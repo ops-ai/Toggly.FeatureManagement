@@ -75,6 +75,28 @@ const fixture = {
     }
     return results
   },
+  async verifyUrlContexts() {
+    const results: {enableVariants: boolean; index: number; active: boolean; variant: string | undefined}[] = []
+    for (const enableVariants of [false, true]) {
+      const owner = new Toggly().init({appKey: `url-${enableVariants}`, environment: 'Test', identity: 'bob', groups: ['team'], claims: {role: 'reader'},
+        baseURI: `${location.origin}/url-fixture?i=retired&i=older&u=old&userId=older&g=inherited&claim.role=old&keep=one&keep=two#fragment`,
+        metricsBaseUrl: new URLSearchParams(location.search).get('metrics')!, enableVariants, persistCache: false, enableLiveUpdates: false})
+      try {
+        const tokens = [undefined, '', ' A ', 'B', '', undefined]
+        for (let index = 0; index < tokens.length; index++) {
+          const instanceId = tokens[index]
+          if (index > 0) await owner.setContext(instanceId === undefined ? {identity: 'bob'} : {instanceId})
+          await owner._loadFeatures(true, {strict: true})
+          const active = await owner.isFeatureOn('On')
+          const variant = enableVariants ? owner.getVariant('On')?.name : undefined
+          owner.recordUsage(`URL${index}`)
+          await owner.flushTelemetry()
+          results.push({enableVariants, index, active, variant})
+        }
+      } finally {owner.dispose()}
+    }
+    return results
+  },
   async verifyCache() {
     const options = {environment: 'Test', instanceId: 'token-a', metricsBaseUrl: new URLSearchParams(location.search).get('metrics')!, baseURI: `${location.origin}/cache-fixture`, persistCache: true, enableLiveUpdates: false}
     const results = []

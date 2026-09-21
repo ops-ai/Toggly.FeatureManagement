@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Preserve configured definitions URL paths and unrelated query parameters while using only the current context token, including when a token is cleared.
+
 - Make locale-independent UTF-16 group ordering explicit while preserving existing cache keys.
 
 - Apply definitions updates that arrive while a component's evaluation hook is

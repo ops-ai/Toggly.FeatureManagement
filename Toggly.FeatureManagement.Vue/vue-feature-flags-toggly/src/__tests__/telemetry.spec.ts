@@ -49,6 +49,35 @@ describe('Vue frontend telemetry', () => {
     expect((reversed as any)._contextCacheKey()).toBe(expected)
     expect(groups).toEqual(original)
   })
+  it.each([false, true])('uses the current token with configured query fields in response mode=%s', async enableVariants => {
+    definitions = enableVariants ? {On: {enabled: true, variant: 'blue'}} : {On: true}
+    const baseURI = 'https://definitions.test/prefix?i=retired&i=older&u=old&userId=older&g=inherited&claim.role=old&keep=one&keep=two#fragment'
+    const service = client({baseURI, identity: 'bob', groups: ['team'], claims: {role: 'reader'}, enableVariants})
+    const transitions = [undefined, '', ' A ', 'B', '', undefined]
+    for (let index = 0; index < transitions.length; index++) {
+      const instanceId = transitions[index]
+      if (index > 0) await service.setContext(instanceId === undefined ? {identity: 'bob'} : {instanceId})
+      await service._loadFeatures(true)
+      const request = fetchMock.mock.calls.filter(([url]) => !url.includes('/api/frontend/telemetry')).at(-1)!
+      const url = new URL(request[0])
+      expect(url.pathname).toBe(`/prefix/${enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed'}/test/Test`)
+      expect(url.searchParams.getAll('keep')).toEqual(['one', 'two'])
+      expect(url.searchParams.getAll('i')).toEqual(instanceId?.trim() ? [instanceId.trim()] : [])
+      if (instanceId?.trim()) expect([...url.searchParams.keys()].filter(key => ['u', 'userId', 'g'].includes(key) || key.startsWith('claim.'))).toEqual([])
+      else {
+        expect(url.searchParams.get(enableVariants ? 'userId' : 'u')).toBe('bob')
+        expect(url.searchParams.getAll('g')).toEqual(['inherited', 'team'])
+        expect(url.searchParams.get('claim.role')).toBe('reader')
+      }
+      expect(await service.isFeatureOn('On')).toBe(true)
+      service.recordUsage(`URL${index}`)
+      await service.flushTelemetry()
+      const body = sent.at(-1)!.body
+      expect(body.i).toBe(instanceId?.trim() || undefined)
+      expect(body.u).toBe(instanceId?.trim() ? undefined : 'bob')
+      expect(body.f[`URL${index}`]).toEqual({enabled: [0, 1]})
+    }
+  })
   it('records effective leaves before negation and retains short circuiting with optional identity', async () => {
     const service = client({identity: 'private-user', groups: ['private-group'], claims: {role: 'private-role'}})
     expect(await service.isFeatureOff('Off')).toBe(true)

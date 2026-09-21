@@ -47,11 +47,17 @@ await new Promise((resolve, reject) => {collector.once('error', reject); collect
   let remoteEnabled = true
   const identities = []
   const cacheRequests = []
+  const urlRequests = []
   const refreshRequests = new Map()
   await page.setRequestInterception(true)
   page.on('request', request => {
     const url = new URL(request.url())
-    if (url.pathname.startsWith('/refresh-order/')) {
+    if (url.pathname.startsWith('/url-fixture')) {
+      urlRequests.push(url.href)
+      const variants = url.pathname.includes('evaluated-variants-signed')
+      const active = !['retired', 'older'].includes(url.searchParams.get('i'))
+      void request.respond({status: 200, contentType: 'application/json', body: JSON.stringify({defs: variants ? {On: {enabled: active, variant: 'blue'}} : {On: active}})})
+    } else if (url.pathname.startsWith('/refresh-order/')) {
       const count = refreshRequests.get(url.pathname) ?? 0
       refreshRequests.set(url.pathname, count + 1)
       void request.respond({status: 200, contentType: 'application/json', body: JSON.stringify({defs: {On: count === 0}})})
@@ -139,6 +145,39 @@ await new Promise((resolve, reject) => {collector.once('error', reject); collect
   }
   assert.deepEqual(telemetry, refreshOrder.map(({kind, phase}) => ({k: `${kind}-${phase}`, e: 'Test', i: 'pending-hook', f: {On: {enabled: [1], disabled: [1]}}})))
   assert.ok([...refreshRequests.values()].every(count => count === 2), 'initial load plus actual refresh only')
+  telemetry.length = 0
+  const urlResults = await evaluate(() => window.fixture.verifyUrlContexts())
+  assert.equal(urlResults.length, 12)
+  for (const result of urlResults) {
+    assert.equal(result.active, true)
+    assert.equal(result.variant, result.enableVariants ? 'blue' : undefined)
+    const packets = telemetry.filter(body => body.k === `url-${result.enableVariants}` && body.f?.[`URL${result.index}`])
+    assert.equal(packets.length, 1)
+    const token = [undefined, undefined, 'A', 'B', undefined, undefined][result.index]
+    assert.equal(packets[0].i, token)
+    assert.equal(packets[0].u, token ? undefined : 'bob')
+    assert.deepEqual(packets[0].f[`URL${result.index}`], {enabled: [0, 1]})
+    assert.deepEqual(packets[0].f.On, result.enableVariants ? {blue: [2]} : {enabled: [1]})
+  }
+  assert(urlRequests.length >= 12)
+  for (const request of urlRequests) {
+    const url = new URL(request)
+    const variants = url.pathname.includes('evaluated-variants-signed')
+    assert.equal(url.pathname, `/url-fixture/${variants ? 'evaluated-variants-signed' : 'evaluated-signed'}/url-${variants}/Test`)
+    assert.deepEqual(url.searchParams.getAll('keep'), ['one', 'two'])
+    const token = url.searchParams.get('i')
+    assert(!['retired', 'older'].includes(token))
+    if (token) {
+      assert.deepEqual(url.searchParams.getAll('i'), [token])
+      assert(['A', 'B'].includes(token))
+      assert.deepEqual([...url.searchParams.keys()].filter(key => ['u', 'userId', 'g'].includes(key) || key.startsWith('claim.')), [])
+    } else {
+      assert.equal(url.searchParams.get(variants ? 'userId' : 'u'), 'bob')
+      assert.deepEqual(url.searchParams.getAll('g'), ['inherited', 'team'])
+      assert.equal(url.searchParams.get('claim.role'), 'reader')
+    }
+  }
+  console.log('PASS actual packed initial/blank/rotation/clear URL contexts in both modes with exact checks and attribution')
   assert.deepEqual(errors, [])
   console.log('Browser passed: plugin/hooks/components, local/context/refresh, real CORS/gzip i/u/checks/metrics/plain keepalive i/pagehide/unmount/remount; response-mode and token ABA 304 cache/public results; pending-hook refresh DOM and exact checks')
 })
