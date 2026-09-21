@@ -823,6 +823,8 @@ export class Toggly {
           Toggly.applyFetchRevision(response);
           if (response.status === 304) {
             const flags = Toggly._getFallbackFlags();
+            Toggly._inMemoryFlags = flags;
+            Toggly._hasLoadedFlags = true;
             resolve(toBooleanDefinitions(flags));
             return null;
           }
@@ -872,6 +874,8 @@ export class Toggly {
           Toggly.applyFetchRevision(response);
           if (response.status === 304) {
             const flags = Toggly._getFallbackFlags();
+            Toggly._inMemoryFlags = flags;
+            Toggly._hasLoadedFlags = true;
             resolve(toBooleanDefinitions(flags));
             return null;
           }

@@ -17,6 +17,8 @@
   gates and assigned variants, before aggregate gate negation.
 
 ### Fixed
+- Restore the matching persisted definitions for evaluation after a token rotation
+  or reinitialization receives HTTP 304, including assigned variants.
 - Keep queued and in-flight telemetry attribution immutable across identity and
   token changes, with one shared bounded queue and ordered gauges.
 - Preserve evaluation attribution and assigned variants when user callbacks

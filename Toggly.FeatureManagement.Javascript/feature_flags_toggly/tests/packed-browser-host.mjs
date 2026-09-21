@@ -45,6 +45,8 @@ try {
   mkdirSync(host);writeFileSync(join(host,'package.json'),JSON.stringify({private:true,type:'module'}));
   run('npm',['install','--no-package-lock',join(temporary,packed.filename),'playwright@1.58.2','typescript@4.9.5',...(reporterTarball?[resolve(reporterTarball)]:[])],host);
   const installed = join(host,'node_modules/@ops-ai/feature-flags-toggly');
+  const sdkVersion = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8')).version;
+  const reporterVersion = JSON.parse(readFileSync(join(host, 'node_modules/@ops-ai/toggly-client-telemetry/package.json'), 'utf8')).version;
   const bundle = readFileSync(join(installed,'dist/feature-flags-toggly.bundle.js'));
   assert.doesNotMatch(bundle.toString(),/node:http|node:zlib|api\/usage|grpc-js/);
   writeFileSync(join(host,'consumer.ts'), `import type {TogglyConfig} from '@ops-ai/feature-flags-toggly';
@@ -204,7 +206,7 @@ require('@ops-ai/feature-flags-toggly');await import('@ops-ai/feature-flags-togg
   assert.ok(packets.slice(11).every(packet=>packet.encoding==='gzip'));
   const beforeClose=definitions.length;await delay(100);assert.equal(definitions.length,beforeClose);assert.deepEqual(errors,[]);
   console.log('PACKED_JAVASCRIPT_BROWSER_TELEMETRY_PASS');
-  console.log('PACKED_JAVASCRIPT_HOST_PASS '+JSON.stringify({node:process.version,typescript:'4.9.5',playwright:'1.58.2',chromium:browser.version(),envelopes:packets.length}));
+  console.log('PACKED_JAVASCRIPT_HOST_PASS '+JSON.stringify({sdk:sdkVersion,reporter:reporterVersion,reporterSource:reporterTarball?'local-tarball':'registry',node:process.version,typescript:'4.9.5',playwright:'1.58.2',chromium:browser.version(),envelopes:packets.length}));
 } finally {
   for(const response of delayed)response.destroy();
   await browser?.close();

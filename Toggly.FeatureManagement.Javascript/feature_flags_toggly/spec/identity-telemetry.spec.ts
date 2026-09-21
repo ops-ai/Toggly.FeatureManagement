@@ -1,4 +1,5 @@
 import { Toggly } from '../lib/toggly';
+import { StorageKeys } from '../lib/models';
 import { gunzipSync } from 'zlib';
 
 const SDK = Toggly as typeof Toggly & { instanceId: string };
@@ -34,6 +35,81 @@ test.each([false, true])('minted definitions suppress client targeting, separate
   await SDK.refresh(); const fallback = definitions()[3].url.searchParams;
   expect(fallback.get('i')).toBeNull(); expect(fallback.get(enableVariants ? 'userId' : 'u')).toBe('alice'); expect(fallback.get('g')).toBe('admin'); expect(fallback.get('claim.plan')).toBe('pro');
   expect((definitions()[3].init!.headers as Record<string,string>)['If-None-Match']).toBeUndefined();
+});
+
+const mintedCacheKeys = (token: string, enableVariants: boolean) => {
+  const context = `i:${encodeURIComponent(token)}`;
+  return {
+    flags: StorageKeys.flagsCacheKey('identity-app', 'Production', context),
+    variants: StorageKeys.variantsCacheKey('identity-app', 'Production', context),
+    revision: StorageKeys.definitionsRevisionCacheKey('identity-app', 'Production', `v2:${enableVariants ? 'variants' : 'evaluated'}:${context}`),
+  };
+};
+
+function tokenDefinitions(enableVariants: boolean, enabled: boolean) {
+  return enableVariants ? { Flag: { enabled, variant: enabled ? 'blue' : 'red', configurationValue: enabled ? 'A' : 'B' } } : { Flag: enabled };
+}
+
+function mockTokenDefinitions(enableVariants: boolean) {
+  global.fetch = jest.fn(async (url, options) => {
+    const parsed = new URL(String(url));
+    requests.push({ url: parsed, init: options });
+    const token = parsed.searchParams.get('i');
+    const revision = `${token}-${enableVariants ? 'variants' : 'evaluated'}`;
+    if ((options?.headers as Record<string, string>)?.['If-None-Match'] === revision) {
+      return { ok: false, status: 304, headers: { get: () => null }, json: jest.fn(() => { throw new Error('304 has no body'); }) } as unknown as Response;
+    }
+    return response(tokenDefinitions(enableVariants, token === 'token/A'), revision);
+  });
+}
+
+test.each([false, true])('persisted token A -> B -> A hydrates matching definitions on 304 (variants %s)', async enableVariants => {
+  mockTokenDefinitions(enableVariants);
+  await init({ instanceId: 'token/A', enableVariants, enableTelemetry: false, flagDefaults: { Default: true } });
+  const keys = mintedCacheKeys('token/A', enableVariants);
+  expect(localStorage.getItem(keys.revision)).toBe(`token/A-${enableVariants ? 'variants' : 'evaluated'}`);
+  expect(JSON.parse(localStorage.getItem(keys.flags)!)).toEqual({ Flag: true });
+  SDK.instanceId = 'token/B';
+  await SDK.refresh();
+  expect(SDK.featureFlagsValue).toEqual({ Flag: false });
+  // A fresh initialization clears all in-memory definitions/revision state.
+  await init({ instanceId: 'token/A', enableVariants, enableTelemetry: false, flagDefaults: { Default: true } });
+  expect(definitions().map(request => request.url.searchParams.get('i'))).toEqual(['token/A', 'token/B', 'token/A']);
+  expect(definitions().map(request => (request.init!.headers as Record<string, string>)['If-None-Match'])).toEqual([undefined, undefined, `token/A-${enableVariants ? 'variants' : 'evaluated'}`]);
+  expect(SDK.featureFlagsValue).toEqual({ Flag: true });
+  expect(SDK.isFeatureOn('Flag')).toBe(true);
+  if (enableVariants) expect(SDK.getVariant('Flag')).toEqual({ name: 'blue', configurationValue: 'A' });
+});
+
+test.each([
+  { enableVariants: false, missing: 'flags' as const },
+  { enableVariants: true, missing: 'flags' as const },
+  { enableVariants: true, missing: 'variants' as const },
+])('returning to token A rejects an orphan revision without $missing (variants $enableVariants)', async ({ enableVariants, missing }) => {
+  mockTokenDefinitions(enableVariants);
+  await init({ instanceId: 'token/A', enableVariants, enableTelemetry: false });
+  const keys = mintedCacheKeys('token/A', enableVariants);
+  SDK.instanceId = 'token/B';
+  await SDK.refresh();
+  localStorage.removeItem(keys[missing]);
+  expect(localStorage.getItem(keys.revision)).not.toBeNull();
+  await init({ instanceId: 'token/A', enableVariants, enableTelemetry: false });
+  expect((definitions()[2].init!.headers as Record<string, string>)['If-None-Match']).toBeUndefined();
+  expect(SDK.featureFlagsValue).toEqual({ Flag: true });
+  if (enableVariants) expect(SDK.getVariant('Flag')?.name).toBe('blue');
+});
+
+test.each([false, true])('returning to token A never reuses the other response mode revision (original variants %s)', async originalVariants => {
+  mockTokenDefinitions(originalVariants);
+  await init({ instanceId: 'token/A', enableVariants: originalVariants, enableTelemetry: false });
+  const keys = mintedCacheKeys('token/A', originalVariants);
+  expect(localStorage.getItem(keys.revision)).not.toBeNull();
+  mockTokenDefinitions(!originalVariants);
+  await init({ instanceId: 'token/B', enableVariants: !originalVariants, enableTelemetry: false });
+  await init({ instanceId: 'token/A', enableVariants: !originalVariants, enableTelemetry: false });
+  expect((definitions()[2].init!.headers as Record<string, string>)['If-None-Match']).toBeUndefined();
+  expect(SDK.featureFlagsValue).toEqual({ Flag: true });
+  if (!originalVariants) expect(SDK.getVariant('Flag')?.name).toBe('blue');
 });
 
 test('queued counters and gauges keep immutable anonymous, identity and minted attribution through logout', async () => {
