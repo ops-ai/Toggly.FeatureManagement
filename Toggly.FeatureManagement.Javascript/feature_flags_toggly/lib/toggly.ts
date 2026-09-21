@@ -455,11 +455,7 @@ export class Toggly {
     Toggly.writeContextValue(StorageKeys.identityKey, v);
     if (!v) Toggly._instanceId = '';
     Toggly.contextChanged(previous);
-    const generation = Toggly._generation;
-    const dataMapPromise = Toggly._hookExecutor.executeBeforeIdentify(v);
-    Promise.resolve(dataMapPromise).then(dataMap =>
-      generation === Toggly._generation ? Toggly._hookExecutor.executeAfterIdentify(v, dataMap) : undefined
-    ).catch(err => console.error('[Toggly] Hook execution error:', err));
+    Toggly.executeIdentifyHooks(v);
   }
 
   static clearIdentity() {
@@ -468,13 +464,15 @@ export class Toggly {
     Toggly.writeContextValue(StorageKeys.identityKey, null);
     Toggly._instanceId = '';
     Toggly.contextChanged(previous);
-    if (currentIdentity) {
-      const generation = Toggly._generation;
-      const dataMapPromise = Toggly._hookExecutor.executeBeforeIdentify('');
-      Promise.resolve(dataMapPromise).then(dataMap =>
-        generation === Toggly._generation ? Toggly._hookExecutor.executeAfterIdentify('', dataMap) : undefined
-      ).catch(err => console.error('[Toggly] Hook execution error:', err));
-    }
+    if (currentIdentity) Toggly.executeIdentifyHooks('');
+  }
+
+  private static executeIdentifyHooks(identity: string): void {
+    const generation = Toggly._generation;
+    const dataMapPromise = Toggly._hookExecutor.executeBeforeIdentify(identity);
+    Promise.resolve(dataMapPromise).then(dataMap =>
+      generation === Toggly._generation ? Toggly._hookExecutor.executeAfterIdentify(identity, dataMap) : undefined
+    ).catch(err => console.error('[Toggly] Hook execution error:', err));
   }
 
   static get groups(): string[] {
@@ -543,27 +541,28 @@ export class Toggly {
   }
 
   static setContext(context: TogglyEvaluationContext): Promise<{ [key: string]: boolean }> {
+    const previous = Toggly._contextCacheKey;
+    const currentIdentity = Toggly.identity;
+    // Apply the complete targeting snapshot before invalidating requests and transports.
     if (context.identity !== undefined) {
-      if (context.identity) {
-        Toggly.identity = context.identity;
-      } else {
-        Toggly.clearIdentity();
-      }
+      Toggly.writeContextValue(StorageKeys.identityKey, context.identity || null);
+      if (!context.identity) Toggly._instanceId = '';
     }
     if (context.groups !== undefined) {
-      Toggly.groups = context.groups;
+      Toggly.writeContextValue(StorageKeys.groupsKey, JSON.stringify(context.groups ?? []));
     }
     if (context.claims !== undefined) {
-      Toggly.claims = context.claims;
+      Toggly.writeContextValue(StorageKeys.claimsKey, JSON.stringify(context.claims ?? {}));
+    }
+    Toggly.contextChanged(previous);
+    if (context.identity !== undefined && (context.identity || currentIdentity)) {
+      Toggly.executeIdentifyHooks(context.identity || '');
     }
     return Toggly.refresh();
   }
 
   static clearContext(): Promise<{ [key: string]: boolean }> {
-    Toggly.clearIdentity();
-    Toggly.groups = [];
-    Toggly.claims = {};
-    return Toggly.refresh();
+    return Toggly.setContext({ identity: '', groups: [], claims: {} });
   }
 
   private static buildEvaluatedUrl(mode: 'evaluated' | 'variants'): string {

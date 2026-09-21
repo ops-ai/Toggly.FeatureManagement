@@ -70,6 +70,7 @@ export declare class Toggly {
     static get identity(): string;
     static set identity(v: string);
     static clearIdentity(): void;
+    private static executeIdentifyHooks;
     static get groups(): string[];
     static set groups(values: string[]);
     static get claims(): Record<string, string>;

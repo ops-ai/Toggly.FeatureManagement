@@ -17,6 +17,8 @@
   gates and assigned variants, before aggregate gate negation.
 
 ### Fixed
+- Apply multi-field context updates and clears together, reconnecting live updates
+  once with the final context while preserving identity hooks.
 - Keep boolean and variant response bodies isolated when switching modes and
   returning to a cached HTTP 304 response.
 - Retain active variant assignments and their check counts when persistence is
