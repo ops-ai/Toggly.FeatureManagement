@@ -9,12 +9,23 @@ class TogglyFeatureFlagsCache {
   String? signature;
   String? keyId;
 
+  /// Conditional-fetch metadata bound to this exact response body.
+  /// Older records without it remain usable offline but fetch unconditionally.
+  String? revision;
+  String? appKey;
+  String? environment;
+  bool? signed;
+
   TogglyFeatureFlagsCache({
     required this.identity,
     required this.flags,
     required this.timestamp,
     required this.signature,
     required this.keyId,
+    this.revision,
+    this.appKey,
+    this.environment,
+    this.signed,
   });
 
   /// Creates an instance from [json].
@@ -23,7 +34,11 @@ class TogglyFeatureFlagsCache {
         flags = json['flags'],
         timestamp = json['timestamp'],
         signature = json['signature'],
-        keyId = json['keyId'];
+        keyId = json['keyId'],
+        revision = json['revision'],
+        appKey = json['appKey'],
+        environment = json['environment'],
+        signed = json['signed'];
 
   /// Returns a serializable object.
   Map<String, dynamic> toJson() => {
@@ -32,6 +47,10 @@ class TogglyFeatureFlagsCache {
         'timestamp': timestamp,
         'signature': signature,
         'keyId': keyId,
+        'revision': revision,
+        'appKey': appKey,
+        'environment': environment,
+        'signed': signed,
       };
 }
 
@@ -43,12 +62,23 @@ class TogglyVariantsCache {
   String? signature;
   String? keyId;
 
+  /// Conditional-fetch metadata bound to this exact response body.
+  /// Older records without it remain usable offline but fetch unconditionally.
+  String? revision;
+  String? appKey;
+  String? environment;
+  bool? signed;
+
   TogglyVariantsCache({
     required this.identity,
     required this.variants,
     required this.timestamp,
     required this.signature,
     required this.keyId,
+    this.revision,
+    this.appKey,
+    this.environment,
+    this.signed,
   });
 
   TogglyVariantsCache.fromJson(Map<String, dynamic> json)
@@ -56,7 +86,11 @@ class TogglyVariantsCache {
         variants = json['variants'],
         timestamp = json['timestamp'],
         signature = json['signature'],
-        keyId = json['keyId'];
+        keyId = json['keyId'],
+        revision = json['revision'],
+        appKey = json['appKey'],
+        environment = json['environment'],
+        signed = json['signed'];
 
   Map<String, dynamic> toJson() => {
         'identity': identity,
@@ -64,5 +98,9 @@ class TogglyVariantsCache {
         'timestamp': timestamp,
         'signature': signature,
         'keyId': keyId,
+        'revision': revision,
+        'appKey': appKey,
+        'environment': environment,
+        'signed': signed,
       };
 }

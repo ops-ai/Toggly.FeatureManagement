@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.7.0
+
+2026-09-19
+
+### Added
+- Forward host-minted `instanceId` to definitions as `i`, suppressing client identity, groups and claims while the token is set.
+- Add `setIdentity(identity, instanceId)` and `setInstanceId(instanceId)` on Core, the global facade, Compose hooks/state and Views models. Blank or null tokens restore client targeting; the existing one-argument `setIdentity` clears any previous token.
+
+### Fixed
+- Preserve the original identity of buffered and retrying telemetry through login, logout and token rotation, using one globally bounded reporter queue.
+- Include stored/generated device identities in telemetry after initialization without relabeling earlier anonymous events.
+- Isolate definitions, validators, persisted cache scope and late cache responses across token changes; cache scope stores a hash rather than the minted capability.
+- Keep delayed UI snapshots attributed to their original context and reset Compose state when identity changes even if flag values remain equal.
+
 ## 1.6.0
 
 2026-09-18

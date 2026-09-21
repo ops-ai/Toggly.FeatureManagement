@@ -69,7 +69,8 @@ final class FeatureFlagsCacheTests: XCTestCase {
                 connectTimeout: 1,
                 requestTimeout: 1,
                 storage: storage,
-                enableLiveUpdates: false
+                enableLiveUpdates: false,
+                enableTelemetry: false
             )
         )
 
@@ -113,7 +114,8 @@ final class FeatureFlagsCacheTests: XCTestCase {
                 connectTimeout: 1,
                 requestTimeout: 1,
                 storage: storage,
-                enableLiveUpdates: false
+                enableLiveUpdates: false,
+                enableTelemetry: false
             )
         )
 
@@ -158,7 +160,8 @@ final class FeatureFlagsCacheTests: XCTestCase {
                 connectTimeout: 1,
                 requestTimeout: 1,
                 storage: storage,
-                enableLiveUpdates: false
+                enableLiveUpdates: false,
+                enableTelemetry: false
             )
         )
 
@@ -198,7 +201,8 @@ final class FeatureFlagsCacheTests: XCTestCase {
                 connectTimeout: 1,
                 requestTimeout: 1,
                 storage: storage,
-                enableLiveUpdates: false
+                enableLiveUpdates: false,
+                enableTelemetry: false
             )
         )
 
@@ -228,7 +232,8 @@ final class FeatureFlagsCacheTests: XCTestCase {
                 connectTimeout: 1,
                 requestTimeout: 1,
                 storage: storage,
-                enableLiveUpdates: false
+                enableLiveUpdates: false,
+                enableTelemetry: false
             )
         )
 
@@ -271,7 +276,8 @@ final class FeatureFlagsCacheTests: XCTestCase {
                 requestTimeout: 1,
                 storage: storage,
                 enableLiveUpdates: false,
-                maxSignatureAgeSeconds: 60
+                maxSignatureAgeSeconds: 60,
+                enableTelemetry: false
             )
         )
 
@@ -301,7 +307,8 @@ final class FeatureFlagsCacheTests: XCTestCase {
                 connectTimeout: 1,
                 requestTimeout: 1,
                 storage: storage,
-                enableLiveUpdates: false
+                enableLiveUpdates: false,
+                enableTelemetry: false
             )
         )
 
@@ -330,7 +337,8 @@ final class FeatureFlagsCacheTests: XCTestCase {
                 connectTimeout: 1,
                 requestTimeout: 1,
                 storage: storage,
-                enableLiveUpdates: false
+                enableLiveUpdates: false,
+                enableTelemetry: false
             )
         )
 
