@@ -4,6 +4,13 @@
 
 ### Added
 
+- Forward host-provided instance tokens with identity fallback and isolated, bounded
+  definition/revision caches. Capture browser checks before reentrant callbacks;
+  preserve original attribution across context changes and lifecycle flushes.
+- Failed browser context refreshes retain the new context and matching cache or
+  defaults instead of restoring retired identity/definitions. Trusted server/edge
+  behavior and legacy usage/view identity/variant arguments are unchanged.
+
 - Add a compact browser telemetry companion with explicit usage/view/counter/gauge
   APIs, bounded aggregation, separate collector configuration and lifecycle flushing.
 - Select a browser entry without trusted telemetry transports while preserving the

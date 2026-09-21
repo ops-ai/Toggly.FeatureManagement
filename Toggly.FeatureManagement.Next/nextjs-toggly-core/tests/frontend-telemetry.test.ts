@@ -224,6 +224,9 @@ describe('browser compact telemetry boundary', () => {
     })
     await value.setContext({instanceId:'mint-a'} as any)
     expect(value.state.features.On).toBe(true)
+    expect(await value.isFeatureOn('On')).toBe(true)
+    fetchMock.mockImplementationOnce(async()=>new Response(null,{status:304,headers:{etag:'rev-a'}}))
+    expect(await value.refresh()).toEqual({On:true})
     fetchMock.mockRejectedValueOnce(Error('offline'))
     await expect(value.setContext({instanceId:'mint-c'} as any)).rejects.toThrow('offline')
     expect(value.state.features.On).toBe(false)
@@ -250,6 +253,64 @@ describe('browser compact telemetry boundary', () => {
     expect(value.identity).toMatch(/^[a-f0-9-]{36}$/)
     await value.setContext({instanceId:''} as any); value.recordUsage('On','ignored','control'); await value.flushTelemetry()
     expect(sent[0].body).toEqual({k:'browser',e:'Test',u:value.identity,f:{On:{control:[0,1]}}})
+  })
+
+  it.each(['hook', 'mapper', 'gate'])('captures evaluated flags and attribution before reentrant %s callbacks', async kind => {
+    definitions={On:true,Second:true}
+    const value=client({identity:'alice'}); await value.init()
+    let transition:Promise<void>|undefined
+    const rotate=()=>{definitions={On:false,Second:false}; transition=value.setContext({identity:'bob'}); return true}
+    if(kind==='hook') value.addHook({getMetadata:()=>({name:'rotate'}),beforeEvaluation:async()=>{rotate(); await transition}})
+    if(kind==='mapper') value.registerContext('NextReentrantMapper',()=>{rotate(); return {kind:'User',key:'fixture',attributes:{}}})
+    if(kind==='gate') value.setLocalGates([{id:'rotate',flagKeys:['On'],isEnabled:rotate}])
+    expect(kind==='gate' ? await value.evaluateFeatureGate(['On','Second'],'all')
+      : await value.isFeatureOn('On',kind==='mapper'?{}:undefined,kind==='mapper'?'NextReentrantMapper':undefined)).toBe(true)
+    await transition; value.recordUsage('New'); await value.flushTelemetry()
+    expect(sent.filter(x=>x.body.u==='alice').map(x=>x.body.f)).toEqual(kind==='gate'?[{On:{enabled:[1]}},{Second:{enabled:[1]}}]:[{On:{enabled:[1]}}])
+    expect(sent.find(x=>x.body.u==='bob')?.body.f).toEqual({New:{enabled:[0,1]}})
+  })
+  it('bounds persisted context snapshots and never offers an evicted revision', async () => {
+    const storage=new Map<string,string>()
+    vi.stubGlobal('localStorage',{getItem:(k:string)=>storage.get(k)??null,setItem:(k:string,v:string)=>storage.set(k,v)})
+    fetchMock.mockImplementation(async(url,init)=>url.includes('/api/frontend/telemetry')?{status:202}
+      :new Response(JSON.stringify({defs:{On:true}}),{status:200,headers:{etag:new URL(url).searchParams.get('i')!}}))
+    const value=client({instanceId:'token-0',persistFeatures:true,enableTelemetry:false}); await value.init()
+    for(let index=1;index<=12;index++) await value.setContext({instanceId:`token-${index}`})
+    expect(storage.size).toBe(1)
+    expect(JSON.stringify([...storage.values()])).not.toContain('token-0')
+    value.destroy()
+    fetchMock.mockImplementationOnce(async(_url,init)=>{
+      expect(init.headers).not.toHaveProperty('If-None-Match')
+      return new Response(null,{status:304})
+    })
+    const evicted=client({instanceId:'token-0',persistFeatures:true,enableTelemetry:false,featureDefaults:{On:false}})
+    expect(await evicted.init()).toEqual({On:false}); expect(await evicted.isFeatureOn('On')).toBe(false)
+    expect(evicted.state.error).toBeInstanceOf(Error)
+    fetchMock.mockImplementationOnce(async(_url,init)=>{
+      expect(init.headers['If-None-Match']).toBe('token-12'); return new Response(null,{status:304})
+    })
+    const retained=client({instanceId:'token-12',persistFeatures:true,enableTelemetry:false,featureDefaults:{On:false}})
+    expect(await retained.init()).toEqual({On:true}); expect(await retained.isFeatureOn('On')).toBe(true)
+  })
+  it('retains the eight-context in-memory bound without orphan conditional requests', async () => {
+    fetchMock.mockImplementation(async url=>new Response(JSON.stringify({defs:{On:true}}),{status:200,headers:{etag:new URL(url).searchParams.get('i')!}}))
+    const value=client({instanceId:'token-0',enableTelemetry:false,featureDefaults:{On:false}}); await value.init()
+    for(let index=1;index<=8;index++) await value.setContext({instanceId:`token-${index}`})
+    fetchMock.mockImplementationOnce(async(_url,init)=>{
+      expect(init.headers).not.toHaveProperty('If-None-Match'); return new Response(null,{status:304})
+    })
+    await expect(value.setContext({instanceId:'token-0'})).rejects.toThrow('without a matching snapshot')
+    expect(await value.isFeatureOn('On')).toBe(false)
+  })
+  it.each(['context', 'setter'])('restarts local-mode live resources after a %s change', async method => {
+    const sockets:any[]=[]
+    const Socket=vi.fn(function(){const socket={onopen:null,onmessage:null,onclose:null,onerror:null,close:vi.fn()};sockets.push(socket);return socket})
+    fetchMock.mockResolvedValue(new Response(JSON.stringify([{featureKey:'On',filters:[{name:'AlwaysOn',parameters:{}}]}]),{status:200}))
+    const value=client({evaluationMode:'local',enableLiveUpdates:true,webSocketImpl:Socket as any,enableTelemetry:false})
+    await value.init(); expect(sockets).toHaveLength(1)
+    if(method==='context') await value.setContext({identity:'bob'}); else value.identity='bob'
+    expect(sockets[0].close).toHaveBeenCalled(); expect(sockets).toHaveLength(2)
+    expect(await value.isFeatureOn('On')).toBe(true)
   })
 
 })

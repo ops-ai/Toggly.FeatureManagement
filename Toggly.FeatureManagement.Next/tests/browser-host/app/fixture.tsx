@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { createTogglyClient } from '@ops-ai/nextjs-toggly-core/browser'
 import { TogglyProvider, useToggly, useFeatureFlag, useFeatureGate, Feature, FeatureVariant, FeatureSwitch, type TogglyContextValue } from '@ops-ai/nextjs-toggly-client'
 
 let current: TogglyContextValue
@@ -35,10 +36,37 @@ export default function Fixture() {
         current.client.recordUsage('On', 'ignored-user'); current.client.recordView('On', 'ignored-user', 'control')
         current.telemetry.incrementCounter('orders', 2); current.telemetry.setGauge('cart', 9); current.telemetry.setGauge('cart', 3)
       },
+      async verifyCache() {
+        const config = {appKey:'cache-fixture', environment:'Test', identity:'cache-user', instanceId:'cache-a', baseUri:`${location.origin}/cache-fixture`, metricsBaseUrl:metrics, persistFeatures:true, enableLiveUpdates:false, refreshInterval:0, enableTelemetry:false, featureDefaults:{On:false}}
+        const client = createTogglyClient(config)
+        try {
+          const first = await client.init()
+          await client.setContext({instanceId:'cache-b'})
+          const second = await client.isFeatureOn('On')
+          await client.setContext({instanceId:'cache-a'})
+          const restored = await client.refresh()
+          const active = await client.isFeatureOn('On')
+          client.destroy()
+          const reloaded = createTogglyClient(config)
+          try {return {first, second, restored, active, persisted:await reloaded.init(), persistedActive:await reloaded.isFeatureOn('On')}}
+          finally {reloaded.destroy()}
+        } finally {client.destroy()}
+      },
+      async verifyReentrantCheck() {
+        const client=createTogglyClient({appKey:'cache-fixture', environment:'Test', identity:'cache-user', instanceId:'cache-a', baseUri:`${location.origin}/cache-fixture`, metricsBaseUrl:metrics, enableLiveUpdates:false, refreshInterval:0})
+        try {
+          await client.init()
+          client.addHook({getMetadata:()=>({name:'reentrant'}),beforeEvaluation:async()=>{await client.setContext({instanceId:'cache-b'})}})
+          const result=await client.isFeatureOn('On')
+          client.recordUsage('After')
+          await client.flushTelemetry()
+          return result
+        } finally {client.destroy()}
+      },
       unmount() {setMounted(false)},
       remount() {setMounted(true)},
       replaceOwner() {setReplacement(true)},
     }})
-  }, [])
+  }, [metrics])
   return mounted && metrics ? <TogglyProvider config={{appKey: replacement ? 'replacement' : 'fixture', environment: replacement ? 'New' : 'Test', identity: 'first-user', instanceId: 'mint-a', groups: ['staff'], claims: {role: 'admin'}, metricsBaseUrl: metrics, baseUri: `${location.origin}/definitions-fixture`, enableLiveUpdates: false, refreshInterval: 0, persistIdentity: false, localGates: [{id: 'device', flagKeys: ['On'], isEnabled: () => localEnabled}]}}><Probe/></TogglyProvider> : <span>waiting</span>
 }

@@ -37,7 +37,17 @@ Provider configuration forwards `enableTelemetry` (default on with an app key),
 `metricsBaseUrl` (default `https://metrics.toggly.io`), and
 `telemetryFlushIntervalMs` (30000-60000 ms, default 45000).
 SSR/build, keyless and opted-out clients remain silent. Telemetry is credential-free
-and contains no user identity, groups, claims or entity attributes.
+and includes optional `i` (host-provided `instanceId`) or fallback `u` (configured
+or generated identity). `i` takes precedence and suppresses identity/groups/claims
+on definitions requests. Groups, claims and entity attributes are never telemetry
+payload fields. Server acceptance of `u` is default-off; HTTP 202 alone does not
+prove accepted attribution. The SDK never mints tokens or requires Backend keys.
+
+Pass `instanceId` in provider configuration or `await setContext({ instanceId })`.
+An empty token clears it; `setIdentity` also clears the token. Existing queued
+events retain their original attribution. Failed explicit context refreshes reject
+and retain the new context with its matching cache or defaults, without restoring
+old-user flags. Provider context and hooks reflect that isolated state.
 `enableUsageTracking: false` disables checks/usage/views and `enableMetrics: false`
 disables business metrics. Each provider has its own owner; changing app/environment
 replaces it without carrying over the old reactive snapshot or queued labels.

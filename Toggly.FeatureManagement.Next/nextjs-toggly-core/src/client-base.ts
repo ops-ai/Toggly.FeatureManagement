@@ -125,7 +125,26 @@ export function createClient(
     config.baseUri, config.appKey, config.environment, config.evaluationMode ?? 'remote',
     config.instanceId?.trim() ? ['i', config.instanceId.trim()] : ['u', config.identity ?? '', [...(config.groups ?? [])].sort(), Object.entries(config.claims ?? {}).sort(([a], [b]) => a.localeCompare(b))],
   ])
-  const storageKey = () => `${config.featuresStorageKey ?? 'toggly:features'}:v2:${encodeURIComponent(scopeKey())}`
+  const storageKey = () => `${config.featuresStorageKey ?? 'toggly:features'}:v3:${encodeURIComponent(JSON.stringify([
+    config.baseUri, config.appKey, config.environment, config.evaluationMode ?? 'remote',
+  ]))}`
+  type Snapshot = {features: FeatureDefinitions; revision: string | null}
+  function persistedSnapshots(): Map<string, Snapshot> {
+    const entries = new Map<string, Snapshot>()
+    if (!config.persistFeatures || typeof localStorage === 'undefined') return entries
+    try {
+      const parsed: unknown = JSON.parse(localStorage.getItem(storageKey()) ?? 'null')
+      if (!Array.isArray(parsed)) return entries
+      for (const entry of parsed.slice(-8)) {
+        if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== 'string') continue
+        const snapshot = entry[1]
+        if (snapshot?.features && typeof snapshot.features === 'object' && !Array.isArray(snapshot.features)
+          && Object.values(snapshot.features).every(value => typeof value === 'boolean')
+          && (snapshot.revision === null || typeof snapshot.revision === 'string')) entries.set(entry[0], snapshot)
+      }
+    } catch { /* Unavailable or corrupt storage is not a definition snapshot. */ }
+    return entries
+  }
   let activeScope = scopeKey()
   let hasRemoteSnapshot = false
   function restoreSnapshot(): void {
@@ -135,13 +154,7 @@ export function createClient(
     state.features = {...config.featureDefaults}
     if (isLocalMode()) return
     state.definitions = new Map()
-    let snapshot = snapshots.get(scopeKey())
-    if (!snapshot && config.persistFeatures && typeof localStorage !== 'undefined') {
-      try {
-        const parsed = JSON.parse(localStorage.getItem(storageKey()) ?? 'null')
-        if (parsed?.features && typeof parsed.features === 'object' && !Array.isArray(parsed.features) && Object.values(parsed.features).every(value => typeof value === 'boolean') && (parsed.revision === null || typeof parsed.revision === 'string')) snapshot = parsed
-      } catch { /* Unavailable or corrupt storage is not a definition snapshot. */ }
-    }
+    const snapshot = snapshots.get(scopeKey()) ?? persistedSnapshots().get(scopeKey())
     if (snapshot) {
       state.features = {...config.featureDefaults, ...snapshot.features}
       cachedDefinitionsRevision = snapshot.revision
@@ -155,7 +168,12 @@ export function createClient(
     snapshots.delete(scopeKey()); snapshots.set(scopeKey(), snapshot)
     if (snapshots.size > 8) snapshots.delete(snapshots.keys().next().value!)
     if (config.persistFeatures && typeof localStorage !== 'undefined') {
-      try { localStorage.setItem(storageKey(), JSON.stringify(snapshot)) } catch { /* Optional cache. */ }
+      try {
+        const persisted = persistedSnapshots()
+        persisted.delete(scopeKey()); persisted.set(scopeKey(), snapshot)
+        if (persisted.size > 8) persisted.delete(persisted.keys().next().value!)
+        localStorage.setItem(storageKey(), JSON.stringify([...persisted]))
+      } catch { /* Optional cache. */ }
     }
   }
   if (policy.frontend) restoreSnapshot()
@@ -326,14 +344,15 @@ export function createClient(
   function buildEvalContext(
     entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
     overrides?: EvalContextArg,
+    ownerConfig: typeof config = config,
   ): EvalContext {
     const o: EvalContextOverrides =
       typeof overrides === 'string' ? { identity: overrides } : overrides ?? {}
     return {
-      identity: o.identity ?? config.identity,
-      groups: o.groups ?? config.groups,
-      traits: o.claims ?? config.claims,
-      claims: o.claims ?? config.claims,
+      identity: o.identity ?? ownerConfig.identity,
+      groups: o.groups ?? ownerConfig.groups,
+      traits: o.claims ?? ownerConfig.claims,
+      claims: o.claims ?? ownerConfig.claims,
       request: o.request,
       entity: entityContext ?? undefined,
     }
@@ -356,30 +375,47 @@ export function createClient(
     return state.features
   }
 
+  function captureEvaluation() {
+    return {
+      features: {...state.features},
+      definitions: new Map(state.definitions),
+      localMode: isLocalMode(),
+      ownerConfig: {...config, featureDefaults: {...config.featureDefaults},
+        groups: config.groups ? [...config.groups] : undefined, claims: {...config.claims}},
+      gates: [...localGates], index: new Map(localGateIndex),
+      record: ensureTelemetry()?.captureCheck?.(),
+    }
+  }
+  type EvaluationSnapshot = ReturnType<typeof captureEvaluation>
+
   function evaluateLocalFeature(
     featureKey: string,
     entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
     overrides?: EvalContextArg,
+    snapshot?: EvaluationSnapshot,
   ): boolean {
-    if (state.definitions.has(featureKey)) {
+    const definitions = snapshot?.definitions ?? state.definitions
+    const ownerConfig = snapshot?.ownerConfig ?? config
+    if (definitions.has(featureKey)) {
       return evaluateDefinitions(
-        state.definitions,
+        definitions,
         featureKey,
-        buildEvalContext(entityContext, overrides),
+        buildEvalContext(entityContext, overrides, ownerConfig),
       )
     }
-    return config.featureDefaults?.[featureKey] ?? false
+    return ownerConfig.featureDefaults?.[featureKey] ?? false
   }
 
   function getEffectiveFlag(
     featureKey: string,
     entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
     overrides?: EvalContextArg,
+    snapshot?: EvaluationSnapshot,
   ): boolean {
-    const remote = isLocalMode()
-      ? evaluateLocalFeature(featureKey, entityContext, overrides)
-      : resolveEvaluatedDefinition(state.features[featureKey], entityContext)
-    return applyLocalGate(remote, featureKey, localGates, localGateIndex)
+    const remote = (snapshot?.localMode ?? isLocalMode())
+      ? evaluateLocalFeature(featureKey, entityContext, overrides, snapshot)
+      : resolveEvaluatedDefinition((snapshot?.features ?? state.features)[featureKey], entityContext)
+    return applyLocalGate(remote, featureKey, snapshot?.gates ?? localGates, snapshot?.index ?? localGateIndex)
   }
 
   /**
@@ -391,11 +427,13 @@ export function createClient(
     featureKey: string,
     entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
     overrides?: EvalContextArg,
+    snapshot?: EvaluationSnapshot,
   ): boolean {
     if (policy.frontend) ensureTelemetry()
-    const captured = telemetry?.captureCheck?.()
-    const result = getEffectiveFlag(featureKey, entityContext, overrides)
+    const captured = snapshot ? snapshot.record : telemetry?.captureCheck?.()
+    const result = getEffectiveFlag(featureKey, entityContext, overrides, snapshot)
     if (captured) { captured(featureKey, result); return result }
+    if (snapshot) return result
     if (telemetry?.usageEnabled) {
       const o: EvalContextOverrides =
         typeof overrides === 'string' ? { identity: overrides } : overrides ?? {}
@@ -878,7 +916,11 @@ export function createClient(
 
     set identity(value: string | undefined) {
       config.identity = value
-      if (policy.frontend) { config.instanceId = undefined; transitionBrowserContext() }
+      if (policy.frontend) {
+        config.instanceId = undefined
+        transitionBrowserContext()
+        if (state.initialized && !destroyed) { startRefreshInterval(); startWebSocket() }
+      }
     },
 
     async init(newConfig?: TogglyConfig): Promise<FeatureDefinitions> {
@@ -1003,17 +1045,16 @@ export function createClient(
         return config.featureDefaults?.[featureKey] ?? false
       }
 
-      const expected = generation
+      const snapshot = policy.frontend ? captureEvaluation() : undefined
       const entityContext = normalizeEntityContext(context, kind)
 
       // Execute before hooks
       const dataMap = await hookExecutor.executeBeforeEvaluation(
         featureKey,
-        config.featureDefaults?.[featureKey]
+        (snapshot?.ownerConfig ?? config).featureDefaults?.[featureKey]
       )
 
-      if (policy.frontend && (destroyed || expected !== generation)) return false
-      const result = evaluateAndRecordCheck(featureKey, entityContext, overrides)
+      const result = evaluateAndRecordCheck(featureKey, entityContext, overrides, snapshot)
 
       // Execute after hooks (fire-and-forget)
       hookExecutor.executeAfterEvaluation(featureKey, dataMap, result).catch(() => {
@@ -1050,15 +1091,14 @@ export function createClient(
         )
       }
 
+      const snapshot = policy.frontend ? captureEvaluation() : undefined
       const entityContext = normalizeEntityContext(context, kind)
 
       if (policy.frontend) {
-        const expected = generation
         let result = requirement !== 'any'
         for (const key of featureKeys) {
-          const dataMap = await hookExecutor.executeBeforeEvaluation(key, config.featureDefaults?.[key])
-          if (destroyed || expected !== generation) return false
-          const enabled = evaluateAndRecordCheck(key, entityContext, overrides)
+          const dataMap = await hookExecutor.executeBeforeEvaluation(key, snapshot?.ownerConfig.featureDefaults?.[key])
+          const enabled = evaluateAndRecordCheck(key, entityContext, overrides, snapshot)
           void hookExecutor.executeAfterEvaluation(key, dataMap, enabled).catch(() => {})
           result = enabled
           if ((requirement === 'any' && enabled) || (requirement !== 'any' && !enabled)) break
@@ -1184,8 +1224,8 @@ export function createClient(
         const installed = generation
         if (dataMap) await hookExecutor.executeAfterIdentify(contextUpdate.identity!, dataMap)
         if (destroyed || installed !== generation) return
-        if (state.initialized && !isLocalMode()) {
-          try { await client.refresh() }
+        if (state.initialized) {
+          try { if (!isLocalMode()) await client.refresh() }
           finally { if (!destroyed && installed === generation) { startRefreshInterval(); startWebSocket() } }
         }
         return

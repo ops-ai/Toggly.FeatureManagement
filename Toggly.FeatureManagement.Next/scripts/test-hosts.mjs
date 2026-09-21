@@ -5,6 +5,7 @@ import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { withResources, closeServer, stopChild } from './host-resources.mjs'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
 const temporary = await mkdtemp(join(tmpdir(), 'toggly-next-hosts-'))
@@ -28,7 +29,8 @@ async function files(directory) {
   }
   return result
 }
-try {
+await withResources(async defer => {
+  defer(() => rm(temporary, {recursive: true, force: true}))
   await run('pnpm', ['build'], root)
   for (const name of ['core', 'client']) await run('pnpm', ['pack', '--pack-destination', temporary], join(root, `nextjs-toggly-${name}`))
   const archives = (await readdir(temporary)).filter(name => name.endsWith('.tgz')).map(name => join(temporary, name))
@@ -41,7 +43,13 @@ try {
     await writeFile(join(host, 'tsconfig.json'), JSON.stringify(hostTypes, null, 2))
     await writeFile(join(host, 'package.json'), JSON.stringify({name: 'toggly-next-packed-host', private: true, type: 'module', dependencies: {next: fixture.next, react: fixture.react, 'react-dom': fixture.react}, devDependencies: {typescript: fixture.typescript, '@types/node': fixture.nodeTypes, '@types/react': fixture.reactTypes, '@types/react-dom': fixture.domTypes, 'puppeteer-core': '25.10.0'}}))
     await run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', ...archives, ...(artifact ? [artifact] : [])], host)
-    for (const [name, version] of [['next', fixture.next], ['react', fixture.react]]) assert.equal(JSON.parse(await readFile(join(host, 'node_modules', name, 'package.json'), 'utf8')).version, version)
+    const versions = {}
+    for (const [name, version] of [['next', fixture.next], ['react', fixture.react], ['typescript', fixture.typescript], ['@ops-ai/nextjs-toggly-core', '1.12.0'], ['@ops-ai/nextjs-toggly-client', '1.5.0'], ['@ops-ai/toggly-client-telemetry', '1.1.0']]) {
+      versions[name] = JSON.parse(await readFile(join(host, 'node_modules', name, 'package.json'), 'utf8')).version
+      assert.equal(versions[name], version)
+    }
+    console.log('ACTUAL REGISTRY HOST', JSON.stringify(versions))
+    await run(process.execPath, [join(root, 'scripts/browser-cleanup-check.mjs')], host)
     await run(process.execPath, ['node_modules/next/dist/bin/next', 'build', ...(fixture.next.startsWith('16.') ? ['--webpack'] : [])], host)
     const typeConfig = JSON.parse(await readFile(join(host, 'tsconfig.json'), 'utf8'))
     assert.equal(typeConfig.compilerOptions.strict, true)
@@ -54,22 +62,24 @@ try {
       assert.doesNotMatch(code, /\/api\/usage\/stats|\/api\/metrics|@grpc\/grpc-js|@grpc\/proto-loader|protobufjs|UsageBatcher|MetricsBatcher/, `Trusted telemetry in browser chunk: ${path}`)
     }
     await run(process.execPath, ['--input-type=module', '-e', `import assert from 'node:assert/strict'; import {createRequire} from 'node:module'; import {createTogglyClient} from '@ops-ai/nextjs-toggly-core/browser'; const require=createRequire(import.meta.url); assert.equal(typeof require('@ops-ai/nextjs-toggly-core').TelemetryRuntime,'function'); let calls=0; globalThis.fetch=async()=>{calls++; throw Error('unexpected SSR fetch')}; const c=createTogglyClient({appKey:'server'}); c.telemetry.recordUsage('On'); c.telemetry.setGauge('cart',3); await c.flushTelemetry(); c.destroy(); assert.equal(calls,0);`], host)
+    await withResources(async own => {
     const socket = createServer()
+    own(() => closeServer(socket))
     await new Promise(resolve => socket.listen(0, '127.0.0.1', resolve))
     const port = socket.address().port
     await new Promise(resolve => socket.close(resolve))
     const server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '--hostname', '127.0.0.1', '--port', String(port)], {cwd: host, env: environment, stdio: 'inherit'})
-    try {
+    own(() => stopChild(server))
       let ready = false
       const deadline = Date.now() + 30000
       while (Date.now() < deadline) {
-        try { const response = await fetch(`http://127.0.0.1:${port}`); if (response.ok) {ready = true; break} } catch {}
+        try { const response = await fetch(`http://127.0.0.1:${port}`, {signal: AbortSignal.timeout(2000)}); if (response.ok) {ready = true; break} } catch {}
         await new Promise(resolve => setTimeout(resolve, 100))
       }
       assert.ok(ready, 'Next production server started')
       await run(process.execPath, [join(root, 'scripts/browser-check.mjs'), String(port)], host)
-    } finally {if (server.exitCode === null) {server.kill('SIGTERM'); await new Promise(resolve => server.once('exit', resolve))}}
+    })
     await rm(host, {recursive: true, force: true})
     console.log(`Next ${fixture.next}/React ${fixture.react}: TS ${fixture.typescript}/${fixture.lib}/Node types ${fixture.nodeTypes}, packed browser transport boundary, SSR, and host passed`)
   }
-} finally {await rm(temporary, {recursive: true, force: true})}
+})

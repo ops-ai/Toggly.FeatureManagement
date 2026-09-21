@@ -30,6 +30,8 @@ import { createTogglyClient } from '@ops-ai/nextjs-toggly-core/browser'
 const client = createTogglyClient({
   appKey: 'your-app-key',
   environment: 'Production',
+  instanceId: 'host-provided-token', // optional token obtained by your trusted host
+  identity: 'customer-123', // fallback when instanceId is absent
   enableTelemetry: true, // browser default with an app key
   metricsBaseUrl: 'https://metrics.toggly.io', // separate from definitions baseUri
   telemetryFlushIntervalMs: 45000, // integer from 30000 through 60000
@@ -50,9 +52,15 @@ variant components use enabled/disabled labels. Usage and views are always expli
 Counters sum nonnegative integer deltas; gauges retain the latest finite
 nonnegative value. Metrics are app-level.
 
-Browser payloads contain only app/environment, feature/variant counts, and numeric
-metrics. They exclude identity, groups, claims, entity data, timestamps, instance
-names, and feature-attributed business metrics. Requests omit credentials and use
+Browser payloads contain app/environment, feature/variant counts, numeric metrics,
+and optional attribution: `i` for a host-provided `instanceId`, otherwise `u` for
+the configured or generated identity. `i` takes precedence; definitions requests
+with `i` omit identity, groups, and claims. The SDK never mints tokens or needs a
+Backend key. Payloads exclude groups, claims, entity data, timestamps, instance
+names, and feature-attributed business metrics. Unless enabled by the operator,
+the collector ignores `u` and ingests anonymously. Unknown or expired `i` is also
+stripped. Both still return HTTP 202, so that status alone does not prove identity
+acceptance. Requests omit credentials and use
 browser gzip when available. Memory, payload size, request timeout and retries are
 bounded; page hiding and destruction trigger best-effort flushing. SSR/build,
 keyless clients and `enableTelemetry: false` create no frontend reporter resources.
@@ -64,7 +72,8 @@ fragment.
 
 Legacy signatures retain their meaning: `recordUsage(feature, identity?, variant?)`
 and `recordView(feature, identity?, variant?)` still reserve the second argument
-for identity. Browser forwarding discards identity and uses only the third variant;
+for identity. Browser forwarding ignores the per-call identity; the owner context supplies
+`i` or `u`, and only the third argument selects the variant;
 use the compact companion for the two-argument feature/variant form.
 
 Browser legacy `incrementCounter(metric, value, options?)` forwards an app-level
@@ -80,7 +89,14 @@ Explicit `enableUsageTracking: false` disables browser checks/usage/views;
 `enableMetrics: false` disables browser business metrics. `enableTelemetry: false`
 disables both. Trusted flush interval options do not configure the browser reporter.
 Reinitialization disposes the previous reporter without relabeling queued events;
-identity refresh on the same owner preserves queued metrics.
+identity refresh on the same owner preserves queued metrics under their original
+attribution. Use `await client.setContext({ instanceId: newToken })` to rotate a
+token, or pass `instanceId: ''` to clear it. `setIdentity` also clears the token.
+Checks capture the evaluated definitions and attribution before hooks or local
+gates can change context. Definition snapshots and revisions share a bounded
+context- and response-mode-specific cache. A failed explicit identity/token refresh
+rejects and retains the new context with matching cached flags or defaults; it
+does not restore the previous identity or its definitions.
 
 ## Documentation
 
