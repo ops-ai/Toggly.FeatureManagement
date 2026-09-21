@@ -12,6 +12,9 @@
 
 ### Changed
 
+- Keep the active context authoritative over configured URL tokens, including
+  initialization without a token and explicit token clearing.
+
 - Accept a host-minted `instanceId` in options and `setContext`; forward it to
   definitions and telemetry ahead of client identity, groups, and claims.
   Otherwise telemetry may carry client identity; server acceptance of those

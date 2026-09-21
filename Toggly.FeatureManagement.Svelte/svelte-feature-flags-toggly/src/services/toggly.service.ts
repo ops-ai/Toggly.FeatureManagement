@@ -695,6 +695,7 @@ export class Toggly implements TogglyService {
       const mode = this._config.enableVariants ? 'variants' : 'evaluated'
       const path = this._config.enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed'
       scopedUrl.pathname = `${scopedUrl.pathname.replace(/\/$/, '')}/${path}/${appKey}/${env}`
+      scopedUrl.searchParams.delete('i')
       const instanceId = this._config.instanceId?.trim()
       if (instanceId) {
         for (const key of [...scopedUrl.searchParams.keys()]) {
