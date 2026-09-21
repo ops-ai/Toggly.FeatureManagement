@@ -165,3 +165,16 @@ test('selects system Chrome before packed Client-Core tests', () => {
     /if: matrix\.sdk == 'Gatsby' \|\| matrix\.sdk == 'Client-Telemetry' \|\| matrix\.sdk == 'Client-Core'/,
   );
 });
+
+
+test('classifies the JavaScript packed browser harness as test code in both scanners', () => {
+  const harness = 'Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs';
+  for (const property of ['exclusions', 'test.inclusions']) {
+    const values = [...workflow.matchAll(new RegExp('-Dsonar\\.' + property.replace('.', '\\.') + '=([^\\n]+)', 'g'))];
+    assert.equal(values.length, 2);
+    for (const [, value] of values) assert.ok(value.split(',').includes(harness), property);
+  }
+  for (const [, value] of workflow.matchAll(/-Dsonar\.coverage\.exclusions=([^\n]+)/g)) {
+    assert.ok(!value.includes('Toggly.FeatureManagement.Javascript'));
+  }
+});
