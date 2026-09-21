@@ -9,7 +9,7 @@
 
 Native Android SDK for [Toggly.io](https://toggly.io) feature flags with Kotlin, coroutines, Jetpack Compose, and traditional Views support.
 
-## Frontend telemetry (1.6.0)
+## Frontend telemetry (1.7.0)
 
 Telemetry is enabled when an application key is configured. Set `enableTelemetry = false` to opt out. Core, Flow, Compose snapshot/entity evaluations, and Views count the feature leaves actually evaluated before aggregate negation; skipped gate keys and internal snapshot projections do not count. Feature use and views remain explicit.
 
@@ -31,9 +31,25 @@ service.setAppState(AppStateType.BACKGROUND)
 service.dispose() // synchronous; at most one final envelope within five seconds
 ```
 
-The same explicit APIs are available through `Toggly`, `UseTogglyResult`, `TogglyState`, and `FeatureFlagViewModel`. Telemetry contains only the public app key, environment, aggregate feature counts and app-level metric values. Identity, claims, groups, entity data, and definitions authentication are excluded. Metrics use a separate HTTP client and are never persisted by storage adapters.
+The same explicit APIs are available through `Toggly`, `UseTogglyResult`, `TogglyState`, and `FeatureFlagViewModel`. Telemetry contains the public app key, environment, aggregate feature counts and app-level metric values, plus an optional minted `i` or client `u`. A nonblank `instanceId` takes precedence over `identity`. Without a token, the current identity (including the stored/generated device ID after initialization) is sent as `u`; the application's default-off **Accept client-generated identities for metrics** setting determines whether the server accepts it. HTTP 202 alone does not prove identity attribution. Claims, groups, entity data, and definitions authentication are excluded. Metrics use a separate HTTP client and are never persisted by storage adapters.
 
 Flush intervals outside 30–60 seconds use 45 seconds; each interval has ±20% jitter. Invalid metrics URLs disable telemetry without affecting flag checks. Supply an absolute HTTP(S) base URL without credentials, query or fragment. Ordinary flushes use gzip, with plain JSON fallback only for compression failure before sending. HTTP 202 acknowledges; only explicit 429/503 responses are retried, twice, within five minutes. Ambiguous failures are dropped. Buffers include inflight data and stay within 2,000 entries and 256 KiB, with 48 KiB envelopes. Variant names must be 1–64 ASCII letters, digits, underscores or hyphens. `onTelemetryDiagnostic` receives bounded status codes without event payloads.
+
+## Host-minted identity (1.7.0)
+
+Have your trusted backend mint the token and pass it into `TogglyConfig(instanceId = token, identity = "user-123")`. The Android client never receives a Backend key or calls the mint endpoint. Definitions use `?i=` and omit `u`, `g` and `claim.*` while the token is present; telemetry puts `i` only in the JSON body. Without a token, existing client targeting continues.
+
+```kotlin
+service.setIdentity("user-456", replacementToken) // Replace user and token atomically.
+service.setInstanceId(rotatedToken)              // Keep the current identity, rotate its token.
+service.setInstanceId(null)                      // Clear token, restore client targeting.
+service.setIdentity("user-789")                  // Existing API also clears the previous token.
+service.setIdentity(null)                        // Return to the stored/generated device ID.
+```
+
+These suspend operations return after their serialized context refresh. Core's existing definitions request/cache mutex completes prior work before activating a replacement context. Cache keys and validator reuse are scoped to the effective token or client context; minted cache metadata stores a hash rather than the raw token. Already accepted telemetry keeps its original attribution through retries. One queue retains the global memory/request bounds across rapid changes, and earlier anonymous events are not reassigned during initialization. Explicit flush remains best-effort and cannot guarantee delivery.
+
+The same replacement and rotation operations are forwarded by `Toggly`, `UseTogglyResult`, `TogglyState`, and `FeatureFlagViewModel` (the Views model launches them in its lifecycle scope). Storage companions create no telemetry reporter and persist no telemetry.
 
 ## Initial targeting context
 
@@ -91,15 +107,15 @@ Add the dependencies to your `build.gradle.kts`:
 ```kotlin
 dependencies {
     // Core module (required)
-    implementation("io.toggly:toggly-android-core:1.6.0")
+    implementation("io.toggly:toggly-android-core:1.7.0")
 
     // UI modules (pick what you need)
-    implementation("io.toggly:toggly-compose:1.6.0")  // Jetpack Compose
-    implementation("io.toggly:toggly-views:1.6.0")    // Android Views
+    implementation("io.toggly:toggly-compose:1.7.0")  // Jetpack Compose
+    implementation("io.toggly:toggly-views:1.7.0")    // Android Views
 
     // Storage modules (pick one, or use built-in SharedPreferences)
-    implementation("io.toggly:toggly-room:1.6.0")      // Room database
-    implementation("io.toggly:toggly-datastore:1.6.0") // DataStore
+    implementation("io.toggly:toggly-room:1.7.0")      // Room database
+    implementation("io.toggly:toggly-datastore:1.7.0") // DataStore
 }
 ```
 

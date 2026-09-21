@@ -148,12 +148,12 @@ jobs:
         run: npm ci
 
       - name: Install locked standalone package dependencies
-        if: matrix.sdk == 'Gatsby' || matrix.sdk == 'Client-Telemetry'
+        if: matrix.sdk == 'Gatsby' || matrix.sdk == 'Client-Telemetry' || matrix.sdk == 'Client-Core'
         working-directory: ${{ matrix.path }}
         run: npm ci
 
       - name: Install dependencies
-        if: matrix.sdk != 'SolidJS' && matrix.sdk != 'SvelteKit' && matrix.sdk != 'Gatsby' && matrix.sdk != 'Client-Telemetry'
+        if: matrix.sdk != 'SolidJS' && matrix.sdk != 'SvelteKit' && matrix.sdk != 'Gatsby' && matrix.sdk != 'Client-Telemetry' && matrix.sdk != 'Client-Core'
         working-directory: ${{ matrix.path }}
         run: |
           if [ "${{ matrix.sdk }}" = "NestJS" ]; then
@@ -167,7 +167,8 @@ jobs:
           needs.prepare.outputs.need_shared_deps == 'true' &&
           matrix.sdk != 'SolidJS' &&
           matrix.sdk != 'SvelteKit' &&
-          matrix.sdk != 'Client-Telemetry'
+          matrix.sdk != 'Client-Telemetry' &&
+          matrix.sdk != 'Client-Core'
         uses: ./.github/actions/overlay-shared-js-deps
         with:
           package-dir: ${{ matrix.path }}
@@ -184,6 +185,12 @@ jobs:
         if: matrix.has-lint == true
         working-directory: ${{ matrix.path }}
         run: npm run lint
+
+      - name: Select system Chrome for packed Client Core
+        if: matrix.sdk == 'Client-Core'
+        run: |
+          test -x /usr/bin/google-chrome
+          echo "CHROME_BIN=/usr/bin/google-chrome" >> "$GITHUB_ENV"
 
       - name: Run tests with coverage
         working-directory: ${{ matrix.path }}

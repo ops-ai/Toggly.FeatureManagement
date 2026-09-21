@@ -87,3 +87,15 @@ test('runs the complete packed Angular host matrix in the required test job', ()
   const testJob = workflow.slice(workflow.indexOf('\n  test:'), workflow.indexOf('\n  test-docusaurus-host:'));
   assert.match(testJob, /- name: Verify packed Angular consumers in Chrome\s+if: matrix\.sdk == 'Angular'\s+working-directory: \$\{\{ matrix\.path \}\}\s+env:\s+CHROME_BIN: \/usr\/bin\/google-chrome\s+run: \|\s+test -x "\$CHROME_BIN"\s+npm run test:hosts/);
 });
+
+test('selects system Chrome before packed Client-Core tests', () => {
+  assert.match(
+    workflow,
+    /- name: Select system Chrome for packed Client Core\s+if: matrix\.sdk == 'Client-Core'/,
+  );
+  assert.match(workflow, /matrix\.sdk != 'Client-Core'/);
+  assert.match(
+    workflow,
+    /if: matrix\.sdk == 'Gatsby' \|\| matrix\.sdk == 'Client-Telemetry' \|\| matrix\.sdk == 'Client-Core'/,
+  );
+});
