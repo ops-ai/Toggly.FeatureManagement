@@ -4,48 +4,78 @@ import { createServer } from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { once } from 'node:events';
+import { withCleanupTimeout, withHostResources } from './host-resources.spec.ts';
+
+const listen = server => new Promise((resolve, reject) => {
+  server.once('error', reject);
+  server.listen(0, '127.0.0.1', () => { server.off('error', reject); resolve(); });
+});
+const closeServer = server => withCleanupTimeout(() => new Promise((resolve, reject) => {
+  if (!server.listening) { resolve(); return; }
+  server.close(error => error ? reject(error) : resolve());
+  server.closeAllConnections();
+}), 'HTTP server');
 
 export async function verifyBrowser(cwd, entry) {
-  const dist = fs.existsSync(path.join(cwd, 'dist/browser')) ? path.join(cwd, 'dist/browser') : path.join(cwd, 'dist');
-  let enabled = true;
-  const requests = [];
-  const telemetry = [];
-  const telemetryHeaders = [];
-  let preflights = 0;
-  const collector = createServer((req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin ?? '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Content-Encoding');
-    if (req.method === 'OPTIONS') { preflights++; res.statusCode = 204; res.end(); return; }
-    if (req.method !== 'POST' || req.url !== '/api/frontend/telemetry') { res.statusCode = 404; res.end(); return; }
-    const chunks = [];
-    req.on('data', chunk => chunks.push(chunk));
-    req.on('end', () => {
-      const bytes = Buffer.concat(chunks);
-      telemetryHeaders.push(req.headers);
-      telemetry.push(JSON.parse((req.headers['content-encoding'] === 'gzip' ? gunzipSync(bytes) : bytes).toString()));
-      res.statusCode = 202; res.end();
+  return withHostResources(async defer => {
+    const dist = fs.existsSync(path.join(cwd, 'dist/browser')) ? path.join(cwd, 'dist/browser') : path.join(cwd, 'dist');
+    let enabled = true;
+    const requests = [];
+    const telemetry = [];
+    const telemetryHeaders = [];
+    let preflights = 0;
+    const collector = createServer((req, res) => {
+      res.setHeader('Access-Control-Allow-Origin', req.headers.origin ?? '*');
+      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Content-Encoding');
+      if (req.method === 'OPTIONS') { preflights++; res.statusCode = 204; res.end(); return; }
+      if (req.method !== 'POST' || req.url !== '/api/frontend/telemetry') { res.statusCode = 404; res.end(); return; }
+      const chunks = [];
+      req.on('data', chunk => chunks.push(chunk));
+      req.on('end', () => {
+        const bytes = Buffer.concat(chunks);
+        telemetryHeaders.push(req.headers);
+        telemetry.push(JSON.parse((req.headers['content-encoding'] === 'gzip' ? gunzipSync(bytes) : bytes).toString()));
+        res.statusCode = 202; res.end();
+      });
     });
-  });
-  const server = createServer((req, res) => {
-    if (req.url.startsWith('/evaluated-variants-signed/')) {
-      requests.push(req.url);
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ Checkout: { enabled, variant: 'control', configurationValue: null }, Disabled: { enabled: false, variant: 'control', configurationValue: null } }));
-      return;
-    }
-    const url = new URL(req.url, 'http://localhost');
-    let file = path.join(dist, url.pathname);
-    if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(dist, 'index.html');
-    const contentTypes = { '.js': 'text/javascript', '.css': 'text/css' };
-    res.setHeader('content-type', contentTypes[path.extname(file)] ?? 'text/html');
-    res.end(fs.readFileSync(file));
-  });
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  await new Promise(resolve => collector.listen(0, '127.0.0.1', resolve));
-  const collectorUrl = `http://127.0.0.1:${collector.address().port}`;
-  const browser = await chromium.launch({ headless: true, ...(process.env.CHROME_BIN ? { executablePath: process.env.CHROME_BIN } : {}) });
-  try {
+    defer(() => closeServer(collector));
+    const server = createServer((req, res) => {
+      if (req.url.startsWith('/evaluated-variants-signed/')) {
+        requests.push(req.url);
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ Checkout: { enabled, variant: 'control', configurationValue: null }, Disabled: { enabled: false, variant: 'control', configurationValue: null } }));
+        return;
+      }
+      const url = new URL(req.url, 'http://localhost');
+      let file = path.join(dist, url.pathname);
+      if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(dist, 'index.html');
+      const contentTypes = { '.js': 'text/javascript', '.css': 'text/css' };
+      res.setHeader('content-type', contentTypes[path.extname(file)] ?? 'text/html');
+      res.end(fs.readFileSync(file));
+    });
+    defer(() => closeServer(server));
+    await listen(server);
+    await listen(collector);
+    const collectorUrl = `http://127.0.0.1:${collector.address().port}`;
+    const browserServer = await chromium.launchServer({ headless: true, host: '127.0.0.1', ...(process.env.CHROME_BIN ? { executablePath: process.env.CHROME_BIN } : {}) });
+    defer(async () => {
+      const child = browserServer.process();
+      try { await withCleanupTimeout(() => browserServer.close(), 'Chrome server'); } finally {
+        if (child.exitCode === null && child.signalCode === null) {
+          try { await withCleanupTimeout(() => browserServer.kill(), 'Chrome server kill'); } finally {
+            if (child.exitCode === null && child.signalCode === null) {
+              const closed = once(child, 'close');
+              child.kill('SIGKILL');
+              await withCleanupTimeout(() => closed, 'Chrome child');
+            }
+          }
+        }
+      }
+    });
+    const browser = await chromium.connect(browserServer.wsEndpoint());
+    defer(() => withCleanupTimeout(() => browser.close(), 'Chrome connection'));
     const page = await browser.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -125,9 +155,5 @@ export async function verifyBrowser(cwd, entry) {
     assert.ok(activeSocketClosed, 'destroy closes the active WebSocket');
     assert.deepEqual(errors, [], 'no uncaught browser errors');
     console.log(`BROWSER ${entry.fixture}: input binding; component/flag/builder/variant local deny+restore and remote refresh; both guards allow+redirect; identity/groups/claims and minted-only definitions; destroy/socket close; cross-origin telemetry POST/preflight/native gzip i/u and plain keepalive i; aggregate checks/metrics; pagehide/destruction flush`);
-  } finally {
-    await browser.close();
-    await new Promise(resolve => server.close(resolve));
-    await new Promise(resolve => collector.close(resolve));
-  }
+  });
 }

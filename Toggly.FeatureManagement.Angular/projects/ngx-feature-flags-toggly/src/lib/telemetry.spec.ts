@@ -347,6 +347,73 @@ describe('Angular frontend telemetry', () => {
     localStorage.setItem((variants as any)._flagsCacheKey,JSON.stringify({On:true}));
     expect((variants as any)._definitionsRevision).toBeNull();
   });
+  for (const context of [{instanceId:'mint-a'}, {identity:'legacy-user'}]) {
+    it(`keeps both response-mode bodies paired with their revisions across reload and 304 (${Object.keys(context)[0]})`, async () => {
+      const requests: Array<{mode:string,revision:string|null}> = [];
+      (globalThis.fetch as jasmine.Spy).and.callFake(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const mode=String(input).includes('variants') ? 'variants' : 'evaluated';
+        const revision=new Headers(init?.headers).get('If-None-Match');
+        requests.push({mode,revision});
+        if (revision) return new Response(null,{status:304,headers:{ETag:revision}});
+        return new Response(JSON.stringify(mode==='variants' ? {On:{enabled:true,variant:'control'}} : {On:false}),
+          {status:200,headers:{ETag:`${mode}-revision`}});
+      });
+      const options={persistCache:true,enableTelemetry:false,...context};
+      const basic=create(options); await basic.setContext(context);
+      expect(await basic.isFeatureOn('On')).toBeFalse();
+      const variants=create({...options,enableVariants:true}); await variants.setContext(context);
+      expect(await variants.getVariant('On')).toEqual({name:'control',configurationValue:undefined});
+      basic.ngOnDestroy(); variants.ngOnDestroy();
+      const reloadedBasic=create(options); await reloadedBasic.setContext(context);
+      expect(await reloadedBasic.isFeatureOn('On')).toBeFalse();
+      const reloadedVariants=create({...options,enableVariants:true}); await reloadedVariants.setContext(context);
+      expect(await reloadedVariants.isFeatureOn('On')).toBeTrue();
+      expect(await reloadedVariants.getVariant('On')).toEqual({name:'control',configurationValue:undefined});
+      expect(requests).toEqual([{mode:'evaluated',revision:null},{mode:'variants',revision:null},
+        {mode:'evaluated',revision:'evaluated-revision'},{mode:'variants',revision:'variants-revision'}]);
+      reloadedVariants.clearFeatureFlagsCache();
+      expect((reloadedVariants as any)._definitionsRevision).toBeNull();
+      expect((reloadedBasic as any)._readCachedFlags()).toEqual({On:false});
+      expect((reloadedBasic as any)._definitionsRevision).toBe('evaluated-revision');
+    });
+  }
+
+  it('does not combine a legacy shared body with an older mode revision', async () => {
+    const contextKey=evaluationContextCacheKey({identity:'legacy-user'});
+    localStorage.setItem(`toggly:flags:telemetry-test:Production:${contextKey}`,JSON.stringify({Cached:true}));
+    localStorage.setItem(`toggly:revision:telemetry-test:Production:v2:evaluated:${contextKey}`,'old-shared-body-revision');
+    const service=create({persistCache:true,identity:'legacy-user',enableTelemetry:false});
+    expect(await service.isFeatureOn('Cached')).toBeTrue();
+    expect((service as any)._definitionsRevision).toBeNull();
+    let revision:string|null=null;
+    (globalThis.fetch as jasmine.Spy).and.callFake(async (_input:RequestInfo|URL,init?:RequestInit)=>{
+      revision=new Headers(init?.headers).get('If-None-Match');
+      return new Response(JSON.stringify({Fresh:true}),{status:200,headers:{ETag:'fresh-revision'}});
+    });
+    await service.setContext({identity:'legacy-user'});
+    expect(revision).toBeNull(); expect(await service.isFeatureOn('Fresh')).toBeTrue();
+  });
+
+  it('tracks, evicts and clears variant-mode flag bodies without touching evaluated bodies', async () => {
+    definitions={On:false};
+    const basic=create({persistCache:true,enableTelemetry:false,instanceId:'shared'});
+    await basic.setContext({instanceId:'shared'});
+    definitions={On:{enabled:true,variant:'control'}};
+    const variants=create({persistCache:true,enableTelemetry:false,enableVariants:true,maxCacheKeys:2,instanceId:'mint-a'});
+    await variants.setContext({instanceId:'mint-a'});
+    const firstFlags=(variants as any)._flagsCacheKey;
+    const firstVariants=(variants as any)._variantsCacheKey;
+    expect(JSON.parse(localStorage.getItem('toggly:cache-lru')!).entries[firstFlags]).toBeDefined();
+    await variants.setContext({instanceId:'mint-b'});
+    expect(localStorage.getItem(firstFlags)).toBeNull(); expect(localStorage.getItem(firstVariants)).toBeNull();
+    const currentFlags=(variants as any)._flagsCacheKey;
+    const currentVariants=(variants as any)._variantsCacheKey;
+    variants.clearFeatureFlagsCache();
+    expect(localStorage.getItem(currentFlags)).toBeNull(); expect(localStorage.getItem(currentVariants)).toBeNull();
+    expect(JSON.parse(localStorage.getItem('toggly:cache-lru')!).entries).toEqual({});
+    expect((basic as any)._readCachedFlags()).toEqual({On:false});
+  });
+
   it('separates structured targeting from delimiter-containing identity values', () => {
     const first=create({identity:'alice|g:staff'});
     const second=create({identity:'alice',groups:['staff']});

@@ -54,13 +54,15 @@ import { buildDefinitionFetchHeaders } from './sdk-identity'
 import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions } from '@ops-ai/toggly-signed-defs'
 
 const CACHE_PREFIX_FLAGS = 'toggly:flags:'
+const CACHE_PREFIX_VARIANT_FLAGS = 'toggly:variant-flags:'
 const CACHE_PREFIX_VARIANTS = 'toggly:variants:'
 const CACHE_PREFIX_REVISION = 'toggly:revision:'
 const CACHE_LRU_KEY = 'toggly:cache-lru'
 
-function getFlagsCacheKey(appKey: string, environment: string, contextKey = ''): string {
+function getFlagsCacheKey(appKey: string, environment: string, contextKey = '', variants = false): string {
   const suffix = contextKey ? `:${contextKey}` : ''
-  return `${CACHE_PREFIX_FLAGS}${appKey}:${environment}${suffix}`
+  // Keep evaluated-mode legacy targeting caches; variant projections must never overwrite them.
+  return `${variants ? CACHE_PREFIX_VARIANT_FLAGS : CACHE_PREFIX_FLAGS}${appKey}:${environment}${suffix}`
 }
 
 /** Package-local wrapper so Angular's call site differs from React/Vue/Svelte for Sonar CPD. */
@@ -176,6 +178,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
       this._config.appKey ?? '',
       this._config.environment ?? 'Production',
       this._contextCacheKey,
+      this._enableVariants,
     )
   }
 
@@ -188,7 +191,8 @@ export class TogglyService implements ITogglyService, OnDestroy {
   }
 
   private get _revisionCacheKey(): string {
-    return `${getRevisionCacheKey(this._config.appKey ?? '', this._config.environment ?? 'Production')}:v2:${this._enableVariants ? 'variants' : 'evaluated'}:${this._contextCacheKey}`
+    // Older revisions could refer to a flags body overwritten by the other response mode.
+    return `${getRevisionCacheKey(this._config.appKey ?? '', this._config.environment ?? 'Production')}:v3:${this._enableVariants ? 'variants' : 'evaluated'}:${this._contextCacheKey}`
   }
 
   private get _definitionsRevision(): string | null {
@@ -394,7 +398,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
   }
 
   private _isTrackedCacheKey(key: string): boolean {
-    return key.startsWith(CACHE_PREFIX_FLAGS) || key.startsWith(CACHE_PREFIX_VARIANTS)
+    return key.startsWith(CACHE_PREFIX_FLAGS) || key.startsWith(CACHE_PREFIX_VARIANT_FLAGS) || key.startsWith(CACHE_PREFIX_VARIANTS)
   }
 
   private _loadLruIndex(): CacheLruIndex {
@@ -459,6 +463,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
    * Clear current identity-scoped flags/variants localStorage entries and update the LRU index.
    */
   clearFeatureFlagsCache(): void {
+    this._cachedDefinitionsRevision = null
     if (!this._canPersist || !this._config.appKey) {
       this._features = null
       this._variants = null
