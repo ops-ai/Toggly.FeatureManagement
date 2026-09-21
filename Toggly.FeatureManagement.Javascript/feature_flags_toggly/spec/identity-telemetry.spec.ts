@@ -382,3 +382,37 @@ test.each([false, true])('preserves configured unrelated queries and ordinary ta
   expect(url.searchParams.get('claim.role')).toBe('admin');
   expect(url.searchParams.has('i')).toBe(false);
 });
+
+test.each([false, true].flatMap(enableVariants => [undefined, ' '].map(instanceId => ({ enableVariants, instanceId }))))('ignores configured retired i at initialization (variants $enableVariants, token $instanceId)', async ({ enableVariants, instanceId }) => {
+  await init({ baseURI: 'https://definitions.invalid/base?i=retired&i=older&keep=one&keep=two', instanceId, identity: 'alice', groups: ['staff'], claims: { role: 'admin' }, enableVariants });
+  const query = definitions()[0].url.searchParams;
+  expect(query.has('i')).toBe(false);
+  expect(query.get(enableVariants ? 'userId' : 'u')).toBe('alice');
+  expect(query.getAll('keep')).toEqual(['one', 'two']);
+  SDK.recordUsage('Initial'); await SDK.flushTelemetry();
+  expect(bodies()[0].u).toBe('alice'); expect(bodies()[0].i).toBeUndefined();
+});
+
+test.each([false, true])('keeps active token authority through partial context changes, rotation and explicit clearing (variants %s)', async enableVariants => {
+  const transport = global.fetch;
+  global.fetch = jest.fn(async (input, options) => {
+    if (String(input).includes('/api/frontend/telemetry')) return transport(input, options);
+    requests.push({ url: new URL(String(input)), init: options });
+    return response(tokenDefinitions(enableVariants, true));
+  });
+  await init({ baseURI: 'https://definitions.invalid/base?i=retired&u=legacy&userId=legacy&g=old&claim.old=kept&keep=one&keep=two', instanceId: 'current', identity: 'alice', enableVariants });
+  SDK.recordUsage('Current');
+  await SDK.setContext({ identity: 'bob', groups: ['team'] });
+  expect(definitions().at(-1)!.url.searchParams.get('i')).toBe('current');
+  SDK.instanceId = 'next'; await SDK.refresh(); SDK.recordUsage('Next');
+  SDK.instanceId = ''; await SDK.refresh(); SDK.recordUsage('Cleared');
+  expect(definitions().map(r => r.url.searchParams.get('i'))).toEqual(['current', 'current', 'next', null]);
+  const query = definitions().at(-1)!.url.searchParams;
+  expect(query.get(enableVariants ? 'userId' : 'u')).toBe('bob');
+  expect(query.getAll('keep')).toEqual(['one', 'two']);
+  expect(query.get('claim.old')).toBe('kept');
+  expect(SDK.isFeatureOn('Flag')).toBe(true);
+  if (enableVariants) expect(SDK.getVariant('Flag')).toEqual({ name: 'blue', configurationValue: 'A' });
+  await SDK.flushTelemetry();
+  expect(bodies().filter(body => body.f.Current || body.f.Next || body.f.Cleared).map(body => [body.i, body.u])).toEqual([['current', undefined], ['next', undefined], [undefined, 'bob']]);
+});

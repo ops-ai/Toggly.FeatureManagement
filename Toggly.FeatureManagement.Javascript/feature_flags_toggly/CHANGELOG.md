@@ -10,6 +10,8 @@
   interval while preserving feature evaluation when telemetry is unavailable.
 
 ### Changed
+- Keep the active context authoritative over configured URL tokens, including
+  initialization without a token and explicit token clearing.
 - Accept a host-minted `instanceId` for definitions and compact telemetry, with
   client identity fallback and no client groups/claims when a token is present.
 - Isolate definitions, revisions and pending responses when identity or token changes.

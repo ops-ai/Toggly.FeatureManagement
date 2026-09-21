@@ -580,6 +580,7 @@ export class Toggly {
     const path = mode === 'variants' ? 'evaluated-variants-signed' : 'evaluated-signed';
     const url = new URL(Toggly._config.baseURI);
     url.pathname = `${url.pathname.replace(/\/$/, '')}/${path}/${Toggly._config.appKey}/${Toggly._config.environment}`;
+    url.searchParams.delete('i');
     if (Toggly._instanceId) {
       for (const key of Array.from(url.searchParams.keys())) {
         if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) url.searchParams.delete(key);
