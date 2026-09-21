@@ -34,6 +34,7 @@ export declare class Toggly {
     static _fallbackRefreshInterval: number;
     private static get _revisionCacheKey();
     private static get definitionsRevision();
+    private static get _hasPersistedDefinitions();
     private static cacheDefinitionsRevision;
     private static scheduleDebouncedRefresh;
     private static handleWsSyncMessage;

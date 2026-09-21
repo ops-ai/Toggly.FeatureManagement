@@ -106,7 +106,7 @@ export class Toggly {
     if (Toggly._cachedDefinitionsRevision && Toggly._cachedRevisionContext === Toggly._revisionCacheKey) {
       return Toggly._cachedDefinitionsRevision;
     }
-    if (!Toggly._persistCache || !Toggly._cachedFeatureFlags || (Toggly._config.enableVariants && !Toggly.variantsValue)) {
+    if (!Toggly._hasPersistedDefinitions) {
       return null;
     }
     try {
@@ -116,15 +116,26 @@ export class Toggly {
     }
   }
 
+  private static get _hasPersistedDefinitions(): boolean {
+    if (!Toggly._persistCache) return false;
+    const keys = [Toggly._flagsCacheKey];
+    if (Toggly._config.enableVariants) keys.push(Toggly._variantsCacheKey);
+    try {
+      return keys.every(key => {
+        const body = JSON.parse(localStorage.getItem(key) ?? 'null');
+        return body !== null && typeof body === 'object' && !Array.isArray(body);
+      });
+    } catch { return false; }
+  }
+
   private static cacheDefinitionsRevision(revision: string | null | undefined): void {
     if (!revision) {
       return;
     }
     Toggly._cachedDefinitionsRevision = revision;
     Toggly._cachedRevisionContext = Toggly._revisionCacheKey;
-    if (!Toggly._persistCache) {
-      return;
-    }
+    // Other bundles can evict persisted bodies while this instance retains memory.
+    if (!Toggly._hasPersistedDefinitions) return;
     try {
       localStorage.setItem(Toggly._revisionCacheKey, revision);
     } catch (error) {
@@ -826,6 +837,7 @@ export class Toggly {
     Toggly._requests.add(controller);
     return new Promise((resolve) => {
       const { url, headers } = Toggly.consumePendingDefinitionsRequest('evaluated');
+      let acceptedResponse: Response;
 
       // Wrap the fetch invocation in a resolved Promise so that any synchronous
       // failure (e.g. a non-conforming fetch implementation returning undefined)
@@ -834,8 +846,8 @@ export class Toggly {
         .then(() => generation === Toggly._generation ? fetch(url, { headers, signal: controller.signal }) : null)
         .then((response) => {
           if (generation !== Toggly._generation) { resolve(fallback); return null; }
-          Toggly.applyFetchRevision(response);
           if (response.status === 304) {
+            Toggly.applyFetchRevision(response);
             const flags = Toggly._getFallbackFlags();
             Toggly._inMemoryFlags = flags;
             Toggly._hasLoadedFlags = true;
@@ -845,6 +857,7 @@ export class Toggly {
           if (!response.ok) {
             throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`);
           }
+          acceptedResponse = response;
           return Toggly.readResponseBody(response);
         })
         .then(async (bodyText) => {
@@ -858,6 +871,7 @@ export class Toggly {
           if (generation !== Toggly._generation) { resolve(fallback); return; }
           const flags = (defs && typeof defs === 'object' ? defs : {}) as EvaluatedDefinitions;
           Toggly.cacheFeatureFlags(flags);
+          Toggly.applyFetchRevision(acceptedResponse);
           resolve(toBooleanDefinitions(flags));
 
           if (Toggly._config.isDebug) { console.log(`Toggly.fetchFeatureFlags - ${JSON.stringify(flags)}`); }
@@ -880,13 +894,14 @@ export class Toggly {
     Toggly._requests.add(controller);
     return new Promise((resolve) => {
       const { url, headers } = Toggly.consumePendingDefinitionsRequest('variants');
+      let acceptedResponse: Response;
 
       Promise.resolve()
         .then(() => generation === Toggly._generation ? fetch(url, { headers, signal: controller.signal }) : null)
         .then((response) => {
           if (generation !== Toggly._generation) { resolve(fallback); return null; }
-          Toggly.applyFetchRevision(response);
           if (response.status === 304) {
+            Toggly.applyFetchRevision(response);
             const flags = Toggly._getFallbackFlags();
             Toggly._inMemoryFlags = flags;
             Toggly._hasLoadedFlags = true;
@@ -896,6 +911,7 @@ export class Toggly {
           if (!response.ok) {
             throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`);
           }
+          acceptedResponse = response;
           return Toggly.readResponseBody(response);
         })
         .then(async (bodyText) => {
@@ -918,6 +934,7 @@ export class Toggly {
             boolFlags[key] = entry.enabled;
           }
           Toggly.cacheFeatureFlags(boolFlags);
+          Toggly.applyFetchRevision(acceptedResponse);
           resolve(boolFlags);
 
           if (Toggly._config.isDebug) { console.log(`Toggly.fetchFeatureFlagsWithVariants - ${JSON.stringify(defs)}`); }
