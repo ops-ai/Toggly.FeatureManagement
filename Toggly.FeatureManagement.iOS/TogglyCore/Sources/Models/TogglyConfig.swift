@@ -14,6 +14,9 @@ public struct TogglyConfig: Sendable {
     /// User identity for feature targeting.
     public let identity: String?
 
+    /// Host-minted identity capability. The SDK never mints tokens or uses a Backend key.
+    public let instanceId: String?
+
     /// Initial targeting memberships. Blank groups are omitted from requests.
     public let groups: [String]
 
@@ -51,6 +54,21 @@ public struct TogglyConfig: Sendable {
     /// Whether to enable WebSocket live updates for real-time flag changes.
     public let enableLiveUpdates: Bool
 
+    /// Send frontend feature and app metrics when an app key is set.
+    public let enableTelemetry: Bool
+
+    /// Independent frontend metrics endpoint base URL.
+    public let metricsBaseUrl: String
+
+    /// Flush interval in milliseconds. Values outside 30,000...60,000 use 45,000.
+    public let telemetryFlushIntervalMs: Int
+
+    /// Receives bounded reporter status codes without event payloads.
+    public let onTelemetryDiagnostic: TelemetryReporter.Diagnostic?
+
+    // Internal transport seam for deterministic package tests.
+    var telemetryTransport: TelemetryReporter.Transport?
+
     /// Creates a new Toggly configuration.
     /// - Parameters:
     ///   - appKey: The application key from the Toggly dashboard.
@@ -85,12 +103,18 @@ public struct TogglyConfig: Sendable {
         enableLiveUpdates: Bool = true,
         maxSignatureAgeSeconds: Int64? = nil,
         groups: [String] = [],
-        claims: [String: String] = [:]
+        claims: [String: String] = [:],
+        enableTelemetry: Bool = true,
+        metricsBaseUrl: String = "https://metrics.toggly.io",
+        telemetryFlushIntervalMs: Int = 45_000,
+        onTelemetryDiagnostic: TelemetryReporter.Diagnostic? = nil,
+        instanceId: String? = nil
     ) {
         self.appKey = appKey
         self.environment = environment
         self.baseURI = baseURI
         self.identity = identity
+        self.instanceId = instanceId
         self.groups = groups
         self.claims = claims
         self.featureDefaults = featureDefaults
@@ -103,5 +127,10 @@ public struct TogglyConfig: Sendable {
         self.storage = storage
         self.enableLiveUpdates = enableLiveUpdates
         self.maxSignatureAgeSeconds = maxSignatureAgeSeconds
+        self.enableTelemetry = enableTelemetry
+        self.metricsBaseUrl = metricsBaseUrl
+        self.telemetryFlushIntervalMs = telemetryFlushIntervalMs
+        self.onTelemetryDiagnostic = onTelemetryDiagnostic
+        self.telemetryTransport = nil
     }
 }

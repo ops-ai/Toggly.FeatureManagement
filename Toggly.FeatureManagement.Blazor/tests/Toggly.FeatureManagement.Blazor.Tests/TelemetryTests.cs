@@ -217,6 +217,31 @@ public class TelemetryTests : BlazorTestContext
         { Calls++; RequestToken = ct; Started.TrySetResult(); return Completion.Task.WaitAsync(ct); }
     }
 
+    [Fact]
+    public async Task CompanionIdentityApiPreservesQueuedAttributionAndContextClearsToken()
+    {
+        var transport = new IdentityCapture(); using var http = new HttpClient(new EmptyHandler());
+        var client = new TogglyClient(new() { AppKey = "local", Context = new("alice"), TelemetryTransport = transport, TrustedJwks = "{}" }, http, new Verifier());
+        await using var browser = new BrowserFeatureSession(client);
+        IFeatureSession session = browser; IFrontendIdentitySession identity = browser; IFrontendTelemetry events = browser;
+        events.RecordUsage("before"); await identity.SetIdentityAsync(new("bob"), "minted"); events.RecordUsage("minted");
+        await session.SetContextAsync(new()); events.RecordUsage("logout"); await events.FlushTelemetryAsync();
+        Assert.Equal(3, transport.Bodies.Count);
+        Assert.Equal("alice", transport.Bodies[0].GetProperty("u").GetString());
+        Assert.Equal("minted", transport.Bodies[1].GetProperty("i").GetString()); Assert.False(transport.Bodies[1].TryGetProperty("u", out _));
+        Assert.False(transport.Bodies[2].TryGetProperty("i", out _)); Assert.False(transport.Bodies[2].TryGetProperty("u", out _));
+    }
+    private sealed class IdentityCapture : IFrontendTelemetryTransport
+    {
+        internal List<JsonElement> Bodies = [];
+        public Task<FrontendTelemetryResponse> SendAsync(Uri endpoint, ReadOnlyMemory<byte> payload, bool gzip, bool keepalive, CancellationToken ct)
+        {
+            using var input = new System.IO.Compression.GZipStream(new MemoryStream(payload.ToArray()), System.IO.Compression.CompressionMode.Decompress);
+            using var output = new MemoryStream(); if (gzip) input.CopyTo(output); else output.Write(payload.Span);
+            Bodies.Add(JsonDocument.Parse(output.ToArray()).RootElement); return Task.FromResult(new FrontendTelemetryResponse(202));
+        }
+    }
+
     private sealed class EmptyHandler : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.ServiceUnavailable));

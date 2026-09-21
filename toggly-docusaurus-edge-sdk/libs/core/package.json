@@ -1,14 +1,22 @@
 {
   "name": "@ops-ai/toggly-client-core",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Framework-agnostic Toggly client for feature flag evaluation",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
+      "browser": "./dist/browser.js",
       "import": "./dist/index.js",
-      "require": "./dist/index.js"
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "import": "./dist/browser.js",
+      "require": "./dist/browser.js",
+      "default": "./dist/browser.js"
     }
   },
   "files": [
@@ -22,7 +30,8 @@
     "lint": "eslint src --ext .ts",
     "test": "vitest run",
     "test:watch": "vitest --watch",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:packed": "node tests/packed-browser.mjs"
   },
   "keywords": [
     "toggly",
@@ -43,10 +52,13 @@
   "homepage": "https://docs.toggly.io/sdks/docusaurus",
   "dependencies": {
     "@ops-ai/toggly-hooks-types": "^1.4.3",
+    "@ops-ai/toggly-client-telemetry": "^1.1.0",
     "@ops-ai/toggly-signed-defs": "^1.2.3"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^1.6.0",
+    "esbuild": "^0.25.10",
+    "playwright": "^1.58.2",
     "typescript": "^5.3.3",
     "vitest": "^1.6.0"
   },

@@ -4,6 +4,7 @@ import androidx.compose.runtime.*
 import io.toggly.core.TogglyService
 import io.toggly.core.models.FeatureFlags
 import io.toggly.core.models.TogglyConfig
+import io.toggly.core.models.TogglyInitResponse
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -31,7 +32,8 @@ fun TogglyProvider(
 ) {
     // Collected values and every remembered adapter state belong to this owner.
     // Effect keys alone restart collection but retain the previous State value.
-    key(service) {
+    val contextRevision by service.evaluationContextRevision.collectAsState()
+    key(service, contextRevision) {
         val featureFlags by service.featureFlags.collectAsState()
         CompositionLocalProvider(
             LocalTogglyService provides service,
@@ -112,6 +114,13 @@ class TogglyState(
     fun setGauge(metricKey: String, value: Double) = service.setGauge(metricKey, value)
     /** Await the current best-effort telemetry drain. */
     suspend fun flushTelemetry() = service.flushTelemetry()
+
+    /** Replace identity and its host-minted token together. */
+    suspend fun setIdentity(identity: String?, instanceId: String?): TogglyInitResponse =
+        service.setIdentity(identity, instanceId)
+
+    /** Rotate or clear the host-minted token, preserving the current identity. */
+    suspend fun setInstanceId(instanceId: String?): TogglyInitResponse = service.setInstanceId(instanceId)
 
     /**
      * Set user identity for targeting.
