@@ -185,6 +185,32 @@ describe('maxCacheKeys LRU', () => {
     } finally { service.dispose() }
   })
 
+  it.each([false, true])('keeps live 304 state without recreating an evicted revision (variants=%s)', async enableVariants => {
+    const options = { appKey, environment, enableVariants, maxCacheKeys: enableVariants ? 2 : 1, enableLiveUpdates: false, enableTelemetry: false }
+    const owners = ['a', 'b'].map(instanceId => new Toggly({ ...options, instanceId }))
+    mockFetch.mockImplementation(async (url: string, init: RequestInit) => {
+      const revision = `rev-${new URL(url).searchParams.get('i')}`
+      const notModified = new Headers(init.headers).get('If-None-Match') === revision
+      return { ...okResponse(enableVariants ? { A: { enabled: true, variant: 'blue', configurationValue: 7 } } : { A: true }),
+        status: notModified ? 304 : 200, ok: !notModified, headers: { get: (key: string) => key.toLowerCase() === 'etag' ? revision : null } }
+    })
+    try {
+      await owners[0]._loadFeatures()
+      jest.setSystemTime(Date.now() + 1000)
+      await owners[1]._loadFeatures()
+      const keysForA = () => Object.keys(localStorage).filter(key => key.endsWith(':i:a'))
+      expect(keysForA()).toEqual([])
+      for (let refresh = 0; refresh < 2; refresh++) {
+        expect(await owners[0]._loadFeatures(true)).toEqual({ A: true })
+        expect(await owners[0].isFeatureOn('A')).toBe(true)
+        expect(owners[0].getVariant('A')).toEqual(enableVariants ? { name: 'blue', configurationValue: 7 } : null)
+        expect(new Headers(mockFetch.mock.calls[mockFetch.mock.calls.length - 1][1].headers).get('If-None-Match')).toBe('rev-a')
+        expect(keysForA()).toEqual([])
+      }
+      expect(Object.keys(localStorage).filter(key => key.startsWith('toggly:revision:'))).toHaveLength(1)
+    } finally { owners.forEach(owner => owner.dispose()) }
+  })
+
   it('removes cleared flags and variants keys from the LRU index', async () => {
     mockFetch.mockResolvedValueOnce(
       okResponse({

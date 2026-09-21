@@ -51,3 +51,5 @@ The runner regenerates only disposable consumer locks through npm, then uses
 `npm ci`; it prints `LOCAL INTEGRATION ARTIFACT`. Checked-in fixture locks remain
 unchanged. Final acceptance must regenerate the committed locks from the real
 registry and run without the artifact override.
+
+The consumer runner bounds each owned command to three minutes and uses a dedicated process group so failed or hung browser children cannot retain descendants. Cleanup independently closes Chrome and both HTTP listeners, removes the isolated consumers and npm cache, and preserves the original failure alongside cleanup errors. The command runs real child/listener negative controls for launch, assertion, rejected or hung browser shutdown, artifact cleanup, and logging failures before the three registry hosts.

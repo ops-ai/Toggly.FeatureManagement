@@ -957,7 +957,7 @@ var HookExecutor = /** @class */ (function () {
 }());
 
 var SDK_ID = 'react';
-var SDK_VERSION = '1.6.0';
+var SDK_VERSION = '1.12.0';
 var SDK_HEADER_ID = 'X-Toggly-Sdk';
 var SDK_HEADER_VERSION = 'X-Toggly-Sdk-Version';
 function sdkUserAgent() {
@@ -1363,9 +1363,9 @@ var Toggly = /** @class */ (function () {
             return __awaiter(_this, void 0, void 0, function () {
                 var generation, now, isInitialLoad, appKey, env, contextKey, url, parsed, keys_2, _i, keys_1, key, pin, fetchUrl, loaded, parsedDefs, defs, error_1, recovered;
                 var _this = this;
-                var _a, _b, _c, _d, _e;
-                return __generator(this, function (_f) {
-                    switch (_f.label) {
+                var _a, _b, _c, _d, _e, _f, _g;
+                return __generator(this, function (_h) {
+                    switch (_h.label) {
                         case 0:
                             if (this._disposed)
                                 return [2 /*return*/, this._booleanFeatures()];
@@ -1383,8 +1383,8 @@ var Toggly = /** @class */ (function () {
                                     checkIfApiCallFinished();
                                 })];
                         case 1:
-                            _f.sent();
-                            _f.label = 2;
+                            _h.sent();
+                            _h.label = 2;
                         case 2:
                             if (generation !== this._generation || this._disposed)
                                 return [2 /*return*/, this._booleanFeatures()
@@ -1407,9 +1407,9 @@ var Toggly = /** @class */ (function () {
                             appKey = (_a = this._config.appKey) !== null && _a !== void 0 ? _a : '';
                             env = (_b = this._config.environment) !== null && _b !== void 0 ? _b : 'Production';
                             contextKey = this._bodyCacheKey();
-                            _f.label = 3;
+                            _h.label = 3;
                         case 3:
-                            _f.trys.push([3, 7, 10, 11]);
+                            _h.trys.push([3, 7, 10, 11]);
                             url = dist.buildEvaluatedSignedUrl((_c = this._config.baseURI) !== null && _c !== void 0 ? _c : 'https://definitions.toggly.io', appKey, env, this._getEvaluationContext(), !!this._config.enableVariants);
                             if (this._config.instanceId) {
                                 parsed = new URL(url);
@@ -1431,13 +1431,11 @@ var Toggly = /** @class */ (function () {
                                     headers: buildDefinitionFetchHeaders(),
                                 })];
                         case 4:
-                            loaded = _f.sent();
+                            loaded = _h.sent();
                             if (generation !== this._generation || this._disposed)
                                 return [2 /*return*/, this._booleanFeatures()];
-                            if (loaded.revision) {
-                                this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''));
-                            }
                             if (loaded.notModified) {
+                                this._cacheDefinitionsRevision((_e = loaded.revision) === null || _e === void 0 ? void 0 : _e.replace(/^"+|"+$/g, ''));
                                 if (isInitialLoad)
                                     this.startWebSocket();
                                 return [2 /*return*/, this._booleanFeatures()];
@@ -1459,18 +1457,19 @@ var Toggly = /** @class */ (function () {
                                     writeCachedFlags(appKey, env, this._features, contextKey, this._config.maxCacheKeys);
                                 }
                             }
+                            this._cacheDefinitionsRevision((_f = loaded.revision) === null || _f === void 0 ? void 0 : _f.replace(/^"+|"+$/g, ''));
                             if (!this._features) return [3 /*break*/, 6];
                             return [4 /*yield*/, this._hookExecutor.executeAfterRefresh(dist.toBooleanDefinitions(this._features))];
                         case 5:
-                            _f.sent();
-                            _f.label = 6;
+                            _h.sent();
+                            _h.label = 6;
                         case 6:
                             if (generation !== this._generation || this._disposed)
                                 return [2 /*return*/, this._booleanFeatures()];
                             this.notifyFeaturesRefresh();
                             return [3 /*break*/, 11];
                         case 7:
-                            error_1 = _f.sent();
+                            error_1 = _h.sent();
                             if (generation !== this._generation || this._disposed)
                                 return [2 /*return*/, this._booleanFeatures()];
                             this._reportError('Error fetching feature flags', error_1);
@@ -1489,7 +1488,7 @@ var Toggly = /** @class */ (function () {
                                         ? readCachedFlags(appKey, env, contextKey, _this._config.maxCacheKeys)
                                         : null;
                                 },
-                                defaults: (_e = this._config.featureDefaults) !== null && _e !== void 0 ? _e : {},
+                                defaults: (_g = this._config.featureDefaults) !== null && _g !== void 0 ? _g : {},
                                 variantsToFlags: variantDefsToFlags,
                             });
                             if (recovered) {
@@ -1503,8 +1502,8 @@ var Toggly = /** @class */ (function () {
                             if (!this._features) return [3 /*break*/, 9];
                             return [4 /*yield*/, this._hookExecutor.executeAfterRefresh(dist.toBooleanDefinitions(this._features))];
                         case 8:
-                            _f.sent();
-                            _f.label = 9;
+                            _h.sent();
+                            _h.label = 9;
                         case 9:
                             if (generation !== this._generation || this._disposed)
                                 return [2 /*return*/, this._booleanFeatures()];
@@ -1807,7 +1806,14 @@ var Toggly = /** @class */ (function () {
         }
         this._cachedDefinitionsRevision = revision;
         if (this._canPersist) {
-            writeCachedRevision(this._config.appKey, (_a = this._config.environment) !== null && _a !== void 0 ? _a : 'Production', revision, this._revisionScope());
+            var appKey = this._config.appKey;
+            var env = (_a = this._config.environment) !== null && _a !== void 0 ? _a : 'Production';
+            var scope = this._bodyCacheKey();
+            // Another live owner can evict our persisted snapshot while memory remains valid.
+            if (readCachedFlags(appKey, env, scope) === null ||
+                (this._config.enableVariants && readCachedVariants(appKey, env, scope) === null))
+                return;
+            writeCachedRevision(appKey, env, revision, this._revisionScope());
         }
     };
     Toggly.prototype._scheduleDebouncedRefresh = function (forceJwksRefresh) {

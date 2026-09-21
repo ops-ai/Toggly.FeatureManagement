@@ -502,7 +502,13 @@ export class Toggly implements TogglyService {
     }
     this._cachedDefinitionsRevision = revision
     if (this._canPersist) {
-      writeCachedRevision(this._config.appKey, this._config.environment ?? 'Production', revision, this._revisionScope())
+      const appKey = this._config.appKey
+      const env = this._config.environment ?? 'Production'
+      const scope = this._bodyCacheKey()
+      // Another live owner can evict our persisted snapshot while memory remains valid.
+      if (readCachedFlags(appKey, env, scope) === null ||
+        (this._config.enableVariants && readCachedVariants(appKey, env, scope) === null)) return
+      writeCachedRevision(appKey, env, revision, this._revisionScope())
     }
   }
 
@@ -693,10 +699,8 @@ export class Toggly implements TogglyService {
         },
       )
       if (generation !== this._generation || this._disposed) return this._booleanFeatures()
-      if (loaded.revision) {
-        this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
-      }
       if (loaded.notModified) {
+        this._cacheDefinitionsRevision(loaded.revision?.replace(/^"+|"+$/g, ''))
         if (isInitialLoad) this.startWebSocket()
         return this._booleanFeatures()
       }
@@ -717,6 +721,8 @@ export class Toggly implements TogglyService {
           writeCachedFlags(appKey, env, this._features, contextKey, this._config.maxCacheKeys)
         }
       }
+
+      this._cacheDefinitionsRevision(loaded.revision?.replace(/^"+|"+$/g, ''))
 
       if (this._features) {
         await this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))

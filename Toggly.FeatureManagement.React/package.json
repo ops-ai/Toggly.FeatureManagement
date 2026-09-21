@@ -5,7 +5,7 @@
   "scripts": {
     "build": "node scripts/clean.mjs && node scripts/build.mjs && node scripts/remove-intermediate-types.mjs && node scripts/normalize-distribution.mjs",
     "test": "jest --coverage",
-    "test:consumers": "tsc --project ../tests/react-consumer-fixtures/tsconfig.runner.json && node ../tests/react-consumer-fixtures/.runner/verify-consumers.js",
+    "test:consumers": "tsc --project ../tests/react-consumer-fixtures/tsconfig.runner.json && node --test ../tests/react-consumer-fixtures/cleanup.test.mjs && node ../tests/react-consumer-fixtures/.runner/verify-consumers.js",
     "test:watch": "jest --watch"
   },
   "author": "Toggly <support@toggly.io>",

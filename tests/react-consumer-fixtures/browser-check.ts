@@ -1,3 +1,4 @@
+import { cleanupOwned, closeBrowser, closeServer } from './owned-resources.js'
 import { createServer } from 'node:http'
 import { gunzipSync } from 'node:zlib'
 import assert from 'node:assert/strict'
@@ -8,11 +9,14 @@ import { dirname, join } from 'node:path'
 const require = createRequire(join(process.cwd(), 'package.json'))
 const { preview } = await import(join(dirname(require.resolve('vite/package.json')), 'dist/node/index.js'))
 const { default: puppeteer } = await import(require.resolve('puppeteer-core'))
-const server = await preview({ preview: { host: '127.0.0.1', port: 0 } })
+let server, collector, browser
+let failure: unknown
+try {
+server = await preview({ preview: { host: '127.0.0.1', port: 0 } })
 const telemetry = []
 const telemetryHeaders = []
 let preflights = 0
-const collector = createServer((request, response) => {
+collector = createServer((request, response) => {
   response.setHeader('Access-Control-Allow-Origin', request.headers.origin ?? '*')
   response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Content-Encoding')
@@ -27,10 +31,8 @@ const collector = createServer((request, response) => {
     response.statusCode = 202; response.end()
   })
 })
-await new Promise<void>(resolve => collector.listen(0, '127.0.0.1', resolve))
+await new Promise<void>((resolve, reject) => { collector.once('error', reject); collector.listen(0, '127.0.0.1', resolve) })
 const metricsUrl = `http://127.0.0.1:${(collector.address() as import('node:net').AddressInfo).port}`
-let browser
-try {
   browser = await puppeteer.launch({
     executablePath: process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     headless: true,
@@ -164,8 +166,9 @@ try {
   console.log(`Browser: response-mode HTTP 304 roundtrips passed with ${telemetry.length - telemetryStart} exact telemetry envelopes; Chromium ${await browser.version()}`)
   assert.deepEqual(errors, [])
   console.log('Browser: provider, hooks, all/negated/render gates, local gates, context, refresh, StrictMode/unmount cleanup; real CORS/native gzip i/u/plain keepalive i/checks/metrics/pagehide/unmount telemetry passed')
-} finally {
-  if (browser) await browser.close()
-  await new Promise(resolve => server.httpServer.close(resolve))
-  await new Promise<void>(resolve => collector.close(() => resolve()))
-}
+} catch (error) { failure = error }
+await cleanupOwned([
+  () => browser && closeBrowser(browser),
+  () => server && closeServer(server.httpServer),
+  () => collector && closeServer(collector),
+], failure)
