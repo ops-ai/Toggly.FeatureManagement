@@ -31,7 +31,8 @@ let package = Package(
         .target(
             name: "TogglyCore",
             dependencies: [],
-            path: "TogglyCore/Sources"),
+            path: "TogglyCore/Sources",
+            linkerSettings: [.linkedLibrary("z")]),
         .testTarget(
             name: "TogglyCoreTests",
             dependencies: ["TogglyCore"],

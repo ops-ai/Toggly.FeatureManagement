@@ -6,7 +6,7 @@ using System.Text.Json;
 namespace Toggly.FeatureManagement.Client;
 
 /// <summary>One user session. Supply a separate client for independent users.</summary>
-public sealed partial class TogglyClient : IAsyncDisposable, IFrontendTelemetry
+public sealed partial class TogglyClient : IAsyncDisposable, IFrontendTelemetry, IFrontendIdentitySession
 {
     private readonly TogglyClientOptions options;
     private readonly FrontendTelemetryReporter? telemetry;
@@ -20,6 +20,7 @@ public sealed partial class TogglyClient : IAsyncDisposable, IFrontendTelemetry
     private readonly object stateLock = new();
     private Dictionary<string, JsonElement> definitions = [];
     private EvaluationContext context;
+    private TelemetryIdentity identity;
     private string? revision, jwks, requestedRevision;
     private bool invalidated;
     private long generation, timestamp;
@@ -85,11 +86,14 @@ public sealed partial class TogglyClient : IAsyncDisposable, IFrontendTelemetry
         this.store = store;
         this.updates = updates ?? new WebSocketUpdates();
         context = Copy(options.Context);
+        identity = TelemetryIdentity.Create(options.InstanceId, context.Identity);
         jwks = options.TrustedJwks;
     }
     // Stable serialization partitions cache entries by the same normalized context sent to delivery.
     private static EvaluationContext Copy(EvaluationContext value) => new(value.Identity, value.Groups?.Distinct().Order(StringComparer.Ordinal).ToArray(), value.Claims?.OrderBy(p => p.Key, StringComparer.Ordinal).Take(20).ToDictionary(p => p.Key, p => p.Value));
-    private string ContextKey(EvaluationContext value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { Base = options.BaseUri.AbsoluteUri, options.AppKey, options.Environment, Context = value }))));
+    private string ContextKey(EvaluationContext value, TelemetryIdentity attribution) => attribution.InstanceId is not null
+        ? Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { Base = options.BaseUri.AbsoluteUri, options.AppKey, options.Environment, InstanceId = attribution.InstanceId }))))
+        : Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new { Base = options.BaseUri.AbsoluteUri, options.AppKey, options.Environment, Context = value }))));
 
     /// <summary>Restores usable signed state, attempts refresh, then starts polling and optional live updates.</summary>
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -125,9 +129,11 @@ public sealed partial class TogglyClient : IAsyncDisposable, IFrontendTelemetry
     public bool IsEnabled(string featureKey, EntityContext? entity = null)
     {
         bool enabled;
+        TelemetryIdentity attribution;
         lock (stateLock)
         {
             ObjectDisposedException.ThrowIf(disposed, this);
+            attribution = identity;
             enabled = definitions.TryGetValue(featureKey, out var value) ? EntityEvaluator.Resolve(value, entity) : options.Defaults.GetValueOrDefault(featureKey);
         }
         if (enabled && options.LocalGates.TryGetValue(featureKey, out var gate))
@@ -138,14 +144,35 @@ public sealed partial class TogglyClient : IAsyncDisposable, IFrontendTelemetry
             }
             catch (Exception ex) { Report(ex); enabled = false; }
         }
-        telemetry?.RecordCheck(featureKey, enabled ? "enabled" : "disabled");
+        telemetry?.RecordCheck(featureKey, enabled ? "enabled" : "disabled", attribution);
         return enabled;
     }
 
-    public void RecordUsage(string featureKey, string variant = "enabled") => telemetry?.RecordUsage(featureKey, variant);
-    public void RecordView(string featureKey, string variant = "enabled") => telemetry?.RecordView(featureKey, variant);
-    public void IncrementCounter(string metricKey, double value = 1) => telemetry?.IncrementCounter(metricKey, value);
-    public void SetGauge(string metricKey, double value) => telemetry?.SetGauge(metricKey, value);
+    private TelemetryIdentity? CaptureIdentity()
+    {
+        lock (stateLock)
+            return disposed ? null : identity;
+    }
+    public void RecordUsage(string featureKey, string variant = "enabled")
+    {
+        if (CaptureIdentity() is { } attribution)
+            telemetry?.RecordUsage(featureKey, variant, attribution);
+    }
+    public void RecordView(string featureKey, string variant = "enabled")
+    {
+        if (CaptureIdentity() is { } attribution)
+            telemetry?.RecordView(featureKey, variant, attribution);
+    }
+    public void IncrementCounter(string metricKey, double value = 1)
+    {
+        if (CaptureIdentity() is { } attribution)
+            telemetry?.IncrementCounter(metricKey, value, attribution);
+    }
+    public void SetGauge(string metricKey, double value)
+    {
+        if (CaptureIdentity() is { } attribution)
+            telemetry?.SetGauge(metricKey, value, attribution);
+    }
     public Task FlushTelemetryAsync(CancellationToken cancellationToken = default) => telemetry?.FlushTelemetryAsync(cancellationToken) ?? Task.CompletedTask;
     /// <summary>Flush for browser exit or a native background transition; exit uses plain JSON.</summary>
     public Task FlushTelemetryAsync(bool keepalive, CancellationToken cancellationToken = default) => telemetry?.FlushTelemetryAsync(keepalive, cancellationToken) ?? Task.CompletedTask;
@@ -159,13 +186,17 @@ public sealed partial class TogglyClient : IAsyncDisposable, IFrontendTelemetry
     }
 
     /// <summary>Clears the previous context and supersedes its in-flight work before restoring or fetching the new context.</summary>
-    public async Task SetContextAsync(EvaluationContext value, CancellationToken cancellationToken = default)
+    public Task SetContextAsync(EvaluationContext value, CancellationToken cancellationToken = default) => SetIdentityAsync(value, null, cancellationToken);
+
+    /// <summary>Atomically replace context and minted token; null clears the previous token.</summary>
+    public async Task SetIdentityAsync(EvaluationContext value, string? instanceId, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(value);
         lock (stateLock)
         {
             ObjectDisposedException.ThrowIf(disposed, this);
             context = Copy(value);
+            identity = TelemetryIdentity.Create(instanceId, context.Identity);
             generation++;
             definitions = [];
             revision = null;
@@ -186,18 +217,20 @@ public sealed partial class TogglyClient : IAsyncDisposable, IFrontendTelemetry
         try
         {
             EvaluationContext current;
+            TelemetryIdentity attribution;
             long version;
             string? keys;
             lock (stateLock)
             {
                 ObjectDisposedException.ThrowIf(disposed, this);
                 current = context;
+                attribution = identity;
                 version = generation;
                 keys = jwks;
             }
             if (string.IsNullOrWhiteSpace(options.AppKey))
                 return;
-            var key = ContextKey(current);
+            var key = ContextKey(current, attribution);
             try
             {
                 // Restore before networking so a fresh process can use verified offline state.
@@ -206,7 +239,7 @@ public sealed partial class TogglyClient : IAsyncDisposable, IFrontendTelemetry
                 keys ??= await FetchKeysAsync(version, ct).ConfigureAwait(false);
                 if (keys is null)
                     return;
-                await FetchDefinitionsAsync(current, key, version, keys, ct).ConfigureAwait(false);
+                await FetchDefinitionsAsync(current, attribution, key, version, keys, ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -245,20 +278,25 @@ public sealed partial class TogglyClient : IAsyncDisposable, IFrontendTelemetry
         return null;
     }
 
-    private HttpRequestMessage CreateRequest(EvaluationContext current)
+    private HttpRequestMessage CreateRequest(EvaluationContext current, TelemetryIdentity attribution, long version)
     {
         var query = new List<string>();
-        if (current.Identity is not null)
-            query.Add("u=" + Uri.EscapeDataString(current.Identity));
-        foreach (var group in current.Groups ?? [])
-            query.Add("g=" + Uri.EscapeDataString(group));
-        foreach (var claim in current.Claims ?? new Dictionary<string, string>())
-            query.Add("claim." + Uri.EscapeDataString(claim.Key) + "=" + Uri.EscapeDataString(claim.Value));
+        if (attribution.InstanceId is not null)
+            query.Add("i=" + Uri.EscapeDataString(attribution.InstanceId));
+        else
+        {
+            if (current.Identity is not null)
+                query.Add("u=" + Uri.EscapeDataString(current.Identity));
+            foreach (var group in current.Groups ?? [])
+                query.Add("g=" + Uri.EscapeDataString(group));
+            foreach (var claim in current.Claims ?? new Dictionary<string, string>())
+                query.Add("claim." + Uri.EscapeDataString(claim.Key) + "=" + Uri.EscapeDataString(claim.Value));
+        }
         string? conditionalRevision, pinnedRevision;
         lock (stateLock)
         {
-            conditionalRevision = invalidated ? null : revision;
-            pinnedRevision = requestedRevision;
+            conditionalRevision = invalidated || version != generation ? null : revision;
+            pinnedRevision = version == generation ? requestedRevision : null;
         }
         // A notification revision routes the GET; only the signed HTTP response updates cached state.
         if (pinnedRevision is not null)
@@ -272,11 +310,11 @@ public sealed partial class TogglyClient : IAsyncDisposable, IFrontendTelemetry
         return request;
     }
 
-    private async Task FetchDefinitionsAsync(EvaluationContext current, string key, long version, string keys, CancellationToken ct)
+    private async Task FetchDefinitionsAsync(EvaluationContext current, TelemetryIdentity attribution, string key, long version, string keys, CancellationToken ct)
     {
         if (!IsCurrent(version))
             return;
-        using var request = CreateRequest(current);
+        using var request = CreateRequest(current, attribution, version);
         using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
         // A host transport may finish normally after cancellation; preserve the client contract across runtimes.
         ct.ThrowIfCancellationRequested();

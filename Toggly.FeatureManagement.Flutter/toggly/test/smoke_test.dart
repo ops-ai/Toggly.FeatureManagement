@@ -25,6 +25,7 @@ void main() {
       identity: 'smoke-test-device',
       useSignedDefinitions: true,
       config: const TogglyConfig(
+        enableTelemetry: false,
         baseURI: 'https://definitions.toggly.io',
         connectTimeout: 15000,
         featureFlagsRefreshInterval: 3600000,
@@ -50,6 +51,7 @@ void main() {
       identity: 'smoke-test-device-ws',
       useSignedDefinitions: true,
       config: const TogglyConfig(
+        enableTelemetry: false,
         baseURI: 'https://definitions.toggly.io',
         connectTimeout: 15000,
         featureFlagsRefreshInterval: 3600000,
