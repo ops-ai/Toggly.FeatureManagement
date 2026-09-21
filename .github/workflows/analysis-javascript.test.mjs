@@ -10,6 +10,7 @@ const docusaurusFixture = readFileSync(
 const summary = workflow.slice(workflow.indexOf('\n  summary:'));
 const packedHostHarnesses = [
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs',
+  'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-check.mjs',
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/**',
   'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-host.mjs',
   'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/tests/host/**'
@@ -81,4 +82,11 @@ test('runs the current Gatsby packed host on Node 24', () => {
     workflow,
     /- name: Install locked Gatsby dependencies\s+if: matrix\.sdk == 'Gatsby'\s+working-directory: \$\{\{ matrix\.path \}\}\s+run: npm ci/,
   );
+});
+
+test('runs Vue packed browser telemetry checks with an explicit Chrome executable', () => {
+  const hostJob = workflow.match(/\n  test-current-browser-hosts:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0];
+  assert.ok(hostJob);
+  assert.match(hostJob, /CHROME_BIN: \/usr\/bin\/google-chrome/);
+  assert.match(hostJob, /run: npm run test:host/);
 });

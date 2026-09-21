@@ -36,7 +36,7 @@ Import the Toggly plugin in your main file.
 import { toggly } from "@ops-ai/vue-feature-flags-toggly";
 ```
 
-Install the toggly plugin while providing your App Key & Environment name from your [Toggly application page](https://app.toggly.io). This will register the Feature component & $toggly service globally.
+Install the toggly plugin while providing your App Key & Environment name from your [Toggly application page](https://app.toggly.io). This registers the Feature component and an app-owned $toggly service. Each app has its own service; app.unmount() disposes it.
 
 ```js
 app.use(toggly, {
@@ -110,6 +110,78 @@ And even evaluate a feature gate (with requirement & negate support).
 await this.$toggly.evaluateFeatureGate(['firstFeature', 'secondFeature'], 'any', true)
 ```
 
+## Frontend telemetry
+
+Browser clients with an app key aggregate effective feature checks automatically.
+Checks respect entity context, local gates, variants, short circuiting, and negation.
+A cached or reactive public evaluation counts again; internal refresh and cache
+hydration do not count. Rendering a component never records a view or usage event.
+SSR/build clients, keyless clients, and `enableTelemetry: false` stay silent.
+
+```ts
+app.use(toggly, {
+  appKey: 'your-app-key',
+  environment: 'Production',
+  enableTelemetry: true, // default
+  metricsBaseUrl: 'https://metrics.toggly.io', // independent of definitions baseURI
+  telemetryFlushIntervalMs: 45000, // integer from 30000 through 60000
+})
+```
+
+In a component, use its app's injected service:
+
+```ts
+import { inject } from 'vue'
+import type { Toggly } from '@ops-ai/vue-feature-flags-toggly'
+
+const service = inject<Toggly>('$toggly')!
+service.recordUsage('Checkout') // explicit calls default to variant "enabled"
+service.recordView('Checkout', 'control')
+service.incrementCounter('orders', 2)
+service.setGauge('cartSize', 3)
+await service.flushTelemetry()
+```
+
+Explicit events do not evaluate flags. Counters sum; gauges retain the latest value.
+Telemetry includes app/environment, feature/variant counts, metrics, and optional
+identity attribution: a host-provided `instanceId` is sent as `i`; otherwise the
+current `identity` is sent as `u`. Groups, claims and entity attributes are excluded.
+The server accepts client-generated `u` only when the application enables its
+default-off setting. HTTP 202 does not confirm that identity was accepted. Requests use
+credential-free JSON, browser gzip when available, and bounded in-memory batching.
+The reporter flushes on page hiding and makes a bounded best-effort final flush on
+teardown. Invalid intervals use 45000 ms; invalid collector URLs disable telemetry
+without changing feature results. Collector URLs must be absolute HTTP(S), with no
+credentials, query, or fragment.
+
+Pass `instanceId` from your trusted backend when it mints an identity. The browser
+SDK never mints identities or needs a Backend key. Definitions requests with `i`
+omit client identity, groups and claims; without it, existing targeting is retained.
+
+```ts
+await service.setContext({ identity: 'user-123', instanceId: mintedInstanceId })
+await service.setContext({ instanceId: '' }) // clear token, use current identity
+await service.setContext({ identity: '' }) // clear identity and any previous token
+```
+
+`setContext` updates only supplied fields. Supplying `identity` without `instanceId`
+clears the previous token. Existing queued events retain their original attribution;
+new events use the new context and share the same bounded queue. Definitions and
+revisions are scoped to the context and token. If refresh fails, the Promise still
+rejects, while the new context retains its matching cache or configured defaults;
+the previous identity, token and definitions are not restored. Reinitialization
+cancels pending telemetry before replacing the configuration; call
+`flushTelemetry()` first if you need to await sending the old context.
+
+The plugin owns one service per Vue app, shared by its components and composables.
+The exported `togglyService` singleton remains available for standalone callers;
+it is independent of plugin apps. Standalone instances created with
+`new Toggly().init(options)` must call synchronous `dispose()` when their owner
+ends. Use `flushTelemetry()` first when deterministic completion is needed.
+Calling `init()` again replaces configuration, definitions, and background resources;
+old queued events retain their original app/environment and late old loads cannot
+replace the new state. A new app mount receives a fresh service.
+
 ## Device-local post-filter gates
 
 Gate bundles of flags behind device-local master switches while rollouts stay on the worker. See **[Post-filter gates](https://docs.toggly.io/sdks/client-side/post-filter)**.
@@ -128,14 +200,8 @@ app.use(toggly, {
   }],
 });
 
-// OFF — instant
-apiRedesignEnabled = false;
-toggly.notifyLocalGatesChanged();
-
-// ON — reload remote flags, then notify UI
-apiRedesignEnabled = true;
-await toggly._loadFeatures();
-toggly.notifyLocalGatesChanged();
+// In component setup, resolve this app's service with inject<Toggly>('$toggly').
+// After changing apiRedesignEnabled, call service.notifyLocalGatesChanged().
 ```
 
 ## Basic Usage (without Toggly.io)
@@ -146,7 +212,7 @@ Import the Toggly plugin in your main file.
 import { toggly } from "@ops-ai/vue-feature-flags-toggly";
 ```
 
-Install the toggly plugin while providing your default feature flags. This will register the Feature component & $toggly service globally.
+Install the toggly plugin while providing your default feature flags. This registers the Feature component and an app-owned $toggly service. Each app has its own service; app.unmount() disposes it.
 
 ```js
 var featureDefaults = {

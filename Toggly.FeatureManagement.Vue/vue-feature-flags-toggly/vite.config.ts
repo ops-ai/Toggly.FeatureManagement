@@ -20,7 +20,7 @@ export default defineConfig({
     },
 
     rollupOptions: {
-      external: ['vue', '@ops-ai/toggly-hooks-types', '@ops-ai/toggly-local-gates', '@ops-ai/toggly-signed-defs'],
+      external: ['vue', '@ops-ai/toggly-client-telemetry', '@ops-ai/toggly-client-telemetry/browser', '@ops-ai/toggly-hooks-types', '@ops-ai/toggly-local-gates', '@ops-ai/toggly-signed-defs'],
       output: {
         globals: {
           vue: 'Vue',

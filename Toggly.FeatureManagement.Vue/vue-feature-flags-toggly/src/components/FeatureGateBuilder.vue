@@ -34,6 +34,10 @@ export default defineComponent({
   data() {
     return {
       enabled: false,
+      isLoading: false,
+      active: true,
+      evaluationId: 0,
+      ownerGeneration: -1,
       _unsubLocalGates: null as (() => void) | null,
       _unsubFeaturesRefresh: null as (() => void) | null,
     }
@@ -41,11 +45,13 @@ export default defineComponent({
 
   mounted() {
     this.evaluateGate()
-    this._unsubLocalGates = this.$toggly.subscribeLocalGatesChanged(this.evaluateGate)
-    this._unsubFeaturesRefresh = this.$toggly.subscribeFeaturesRefresh(this.evaluateGate)
+    this._unsubLocalGates = this.$toggly.subscribeLocalGatesChanged(() => { void this.evaluateGate() })
+    this._unsubFeaturesRefresh = this.$toggly.subscribeFeaturesRefresh(() => { if (!this.isLoading || this.ownerGeneration !== this.$toggly._ownerGeneration) void this.evaluateGate() })
   },
 
   beforeUnmount() {
+    this.active = false
+    this.evaluationId++
     if (this._unsubLocalGates) {
       this._unsubLocalGates()
       this._unsubLocalGates = null
@@ -67,6 +73,10 @@ export default defineComponent({
 
   methods: {
     async evaluateGate() {
+      if (!this.active) return
+      const evaluationId = ++this.evaluationId
+      this.ownerGeneration = this.$toggly._ownerGeneration
+      this.isLoading = true
       const gate: string[] = []
 
       if (this.featureKey) {
@@ -79,16 +89,21 @@ export default defineComponent({
 
       if (gate.length === 0) {
         this.enabled = !this.negate
+        this.isLoading = false
         return
       }
 
-      this.enabled = await this.$toggly.evaluateFeatureGate(
+      const enabled = await this.$toggly.evaluateFeatureGate(
         gate,
         this.requirement,
         this.negate,
         this.context,
         this.contextKind,
       )
+      if (this.active && evaluationId === this.evaluationId) {
+        this.enabled = enabled
+        this.isLoading = false
+      }
     },
   },
 })

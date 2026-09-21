@@ -400,7 +400,7 @@ describe('Toggly Service', () => {
 
   // ─── setContext ─────────────────────────────────
   describe('setContext', () => {
-    it('restores prior context when setContext fetch fails', async () => {
+    it('rejects failed context refresh without restoring retired identity, token or flags', async () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
@@ -416,6 +416,8 @@ describe('Toggly Service', () => {
         appKey: 'test-key',
         environment: 'Production',
         identity: 'user-a',
+        instanceId: 'mint-a',
+        featureDefaults: {Safe: true},
         enableLiveUpdates: false,
       });
       await service._loadFeatures();
@@ -425,8 +427,10 @@ describe('Toggly Service', () => {
         service.setContext({ identity: 'user-b' }),
       ).rejects.toThrow('refresh failed');
 
-      expect((service as any)._config.identity).toBe('user-a');
-      expect(await service.isFeatureOn('Gated')).toBe(true);
+      expect((service as any)._config.identity).toBe('user-b');
+      expect((service as any)._config.instanceId).toBeUndefined();
+      expect(await service.isFeatureOn('Gated')).toBe(false);
+      expect(await service.isFeatureOn('Safe')).toBe(true);
     });
 
     it('should include groups and claims in API URL after setContext', async () => {
