@@ -467,4 +467,15 @@ describe('ElectronTogglyClient', () => {
     >
     expect(headers['User-Agent'] || headers['X-Toggly-Sdk']).toBeTruthy()
   })
+  it('ignores retired websocket callbacks after context replacement', async () => {
+    await initToggly({ userDataPath, appKey:'app', identity:'alice', fetch:vi.fn().mockResolvedValue(mockResponse(200,{defs:{On:true}})), enableTelemetry:false })
+    const client=getToggly()!; const old=wsInstances.at(-1)!
+    await client.setContext({identity:'bob'})
+    const current=wsInstances.at(-1)!
+    old.handlers.open?.();old.handlers.message?.(JSON.stringify({type:'sync',etag:'retired'}));old.handlers.close?.()
+    expect((client as any).ws).toBe(current)
+    expect((client as any).cachedDefinitionsRevision).not.toBe('retired')
+    expect((client as any).wsReconnectTimer).toBeNull()
+  })
+
 })

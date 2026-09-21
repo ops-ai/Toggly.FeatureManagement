@@ -7,6 +7,7 @@ import {
   ElectronTogglyClient,
   initToggly,
   closeToggly,
+  getToggly,
 } from '../src/main/client.js'
 import { registerTogglyIpc } from '../src/main/ipc.js'
 import { IPC_CHANNELS } from '../src/ipc-channels.js'
@@ -101,6 +102,7 @@ it('records effective cached leaves once after gates and before negation, and ke
     {
       k: 'app',
       e: 'Test',
+      u: 'secret',
       f: {
         On: { enabled: [2], disabled: [1] },
         Off: { disabled: [2] },
@@ -200,6 +202,7 @@ it('validates IPC sender, main frame and compact arguments without losing accept
     {
       k: 'ipc',
       e: 'Production',
+      u: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
       f: { On: { enabled: [1] }, Action: { enabled: [0, 1] } },
       m: { orders: 2 },
     },
@@ -377,6 +380,7 @@ it('forwards public main, renderer and preload APIs through one real reporter an
     {
       k: 'bridge',
       e: 'Production',
+      u: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
       f: {
         Action: { enabled: [0, 1], blue: [0, 1] },
         Panel: { enabled: [0, 0, 1], blue: [0, 0, 1] },
@@ -433,7 +437,7 @@ it('keeps disabled and keyless telemetry silent, and bounds a stalled native qui
   expect(app.quit).toHaveBeenCalledOnce()
   expect(vi.getTimerCount()).toBe(0)
 })
-it('reinitialization detaches IPC/lifecycle from old owner and never relabels queued checks', async () => {
+it('reinitialization detaches IPC/lifecycle, preserves delivered checks and cancels the old queue', async () => {
   const wire = transport()
   const main = await import('../src/main/client.js')
   const { EventEmitter } = await import('node:events')
@@ -449,6 +453,8 @@ it('reinitialization detaches IPC/lifecycle from old owner and never relabels qu
   await initToggly(first)
   const old = main.getToggly()!
   old.isFeatureOn('Switch')
+  await old.flushTelemetry()
+  old.recordUsage('Cancelled')
   const sync = new Map<string, Function>(),
     async = new Map<string, Function>()
   const ipc = {
@@ -481,8 +487,8 @@ it('reinitialization detaches IPC/lifecycle from old owner and never relabels qu
   await old.flushTelemetry()
   await main.flushTelemetry()
   expect(wire.packets).toEqual([
-    { k: 'old', e: 'Old', f: { Switch: { enabled: [1] } } },
-    { k: 'new', e: 'New', f: { Switch: { disabled: [1] } } },
+    { k: 'old', e: 'Old', u: expect.stringMatching(/^[0-9a-f-]{36}$/), f: { Switch: { enabled: [1] } } },
+    { k: 'new', e: 'New', u: expect.stringMatching(/^[0-9a-f-]{36}$/), f: { Switch: { disabled: [1] } } },
   ])
   registerTogglyIpc(ipc)
   unregister()
@@ -495,5 +501,31 @@ it('invalidates an existing renderer when a replacement owner registers its IPC'
   const sync=new Map<string,Function>()
   const window={webContents:{send:(channel:string)=>{if(channel===IPC_CHANNELS.evaluationsChanged){const event={returnValue:undefined as unknown};sync.get(IPC_CHANNELS.isFeatureOn)!(event,'Switch');rendered=event.returnValue as boolean}}}}
   registerTogglyIpc({on:(key,fn)=>{sync.set(key,fn)},handle:()=>{}},()=>[window])
-  expect(rendered).toBe(false);await main.flushTelemetry();expect(wire.packets[0]).toEqual({k:'new',e:'New',f:{Switch:{disabled:[1]}}})
+  expect(rendered).toBe(false);await main.flushTelemetry();expect(wire.packets[0]).toEqual({k:'new',e:'New',u:expect.stringMatching(/^[0-9a-f-]{36}$/),f:{Switch:{disabled:[1]}}})
 })
+
+it('preserves the newest singleton and accepted event after finite diagnostic reentry', async () => {
+  const wire=transport();const reads:string[]=[];let replacement:Promise<unknown>|undefined
+  const base={userDataPath:directory,appKey:'app',enableLiveUpdates:false,fetch:async(url:any)=>{reads.push(String(url));return new Response('{"On":true}')},telemetryFetch:wire.fetch}
+  await initToggly({...base,identity:'alice',telemetryFlushIntervalMs:1,onTelemetryDiagnostic:()=>{
+    replacement=initToggly({...base,identity:'bob'})
+    getToggly()!.recordUsage('Accepted')
+  }})
+  await replacement;await getToggly()!.flushTelemetry()
+  expect(reads).toHaveLength(1);expect(new URL(reads[0]).searchParams.get('u')).toBe('bob')
+  expect(wire.packets).toEqual([{k:'app',e:'Production',u:'bob',f:{Accepted:{enabled:[0,1]}}}])
+})
+it('keeps terminal singleton disposal authoritative during constructor diagnostics', async () => {
+  await initToggly({userDataPath:directory,appKey:'app',enableLiveUpdates:false,telemetryFlushIntervalMs:1,onTelemetryDiagnostic:closeToggly,fetch:async()=>new Response('{"On":true}')})
+  expect(getToggly()).toBeNull()
+})
+
+it('shares one bounded admission budget across2200 context transitions', async()=>{
+ const {client,packets}=await owner({fetch:async()=>{throw new Error('offline')}})
+ for(let n=0;n<2200;n++){await client.setContext({instanceId:'i'+n});client.recordUsage('Action')}
+ await client.flushTelemetry()
+ expect(packets).toHaveLength(2000)
+ expect(packets.reduce((total,packet)=>total+packet.f.Action.enabled[1],0)).toBe(2000)
+ expect(packets.every((packet,n)=>packet.i==='i'+n&&packet.u===undefined)).toBe(true)
+ expect(packets.reduce((total,packet)=>total+Buffer.byteLength(JSON.stringify(packet)),0)).toBeLessThanOrEqual(256*1024)
+},15000)

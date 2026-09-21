@@ -164,8 +164,11 @@ These methods are also available on the main client, `/main`, `/react` and
 `window.toggly`. Variants are 1–64 ASCII letters/digits/underscore/hyphen.
 Counters use nonnegative integer deltas; gauges use finite nonnegative values,
 up to 1000000 per call. Metrics are app-level bare names. Payloads contain only
-application/environment, aggregate checks/usage/views and business metrics;
-identity, claims, groups and entity data are excluded. Ordinary native requests
+application/environment, aggregate checks/usage/views and business metrics.
+A nonblank host-minted `instanceId` is sent as `i`; otherwise the existing
+identity (including the generated anonymous UUID) is sent as `u`, never both.
+Claims, groups and entity data are excluded. Do not mint tokens with Backend
+keys in the client. The server must explicitly accept client identity. Ordinary native requests
 use Node gzip and omit credentials and Origin. No browser lifecycle or network
 library is included in renderer code.
 
@@ -185,7 +188,7 @@ retry, then lets quit continue within five seconds. `closeToggly()` and
 `client.close()` remain synchronous best-effort cleanup; use awaitable
 `flushTelemetry()` when deterministic completion is needed before shutdown.
 Closing one window does not dispose another's owner. Reinitialization closes
-the previous owner and removes its IPC/lifecycle listeners; register the new
+the previous owner, discards its pending telemetry and removes its IPC/lifecycle listeners; register the new
 owner's IPC and lifecycle again. The registration functions return detach
 callbacks. Forced process termination cannot guarantee delivery. Telemetry is
 never written to the feature disk cache.
@@ -216,6 +219,13 @@ never written to the feature disk cache.
 - `getFlags()` / `setContext` / `clearContext`
 - `onFlagsUpdated(callback)` → unsubscribe
 
+Accepted events retain the identity and application context captured at evaluation,
+even when hooks change context. Context updates share one 2000-entry/256KiB
+queue budget. `setContext({ instanceId })` updates the existing owner through
+the validated bridge. A blank token clears it; changing `identity` clears an
+omitted token, while group-only updates retain it. Token-based definitions
+requests omit identity, groups and claims, including inherited base-URL values.
+
 ## Configuration
 
 | Option | Default | Notes |
@@ -228,6 +238,7 @@ never written to the feature disk cache.
 | `baseURI` | `https://definitions.toggly.io` | |
 | `userDataPath` | **required** | `app.getPath('userData')` |
 | `flagDefaults` | `{}` | Offline / no-key fallback |
+| `instanceId` | `undefined` | Optional host-minted token; preferred over identity |
 | `identity` / `groups` / `claims` | | Targeting context |
 | `verifySignatures` | `false` | ES256 via JWKS |
 | `enableLiveUpdates` | `true` when `appKey` set | WebSocket in main |

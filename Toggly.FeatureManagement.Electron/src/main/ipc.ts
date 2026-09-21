@@ -281,8 +281,9 @@ function validSetContext(value: unknown): boolean {
   const context = value as SetContextInput
   return (
     Object.keys(context).every((key) =>
-      ['identity', 'groups', 'claims'].includes(key),
+      ['identity', 'instanceId', 'groups', 'claims'].includes(key),
     ) &&
+    (context.instanceId === undefined || typeof context.instanceId === 'string') &&
     (context.identity === undefined || typeof context.identity === 'string') &&
     (context.groups === undefined ||
       (Array.isArray(context.groups) &&

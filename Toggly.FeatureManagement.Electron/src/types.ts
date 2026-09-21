@@ -17,6 +17,8 @@ export interface TogglyElectronConfig {
   environment?: string
   baseURI?: string
   flagDefaults?: Record<string, boolean>
+  /** Host-minted attribution token; blank clears it. */
+  instanceId?: string
   identity?: string
   groups?: string[]
   claims?: Record<string, string>
@@ -35,6 +37,8 @@ export interface TogglyElectronConfig {
 }
 
 export interface SetContextInput {
+  /** Host-minted attribution token; blank clears it. */
+  instanceId?: string
   identity?: string
   groups?: string[]
   claims?: Record<string, string>
