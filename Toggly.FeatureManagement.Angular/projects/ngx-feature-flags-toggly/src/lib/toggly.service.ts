@@ -427,6 +427,29 @@ export class TogglyService implements ITogglyService, OnDestroy {
     } catch { /* ignore LRU failures */ }
   }
 
+  /** Remove only scoped validators whose required body is being removed. */
+  private _removePairedRevisions(bodyKey: string): void {
+    const prefix = bodyKey.startsWith(CACHE_PREFIX_FLAGS) ? CACHE_PREFIX_FLAGS
+      : bodyKey.startsWith(CACHE_PREFIX_VARIANT_FLAGS) ? CACHE_PREFIX_VARIANT_FLAGS : CACHE_PREFIX_VARIANTS
+    const marker = `:v3:${prefix === CACHE_PREFIX_FLAGS ? 'evaluated' : 'variants'}:`
+    const keys = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index))
+    for (const key of keys) {
+      if (!key?.startsWith(CACHE_PREFIX_REVISION)) continue
+      // App/environment and legacy identity strings are not delimiter-escaped.
+      // Compare complete body keys rather than splitting either identifier on ':'.
+      let position = key.indexOf(marker, CACHE_PREFIX_REVISION.length)
+      while (position !== -1) {
+        const route = key.slice(CACHE_PREFIX_REVISION.length, position)
+        const context = key.slice(position + marker.length)
+        if (`${prefix}${route}${context ? `:${context}` : ''}` === bodyKey) {
+          localStorage.removeItem(key)
+          break
+        }
+        position = key.indexOf(marker, position + 1)
+      }
+    }
+  }
+
   private _enforceMaxCacheKeys(protectKeys: string[]): void {
     const maxKeys = this._config.maxCacheKeys
     if (!this._canPersist || !isCacheLruEnabled(maxKeys)) {
@@ -443,6 +466,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
       for (const key of toEvict) {
         try {
           localStorage.removeItem(key)
+          this._removePairedRevisions(key)
         } catch { /* ignore per-key removal failures */ }
       }
       index = removeCacheLruKeys(index, toEvict)
@@ -474,9 +498,9 @@ export class TogglyService implements ITogglyService, OnDestroy {
       const variantsKey = this._variantsCacheKey
       const revisionKey = this._revisionCacheKey
       localStorage.removeItem(flagsKey)
-      localStorage.removeItem(variantsKey)
+      if (this._enableVariants) localStorage.removeItem(variantsKey)
       localStorage.removeItem(revisionKey)
-      this._removeCacheKeysFromLruIndex([flagsKey, variantsKey])
+      this._removeCacheKeysFromLruIndex(this._enableVariants ? [flagsKey, variantsKey] : [flagsKey])
     } catch { /* ignore */ }
     this._features = null
     this._variants = null

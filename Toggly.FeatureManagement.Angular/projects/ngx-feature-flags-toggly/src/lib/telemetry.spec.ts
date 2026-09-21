@@ -420,4 +420,52 @@ describe('Angular frontend telemetry', () => {
     expect((first as any)._contextCacheKey).not.toBe((second as any)._contextCacheKey);
   });
 
+  for (const enableVariants of [false, true]) it(`bounds scoped revisions with evicted ${enableVariants ? 'variant' : 'evaluated'} bodies`, async () => {
+    const service=create({persistCache:true,enableTelemetry:false,enableVariants,maxCacheKeys:enableVariants?1:2});
+    (globalThis.fetch as jasmine.Spy).and.callFake(async () => new Response(JSON.stringify(enableVariants?{On:{enabled:true,variant:'blue'}}:{On:true}),{headers:{etag:'revision'}}));
+    for(let index=0;index<12;index++) await service.setContext({instanceId:`mint-${index}`});
+    const revisions=Object.keys(localStorage).filter(key=>key.startsWith('toggly:revision:') && key.includes(':v3:'));
+    expect(revisions.length).toBe(enableVariants?1:2);
+    const current=(service as any)._revisionCacheKey;
+    expect(localStorage.getItem(current)).toBe('revision');
+    (globalThis.fetch as jasmine.Spy).and.callFake(async (_url:RequestInfo|URL,init?:RequestInit) => {
+      expect(new Headers(init?.headers).get('If-None-Match')).toBe('revision');
+      return new Response(null,{status:304});
+    });
+    await service.setContext({instanceId:'mint-11'}); expect(await service.isFeatureOn('On')).toBeTrue();
+    if(enableVariants) expect((await service.getVariant('On'))?.name).toBe('blue');
+    (globalThis.fetch as jasmine.Spy).and.callFake(async (_url:RequestInfo|URL,init?:RequestInit) => {
+      expect(new Headers(init?.headers).get('If-None-Match')).toBeNull();
+      return new Response(JSON.stringify(enableVariants?{On:{enabled:false}}:{On:false}),{headers:{etag:'replacement'}});
+    });
+    await service.setContext({instanceId:'mint-0'}); expect(await service.isFeatureOn('On')).toBeFalse();
+  });
+
+  it('removes paired revisions across application eviction without deleting legacy or protected revisions', async () => {
+    (globalThis.fetch as jasmine.Spy).and.callFake(async () => new Response(JSON.stringify({On:true}),{headers:{etag:'revision'}}));
+    localStorage.setItem('toggly:revision:legacy:Production','legacy');
+    const first=create({appKey:'first',persistCache:true,enableTelemetry:false,maxCacheKeys:1});
+    await first.setContext({instanceId:'mint-a'}); const oldRevision=(first as any)._revisionCacheKey;
+    const second=create({appKey:'second',persistCache:true,enableTelemetry:false,maxCacheKeys:1});
+    await second.setContext({instanceId:'mint-b'});
+    expect(localStorage.getItem(oldRevision)).toBeNull();
+    expect(localStorage.getItem((second as any)._revisionCacheKey)).toBe('revision');
+    expect(localStorage.getItem('toggly:revision:legacy:Production')).toBe('legacy');
+  });
+
+  it('clears only current-mode bodies and their paired revision', async () => {
+    (globalThis.fetch as jasmine.Spy).and.callFake(async () => new Response(JSON.stringify(definitions),{headers:{etag:'revision'}}));
+    const basic=create({persistCache:true,enableTelemetry:false,instanceId:'shared'});
+    await basic.setContext({instanceId:'shared'});
+    definitions={On:{enabled:true,variant:'blue'}};
+    const variants=create({persistCache:true,enableTelemetry:false,instanceId:'shared',enableVariants:true});
+    await variants.setContext({instanceId:'shared'});
+    basic.clearFeatureFlagsCache();
+    expect(localStorage.getItem((basic as any)._revisionCacheKey)).toBeNull();
+    expect(localStorage.getItem((variants as any)._revisionCacheKey)).toBe('revision');
+    expect((variants as any)._readCachedVariants()).toEqual(definitions);
+    (globalThis.fetch as jasmine.Spy).and.callFake(async () => new Response(null,{status:304}));
+    await variants.setContext({instanceId:'shared'}); expect((await variants.getVariant('On'))?.name).toBe('blue');
+  });
+
 });

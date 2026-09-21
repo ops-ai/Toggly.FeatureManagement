@@ -9,6 +9,7 @@
 - Host-supplied `instanceId` takes precedence for definitions and telemetry. Identity/token updates isolate queued events, caches, revisions and pending responses; clearing identity clears an omitted token. Client identity acceptance is server-controlled and off by default; HTTP 202 does not prove acceptance [OPS-1313].
 
 ### Fixed
+- Remove paired scoped revisions when their cached bodies are evicted; clearing evaluated flags preserves independent variant-mode caches.
 - Keep evaluated and variant-response cache bodies separate, including conditional refreshes after reload. Clearing cached definitions also clears the in-memory conditional revision.
 
 ## 2.8.3
