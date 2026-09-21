@@ -48,7 +48,7 @@ export default function Fixture() {
           const active = await client.isFeatureOn('On')
           client.destroy()
           const reloaded = createTogglyClient(config)
-          try {return {first, second, restored, active, persisted:await reloaded.init(), persistedActive:await reloaded.isFeatureOn('On')}}
+          try {return {first, second, restored, active, persisted:await reloaded.init(), persistedActive:await reloaded.isFeatureOn('On'), entityAllowed:await reloaded.isFeatureOn('Entity',{kind:'User',key:'a',attributes:{role:'admin'}}), entityDenied:await reloaded.isFeatureOn('Entity',{kind:'User',key:'b',attributes:{role:'guest'}})}}
           finally {reloaded.destroy()}
         } finally {client.destroy()}
       },

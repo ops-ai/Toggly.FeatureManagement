@@ -2,6 +2,12 @@
 
 2026-09-18
 
+### Fixed
+
+- Restore persisted mixed boolean and entity-gate definitions with their matching
+  revision after owner replacement, including offline and 304 refreshes.
+- Advertise the package version consistently in definitions and socket metadata.
+
 ### Added
 
 - Forward host-provided instance tokens with identity fallback and isolated, bounded

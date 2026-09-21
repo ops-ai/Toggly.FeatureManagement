@@ -38,6 +38,7 @@ import {
 import {
   appendEvaluationContext,
   normalizeEntityContext,
+  isEntityGate,
   registerContext as registerEntityContext,
   resolveEvaluatedDefinition,
 } from '@ops-ai/toggly-hooks-types'
@@ -139,7 +140,10 @@ export function createClient(
         if (!Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== 'string') continue
         const snapshot = entry[1]
         if (snapshot?.features && typeof snapshot.features === 'object' && !Array.isArray(snapshot.features)
-          && Object.values(snapshot.features).every(value => typeof value === 'boolean')
+          && Object.values(snapshot.features).every(value => typeof value === 'boolean' || (isEntityGate(value)
+            && value.rules.every(rule => rule !== null && typeof rule === 'object'
+              && typeof rule.property === 'string' && typeof rule.op === 'string' && typeof rule.value === 'string'
+              && (rule.type === undefined || ['datetime', 'number', 'boolean', 'string', 'string[]'].includes(rule.type)))))
           && (snapshot.revision === null || typeof snapshot.revision === 'string')) entries.set(entry[0], snapshot)
       }
     } catch { /* Unavailable or corrupt storage is not a definition snapshot. */ }

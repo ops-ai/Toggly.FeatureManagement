@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { SDK_VERSION } from '../src/sdk-identity'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTogglyClient } from '../src/client'
 import type { TogglyClient, TogglyConfig } from '../src/types'
@@ -311,6 +313,51 @@ describe('browser compact telemetry boundary', () => {
     if(method==='context') await value.setContext({identity:'bob'}); else value.identity='bob'
     expect(sockets[0].close).toHaveBeenCalled(); expect(sockets).toHaveLength(2)
     expect(await value.isFeatureOn('On')).toBe(true)
+  })
+
+  it('advertises the published package version on definitions and socket metadata', () => {
+    expect(SDK_VERSION).toBe(JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version)
+  })
+  for (const transition of ['replacement', 'ABA']) it.each(['304','offline'])(`restores mixed entity gates and booleans after ${transition} with %s`, async response => {
+    const storage=new Map<string,string>()
+    vi.stubGlobal('localStorage',{getItem:(key:string)=>storage.get(key)??null,setItem:(key:string,value:string)=>storage.set(key,value)})
+    const gate={requirement:'all',rules:[{property:'role',op:'eq',value:'admin',type:'string'}]}
+    const expected={On:gate,Plain:true,Off:false}
+    const options={instanceId:'mint-a',persistFeatures:true,enableTelemetry:false,featureDefaults:{On:false,Plain:false}}
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({defs:expected}),{headers:{etag:'gate-a'}}))
+    const first=client(options); await first.init()
+    if(transition==='ABA') {
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({defs:{On:false,Plain:false}}),{headers:{etag:'gate-b'}}))
+      await first.setContext({instanceId:'mint-b'})
+    }
+    first.destroy()
+    fetchMock.mockImplementationOnce(async(_url,init)=>{
+      expect(new Headers(init.headers).get('If-None-Match')).toBe('gate-a')
+      if(response==='offline') throw Error('offline replacement')
+      return new Response(null,{status:304})
+    })
+    const restored=client(options)
+    expect(await restored.init()).toEqual(expected)
+    expect(await restored.isFeatureOn('Plain')).toBe(true)
+    expect(await restored.isFeatureOn('On',{kind:'User',key:'a',attributes:{role:'admin'}})).toBe(true)
+    expect(await restored.isFeatureOn('On',{kind:'User',key:'b',attributes:{role:'guest'}})).toBe(false)
+    expect(await restored.isFeatureOn('On')).toBe(false)
+    expect(restored.state.error?.message).toBe(response==='offline'?'offline replacement':undefined)
+  })
+  it.each([
+    null, [], {requirement:'bad',rules:[]}, {requirement:'all'}, {rules:[null]},
+    {rules:[{property:'role',op:'eq',value:123}]}, {rules:[{property:3,op:'eq',value:'admin'}]},
+    {rules:[{property:'role',op:3,value:'admin'}]}, {rules:[{property:'role',op:'eq',value:'admin',type:'invalid'}]},
+  ])('rejects malformed persisted gate %j without reusing its revision', async malformed => {
+    const storage=new Map<string,string>()
+    vi.stubGlobal('localStorage',{getItem:(key:string)=>storage.get(key)??null,setItem:(key:string,value:string)=>storage.set(key,value)})
+    const options={instanceId:'mint-a',persistFeatures:true,enableTelemetry:false,featureDefaults:{On:false}}
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({defs:{On:true}}),{headers:{etag:'bad-revision'}}))
+    const first=client(options); await first.init(); first.destroy()
+    for(const [key,serialized] of storage) {const parsed=JSON.parse(serialized);parsed[0][1].features.On=malformed;storage.set(key,JSON.stringify(parsed))}
+    fetchMock.mockImplementationOnce(async(_url,init)=>{expect(new Headers(init.headers).has('If-None-Match')).toBe(false);throw Error('offline')})
+    const restored=client(options); expect(await restored.init()).toEqual({On:false})
+    expect(await restored.isFeatureOn('On',{kind:'User',key:'a',attributes:{role:'admin'}})).toBe(false)
   })
 
 })

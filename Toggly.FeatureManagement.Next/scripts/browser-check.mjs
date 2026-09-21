@@ -45,7 +45,7 @@ await new Promise((resolve, reject) => {collector.once('error', reject); collect
       const token=url.searchParams.get('i'), revision=`rev-${token}`
       const conditional=request.headers()['if-none-match']?.replaceAll('"','')
       cacheRequests.push({token, conditional})
-      void request.respond(conditional===revision ? {status:304} : {status:200,contentType:'application/json',headers:{etag:revision},body:JSON.stringify({defs:{On:token==='cache-a'}})})
+      void request.respond(conditional===revision ? {status:304} : {status:200,contentType:'application/json',headers:{etag:revision},body:JSON.stringify({defs:{On:token==='cache-a',Entity:{requirement:'all',rules:[{property:'role',op:'eq',value:token==='cache-a'?'admin':'guest',type:'string'}]}}})})
     } else if (url.pathname.startsWith('/definitions-fixture/')) {
       identities.push({i:url.searchParams.get('i'),u:url.searchParams.get('u'),g:url.searchParams.get('g'),claim:url.searchParams.get('claim.role')})
       const enabled = url.pathname.includes('/replacement/') ? false : remoteEnabled
@@ -115,7 +115,8 @@ await new Promise((resolve, reject) => {collector.once('error', reject); collect
   assert.ok(telemetry.some(body => body.u === 'first-user' && !body.i && body.m?.afterClear === 1))
   assert.ok(telemetry.every(body => !body.groups && !body.claims && !body.entity && body.u !== 'ignored-user'))
   const cache=await page.evaluate(()=>window.fixture.verifyCache())
-  assert.deepEqual(cache,{first:{On:true},second:false,restored:{On:true},active:true,persisted:{On:true},persistedActive:true})
+  const mixed={On:true,Entity:{requirement:'all',rules:[{property:'role',op:'eq',value:'admin',type:'string'}]}}
+  assert.deepEqual(cache,{first:mixed,second:false,restored:mixed,active:true,persisted:mixed,persistedActive:true,entityAllowed:true,entityDenied:false})
   assert.ok(cacheRequests.filter(value=>value.token==='cache-a' && value.conditional==='rev-cache-a').length>=3,'A-B-A and persisted reload use matching body and revision')
   assert.ok(cacheRequests.some(value=>value.token==='cache-b' && value.conditional===undefined),'new token never sends an orphan revision')
   telemetry.length=0
