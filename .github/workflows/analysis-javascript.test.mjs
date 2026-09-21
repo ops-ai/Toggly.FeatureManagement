@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
+import { splitJobList, verifyRequiredJobs } from '../actions/verify-required-jobs/verify-required-jobs.mjs';
 
 const workflow = readFileSync(new URL('./analysis-javascript.yml', import.meta.url), 'utf8');
 const docusaurusFixture = readFileSync(
@@ -8,6 +13,48 @@ const docusaurusFixture = readFileSync(
   'utf8',
 );
 const summary = workflow.slice(workflow.indexOf('\n  summary:'));
+const prepare = workflow.match(/\n  prepare:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+const selections = new Map();
+
+// Exercise the same CLI/output protocol consumed by the workflow, including
+// matrix serialization; testing only the exported selector misses this boundary.
+function selectAnalysis(sdks) {
+  if (selections.has(sdks)) return selections.get(sdks);
+  const directory = mkdtempSync(join(tmpdir(), 'toggly-analysis-filter-'));
+  try {
+    const output = join(directory, 'outputs');
+    execFileSync(process.execPath, [
+      fileURLToPath(new URL('../package-registry/analysis-js-filter.mjs', import.meta.url)), sdks,
+    ], { env: { ...process.env, GITHUB_OUTPUT: output }, encoding: 'utf8', timeout: 10000 });
+    const text = readFileSync(output, 'utf8');
+    const value = name => text.match(new RegExp(`^${name}=(.*)$`, 'm'))?.[1];
+    const result = {
+      requiredJobs: splitJobList(value('required_jobs')),
+      runBrowserHosts: value('run_test_current_browser_hosts'),
+      runDocusaurusHost: value('run_test_docusaurus_host'),
+      testMatrix: JSON.parse(text.match(/^test_matrix<<EOF\n([^\n]+)\nEOF$/m)?.[1] ?? 'null'),
+    };
+    selections.set(sdks, result);
+    return result;
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+function assertRequiredHost(sdks, job) {
+  const required = selectAnalysis(sdks).requiredJobs;
+  assert.ok(required.includes(job), `${sdks} must require ${job}`);
+  const successful = Object.fromEntries(required.map(name => [name, { result: 'success' }]));
+  verifyRequiredJobs(successful, required);
+  for (const result of ['failure', 'cancelled', 'skipped', undefined]) {
+    const needs = { ...successful };
+    if (result === undefined) delete needs[job];
+    else needs[job] = { result };
+    assert.throws(() => verifyRequiredJobs(needs, required), error =>
+      error.failed.length === 1 && error.failed[0] === job,
+    );
+  }
+}
 const packedHostHarnesses = [
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs',
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/**',
@@ -17,12 +64,19 @@ const packedHostHarnesses = [
 
 test('requires current packed browser-host validation in the analysis summary', () => {
   const needs = summary.match(/needs: \[([^\]]+)\]/)?.[1];
-  const requiredJobs = summary.match(/required-jobs: ([^\n]+)/)?.[1];
-
   assert.ok(needs, 'analysis summary must declare its required jobs');
-  assert.ok(requiredJobs, 'analysis summary must verify required jobs');
   assert.match(needs, /\btest-current-browser-hosts\b/);
-  assert.match(requiredJobs, /\btest-current-browser-hosts\b/);
+  assert.match(summary, /uses: \.\/\.github\/actions\/verify-required-jobs/);
+  assert.match(summary, /needs-json: \$\{\{ toJSON\(needs\) \}\}/);
+  assert.match(summary, /required-jobs: \$\{\{ needs\.prepare\.outputs\.required_jobs \}\}/);
+  assert.match(prepare, /required_jobs: \$\{\{ steps\.filter\.outputs\.required_jobs \}\}/);
+  assert.match(prepare, /run: node \.github\/package-registry\/analysis-js-filter\.mjs "\$SDKS"/);
+  assert.match(prepare, /run_test_current_browser_hosts: \$\{\{ steps\.filter\.outputs\.run_test_current_browser_hosts \}\}/);
+  assert.match(workflow, /test-current-browser-hosts:[\s\S]*?if: needs\.prepare\.outputs\.run_test_current_browser_hosts == 'true'/);
+  for (const sdks of ['all', 'Vue', 'Svelte', 'SvelteKit']) {
+    assertRequiredHost(sdks, 'test-current-browser-hosts');
+    assert.equal(selectAnalysis(sdks).runBrowserHosts, 'true');
+  }
 });
 
 test('does not count packed Vue and Svelte host harnesses as production source', () => {
@@ -52,10 +106,18 @@ test('requires the packed Docusaurus production host with a locked Node 24 insta
   assert.match(hostJob, /run: node tests\/docusaurus-consumer-fixtures\/packed-host\.mjs/);
   assert.doesNotMatch(hostJob, /overlay-shared-js-deps|continue-on-error|npm ci \|\|/);
   assert.match(summary.match(/needs: \[([^\]]+)\]/)?.[1] ?? '', /\btest-docusaurus-host\b/);
-  assert.match(summary.match(/required-jobs: ([^\n]+)/)?.[1] ?? '', /\btest-docusaurus-host\b/);
-  assert.equal((workflow.match(/'tests\/docusaurus-consumer-fixtures\/\*\*'/g) ?? []).length, 2);
-  assert.match(docusaurusFixture, /react@19\.3\.0/);
-  assert.match(docusaurusFixture, /react-dom@19\.3\.0/);
+  assert.match(hostJob, /if: needs\.prepare\.outputs\.run_test_docusaurus_host == 'true'/);
+  assert.match(prepare, /run_test_docusaurus_host: \$\{\{ steps\.filter\.outputs\.run_test_docusaurus_host \}\}/);
+  for (const sdks of ['all', 'Docusaurus']) {
+    assertRequiredHost(sdks, 'test-docusaurus-host');
+    assert.equal(selectAnalysis(sdks).runDocusaurusHost, 'true');
+  }
+  const pullRequest = workflow.match(/\n  pull_request:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  assert.match(pullRequest, /'tests\/docusaurus-consumer-fixtures\/\*\*'/);
+  assert.match(workflow, /workflow_call:\s+inputs:\s+sdks:/);
+  assert.match(docusaurusFixture, /const currentReact = '19\.3\.0'/);
+  assert.ok(docusaurusFixture.includes('`react@${currentReact}`'));
+  assert.ok(docusaurusFixture.includes('`react-dom@${currentReact}`'));
   assert.match(docusaurusFixture, /page\.on\('console'/);
   assert.match(docusaurusFixture, /consoleErrors/);
 });
@@ -73,12 +135,33 @@ test('excludes fixture and packaging lockfiles from the JS OWASP Node Audit scan
 
 test('runs the current Gatsby packed host on Node 24', () => {
   assert.match(workflow, /'Toggly\.FeatureManagement\.Gatsby\/\*\*'/);
+  for (const sdks of ['all', 'Gatsby']) {
+    assert.deepEqual(selectAnalysis(sdks).testMatrix.include.filter(row => row.sdk === 'Gatsby'), [{
+      sdk: 'Gatsby', path: 'Toggly.FeatureManagement.Gatsby',
+      'test-cmd': 'npm run test:coverage && node tests/packed-host.mjs',
+      'node-version': '24.x', 'has-lint': false,
+    }]);
+    assertRequiredHost(sdks, 'test');
+  }
+  assert.match(prepare, /test_matrix: \$\{\{ steps\.filter\.outputs\.test_matrix \}\}/);
+  const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  assert.match(testJob, /matrix: \$\{\{ fromJson\(needs\.prepare\.outputs\.test_matrix\) \}\}/);
+  assert.match(testJob, /node-version: \$\{\{ matrix\.node-version \|\| 'lts\/\*' \}\}/);
+  assert.match(testJob, /run: \$\{\{ matrix\.test-cmd \}\}/);
+  const install = testJob.match(/- name: Install locked standalone package dependencies\n[\s\S]*?(?=\n\s+- name:)/)?.[0] ?? '';
+  assert.match(install, /if: matrix\.sdk == 'Gatsby' \|\|/);
+  assert.match(install, /working-directory: \$\{\{ matrix\.path \}\}\s+run: npm ci/);
+  assert.doesNotMatch(install, /continue-on-error|npm ci \|\|/);
+});
+
+test('selects system Chrome before packed Client-Core tests', () => {
   assert.match(
     workflow,
-    /- sdk: Gatsby\s+path: Toggly\.FeatureManagement\.Gatsby\s+test-cmd: npm run test:coverage && node tests\/packed-host\.mjs\s+node-version: '24\.x'/,
+    /- name: Select system Chrome for packed Client Core\s+if: matrix\.sdk == 'Client-Core'/,
   );
+  assert.match(workflow, /matrix\.sdk != 'Client-Core'/);
   assert.match(
     workflow,
-    /- name: Install locked Gatsby dependencies\s+if: matrix\.sdk == 'Gatsby'\s+working-directory: \$\{\{ matrix\.path \}\}\s+run: npm ci/,
+    /if: matrix\.sdk == 'Gatsby' \|\| matrix\.sdk == 'Client-Telemetry' \|\| matrix\.sdk == 'Client-Core'/,
   );
 });

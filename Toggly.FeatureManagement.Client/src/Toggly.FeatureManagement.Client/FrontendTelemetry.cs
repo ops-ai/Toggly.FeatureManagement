@@ -48,6 +48,13 @@ internal sealed class NativeTelemetryTransport : IFrontendTelemetryTransport, ID
     public void Dispose() => http.Dispose();
 }
 
+/// <summary>Immutable compact attribution captured with each evaluation or explicit event.</summary>
+internal sealed record TelemetryIdentity(string? InstanceId, string? Identity)
+{
+    internal static TelemetryIdentity Create(string? instanceId, string? identity) =>
+        !string.IsNullOrWhiteSpace(instanceId) ? new(instanceId.Trim(), null) : new(null, string.IsNullOrWhiteSpace(identity) ? null : identity.Trim());
+}
+
 /// <summary>Bounded memory-only aggregate owner. No lifetime name or encoded-key cache.</summary>
 internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisposable
 {
@@ -71,7 +78,7 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
         public double First => Counter ? Math.Min(Value, ValueLimit) : Value;
     }
     private sealed record Stored<T>(T Value, int Entries, long UpperBytes);
-    private sealed record Batch(byte[] Bytes, int Entries, long CreatedAt);
+    private sealed record Batch(byte[] Bytes, int Entries, long CreatedAt, Dictionary<string, bool> Kinds);
     private readonly object sync = new();
     private readonly TogglyClientOptions options;
     private readonly Uri? endpoint;
@@ -83,7 +90,7 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
     private readonly Dictionary<(string Key, string Variant), Stored<Feature>> features = [];
     private readonly Dictionary<string, Stored<Metric>> metrics = new(StringComparer.Ordinal);
     private readonly Queue<Batch> queue = new();
-    private Dictionary<string, bool> queuedKinds = new(StringComparer.Ordinal);
+    private TelemetryIdentity identity;
     private long pendingBytes, queuedBytes;
     private int pendingEntries, queuedEntries;
     private int diagnosticMask;
@@ -99,6 +106,7 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
         Func<int, CancellationToken, Task>? delay = null, Func<byte[], byte[]>? compress = null, TimeSpan? timeout = null)
     {
         this.options = options;
+        identity = TelemetryIdentity.Create(options.InstanceId, options.Context.Identity);
         endpoint = Endpoint(options.MetricsBaseUrl);
         this.now = now ?? (() => (long)(Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency));
         this.delay = delay ?? ((ms, ct) => Task.Delay(ms, ct));
@@ -125,10 +133,12 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
         return new UriBuilder(uri) { Path = uri.AbsolutePath.TrimEnd('/') + "/api/frontend/telemetry" }.Uri;
     }
 
-    internal void RecordCheck(string key, string variant) => RecordFeature(key, variant, 0);
+    internal void RecordCheck(string key, string variant, TelemetryIdentity? attribution = null) => RecordFeature(key, variant, 0, attribution);
+    internal void RecordUsage(string key, string variant, TelemetryIdentity attribution) => RecordFeature(key, variant, 1, attribution);
+    internal void RecordView(string key, string variant, TelemetryIdentity attribution) => RecordFeature(key, variant, 2, attribution);
     public void RecordUsage(string featureKey, string variant = "enabled") => RecordFeature(featureKey, variant, 1);
     public void RecordView(string featureKey, string variant = "enabled") => RecordFeature(featureKey, variant, 2);
-    private void RecordFeature(string key, string variant, int index)
+    private void RecordFeature(string key, string variant, int index, TelemetryIdentity? attribution = null)
     {
         lock (sync)
         {
@@ -139,6 +149,7 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
                 Diagnose("invalid-event");
                 return;
             }
+            UseIdentity(attribution);
             var name = (key, variant);
             features.TryGetValue(name, out var old);
             var before = old?.Value ?? new Feature();
@@ -167,7 +178,9 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
     }
     public void IncrementCounter(string metricKey, double value = 1) => RecordMetric(metricKey, value, true);
     public void SetGauge(string metricKey, double value) => RecordMetric(metricKey, value, false);
-    private void RecordMetric(string key, double amount, bool counter)
+    internal void IncrementCounter(string key, double value, TelemetryIdentity attribution) => RecordMetric(key, value, true, attribution);
+    internal void SetGauge(string key, double value, TelemetryIdentity attribution) => RecordMetric(key, value, false, attribution);
+    private void RecordMetric(string key, double amount, bool counter, TelemetryIdentity? attribution = null)
     {
         lock (sync)
         {
@@ -178,8 +191,9 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
                 Diagnose("invalid-event");
                 return;
             }
+            UseIdentity(attribution);
             metrics.TryGetValue(key, out var old);
-            if ((old is not null && old.Value.Counter != counter) || (queuedKinds.TryGetValue(key, out var kind) && kind != counter))
+            if ((old is not null && old.Value.Counter != counter) || queue.Any(batch => batch.Kinds.TryGetValue(key, out var kind) && kind != counter))
             {
                 Diagnose("metric-kind-conflict");
                 return;
@@ -203,6 +217,28 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
             metrics[key] = next;
             Admit(old?.Entries ?? 0, old?.UpperBytes ?? 0, next.Entries, next.UpperBytes, () => { if (old is null) metrics.Remove(key); else metrics[key] = old; });
         }
+    }
+    private void UseIdentity(TelemetryIdentity? attribution)
+    {
+        if (attribution is null || attribution == identity)
+            return;
+        // Serialize accepted events with their original identity before switching. All
+        // generations share the same queue, admission budget, request and retry owner.
+        SealPending();
+        identity = attribution;
+    }
+    private void SealPending()
+    {
+        foreach (var batch in Batches())
+        {
+            queue.Enqueue(batch);
+            queuedEntries += batch.Entries;
+            queuedBytes += batch.Bytes.Length;
+        }
+        features.Clear();
+        metrics.Clear();
+        pendingEntries = 0;
+        pendingBytes = 0;
     }
     private void Admit(int oldEntries, long oldBytes, int entries, long bytes, Action undo)
     {
@@ -243,10 +279,10 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
             writer.WriteStartObject();
             writer.WriteString("k", options.AppKey);
             writer.WriteString("e", options.Environment);
-            if (!string.IsNullOrWhiteSpace(options.InstanceId))
-                writer.WriteString("i", options.InstanceId.Trim());
-            else if (!string.IsNullOrWhiteSpace(options.Context.Identity))
-                writer.WriteString("u", options.Context.Identity.Trim());
+            if (identity.InstanceId is not null)
+                writer.WriteString("i", identity.InstanceId);
+            else if (identity.Identity is not null)
+                writer.WriteString("u", identity.Identity);
             if (f.Count > 0)
             {
                 writer.WritePropertyName("f");
@@ -271,7 +307,7 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
         void Finish()
         {
             if (count > 0)
-                batches.Add(new(Encode(f, m), count, created));
+                batches.Add(new(Encode(f, m), count, created, m.Keys.ToDictionary(key => key, key => metrics[key].Value.Counter, StringComparer.Ordinal)));
             f = new(StringComparer.Ordinal);
             m = new(StringComparer.Ordinal);
             count = 0;
@@ -374,15 +410,7 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
                     {
                         if (pendingEntries == 0)
                             break;
-                        foreach (var next in Batches())
-                            queue.Enqueue(next);
-                        queuedEntries = pendingEntries;
-                        queuedBytes = queue.Sum(b => (long)b.Bytes.Length);
-                        queuedKinds = metrics.ToDictionary(p => p.Key, p => p.Value.Value.Counter, StringComparer.Ordinal);
-                        features.Clear();
-                        metrics.Clear();
-                        pendingEntries = 0;
-                        pendingBytes = 0;
+                        SealPending();
                     }
                     batch = queue.Peek();
                 }
@@ -395,8 +423,6 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
                     queue.Dequeue();
                     queuedEntries -= batch.Entries;
                     queuedBytes -= batch.Bytes.Length;
-                    if (queue.Count == 0)
-                        queuedKinds.Clear();
                 }
             }
         }
@@ -531,7 +557,6 @@ internal sealed class FrontendTelemetryReporter : IFrontendTelemetry, IAsyncDisp
             features.Clear();
             metrics.Clear();
             queue.Clear();
-            queuedKinds.Clear();
             pendingEntries = queuedEntries = 0;
             pendingBytes = queuedBytes = 0;
         }

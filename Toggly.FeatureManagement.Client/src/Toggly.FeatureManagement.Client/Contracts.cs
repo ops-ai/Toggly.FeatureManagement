@@ -44,6 +44,13 @@ public interface IUpdateSource
 {
     IAsyncEnumerable<string> ListenAsync(Uri uri, CancellationToken cancellationToken = default);
 }
+/// <summary>Optional frontend companion for atomically replacing context and its minted capability.</summary>
+/// <remarks>Existing feature-session implementations and trusted server sessions need not implement this interface.</remarks>
+public interface IFrontendIdentitySession
+{
+    /// <summary>Replace targeting context and token together. Null or blank token restores client-asserted targeting.</summary>
+    Task SetIdentityAsync(EvaluationContext context, string? instanceId, CancellationToken cancellationToken = default);
+}
 /// <summary>Configuration for a frontend session with mandatory signature verification.</summary>
 public sealed record TogglyClientOptions
 {
@@ -65,7 +72,7 @@ public sealed record TogglyClientOptions
         get; init;
     }
 
-    /// <summary>Opaque minted instance id; sent as compact telemetry field <c>i</c>.</summary>
+    /// <summary>Opaque minted instance id for definitions and telemetry. Replaced by SetIdentityAsync; cleared by SetContextAsync.</summary>
     public string? InstanceId { get; init; }
 
     /// <summary>Public frontend application key; empty selects local defaults without network access.</summary>
