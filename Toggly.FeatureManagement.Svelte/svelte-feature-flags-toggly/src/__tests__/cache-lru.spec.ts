@@ -18,7 +18,7 @@ function okResponse(body: unknown) {
     ok: true,
     status: 200,
     statusText: 'OK',
-    headers: { get: () => null },
+    headers: { get: (_key: string): string | null => null },
     json: () => Promise.resolve(body),
     text: () => Promise.resolve(JSON.stringify(body)),
   }
@@ -134,6 +134,32 @@ describe('maxCacheKeys LRU', () => {
     await writeFlagsForIdentity(service, 'user-c', { C: true })
 
     expect(localStorage.getItem(revisionKey)).toBe('etag-1')
+  })
+
+  it.each([false, true])('evicts paired revisions without charging them to the body limit, variants=%s', async enableVariants => {
+    const service = new Toggly({ appKey, environment, enableVariants, maxCacheKeys: 1, enableLiveUpdates: false, enableTelemetry: false })
+    const scope = (identity: string) => flagsCacheKeyForContext(appKey, environment, identity, enableVariants ? 'variants' : 'evaluated')
+    const revisionKey = (identity: string) => scope(identity).replace('toggly:flags:', 'toggly:revision:')
+    try {
+      for (const identity of ['user-a', 'user-b', 'user-c']) {
+        const response = okResponse(enableVariants ? { A: { enabled: true, variant: 'blue' } } : { A: true })
+        response.headers.get = (key: string) => key.toLowerCase() === 'etag' ? 'revision-' + identity : null
+        mockFetch.mockResolvedValueOnce(response)
+        await service.setContext({ identity })
+        vi.setSystemTime(Date.now() + 1000)
+      }
+      expect(localStorage.getItem(revisionKey('user-a'))).toBeNull()
+      expect(localStorage.getItem(revisionKey('user-b'))).toBeNull()
+      expect(localStorage.getItem(revisionKey('user-c'))).toBe('revision-user-c')
+      expect(localStorage.getItem(scope('user-c'))).not.toBeNull()
+      if (enableVariants) expect(localStorage.getItem(variantsCacheKeyForContext(appKey, environment, 'user-c'))).not.toBeNull()
+      expect(Object.keys(JSON.parse(localStorage.getItem('toggly:cache-lru')!).entries)).toHaveLength(enableVariants ? 2 : 1)
+      expect(Object.keys(localStorage).filter(key => key.startsWith('toggly:revision:'))).toHaveLength(1)
+      mockFetch.mockResolvedValueOnce(okResponse(enableVariants ? { A: { enabled: false } } : { A: false }))
+      await service.setContext({ identity: 'user-a' })
+      expect(new Headers(mockFetch.mock.calls[mockFetch.mock.calls.length - 1][1]?.headers).has('If-None-Match')).toBe(false)
+      expect(await service.isFeatureOn('A')).toBe(false)
+    } finally { service.dispose() }
   })
 
   it('removes cleared flags and variants keys from the LRU index', async () => {

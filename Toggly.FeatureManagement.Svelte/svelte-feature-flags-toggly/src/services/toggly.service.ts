@@ -103,6 +103,9 @@ function enforceMaxCacheKeys(protectKeys: string[], maxCacheKeys?: number | null
     for (const key of toEvict) {
       try {
         localStorage.removeItem(key)
+        // Revisions belong to their bodies and do not consume separate LRU slots.
+        const prefix = key.startsWith(CACHE_PREFIX) ? CACHE_PREFIX : VARIANTS_CACHE_PREFIX
+        localStorage.removeItem(REVISION_CACHE_PREFIX + key.slice(prefix.length))
       } catch { /* ignore per-key removal failures */ }
     }
     index = removeCacheLruKeys(index, toEvict)

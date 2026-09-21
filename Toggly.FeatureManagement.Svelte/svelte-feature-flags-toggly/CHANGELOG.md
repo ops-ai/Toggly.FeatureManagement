@@ -23,6 +23,11 @@
 - Failed explicit context refreshes still reject, but retain the new context's
   cache or defaults instead of restoring the previous user's definitions/token.
 
+### Fixed
+
+- Remove scoped revision validators with evicted cached definitions, keeping
+  context changes within the configured cache limit.
+
 ## 1.10.2
 
 2026-09-13
