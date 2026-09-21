@@ -460,7 +460,15 @@ export class Toggly implements TogglyService {
     }
     this._cachedDefinitionsRevision = revision
     if (this._canPersist) {
-      writeCachedRevision(this._config.appKey, this._config.environment ?? 'Production', revision, this._contextCacheKey())
+      const appKey = this._config.appKey
+      const environment = this._config.environment ?? 'Production'
+      const context = this._contextCacheKey()
+      // Another owner can evict storage while this owner retains its memory body.
+      // A valid in-memory304 must not recreate a persisted orphan validator.
+      if (readCachedFlags(appKey, environment, context) !== null &&
+          (!this._config.enableVariants || readCachedVariants(appKey, environment, context) !== null)) {
+        writeCachedRevision(appKey, environment, revision, context)
+      }
     }
   }
 
@@ -710,10 +718,8 @@ export class Toggly implements TogglyService {
         },
       )
       if (this._disposed || generation !== this._generation) return this._features
-      if (loaded.revision) {
-        this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
-      }
       if (loaded.notModified) {
+        if (loaded.revision) this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
         this._lastFetchTime = Date.now()
         return this._features
       }
@@ -735,6 +741,9 @@ export class Toggly implements TogglyService {
           writeCachedFlags(appKey, env, this._features, contextKey, this._config.maxCacheKeys)
         }
       }
+
+      // Persist validators only after their mode-scoped bodies have been written.
+      if (loaded.revision) this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
 
       if (this._features) {
         this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))

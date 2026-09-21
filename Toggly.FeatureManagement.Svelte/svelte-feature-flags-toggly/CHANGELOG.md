@@ -26,7 +26,8 @@
 ### Fixed
 
 - Remove scoped revision validators with evicted cached definitions, keeping
-  context changes within the configured cache limit.
+  context changes within the configured cache limit. A live client's304 response
+  preserves its active flags and variant without recreating an evicted validator.
 
 ## 1.10.2
 
