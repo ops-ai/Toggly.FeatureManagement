@@ -81,11 +81,11 @@ describe('TogglyProvider Component', () => {
 
     unmount();
 
-    expect(disposeTogglyClient).toHaveBeenCalledWith(config);
+    await vi.waitFor(() => expect(disposeTogglyClient).toHaveBeenCalledWith(config));
   });
 
   it('should handle initTogglyClient error', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { /* Assert the captured initialization failure below. */ });
     vi.mocked(initTogglyClient).mockRejectedValueOnce(new Error('Init failed'));
 
     render(

@@ -308,8 +308,8 @@ class TogglyClientInstance {
   }
 
   captureEvaluation() {
-    const localGates = this.localGates;
-    const localGateIndex = this.localGateIndex;
+    const localGates = this.localGates.map(gate => ({ ...gate, flagKeys: [...gate.flagKeys] }));
+    const localGateIndex = buildFlagGateIndex(localGates);
     return (flagKey: string, definition: EvaluatedDefinitionValue | undefined,
       defaultValue: boolean, entityContext: TogglyEntityContext | null) => {
       const remote = resolveEvaluatedDefinition(definition, entityContext, defaultValue);
@@ -353,10 +353,15 @@ class TogglyClientInstance {
       return '';
     }
 
-    const baseUrl = baseURI.replace(/\/$/, '');
-    const url = new URL(`${baseUrl}/evaluated-signed/${appKey}/${environment}`);
+    const url = new URL(baseURI);
+    url.pathname = `${url.pathname.replace(/\/$/, '')}/evaluated-signed/${appKey}/${environment}`;
 
-    if (instanceId) url.searchParams.set('i', instanceId);
+    if (instanceId) {
+      for (const key of [...url.searchParams.keys()]) {
+        if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) url.searchParams.delete(key);
+      }
+      url.searchParams.set('i', instanceId);
+    }
     else appendEvaluationContext(url, { identity, groups, claims }, 'evaluated');
 
     return url.toString();
@@ -989,7 +994,8 @@ function createGateStore(
   const gateAtom: TogglyReadableAtom<boolean> = computed(
     [$flags, $localGatesRevision, $isReady],
     (flags) => {
-      if (keys.length === 0) {
+      const selectedKeys = [...keys];
+      if (selectedKeys.length === 0) {
         return !negate;
       }
 
@@ -1007,7 +1013,7 @@ function createGateStore(
         return enabled;
       };
 
-      const isEnabled = requirement === 'any' ? keys.some(evaluate) : keys.every(evaluate);
+      const isEnabled = requirement === 'any' ? selectedKeys.some(evaluate) : selectedKeys.every(evaluate);
       evaluatedLeaves = leaves;
       if (gateAtom.lc > 0) pending = undefined;
       else if (consumer) pending = () => leaves.forEach(([key, result]) => record?.(key, result ? 'enabled' : 'disabled'));

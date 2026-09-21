@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { bounded, cleanupOwned, closeBrowser, closeServer, runOwnedCommand, stopChild } from './owned-resources.mjs';
+import { bounded, diagnoseFailure, cleanupOwned, closeBrowser, closeServer, runOwnedCommand, stopChild } from './owned-resources.mjs';
 import { spawn } from 'node:child_process';
+import { runBrowserCleanupControls } from './browser-cleanup.mjs';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -428,6 +429,7 @@ try {
   const baseURI = `http://127.0.0.1:${definitions.address().port}`;
 
   await run('npm', ['run', 'build']);
+  await runAsync(process.execPath, [join(packageDirectory, 'provider-ownership.mjs')]);
   const packed = JSON.parse(await run('npm', ['pack', '--json', '--pack-destination', temporary]))[0];
   const tarball = join(temporary, packed.filename);
   console.log('PACKED_GATSBY_ARTIFACT', JSON.stringify({ version: packed.version, integrity: packed.integrity, shasum: packed.shasum }));
@@ -475,7 +477,7 @@ try {
   ], { cwd: host, stdio: 'inherit' });
   await runAsync(process.execPath, ['consumer.mjs'], { cwd: host });
   await runAsync(join(host, 'node_modules', '.bin', 'gatsby'), ['build'], {
-    cwd: host, env: { CI: 'true', GATSBY_TELEMETRY_DISABLED: '1' },
+    cwd: host, env: { CI: 'true', GATSBY_TELEMETRY_DISABLED: '1', TOGGLY_GATSBY_BUILD_DIAGNOSTICS: '1', NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --require=${JSON.stringify(join(packageDirectory, 'build-diagnostics.cjs'))}` },
   });
 
   const pageFeatures = JSON.parse(readFileSync(join(host, 'public', 'toggly-page-features.json'), 'utf8'));
@@ -531,6 +533,7 @@ try {
   const { chromium } = await import(
     pathToFileURL(join(host, 'node_modules', 'playwright', 'index.mjs')).href
   );
+  await runBrowserCleanupControls(chromium);
   browserServer = await chromium.launchServer({ headless: true });
   browser = await chromium.connect(browserServer.wsEndpoint());
   const page = await browser.newPage();
@@ -560,14 +563,13 @@ try {
       { timeout: 10_000 },
     );
   } catch (error) {
-    console.error('Gatsby browser diagnostics', {
+    throw await diagnoseFailure(error, async () => console.error('Gatsby browser diagnostics', {
       mounted: await page.locator('#mounted').textContent().catch(() => null),
       body: await page.locator('body').textContent().catch(() => null),
       browserErrors,
       definitionRequests: requests,
       resources: await page.evaluate(() => performance.getEntriesByType('resource').map((entry) => entry.name)),
-    });
-    throw error;
+    }));
   }
   assert.equal(await page.locator('#hook').textContent(), 'on');
   assert.equal(await page.locator('#feature').textContent(), 'on');
@@ -595,7 +597,7 @@ try {
     m: { orders: 2, cartValue: 19.5 },
   });
   assert.equal(
-    await page.evaluate(async (collector) => {
+    await bounded(() => page.evaluate(async (collector) => {
       const response = await fetch(`${collector}/cors-probe`, {
         signal: AbortSignal.timeout(5000),
         method: 'POST',
@@ -604,12 +606,12 @@ try {
         body: '{}',
       });
       return response.status;
-    }, baseURI),
+    }, baseURI), 'Browser CORS evaluation', 10000),
     202,
   );
 
   await page.locator('#exit').click();
-  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  await bounded(() => page.evaluate(() => window.dispatchEvent(new Event('pagehide'))), 'Browser pagehide evaluation', 10000);
   await waitForTelemetry(2, 'pagehide flush');
   assert.equal(telemetryRequests[1].encoding, 'identity');
   assert.deepEqual(telemetryRequests[1].body.f, {

@@ -14,6 +14,8 @@
   cross-origin collector, including gzip, pagehide, and owner replacement.
 
 ### Fixed
+- Snapshot selected local gates before callbacks, suppress configured URL targeting
+  for minted identities, and discard retired Provider telemetry on replacement.
 - Keep the newest overlapping refresh and stop retired asynchronous refresh hooks.
 - Count initial React consumer checks only after commit; discarded hydration renders
   and StrictMode replay stay silent while real remounts and subscribed recomputations retain checks.

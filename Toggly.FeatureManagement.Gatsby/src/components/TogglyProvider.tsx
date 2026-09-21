@@ -8,12 +8,12 @@
 
 import React, { useEffect, useRef } from 'react';
 import {
-  disposeTogglyClient,
   getTogglyClientOwnerKey,
   getTogglyClientContextKey,
   initTogglyClient,
 } from '../client/store.js';
 import type { TogglyProviderProps } from '../types/index.js';
+import { retainProviderOwner } from '../client/provider-owner.js';
 
 /**
  * TogglyProvider - Initializes Toggly client with configuration
@@ -49,8 +49,7 @@ export function TogglyProvider({ config, children }: TogglyProviderProps) {
   const configRef = useRef(config);
   configRef.current = config;
   useEffect(() => {
-    const ownerConfig = configRef.current;
-    return () => disposeTogglyClient(ownerConfig);
+    return retainProviderOwner(configRef.current);
   }, [ownerKey]);
   useEffect(() => {
     initTogglyClient(configRef.current).catch((error) => {

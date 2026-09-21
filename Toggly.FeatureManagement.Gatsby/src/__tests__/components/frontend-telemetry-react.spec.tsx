@@ -7,11 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Feature } from '../../components/Feature.js';
 import { FeatureGate } from '../../components/FeatureGate.js';
 import { TogglyProvider } from '../../components/TogglyProvider.js';
-import { disposeTogglyClient, flushTelemetry, initTogglyClient, refreshFlags } from '../../client/store.js';
+import { disposeTogglyClient, flushTelemetry, initTogglyClient, refreshFlags, incrementCounter } from '../../client/store.js';
 import { useFeatureFlag } from '../../hooks/useFeatureFlag.js';
 
 type Envelope = {
   i?: string;
+  m?: Record<string, number>;
   f?: Record<string, Record<string, number[]>>;
 };
 
@@ -257,6 +258,82 @@ describe('React consumer telemetry', () => {
     await flushTelemetry();
     expect(envelopes.map(envelope => envelope.f)).toEqual([{ HookFlag: { enabled: [1] } }, { HookFlag: { disabled: [1] } }]);
     act(() => view.unmount());
+  });
+
+  it('discards retired Provider queues on replacement while final unmount flushes the current owner', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input).includes('/api/frontend/telemetry')) { envelopes.push(await bodyJson(init?.body)); return new Response(null, { status: 202 }); }
+      return new Response(JSON.stringify({ HookFlag: true }));
+    });
+    const config = { appKey: 'replacement', enableLiveUpdates: false, featureFlagsRefreshInterval: 0, metricsBaseUrl: 'https://old.example' };
+    const view = render(<React.StrictMode><TogglyProvider config={config}><HookConsumer /></TogglyProvider></React.StrictMode>);
+    await screen.findByText('hook-on');
+    await flushTelemetry(); envelopes.length = 0;
+    incrementCounter('retired');
+    view.rerender(<React.StrictMode><TogglyProvider config={{ ...config, metricsBaseUrl: 'https://off.example', enableTelemetry: false }}><HookConsumer /></TogglyProvider></React.StrictMode>);
+    await act(async () => { await Promise.resolve(); });
+    expect(envelopes).toEqual([]);
+    view.rerender(<React.StrictMode><TogglyProvider config={{ ...config, metricsBaseUrl: 'https://new.example' }}><HookConsumer /></TogglyProvider></React.StrictMode>);
+    await act(async () => { await Promise.resolve(); });
+    incrementCounter('current');
+    await act(async () => view.unmount());
+    await vi.waitFor(() => expect(envelopes.some(envelope => envelope.m?.current === 1)).toBe(true));
+    expect(envelopes.some(envelope => envelope.m?.retired)).toBe(false);
+  });
+
+  it('keeps mounted gate selection immutable and counts only the selected leaves', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input).includes('/api/frontend/telemetry')) { envelopes.push(await bodyJson(init?.body)); return new Response(null, { status: 202 }); }
+      return new Response(JSON.stringify({ First: true, Later: true, Injected: false }));
+    });
+    const keys = ['First', 'Later'];
+    const later = { id: 'later', flagKeys: ['Later'], isEnabled: () => true };
+    await initTogglyClient({ appKey: 'mounted-gates', enableLiveUpdates: false, featureFlagsRefreshInterval: 0, localGates: [
+      { id: 'first', flagKeys: ['First'], isEnabled: () => { later.isEnabled = () => false; keys[1] = 'Injected'; return true; } }, later,
+    ] });
+    const view = render(<FeatureGate flags={keys}>selected-on</FeatureGate>);
+    expect(screen.getByText('selected-on')).toBeTruthy();
+    await flushTelemetry();
+    expect(envelopes[0]?.f).toEqual({ First: { enabled: [1] }, Later: { enabled: [1] } });
+    act(() => view.unmount());
+  });
+
+  it('keeps a genuinely remounted Provider owner alive through the previous cleanup', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input).includes('/api/frontend/telemetry')) { envelopes.push(await bodyJson(init?.body)); return new Response(null, { status: 202 }); }
+      return new Response(JSON.stringify({ HookFlag: true }));
+    });
+    const config = { appKey: 'remount-provider', enableLiveUpdates: false, featureFlagsRefreshInterval: 0 };
+    const view = render(<TogglyProvider key="first" config={config}><HookConsumer /></TogglyProvider>);
+    await screen.findByText('hook-on');
+    await flushTelemetry(); envelopes.length = 0;
+    view.rerender(<TogglyProvider key="second" config={config}><HookConsumer /></TogglyProvider>);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByText('hook-on')).toBeTruthy();
+    incrementCounter('remounted'); await flushTelemetry();
+    expect(envelopes.some(envelope => envelope.m?.remounted === 1)).toBe(true);
+    await act(async () => view.unmount());
+  });
+
+  it('aborts the active retired Provider transport when replacement opts out', async () => {
+    let activeSignal: AbortSignal | undefined;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input).includes('/api/frontend/telemetry')) {
+        activeSignal = init?.signal ?? undefined;
+        return new Promise<Response>((_resolve, reject) => activeSignal?.addEventListener('abort', () => reject(new DOMException('Retired', 'AbortError')), { once: true }));
+      }
+      return new Response(JSON.stringify({ HookFlag: true }));
+    });
+    const config = { appKey: 'active-replacement', enableLiveUpdates: false, featureFlagsRefreshInterval: 0, metricsBaseUrl: 'https://old.example' };
+    const view = render(<TogglyProvider config={config}><HookConsumer /></TogglyProvider>);
+    await screen.findByText('hook-on');
+    incrementCounter('inflight');
+    const flushing = flushTelemetry();
+    await vi.waitFor(() => expect(activeSignal).toBeDefined());
+    view.rerender(<TogglyProvider config={{ ...config, metricsBaseUrl: 'https://new.example', enableTelemetry: false }}><HookConsumer /></TogglyProvider>);
+    expect(activeSignal?.aborted).toBe(true);
+    await flushing;
+    await act(async () => view.unmount());
   });
 
 });

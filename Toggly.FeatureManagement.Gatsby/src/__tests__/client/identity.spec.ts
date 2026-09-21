@@ -203,3 +203,44 @@ it('stops the remaining async hooks after a newer refresh supersedes the held ca
   expect(refreshed).toEqual([false]);
   expect(store.$flags.get()).toEqual({ F: false });
 });
+
+it('snapshots local callbacks and selected key membership before the first leaf runs', async () => {
+  respond = async () => response({ First: true, Later: true, Injected: false });
+  const keys = ['First', 'Later'];
+  const later = { id: 'later', flagKeys: ['Later'], isEnabled: () => true };
+  await store.initTogglyClient({ ...config, localGates: [
+    { id: 'first', flagKeys: ['First'], isEnabled: () => {
+      later.isEnabled = () => false;
+      later.flagKeys.push('First');
+      keys[1] = 'Injected';
+      return true;
+    } }, later,
+  ] });
+  expect(store.$gate(keys).get()).toBe(true);
+  await store.flushTelemetry();
+  expect(envelopes[0]?.f).toEqual({ First: { enabled: [1] }, Later: { enabled: [1] } });
+  store.setLocalGates([]);
+  expect(store.$gate(['First', 'Later'], 'any').get()).toBe(true);
+  await store.flushTelemetry();
+  expect(envelopes[1]?.f).toEqual({ First: { enabled: [1] } });
+});
+it.each(['token', '  token  '])('constructs the endpoint pathname and removes all base targeting for %s', async instanceId => {
+  await store.initTogglyClient({ ...config, instanceId,
+    baseURI: 'https://defs.invalid/base/?u=old&u=older&userId=private&g=a&g=b&claim.plan=paid&claim.team=secret&keep=one&keep=two',
+    groups: ['staff'], claims: { role: 'admin' },
+  });
+  const url = requests[0].url;
+  expect(url.pathname).toBe('/base/evaluated-signed/identity/Production');
+  expect([...url.searchParams]).toEqual([['keep', 'one'], ['keep', 'two'], ['i', 'token']]);
+  expect(store.$flag('F').get()).toBe(true);
+});
+it('preserves unrelated base query fields and ordinary targeting with a blank token', async () => {
+  await store.initTogglyClient({ ...config, instanceId: ' ', baseURI: 'https://defs.invalid/base/?keep=one&keep=two', groups: ['staff'], claims: { role: 'admin' } });
+  const url = requests[0].url;
+  expect(url.pathname).toBe('/base/evaluated-signed/identity/Production');
+  expect(url.searchParams.getAll('keep')).toEqual(['one', 'two']);
+  expect(url.searchParams.get('u')).toBe('alice');
+  expect(url.searchParams.getAll('g')).toEqual(['staff']);
+  expect(url.searchParams.get('claim.role')).toBe('admin');
+  expect(url.searchParams.has('i')).toBe(false);
+});
