@@ -20,3 +20,18 @@ to the Angular LCOV file when that file exists, so the repository's existing
 single-report-per-SDK collector receives both records. Test drivers themselves
 are not production coverage targets. Coverage thresholds and source-suite
 collection are unchanged.
+
+The browser driver uses a second local HTTP origin as the telemetry collector.
+It verifies real CORS preflight and POST delivery, native browser gzip, effective
+check aggregation, explicit usage/view/counter/gauge payloads, and pagehide and
+service-destruction flushes with plain keepalive. Client identity is asserted as
+`u`; host-minted tokens are asserted as `i`, suppressing client targeting in
+definitions URLs. Telemetry still excludes groups and claims. No telemetry fetch is mocked or sent to the
+production metrics endpoint.
+
+For intermediate testing before a shared telemetry release is published, set
+`TOGGLY_CLIENT_TELEMETRY_TARBALL` to an actual `npm pack` artifact. The runner
+labels that graph `LOCAL INTEGRATION ARTIFACT`; it does not change production
+manifests or fixture locks. Final release verification must run without this
+override after the public dependency is available. Run build/post-test packaging
+checks before the host matrix, since both use the package output directory.

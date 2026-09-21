@@ -205,6 +205,15 @@ jobs:
           test -x "$CHROME_BIN"
           npm run test:consumers
 
+      - name: Verify packed Angular consumers in Chrome
+        if: matrix.sdk == 'Angular'
+        working-directory: ${{ matrix.path }}
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: |
+          test -x "$CHROME_BIN"
+          npm run test:hosts
+
       - name: Install Chromium for packed SvelteKit host
         if: matrix.sdk == 'SvelteKit'
         working-directory: ${{ matrix.path }}
