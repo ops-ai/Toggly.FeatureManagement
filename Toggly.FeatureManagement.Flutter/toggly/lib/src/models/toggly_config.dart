@@ -32,6 +32,20 @@ class TogglyConfig {
   /// exposes variant lookup APIs on `Toggly`.
   final bool enableVariants;
 
+  /// Send aggregated feature checks and explicit usage/business metrics.
+  /// Effective only when Toggly is initialized with an application key.
+  final bool enableTelemetry;
+
+  /// Base URL for frontend telemetry ingestion, separate from [baseURI].
+  final String metricsBaseUrl;
+
+  /// Base interval between telemetry flushes, before up to 20% jitter.
+  /// Must be between 30000 and 60000 milliseconds.
+  final int telemetryFlushIntervalMs;
+
+  /// Receives bounded telemetry status codes without event payloads or keys.
+  final void Function(String code)? onTelemetryDiagnostic;
+
   /// Optional persistence backend for caches (flags, variants, JWKS).
   ///
   /// When `null` (the default) the SDK is memory-only and does not support
@@ -70,6 +84,10 @@ class TogglyConfig {
     this.jwksCacheDuration = const Duration(days: 30),
     this.enableLiveUpdates = true,
     this.enableVariants = false,
+    this.enableTelemetry = true,
+    this.metricsBaseUrl = 'https://metrics.toggly.io',
+    this.telemetryFlushIntervalMs = 45000,
+    this.onTelemetryDiagnostic,
     this.cacheProvider,
     this.maxCacheKeys,
     this.localGates,

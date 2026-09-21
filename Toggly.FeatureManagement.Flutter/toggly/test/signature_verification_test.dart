@@ -167,6 +167,7 @@ void main() {
         useSignedDefinitions: true,
         flagDefaults: {'PresalePhotos': false, 'OrderSales': false},
         config: const TogglyConfig(
+          enableTelemetry: false,
           baseURI: 'https://example.test',
           enableLiveUpdates: false,
           featureFlagsRefreshInterval: 3600000,
@@ -205,6 +206,7 @@ void main() {
         useSignedDefinitions: true,
         flagDefaults: {'PresalePhotos': false},
         config: TogglyConfig(
+          enableTelemetry: false,
           baseURI: 'https://example.test',
           enableLiveUpdates: false,
           featureFlagsRefreshInterval: 3600000,
@@ -246,6 +248,7 @@ void main() {
         useSignedDefinitions: true,
         flagDefaults: {'PresalePhotos': false, 'Evil': false},
         config: const TogglyConfig(
+          enableTelemetry: false,
           baseURI: 'https://example.test',
           enableLiveUpdates: false,
           featureFlagsRefreshInterval: 3600000,
@@ -265,6 +268,7 @@ void main() {
       useSignedDefinitions: false,
       flagDefaults: const {},
       config: const TogglyConfig(
+        enableTelemetry: false,
         baseURI: 'https://example.test',
         enableLiveUpdates: false,
       ),

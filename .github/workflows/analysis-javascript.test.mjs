@@ -90,3 +90,15 @@ test('runs Vue packed browser telemetry checks with an explicit Chrome executabl
   assert.match(hostJob, /CHROME_BIN: \/usr\/bin\/google-chrome/);
   assert.match(hostJob, /run: npm run test:host/);
 });
+
+test('selects system Chrome before packed Client-Core tests', () => {
+  assert.match(
+    workflow,
+    /- name: Select system Chrome for packed Client Core\s+if: matrix\.sdk == 'Client-Core'/,
+  );
+  assert.match(workflow, /matrix\.sdk != 'Client-Core'/);
+  assert.match(
+    workflow,
+    /if: matrix\.sdk == 'Gatsby' \|\| matrix\.sdk == 'Client-Telemetry' \|\| matrix\.sdk == 'Client-Core'/,
+  );
+});

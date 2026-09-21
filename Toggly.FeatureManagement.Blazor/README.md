@@ -12,12 +12,12 @@ Native Razor feature gates for static SSR, Interactive Server, WebAssembly and I
 | Interactive Auto | Server package in server project; browser package in client project | Each runtime creates its own session |
 
 ```sh
-dotnet add package Toggly.FeatureManagement.Blazor --version 3.9.0
+dotnet add package Toggly.FeatureManagement.Blazor --version 3.10.0
 # Server project only:
-dotnet add package Toggly.FeatureManagement.Blazor.Server --version 3.9.0
+dotnet add package Toggly.FeatureManagement.Blazor.Server --version 3.10.0
 ```
 
-The server package reuses trusted `Toggly.FeatureManagement` 3.9.0. The browser package reuses portable `Toggly.FeatureManagement.Client` 3.9.0 and has no dependency on server evaluation or filesystem storage. The two packages target net8.0; use a compatible ASP.NET Core host and supported .NET runtime.
+The server package reuses trusted `Toggly.FeatureManagement` 3.10.0. The browser package reuses portable `Toggly.FeatureManagement.Client` 3.10.0 and has no dependency on server evaluation or filesystem storage. The two packages target net8.0; use a compatible ASP.NET Core host and supported .NET runtime.
 
 ## Trusted server setup
 
@@ -56,7 +56,7 @@ builder.Services.AddTogglyBlazorWebAssembly(_ => new TogglyClientOptions
 
 Obtain an additional **Front-end App Key** from App Settings and enable **Available to Client SDK** for each exposed flag. Configure exact allowed browser origins. No Blazor-specific technology picker is required. Everything in client configuration is public: never use a backend or management credential here.
 
-The browser fetches `evaluated-signed` definitions, forwards identity/groups/claims to the evaluation endpoint, verifies signed responses using WebCrypto, and evaluates returned entity gates locally. `BrowserSnapshotStore` uses durable localStorage, partitioned by the portable client's context key (definitions endpoint, app, environment and normalized user context). After a verified response, the portable client persists the signed envelope and the exact accepted public key set. A new browser runtime can restore that snapshot before contacting the definitions service; it checks the cache format, context, configured key restrictions, signature age and signature again. Invalid, expired or corrupt snapshots fall back to defaults. Storage denial or quota limits leave network and in-memory evaluation available.
+The browser fetches `evaluated-signed` definitions using minted token `i` when configured, otherwise forwarding identity/groups/claims to the evaluation endpoint. It verifies signed responses using WebCrypto and evaluates returned entity gates locally. `BrowserSnapshotStore` uses durable localStorage, partitioned by the portable client's context key (definitions endpoint, app, environment and either the minted token or normalized user context). After a verified response, the portable client persists the signed envelope and the exact accepted public key set. A new browser runtime can restore that snapshot before contacting the definitions service; it checks the cache format, context, configured key restrictions, signature age and signature again. Invalid, expired or corrupt snapshots fall back to defaults. Storage denial or quota limits leave network and in-memory evaluation available.
 
 Persisted public keys are local application state originally learned from the configured HTTPS endpoint. This supports offline restart after a successful online initialization, but cannot defend against an attacker replacing both the local key set and its signed envelope. Configure out-of-band `AllowedKeyIds` or authoritative `TrustedJwks` when the host requires independent key trust. An explicit trusted key set is not silently replaced after verification failure. The default 30-day maximum signature age applies when restoring or accepting an envelope; already accepted in-memory definitions remain last-known-good during an outage.
 
@@ -165,7 +165,7 @@ Static SSR has no interactive event handlers. Interactive Server retains a circu
 | ContextProperty | Existing .NET entity evaluator | Local returned entity gate |
 | UserClaims / country / UA / language / device / OS | Not registered by this circuit adapter; custom filters require explicit scoped inputs | Evaluation endpoint; browser headers reflect the actual browser, not demo overrides |
 | Live definitions | Trusted provider polling and push notifications | Portable polling and WebSocket invalidation |
-| Usage / custom metrics / named variants | Underlying trusted SDK APIs, not new Blazor session methods | No telemetry or variant-assignment API in the portable client |
+| Usage / custom metrics / named variants | Underlying trusted SDK APIs, not new Blazor session methods | `IFrontendTelemetry` supports usage, views, counters and gauges; no variant-assignment evaluation API |
 
 ## Runnable workshop
 
@@ -206,3 +206,11 @@ if (Features is IFrontendTelemetry telemetry)
 ```
 
 There is one reporter in the portable browser client. Component/session evaluations count actual leaves once, including local/entity results and short circuiting; refresh, hydration and snapshot projection are silent. Frontend reporting is disabled during server/prerender execution. Trusted Blazor Server telemetry retains its existing server implementation. Browser CORS must allow the configured metrics origin and JSON/gzip content headers.
+
+### Minted identity and login/logout
+
+`TogglyClientOptions.InstanceId` accepts a capability minted by your trusted backend. Definitions use `?i=` and omit client identity, groups and claims; telemetry sends the same token as JSON `i`. Without a token, definitions retain existing targeting and telemetry sends optional `u`. The app setting for accepting client-generated metric identities is off by default; an HTTP 202 does not confirm that identity was accepted.
+
+Use `IFrontendIdentitySession.SetIdentityAsync(context, instanceId)` on `TogglyClient` or `BrowserFeatureSession` to replace the context and token atomically. Pass null to clear the token. Existing `SetContextAsync(context)` always clears the previous token, including login/logout from Blazor's authentication provider. Supply the replacement token after authenticating the new user; never reuse the old user's token.
+
+Events already accepted retain their original identity, including retries and gauges. All identities share one bounded in-memory queue and one request owner. Token changes partition signed snapshots and conditional requests. Trusted Blazor Server sessions keep their existing server-side identity behavior and do not implement the frontend companion.

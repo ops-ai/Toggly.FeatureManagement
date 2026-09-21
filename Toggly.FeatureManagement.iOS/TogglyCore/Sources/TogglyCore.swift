@@ -11,7 +11,7 @@
 // This file serves as the main entry point for the TogglyCore module
 
 /// Toggly SDK version
-    public let togglyVersion = "1.4.0"
+    public let togglyVersion = "1.5.0"
 
 /// Shared Toggly service instance for convenient access.
 /// Initialize with `Toggly.shared.configure(config:)` before use.
@@ -32,6 +32,7 @@ public enum Toggly {
     /// - Returns: The configured TogglyService instance.
     @discardableResult
     public static func configure(config: TogglyConfig) -> TogglyService {
+        if let old = _shared { Task { await old.dispose() } }
         let service = TogglyService(config: config)
         _shared = service
         return service
@@ -39,6 +40,7 @@ public enum Toggly {
 
     /// Reset the shared instance. Useful for testing.
     public static func reset() {
+        if let old = _shared { Task { await old.dispose() } }
         _shared = nil
         clearRegisteredContexts()
     }

@@ -7,7 +7,7 @@ Use the [trusted .NET server SDK](https://docs.toggly.io/sdks/dotnet) for backen
 ## Install and initialize
 
 ```sh
-dotnet add package Toggly.FeatureManagement.Client.Desktop --version 3.9.0
+dotnet add package Toggly.FeatureManagement.Client.Desktop --version 3.10.0
 ```
 
 ```csharp
@@ -53,7 +53,7 @@ await client.SetContextAsync(new EvaluationContext(
     new Dictionary<string, string> { ["role"] = "editor" }));
 ```
 
-A client represents one user session. Create separate clients for independent sessions. Context updates clear the previous flags and revision before fetching, and reject stale in-flight responses from the previous context. Input collections are copied. Groups are deduplicated and sorted; claims are sorted and limited to 20 types. Identity, groups and claims become `u`, repeatable `g`, and `claim.*` query parameters; use opaque IDs and coarse, non-sensitive rollout dimensions.
+A client represents one user session. Create separate clients for independent sessions. Context updates clear the previous flags and revision before fetching, and reject stale in-flight responses from the previous context. Input collections are copied. Groups are deduplicated and sorted; claims are sorted and limited to 20 types. Without a minted instance token, identity, groups and claims become `u`, repeatable `g`, and `claim.*` query parameters; use opaque IDs and coarse, non-sensitive rollout dimensions. With a token, definitions send only `i` for targeting and omit those client-asserted fields.
 
 User targeting, percentage, claims, time and request-derived filters execute on the definitions worker. Native desktop requests do not supply browser fingerprints or spoof geographic signals through this API.
 
@@ -71,7 +71,7 @@ An EntityGate without entity context fails closed, even when a default is true. 
 
 All remote responses require ES256 verification. The exact raw `defs` JSON plus `|` plus Unix timestamp is double SHA-256 hashed, matching the definitions worker. Both P1363 and DER signatures are accepted by the desktop verifier. JWK curve, algorithm, key coordinates and key fingerprint are checked. `AllowedKeyIds` can restrict the accepted keys. `MaximumSignatureAge` defaults to 30 days; timestamps over five minutes in the future and rollback timestamps are rejected.
 
-Pass a directory as the third `DesktopClient.Create` argument to enable `FileSnapshotStore`. Restrict that directory to the current OS user. The store writes envelopes atomically under a SHA-256 context key covering endpoint, app, environment and complete evaluation context. Snapshot loads validate context and reverify signatures; malformed data never replaces last-known-good memory state.
+Pass a directory as the third `DesktopClient.Create` argument to enable `FileSnapshotStore`. Restrict that directory to the current OS user. The store writes envelopes atomically under a SHA-256 context key covering endpoint, app, environment and either the minted instance token or, without a token, the complete evaluation context. Snapshot loads validate context and reverify signatures; malformed data never replaces last-known-good memory state.
 
 After an accepted HTTPS response, the snapshot retains the original signed envelope and the exact public JWKS that verified it, including a successful signing-key rotation. A fresh client restores and reverifies this state before attempting network access. The current context, allowed key IDs and maximum signature age still apply; expired, malformed or unverifiable snapshots fall back to defaults. Previously verified in-memory flags remain available during network errors; maximum signature age is checked when accepting envelopes, not a forced expiration of last-known-good memory.
 
@@ -133,6 +133,14 @@ await client.FlushTelemetryAsync(keepalive: true);
 
 Automatic checks count only actual evaluated leaves after entity/local gates and before aggregate negation. Short-circuited keys and internal refresh/snapshot work do not count. Explicit events do not reevaluate flags. Variants accept 1–64 ASCII letters, digits, underscores or hyphens. This client exposes Boolean evaluation; it does not expose an assigned-variant evaluation API.
 
-Payloads contain only public app key, environment and aggregate counts/metric values. Identity, groups, claims and entity data are excluded. Telemetry uses its own HTTP client, never definitions authentication, and never persists events. The caller retains ownership of its definitions `HttpClient` and any optional `IFrontendTelemetryTransport`.
+Payloads contain the public app key, environment and aggregate counts/metric values, plus optional minted identity `i` or, without a minted token, client identity `u`. Groups, claims and entity data are excluded. The server app setting for accepting client-generated metric identities is off by default; sending `u` or receiving HTTP 202 does not confirm identity acceptance. Telemetry uses its own HTTP client, never definitions authentication, and never persists events. The caller retains ownership of its definitions `HttpClient` and any optional `IFrontendTelemetryTransport`.
 
 Buffers include inflight/retry data and numeric chunks within 2000 entries / 256 KiB; each envelope is at most 48 KiB. Ordinary sends use gzip with pre-send plain fallback. Only 429/503 responses retry, at most twice after 30/60 seconds (longer Retry-After honored), within 5 minutes. Ambiguous failures drop. `DisposeAsync` cancels schedules and attempts at most one final plain envelope within a global 5-second bound. `OnTelemetryDiagnostic` receives each fixed code at most once per client lifetime, without payloads. Cancelling an explicit telemetry flush ends that wait without throwing or cancelling a shared send.
+
+### Minted identity and login/logout
+
+`TogglyClientOptions.InstanceId` accepts a capability minted by your trusted backend. Definitions use `?i=` and omit client identity, groups and claims; telemetry sends the same token as JSON `i`. Without a token, definitions retain existing targeting and telemetry sends optional `u`. The app setting for accepting client-generated metric identities is off by default; an HTTP 202 does not confirm that identity was accepted.
+
+Use `IFrontendIdentitySession.SetIdentityAsync(context, instanceId)` on `TogglyClient` or `BrowserFeatureSession` to replace the context and token atomically. Pass null to clear the token. Existing `SetContextAsync(context)` always clears the previous token, including login/logout from Blazor's authentication provider. Supply the replacement token after authenticating the new user; never reuse the old user's token.
+
+Events already accepted retain their original identity, including retries and gauges. All identities share one bounded in-memory queue and one request owner. Token changes partition signed snapshots and conditional requests. Trusted Blazor Server sessions keep their existing server-side identity behavior and do not implement the frontend companion.

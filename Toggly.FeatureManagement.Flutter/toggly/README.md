@@ -106,6 +106,86 @@ await Toggly.evaluateFeatureGate(
 );
 ```
 
+### Frontend telemetry
+
+With an application key, Toggly batches feature checks automatically when a
+feature is actually evaluated, including `Feature` widgets and async gate
+calls. Evaluations that stop early do not count skipped keys. Calls that only
+refresh or cache definitions do not count as checks. Without an application
+key, telemetry stays off.
+
+Record usage, views, and business metrics explicitly at the point
+where they happen. These methods do not evaluate a feature:
+
+```dart
+Toggly.recordUsage('Checkout', 'blue');
+Toggly.recordView('Checkout', 'blue');
+Toggly.incrementCounter('orders', 1);
+Toggly.setGauge('cartValue', 42.5);
+await Toggly.flushTelemetry(); // Optional when awaiting a send matters.
+```
+
+Telemetry is enabled by default with an application key. To opt out or use a
+different metrics host, pass a configuration to `Toggly.init`:
+
+```dart
+const TogglyConfig(
+  enableTelemetry: false,
+  metricsBaseUrl: 'https://metrics.toggly.io',
+  telemetryFlushIntervalMs: 45000,
+)
+```
+
+The flush interval accepts 30000–60000 milliseconds and each scheduled flush
+has up to 20% jitter. An invalid interval falls back to 45000 milliseconds;
+an invalid metrics URL disables telemetry. Neither setting affects feature
+evaluation.
+
+#### Identity and privacy
+
+Telemetry sends the application key, environment, aggregated feature counts,
+and numeric metric values. A host-supplied `instanceId` is sent as `i`; otherwise
+Toggly sends its current identity as `u`, including the ephemeral device identity
+created when no explicit identity is supplied. Groups, claims, entity context,
+timestamps, metric kind, and backend credentials are excluded from telemetry.
+Browser requests omit cookies and credentials, including for same-origin hosts.
+
+Obtain a minted instance ID from your trusted backend, then pass it to the SDK:
+
+```dart
+await Toggly.init(appKey: frontendAppKey, identity: userId, instanceId: token);
+await Toggly.setIdentity(nextUserId, instanceId: nextToken); // atomic replacement
+await Toggly.setInstanceId(rotatedToken); // same user, new token
+await Toggly.setInstanceId(null); // use current client identity
+await Toggly.setIdentity(null); // logout: clears token and uses ephemeral identity
+```
+
+The public SDK does not mint identities or accept Backend keys. Definitions
+requests with `instanceId` use only `i` for targeting and suppress client user,
+group, and claim parameters. Without a token, existing identity/groups/claims
+targeting remains available. Token rotations isolate definitions caches and
+revisions; already accepted telemetry retains its original attribution.
+`setContext` preserves an omitted token for groups/claims-only updates; changing
+the identity clears the previous token unless a replacement is supplied.
+
+The application's **AcceptClientGeneratedIdentitiesForMetrics** server setting
+is off by default and decides whether `u` is accepted. A 202 response does not
+prove identity acceptance; unresolved tokens can also be ingested anonymously.
+Disable telemetry with `enableTelemetry: false` if reporting is not wanted.
+
+#### Delivery limits
+
+Telemetry is best effort and held in memory. Each JSON envelope is at most
+48 KiB, with a combined maximum of 2,000 retained entries and 256 KiB including
+attribution, queued batches, and retries. Excess events are dropped. Only one
+request runs at a time with a five-second deadline. Only 429 and 503 responses
+retry, at most twice after 30/60 seconds (or a longer Retry-After), within five
+minutes. Other failures and ambiguous sends are dropped. Ordinary native sends
+use gzip; browsers use native CompressionStream when available with a pre-send
+plain JSON fallback. Browser hidden/pagehide and disposal sends use plain JSON
+and fetch keepalive. Disposal removes listeners and permits at most one final
+envelope; it does not guarantee delivery.
+
 ### Entity context (per evaluation)
 
 Entity-gated flags fail closed without a context. Identity (`Toggly.init` user id)
@@ -325,6 +405,13 @@ The SDK is **memory-only by default** and does not persist anything to disk.
 This keeps it crash-safe and avoids secure-storage access while the app is
 backgrounded. As a result, a memory-only configuration has no cache after a
 cold start and cannot evaluate flags offline until the first successful fetch.
+
+Conditional fetches require a validated cached body for the same application,
+environment, identity, and response mode. Flags and variant assignments keep
+separate revisions. Custom cache providers should preserve each model's
+`revision`, `appKey`, `environment`, and `signed` fields (included by `toJson`)
+alongside its body. Older records without these optional fields still provide
+offline fallback, but the next refresh fetches a full response.
 
 To support offline restarts, supply a **cache provider** — your app chooses
 where data is stored. Pass an implementation of `TogglyCacheProvider` via
