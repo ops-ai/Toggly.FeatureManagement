@@ -9,6 +9,7 @@
 - Host-provided `instanceId` takes precedence in definitions and telemetry; context transitions retain original queued attribution. Client identity acceptance is server-controlled and off by default; HTTP202 does not prove acceptance [OPS-1314].
 
 ### Fixed
+- Keep cached response bodies paired with their mode-specific revisions, ignore ambiguous legacy bodies, and evict validators with their definitions. Active variants remain available when persistence is disabled or browser storage is unavailable.
 - Isolate identity/token caches, response-mode revisions and pending responses, including return-to-token HTTP304. Failed context refresh still rejects its Promise while retaining the new context's scoped cache/defaults instead of restoring a previous user. Hooks reject superseded evaluation results [OPS-1314].
 - Preserve provider ownership during StrictMode effect replay, dispose after the final unmount and create a fresh owner when remounted. Feature components follow service replacements and discard stale asynchronous results [OPS-1281].
 - Forward entity context and default values through useFeatureFlag, and avoid duplicate variant checks from internal component projections [OPS-1281].

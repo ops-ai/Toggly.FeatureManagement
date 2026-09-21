@@ -43,10 +43,21 @@ try {
   let remoteEnabled = true
   const identities = []
   const definitionsQueries: URLSearchParams[] = []
+  const modeRequests: Array<{variants: boolean; revision?: string}> = []
   await page.setRequestInterception(true)
   page.on('request', request => {
     if (new URL(request.url()).pathname.startsWith('/definitions-fixture/')) {
       const query = new URL(request.url()).searchParams
+      if (new URL(request.url()).pathname.includes('/mode-cache-')) {
+        const variants = request.url().includes('evaluated-variants-signed')
+        const revision = request.headers()['if-none-match']
+        modeRequests.push({variants, revision})
+        const etag = variants ? 'variants-revision' : 'boolean-revision'
+        void request.respond({ status: revision === etag ? 304 : 200, contentType: 'application/json',
+          headers: { 'access-control-allow-origin': '*', etag },
+          body: revision === etag ? undefined : JSON.stringify(variants ? {Flag:{enabled:true,variant:'blue',configurationValue:7}} : {Flag:false}) })
+        return
+      }
       definitionsQueries.push(query)
       identities.push(query.get('userId'))
       void request.respond({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ defs: { release: {enabled: remoteEnabled, variant: 'control'}, second: {enabled: true, variant: 'control'} } }) })
@@ -125,6 +136,32 @@ try {
   assert.equal(telemetry[3].u, 'first-user'); assert.equal(telemetry[3].i, undefined, 'remount does not inherit the retired token')
   await page.click('#unmount')
   await page.waitForFunction(() => (window as any).fixture.activeSubscriptions === 0)
+  const telemetryStart = telemetry.length
+  const roundtrips = await page.evaluate(async metricsBaseUrl => {
+    const Client = (window as any).fixture.service.constructor
+    const results = []
+    for (const firstVariants of [false, true]) {
+      for (const enableVariants of [firstVariants, !firstVariants, firstVariants]) {
+        const owner = new Client({ appKey: `mode-cache-${firstVariants}`, environment: 'Test', instanceId: 'mode-token',
+          baseURI: `${window.location.origin}/definitions-fixture`, metricsBaseUrl, enableVariants, persistCache: true, enableLiveUpdates: false })
+        results.push({ definitions: await owner._loadFeatures(true), enabled: await owner.isFeatureOn('Flag'), variant: owner.getVariant('Flag') })
+        await owner.flushTelemetry()
+        owner.dispose()
+      }
+    }
+    return results
+  }, metricsUrl)
+  assert.deepEqual(roundtrips, [false, true, false, true, false, true].map(enabled => ({
+    definitions: {Flag:enabled}, enabled, variant: enabled ? {name:'blue',configurationValue:7} : null,
+  })))
+  assert.deepEqual(modeRequests, [false, true].flatMap(first => [
+    {variants:first,revision:undefined}, {variants:!first,revision:undefined},
+    {variants:first,revision:first?'variants-revision':'boolean-revision'},
+  ]))
+  assert.deepEqual(telemetry.slice(telemetryStart), [false, true, false, true, false, true].map((enabled, index) => ({
+    k: `mode-cache-${index >= 3}`, e: 'Test', i: 'mode-token', f: {Flag:enabled?{blue:[2]}:{disabled:[1]}},
+  })))
+  console.log(`Browser: response-mode HTTP 304 roundtrips passed with ${telemetry.length - telemetryStart} exact telemetry envelopes; Chromium ${await browser.version()}`)
   assert.deepEqual(errors, [])
   console.log('Browser: provider, hooks, all/negated/render gates, local gates, context, refresh, StrictMode/unmount cleanup; real CORS/native gzip i/u/plain keepalive i/checks/metrics/pagehide/unmount telemetry passed')
 } finally {

@@ -53,7 +53,10 @@ export type { EvaluatedVariantDef, VariantResult } from './variant.types';
 export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 export { isEntityGate, mapEntityContext, normalizeEntityContext, registerContext } from '@ops-ai/toggly-hooks-types';
 
-const canUseStorage = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+const canUseStorage = (() => {
+  try { return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined' }
+  catch { return false }
+})()
 const CACHE_PREFIX = 'toggly:flags:'
 const VARIANTS_CACHE_PREFIX = 'toggly:variants:'
 const REVISION_CACHE_PREFIX = 'toggly:revision:'
@@ -115,6 +118,11 @@ function enforceMaxCacheKeys(protectKeys: string[], maxCacheKeys?: number | null
     for (const key of toEvict) {
       try {
         localStorage.removeItem(key)
+        // Revisions follow their response-mode bodies without consuming LRU slots.
+        const revisionKey = key.replace(
+          /^toggly:(?:flags|variants):(.*?):v3:(variants|evaluated):/, 'toggly:revision:$1:v2:$2:',
+        )
+        if (revisionKey !== key) localStorage.removeItem(revisionKey)
       } catch { /* ignore per-key removal failures */ }
     }
     index = removeCacheLruKeys(index, toEvict)
@@ -139,16 +147,16 @@ function clearCachedFlagsAndVariants(
 ): void {
   if (!canUseStorage) return
   try {
-    const flagsKey = getCacheKey(appKey, environment, contextKey)
-    const variantsKey = getVariantsCacheKey(appKey, environment, contextKey)
-    const revisionKey = getRevisionCacheKey(appKey, environment)
-    localStorage.removeItem(flagsKey)
-    localStorage.removeItem(variantsKey)
-    localStorage.removeItem(revisionKey)
+    const bodyScopes = [contextKey, `v3:evaluated:${contextKey}`, `v3:variants:${contextKey}`]
+    const bodyKeys = bodyScopes.flatMap(scope => [
+      getCacheKey(appKey, environment, scope), getVariantsCacheKey(appKey, environment, scope),
+    ])
+    bodyKeys.forEach(key => localStorage.removeItem(key))
+    localStorage.removeItem(getRevisionCacheKey(appKey, environment))
     for (const mode of ['variants', 'evaluated']) {
       localStorage.removeItem(getRevisionCacheKey(appKey, environment, `v2:${mode}:${contextKey}`))
     }
-    removeCacheKeysFromLruIndex([flagsKey, variantsKey], maxCacheKeys)
+    removeCacheKeysFromLruIndex(bodyKeys, maxCacheKeys)
   } catch { /* ignore */ }
 }
 
@@ -440,7 +448,7 @@ export class Toggly implements TogglyService {
     if (this._features === null && this._canPersist && this._config.appKey) {
       const appKey = this._config.appKey
       const env = this._config.environment ?? 'Production'
-      const contextKey = this._contextCacheKey()
+      const contextKey = this._bodyCacheKey()
       if (this._config.enableVariants) {
         const vCached = readCachedVariants(appKey, env, contextKey, this._config.maxCacheKeys)
         if (vCached) {
@@ -482,7 +490,7 @@ export class Toggly implements TogglyService {
     }
     const appKey = this._config.appKey
     const env = this._config.environment ?? 'Production'
-    const scope = this._contextCacheKey()
+    const scope = this._bodyCacheKey()
     if (readCachedFlags(appKey, env, scope) === null ||
       (this._config.enableVariants && readCachedVariants(appKey, env, scope) === null)) return null
     return readCachedRevision(appKey, env, this._revisionScope())
@@ -568,6 +576,11 @@ export class Toggly implements TogglyService {
     ]))}`
   }
 
+  private _bodyCacheKey(): string {
+    // Legacy bodies were shared across modes and cannot validate a scoped revision.
+    return `v3:${this._config.enableVariants ? 'variants' : 'evaluated'}:${this._contextCacheKey()}`
+  }
+
   private _revisionScope(): string {
     return `v2:${this._config.enableVariants ? 'variants' : 'evaluated'}:${this._contextCacheKey()}`
   }
@@ -589,7 +602,7 @@ export class Toggly implements TogglyService {
     this._lastFallbackRefresh = 0
     const appKey = this._config.appKey ?? ''
     const env = this._config.environment ?? 'Production'
-    const scope = this._contextCacheKey()
+    const scope = this._bodyCacheKey()
     this._variants = this._canPersist && this._config.enableVariants ? readCachedVariants(appKey, env, scope, this._config.maxCacheKeys) : null
     this._features = this._variants ? variantDefsToFlags(this._variants)
       : (this._canPersist ? readCachedFlags(appKey, env, scope, this._config.maxCacheKeys) : null) ?? { ...this._config.featureDefaults }
@@ -642,7 +655,7 @@ export class Toggly implements TogglyService {
 
     const appKey = this._config.appKey ?? ''
     const env = this._config.environment ?? 'Production'
-    const contextKey = this._contextCacheKey()
+    const contextKey = this._bodyCacheKey()
 
     try {
       let url = buildEvaluatedSignedUrl(
@@ -1006,7 +1019,7 @@ export class Toggly implements TogglyService {
         this._config.appKey ?? '',
         this._config.environment ?? 'Production',
         this._features,
-        this._contextCacheKey(),
+        this._bodyCacheKey(),
         this._config.maxCacheKeys,
       )
     }

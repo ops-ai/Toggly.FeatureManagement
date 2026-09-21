@@ -77,6 +77,87 @@ describe('React frontend telemetry', () => {
     await service.flushTelemetry()
     expect(sent[0].body.f).toEqual({On: {control: [3]}, Off: {disabled: [1]}, Plain: {enabled: [1]}})
   })
+  it.each([false, true])('keeps the response body and revision together across a mode roundtrip starting with variants=%s', async firstVariants => {
+    const requests: Array<{ variants: boolean; revision: string | null }> = []
+    const transport = fetchMock.getMockImplementation()!
+    fetchMock.mockImplementation(async (input: string, init?: RequestInit) => {
+      if (input.includes('/api/frontend/telemetry')) return transport(input, init)
+      const variants = input.includes('evaluated-variants-signed')
+      const revision = new Headers(init?.headers).get('If-None-Match')
+      requests.push({ variants, revision })
+      const expected = variants ? 'variant-revision' : 'boolean-revision'
+      if (revision === expected) return { ok: false, status: 304 }
+      const body = variants ? { Flag: { enabled: true, variant: 'blue', configurationValue: 7 } } : { Flag: false }
+      return { ok: true, status: 200, headers: { get: (key: string) => key.toLowerCase() === 'etag' ? expected : null }, text: async () => JSON.stringify(body) }
+    })
+    for (const enableVariants of [firstVariants, !firstVariants, firstVariants]) {
+      const owner = client({ instanceId: 'mode-token', persistCache: true, enableVariants })
+      expect(await owner._loadFeatures(true)).toEqual({ Flag: enableVariants })
+      expect(await owner.isFeatureOn('Flag')).toBe(enableVariants)
+      expect(owner.getVariant('Flag')).toEqual(enableVariants ? { name: 'blue', configurationValue: 7 } : null)
+      await owner.flushTelemetry()
+      expect(sent[sent.length - 1].body.f.Flag).toEqual(enableVariants ? { blue: [2] } : { disabled: [1] })
+      owner.dispose()
+    }
+    expect(requests).toEqual([
+      { variants: firstVariants, revision: null },
+      { variants: !firstVariants, revision: null },
+      { variants: firstVariants, revision: firstVariants ? 'variant-revision' : 'boolean-revision' },
+    ])
+  })
+
+  it.each([false, true])('restores public evaluations and variants after persisted token A to B to A HTTP 304, variants=%s', async enableVariants => {
+    const body = enableVariants ? { Flag: { enabled: true, variant: 'blue', configurationValue: 7 } } : { Flag: true }
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, headers: { get: (key: string) => key.toLowerCase() === 'etag' ? 'token-a-revision' : null }, text: async () => JSON.stringify(body) })
+    const owner = client({ instanceId: 'token-a', persistCache: true, enableVariants })
+    expect(await owner._loadFeatures()).toEqual({ Flag: true })
+    definitions = enableVariants ? { Flag: { enabled: false } } : { Flag: false }
+    await owner.setContext({ instanceId: 'token-b' })
+    expect(await owner._loadFeatures()).toEqual({ Flag: false })
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 304 })
+    await owner.setContext({ instanceId: 'token-a' })
+    expect(new Headers(fetchMock.mock.calls[2][1]?.headers).get('If-None-Match')).toBe('token-a-revision')
+    expect(await owner._loadFeatures()).toEqual({ Flag: true })
+    expect(await owner.isFeatureOn('Flag')).toBe(true)
+    expect(owner.getVariant('Flag')).toEqual(enableVariants ? { name: 'blue', configurationValue: 7 } : null)
+    await owner.flushTelemetry()
+    expect(sent[0].body).toEqual({ k: 'telemetry-test', e: 'Production', i: 'token-a', f: { Flag: enableVariants ? { blue: [2] } : { enabled: [1] } } })
+  })
+
+  it.each([false, true])('ignores ambiguous legacy bodies and their mode revision, variants=%s', async enableVariants => {
+    const scope = 'i:legacy-token'
+    localStorage.setItem(`toggly:flags:telemetry-test:Production:${scope}`, JSON.stringify({ Flag: true }))
+    localStorage.setItem(`toggly:variants:telemetry-test:Production:${scope}`, JSON.stringify({ Flag: { enabled: true, variant: 'old' } }))
+    localStorage.setItem(`toggly:revision:telemetry-test:Production:v2:${enableVariants ? 'variants' : 'evaluated'}:${scope}`, 'legacy-revision')
+    definitions = enableVariants ? { Flag: { enabled: false } } : { Flag: false }
+    const owner = client({ instanceId: 'legacy-token', persistCache: true, enableVariants })
+    expect(await owner._loadFeatures(true)).toEqual({ Flag: false })
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).has('If-None-Match')).toBe(false)
+    expect(await owner.isFeatureOn('Flag')).toBe(false)
+    expect(owner.getVariant('Flag')).toBeNull()
+    await owner.flushTelemetry()
+    expect(sent[0].body.f.Flag).toEqual({ disabled: [enableVariants ? 2 : 1] })
+  })
+
+  it.each(['disabled', 'read-blocked', 'write-blocked'])('retains assigned variants with persistence %s and clears them on context replacement', async storage => {
+    if (storage === 'read-blocked') jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked') })
+    if (storage === 'write-blocked') jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked') })
+    definitions = { Flag: { enabled: true, variant: 'blue', configurationValue: 7 } }
+    const owner = client({ instanceId: 'old-token', enableVariants: true, persistCache: storage !== 'disabled' })
+    await owner._loadFeatures()
+    expect(await owner.isFeatureOn('Flag')).toBe(true)
+    expect(owner.getVariant('Flag')).toEqual({ name: 'blue', configurationValue: 7 })
+    expect(owner.getVariantValue('Flag')).toBe(7)
+    definitions = { Flag: { enabled: false, variant: 'retired' } }
+    await owner.setContext({ instanceId: 'new-token' })
+    expect(owner.getVariant('Flag')).toBeNull()
+    await owner.flushTelemetry()
+    expect(sent.map(item => item.body)).toEqual([
+      { k: 'telemetry-test', e: 'Production', i: 'old-token', f: { Flag: { blue: [3] } } },
+      { k: 'telemetry-test', e: 'Production', i: 'new-token', f: { Flag: { disabled: [1] } } },
+    ])
+  })
+
   it('keeps explicit events independent of feature evaluation and app context immutable', async () => {
     const first = client({appKey: 'old', environment: 'Staging'})
     const second = client({appKey: 'new', metricsBaseUrl: 'https://collector.test/base/'})
@@ -90,7 +171,7 @@ describe('React frontend telemetry', () => {
     expect(fetchMock.mock.calls.every(([url]) => url.includes('/api/frontend/telemetry'))).toBe(true)
   })
   it('does not count cache hydration, internal loads or context refresh', async () => {
-    localStorage.setItem('toggly:flags:telemetry-test:Production', JSON.stringify({Cached: true}))
+    localStorage.setItem('toggly:flags:telemetry-test:Production:v3:evaluated:', JSON.stringify({Cached: true}))
     const service = client({persistCache: true})
     await service._featuresLoaded(); await service.flushTelemetry(); expect(sent).toEqual([])
     expect(await service.isFeatureOn('Cached')).toBe(true)
@@ -306,6 +387,8 @@ describe('React frontend telemetry', () => {
       expect(sent[0].init.body).toBe(sent[1].init.body);
     } finally { jest.useRealTimers(); }
   });
+  // Admission across all 2200 transitions takes ~1.8s under local coverage;
+  // equivalent hosted stress cases exceed 5s. Bound this case at 15s without sleeps.
   it('keeps a single globally bounded reporter through 2200 context changes', async () => {
     const onError=jest.fn(); const service=client({onError}); service.recordUsage('Initial');
     const reporter=(service as any)._telemetry;
@@ -314,7 +397,7 @@ describe('React frontend telemetry', () => {
     expect(onError.mock.calls.some(args=>String(args[0]).includes('buffer-full'))).toBe(true);
     await service.flushTelemetry(); expect(sent.length).toBeGreaterThan(0); expect(sent.length).toBeLessThanOrEqual(2000);
     expect(sent.reduce((size,x)=>size+Buffer.byteLength(JSON.stringify(x.body)),0)).toBeLessThanOrEqual(262144);
-  });
+  }, 15000);
   it('rejects foreign owner captures, orphan revisions and delimiter collisions', async () => {
     const first=client({identity:'alice|g:staff',persistCache:true}); const second=client({identity:'alice',groups:['staff'],persistCache:true});
     expect((first as any)._contextCacheKey()).not.toBe((second as any)._contextCacheKey());

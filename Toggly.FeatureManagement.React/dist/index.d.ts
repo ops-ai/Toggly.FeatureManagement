@@ -151,6 +151,7 @@ declare class Toggly implements TogglyService {
     private get _canPersist();
     private _getEvaluationContext;
     private _contextCacheKey;
+    private _bodyCacheKey;
     private _revisionScope;
     setContext: (context: TogglyContextUpdate) => Promise<void>;
     _loadFeatures: (forceRefresh?: boolean, options?: {

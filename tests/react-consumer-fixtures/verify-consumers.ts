@@ -110,7 +110,7 @@ try {
       stdio: 'inherit',
     })
     console.log(`HOST ${fixture}; node ${process.version}; SDK ${packageManifest.version}; reporter ${JSON.parse(readFileSync(join(fixtureDirectory, 'node_modules/@ops-ai/toggly-client-telemetry/package.json'), 'utf8')).version}; signer ${JSON.parse(readFileSync(join(fixtureDirectory, 'node_modules/@ops-ai/toggly-signed-defs/package.json'), 'utf8')).version}`)
-    runCommand('node', [join(fixtureDirectory, 'node_modules/typescript/bin/tsc'), '--project', 'tsconfig.json', '--noEmit'], { cwd: fixtureDirectory, env: commandEnvironment, stdio: 'inherit' })
+    runCommand('node', [join(fixtureDirectory, 'node_modules/typescript/bin/tsc'), '--project', 'tsconfig.json', '--noEmit', '--skipLibCheck', 'false'], { cwd: fixtureDirectory, env: commandEnvironment, stdio: 'inherit' })
     runCommand('node', [join(fixtureDirectory, 'node_modules/vite/bin/vite.js'), 'build'], { cwd: fixtureDirectory, env: commandEnvironment, stdio: 'inherit' })
     runCommand('node', [join(runnerDirectory, 'browser-check.js')], { cwd: fixtureDirectory, env: commandEnvironment, stdio: 'inherit' })
     runCommand('node', [join(fixtureDirectory, 'node_modules/vite/bin/vite.js'), 'build', '--ssr', 'src/verify.tsx', '--outDir', 'dist-ssr'], { cwd: fixtureDirectory, env: commandEnvironment, stdio: 'inherit' })

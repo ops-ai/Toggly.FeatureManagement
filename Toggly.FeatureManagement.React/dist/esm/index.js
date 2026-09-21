@@ -23,7 +23,7 @@ LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
 OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 PERFORMANCE OF THIS SOFTWARE.
 ***************************************************************************** */
-/* global Reflect, Promise, SuppressedError, Symbol, Iterator */
+/* global Reflect, Promise */
 
 var extendStatics = function(d, b) {
     extendStatics = Object.setPrototypeOf ||
@@ -62,8 +62,8 @@ function __awaiter(thisArg, _arguments, P, generator) {
 }
 
 function __generator(thisArg, body) {
-    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g = Object.create((typeof Iterator === "function" ? Iterator : Object).prototype);
-    return g.next = verb(0), g["throw"] = verb(1), g["return"] = verb(2), typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
     function verb(n) { return function (v) { return step([n, v]); }; }
     function step(op) {
         if (f) throw new TypeError("Generator is already executing.");
@@ -98,11 +98,6 @@ function __spreadArray(to, from, pack) {
     }
     return to.concat(ar || Array.prototype.slice.call(from));
 }
-
-typeof SuppressedError === "function" ? SuppressedError : function (error, suppressed, message) {
-    var e = new Error(message);
-    return e.name = "SuppressedError", e.error = error, e.suppressed = suppressed, e;
-};
 
 var dist = {};
 
@@ -1092,7 +1087,14 @@ function appendDefinitionsRevisionParam(url, rev) {
     }
 }
 
-var canUseStorage = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+var canUseStorage = (function () {
+    try {
+        return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+    }
+    catch (_a) {
+        return false;
+    }
+})();
 var CACHE_PREFIX = 'toggly:flags:';
 var VARIANTS_CACHE_PREFIX = 'toggly:variants:';
 var REVISION_CACHE_PREFIX = 'toggly:revision:';
@@ -1151,6 +1153,10 @@ function enforceMaxCacheKeys(protectKeys, maxCacheKeys) {
             var key = toEvict_1[_i];
             try {
                 localStorage.removeItem(key);
+                // Revisions follow their response-mode bodies without consuming LRU slots.
+                var revisionKey = key.replace(/^toggly:(?:flags|variants):(.*?):v3:(variants|evaluated):/, 'toggly:revision:$1:v2:$2:');
+                if (revisionKey !== key)
+                    localStorage.removeItem(revisionKey);
             }
             catch ( /* ignore per-key removal failures */_a) { /* ignore per-key removal failures */ }
         }
@@ -1173,17 +1179,17 @@ function clearCachedFlagsAndVariants(appKey, environment, contextKey, maxCacheKe
     if (!canUseStorage)
         return;
     try {
-        var flagsKey = getCacheKey(appKey, environment, contextKey);
-        var variantsKey = getVariantsCacheKey(appKey, environment, contextKey);
-        var revisionKey = getRevisionCacheKey(appKey, environment);
-        localStorage.removeItem(flagsKey);
-        localStorage.removeItem(variantsKey);
-        localStorage.removeItem(revisionKey);
+        var bodyScopes = [contextKey, "v3:evaluated:".concat(contextKey), "v3:variants:".concat(contextKey)];
+        var bodyKeys = bodyScopes.flatMap(function (scope) { return [
+            getCacheKey(appKey, environment, scope), getVariantsCacheKey(appKey, environment, scope),
+        ]; });
+        bodyKeys.forEach(function (key) { return localStorage.removeItem(key); });
+        localStorage.removeItem(getRevisionCacheKey(appKey, environment));
         for (var _i = 0, _a = ['variants', 'evaluated']; _i < _a.length; _i++) {
             var mode = _a[_i];
             localStorage.removeItem(getRevisionCacheKey(appKey, environment, "v2:".concat(mode, ":").concat(contextKey)));
         }
-        removeCacheKeysFromLruIndex([flagsKey, variantsKey], maxCacheKeys);
+        removeCacheKeysFromLruIndex(bodyKeys, maxCacheKeys);
     }
     catch ( /* ignore */_b) { /* ignore */ }
 }
@@ -1334,7 +1340,7 @@ var Toggly = /** @class */ (function () {
                         this._lastFallbackRefresh = 0;
                         appKey = (_a = this._config.appKey) !== null && _a !== void 0 ? _a : '';
                         env = (_b = this._config.environment) !== null && _b !== void 0 ? _b : 'Production';
-                        scope = this._contextCacheKey();
+                        scope = this._bodyCacheKey();
                         this._variants = this._canPersist && this._config.enableVariants ? readCachedVariants(appKey, env, scope, this._config.maxCacheKeys) : null;
                         this._features = this._variants ? variantDefsToFlags(this._variants)
                             : (_c = (this._canPersist ? readCachedFlags(appKey, env, scope, this._config.maxCacheKeys) : null)) !== null && _c !== void 0 ? _c : __assign({}, this._config.featureDefaults);
@@ -1400,7 +1406,7 @@ var Toggly = /** @class */ (function () {
                             isInitialLoad = this._ws === null && !this._wsConnected;
                             appKey = (_a = this._config.appKey) !== null && _a !== void 0 ? _a : '';
                             env = (_b = this._config.environment) !== null && _b !== void 0 ? _b : 'Production';
-                            contextKey = this._contextCacheKey();
+                            contextKey = this._bodyCacheKey();
                             _f.label = 3;
                         case 3:
                             _f.trys.push([3, 7, 10, 11]);
@@ -1694,7 +1700,7 @@ var Toggly = /** @class */ (function () {
                         if (generation !== this._generation || this._disposed)
                             return [2 /*return*/];
                         if (this._features && this._canPersist) {
-                            writeCachedFlags((_a = this._config.appKey) !== null && _a !== void 0 ? _a : '', (_b = this._config.environment) !== null && _b !== void 0 ? _b : 'Production', this._features, this._contextCacheKey(), this._config.maxCacheKeys);
+                            writeCachedFlags((_a = this._config.appKey) !== null && _a !== void 0 ? _a : '', (_b = this._config.environment) !== null && _b !== void 0 ? _b : 'Production', this._features, this._bodyCacheKey(), this._config.maxCacheKeys);
                         }
                         return [2 /*return*/];
                 }
@@ -1730,7 +1736,7 @@ var Toggly = /** @class */ (function () {
         if (this._features === null && this._canPersist && this._config.appKey) {
             var appKey = this._config.appKey;
             var env = (_c = this._config.environment) !== null && _c !== void 0 ? _c : 'Production';
-            var contextKey = this._contextCacheKey();
+            var contextKey = this._bodyCacheKey();
             if (this._config.enableVariants) {
                 var vCached = readCachedVariants(appKey, env, contextKey, this._config.maxCacheKeys);
                 if (vCached) {
@@ -1785,7 +1791,7 @@ var Toggly = /** @class */ (function () {
             }
             var appKey = this._config.appKey;
             var env = (_a = this._config.environment) !== null && _a !== void 0 ? _a : 'Production';
-            var scope = this._contextCacheKey();
+            var scope = this._bodyCacheKey();
             if (readCachedFlags(appKey, env, scope) === null ||
                 (this._config.enableVariants && readCachedVariants(appKey, env, scope) === null))
                 return null;
@@ -1878,6 +1884,10 @@ var Toggly = /** @class */ (function () {
                 return a.localeCompare(b);
             }),
         ])));
+    };
+    Toggly.prototype._bodyCacheKey = function () {
+        // Legacy bodies were shared across modes and cannot validate a scoped revision.
+        return "v3:".concat(this._config.enableVariants ? 'variants' : 'evaluated', ":").concat(this._contextCacheKey());
     };
     Toggly.prototype._revisionScope = function () {
         return "v2:".concat(this._config.enableVariants ? 'variants' : 'evaluated', ":").concat(this._contextCacheKey());

@@ -385,7 +385,7 @@ without a token, existing identity/group/claim targeting remains supported.
 an explicit identity update clears an omitted token. Pass `instanceId: ''` to
 return to the current client identity; `identity: ''` clears identity and token.
 A failed refresh still rejects its Promise, but keeps the new context's scoped
-cache or defaults, never the previous user's flags or token. Definitions,
+cache or defaults, never the previous user's flags or token. Cached bodies and revision validators are scoped by response mode; ambiguous legacy cache entries are refreshed. Cache eviction removes the matching validator, while disabled or unavailable storage still retains the active variant snapshot. Definitions,
 revisions and pending responses are isolated by context. Queued telemetry and
 retries retain their original attribution while all contexts share one bounded
 queue. Hooks ignore superseded results after context or owner replacement.

@@ -144,7 +144,7 @@ describe('Toggly Service', () => {
     });
 
     it('should return cached features when API returns 304', async () => {
-      localStorage.setItem('toggly:flags:test-key:Production', JSON.stringify({CachedFlag:true}));
+      localStorage.setItem('toggly:flags:test-key:Production:v3:evaluated:', JSON.stringify({CachedFlag:true}));
       localStorage.setItem('toggly:revision:test-key:Production:v2:evaluated:', 'rev123');
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -173,7 +173,7 @@ describe('Toggly Service', () => {
 
     it('should preserve cached flags when API returns non-2xx', async () => {
       localStorage.setItem(
-        'toggly:flags:test-key:Production',
+        'toggly:flags:test-key:Production:v3:evaluated:',
         JSON.stringify({ CachedFlag: true }),
       );
       mockFetch.mockResolvedValueOnce({
@@ -217,7 +217,7 @@ describe('Toggly Service', () => {
     });
 
     it('should ignore invalid JSON in localStorage cache', () => {
-      localStorage.setItem('toggly:flags:test-key:Production', 'not-json{{{');
+      localStorage.setItem('toggly:flags:test-key:Production:v3:evaluated:', 'not-json{{{');
 
       const service = new Toggly({
         enableTelemetry: false, appKey: 'test-key',
@@ -365,7 +365,7 @@ describe('Toggly Service', () => {
       });
 
       const cacheKeys = Object.keys(localStorage).filter(k => k.includes('toggly:flags'));
-      expect(cacheKeys).toContain('toggly:flags:test-key:Production:v2:' + encodeURIComponent(JSON.stringify(['user-123',['beta'],[['role','admin']]])));
+      expect(cacheKeys).toContain('toggly:flags:test-key:Production:v3:evaluated:v2:' + encodeURIComponent(JSON.stringify(['user-123',['beta'],[['role','admin']]])));
     });
 
     it('setContext should append context to variants URL when enableVariants is true', async () => {
@@ -1147,7 +1147,7 @@ describe('Toggly Service', () => {
     });
 
     it('should include rev query param when definitions revision is cached', () => {
-      localStorage.setItem('toggly:flags:k:Production', JSON.stringify({F1:true}));
+      localStorage.setItem('toggly:flags:k:Production:v3:evaluated:', JSON.stringify({F1:true}));
       localStorage.setItem('toggly:revision:k:Production:v2:evaluated:', 'rev123');
       const service = new Toggly({ enableTelemetry: false, appKey: 'k', environment: 'Production', featureDefaults: {} });
       service.startWebSocket();
@@ -1256,7 +1256,7 @@ describe('Toggly Service', () => {
     });
 
     it('should skip refresh when flags-updated etag matches cache', () => {
-      localStorage.setItem('toggly:flags:k:Production', JSON.stringify({F1:true}));
+      localStorage.setItem('toggly:flags:k:Production:v3:evaluated:', JSON.stringify({F1:true}));
       localStorage.setItem('toggly:revision:k:Production:v2:evaluated:', 'same-rev');
       const service = new Toggly({ enableTelemetry: false, appKey: 'k', environment: 'Production', featureDefaults: {} });
       (service as any)._features = { F1: true };
@@ -1467,7 +1467,7 @@ describe('Toggly Service', () => {
       const env = 'Production';
       const defs = { V: { enabled: true, variant: 'cached' } };
       localStorage.setItem(
-        `toggly:variants:${appKey}:${env}`,
+        `toggly:variants:${appKey}:${env}:v3:variants:`,
         JSON.stringify(defs),
       );
       mockFetch.mockRejectedValueOnce(new Error('network'));
@@ -1503,7 +1503,7 @@ describe('Toggly Service', () => {
         enableLiveUpdates: false,
       });
       localStorage.setItem(
-        'toggly:flags:test-key:Production',
+        'toggly:flags:test-key:Production:v3:variants:',
         JSON.stringify({ F1: true }),
       );
 
@@ -1603,7 +1603,7 @@ describe('Toggly Service', () => {
 
     it('loads cached variant definitions during init', () => {
       localStorage.setItem(
-        'toggly:variants:k:Production',
+        'toggly:variants:k:Production:v3:variants:',
         JSON.stringify({ V: { enabled: true, variant: 'cached', configurationValue: 'x' } }),
       );
 
@@ -1621,8 +1621,8 @@ describe('Toggly Service', () => {
     });
 
     it('ignores corrupt cached variants and falls back to cached flags', async () => {
-      localStorage.setItem('toggly:variants:k:Production', '{bad');
-      localStorage.setItem('toggly:flags:k:Production', JSON.stringify({ F1: true }));
+      localStorage.setItem('toggly:variants:k:Production:v3:variants:', '{bad');
+      localStorage.setItem('toggly:flags:k:Production:v3:variants:', JSON.stringify({ F1: true }));
       mockFetch.mockRejectedValueOnce(new Error('network'));
 
       const service = new Toggly({

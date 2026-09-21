@@ -4,12 +4,12 @@ import Toggly from './toggly.service'
 const mockFetch = jest.fn()
 ;(global as any).fetch = mockFetch
 
-function flagsCacheKeyForContext(appKey: string, environment: string, identity: string): string {
-  return `toggly:flags:${appKey}:${environment}:${evaluationContextCacheKey({ identity })}`
+function flagsCacheKeyForContext(appKey: string, environment: string, identity: string, variants = false): string {
+  return `toggly:flags:${appKey}:${environment}:v3:${variants ? 'variants' : 'evaluated'}:${evaluationContextCacheKey({ identity })}`
 }
 
 function variantsCacheKeyForContext(appKey: string, environment: string, identity: string): string {
-  return `toggly:variants:${appKey}:${environment}:${evaluationContextCacheKey({ identity })}`
+  return `toggly:variants:${appKey}:${environment}:v3:variants:${evaluationContextCacheKey({ identity })}`
 }
 
 function okResponse(body: unknown) {
@@ -17,7 +17,7 @@ function okResponse(body: unknown) {
     ok: true,
     status: 200,
     statusText: 'OK',
-    headers: { get: () => null },
+    headers: { get: (_key: string): string | null => null },
     json: () => Promise.resolve(body),
     text: () => Promise.resolve(JSON.stringify(body)),
   }
@@ -125,7 +125,7 @@ describe('maxCacheKeys LRU', () => {
     })
     await service.setContext({ identity: 'user-a' })
 
-    expect(localStorage.getItem(flagsCacheKeyForContext(appKey, environment, 'user-a'))).not.toBeNull()
+    expect(localStorage.getItem(flagsCacheKeyForContext(appKey, environment, 'user-a', true))).not.toBeNull()
     expect(localStorage.getItem(variantsCacheKeyForContext(appKey, environment, 'user-a'))).not.toBeNull()
   })
 
@@ -158,6 +158,33 @@ describe('maxCacheKeys LRU', () => {
     expect(localStorage.getItem(revisionKey)).toBe('etag-1')
   })
 
+  it.each([[false, 1], [true, 1], [true, 3]])('evicts paired revisions without charging them to the body limit (variants=%s, limit=%s)', async (variants, limit) => {
+    const enableVariants = variants as boolean
+    const maxCacheKeys = limit as number
+    const service = new Toggly({ appKey, environment, enableVariants, maxCacheKeys, enableLiveUpdates: false, enableTelemetry: false })
+    const revisionKey = (identity: string) => `toggly:revision:${appKey}:${environment}:v2:${enableVariants ? 'variants' : 'evaluated'}:${evaluationContextCacheKey({ identity })}`
+    try {
+      for (const identity of ['user-a', 'user-b', 'user-c']) {
+        const response = okResponse(enableVariants ? { A: { enabled: true, variant: 'blue' } } : { A: true })
+        response.headers.get = (key: string) => key.toLowerCase() === 'etag' ? 'revision-' + identity : null
+        mockFetch.mockResolvedValueOnce(response)
+        await service.setContext({ identity })
+        jest.setSystemTime(Date.now() + 1000)
+      }
+      expect(localStorage.getItem(revisionKey('user-a'))).toBeNull()
+      expect(localStorage.getItem(revisionKey('user-b'))).toBeNull()
+      expect(localStorage.getItem(revisionKey('user-c'))).toBe('revision-user-c')
+      expect(localStorage.getItem(flagsCacheKeyForContext(appKey, environment, 'user-c', enableVariants))).not.toBeNull()
+      if (enableVariants) expect(service.getVariant('A')?.name).toBe('blue')
+      expect(Object.keys(JSON.parse(localStorage.getItem('toggly:cache-lru')!).entries)).toHaveLength(enableVariants ? Math.max(2, maxCacheKeys) : 1)
+      expect(Object.keys(localStorage).filter(key => key.startsWith('toggly:revision:'))).toHaveLength(1)
+      mockFetch.mockResolvedValueOnce(okResponse(enableVariants ? { A: { enabled: false } } : { A: false }))
+      await service.setContext({ identity: 'user-a' })
+      expect(new Headers(mockFetch.mock.calls[mockFetch.mock.calls.length - 1][1]?.headers).has('If-None-Match')).toBe(false)
+      expect(await service.isFeatureOn('A')).toBe(false)
+    } finally { service.dispose() }
+  })
+
   it('removes cleared flags and variants keys from the LRU index', async () => {
     mockFetch.mockResolvedValueOnce(
       okResponse({
@@ -174,7 +201,7 @@ describe('maxCacheKeys LRU', () => {
     })
     await variantsService.setContext({ identity: 'user-a' })
 
-    const flagsKey = flagsCacheKeyForContext(appKey, environment, 'user-a')
+    const flagsKey = flagsCacheKeyForContext(appKey, environment, 'user-a', true)
     const variantsKey = variantsCacheKeyForContext(appKey, environment, 'user-a')
 
     variantsService.clearFeatureFlagsCache()
