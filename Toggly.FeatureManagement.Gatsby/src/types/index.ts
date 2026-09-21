@@ -40,6 +40,9 @@ export interface TogglyWritableAtom<Value> extends TogglyReadableAtom<Value> {
 export interface TogglyPluginOptions {
   /** Application key from Toggly dashboard */
   appKey: string;
+
+  /** Host-minted token; takes precedence over identity, groups, and claims in browser requests. */
+  instanceId?: string;
   
   /** Environment name (e.g., 'Production', 'Staging') */
   environment?: string;

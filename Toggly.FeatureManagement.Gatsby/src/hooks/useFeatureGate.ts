@@ -6,8 +6,9 @@
 
 import { useMemo } from 'react';
 import { useStore } from '@nanostores/react';
+import { useConsumerStore } from '../hooks/useConsumerStore.js';
 import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
-import { $gate, $isReady, $error } from '../client/store.js';
+import { createConsumerGate, $isReady, $error } from '../client/store.js';
 import type { UseFeatureGateResult, GateRequirement } from '../types/index.js';
 
 /**
@@ -43,12 +44,12 @@ export function useFeatureGate(
 ): UseFeatureGateResult {
   const stableKeys = flagKeys.join('\u0000');
   const gate = useMemo(
-    () => $gate(flagKeys, requirement, negate, entity, kind),
+    () => createConsumerGate(flagKeys, requirement, negate, entity, kind),
     // The joined keys preserve caller order, including short-circuit order.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [stableKeys, requirement, negate, entity, kind],
   );
-  const isEnabled = useStore(gate);
+  const isEnabled = useConsumerStore(gate);
   const isReady = useStore($isReady);
   const error = useStore($error);
 

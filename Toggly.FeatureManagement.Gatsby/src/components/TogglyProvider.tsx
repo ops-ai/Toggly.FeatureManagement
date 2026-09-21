@@ -10,6 +10,7 @@ import React, { useEffect, useRef } from 'react';
 import {
   disposeTogglyClient,
   getTogglyClientOwnerKey,
+  getTogglyClientContextKey,
   initTogglyClient,
 } from '../client/store.js';
 import type { TogglyProviderProps } from '../types/index.js';
@@ -44,15 +45,18 @@ import type { TogglyProviderProps } from '../types/index.js';
  */
 export function TogglyProvider({ config, children }: TogglyProviderProps) {
   const ownerKey = getTogglyClientOwnerKey(config);
+  const contextKey = getTogglyClientContextKey(config);
   const configRef = useRef(config);
   configRef.current = config;
   useEffect(() => {
     const ownerConfig = configRef.current;
-    initTogglyClient(ownerConfig).catch((error) => {
-      console.error('[TogglyProvider] Failed to initialize client:', error);
-    });
     return () => disposeTogglyClient(ownerConfig);
   }, [ownerKey]);
+  useEffect(() => {
+    initTogglyClient(configRef.current).catch((error) => {
+      console.error('[TogglyProvider] Failed to initialize client:', error);
+    });
+  }, [ownerKey, contextKey]);
 
   return <>{children}</>;
 }

@@ -113,6 +113,7 @@ function canUseStorage(): boolean {
 type ClientConfig = Required<
   Omit<
     TogglyPluginOptions,
+    | 'instanceId'
     | 'identity'
     | 'groups'
     | 'claims'
@@ -125,6 +126,7 @@ type ClientConfig = Required<
     | 'telemetryFlushIntervalMs'
   >
 > & {
+  instanceId?: string;
   identity?: string;
   groups?: string[];
   claims?: Record<string, string>;
@@ -147,7 +149,17 @@ function ownerKey(config: TogglyPluginOptions): string {
     config.enableUsageTracking ?? true,
     config.enableMetrics ?? true,
     config.telemetryFlushIntervalMs ?? 45000,
+    config.verifySignatures ?? false,
+    config.allowedKeyIds ?? [],
+    config.maxSignatureAgeSeconds ?? null,
   ]);
+}
+
+/** Context key excludes routing so queued telemetry retains one bounded reporter. */
+export function getTogglyClientContextKey(config: TogglyPluginOptions): string {
+  return JSON.stringify([config.instanceId?.trim() || null, config.identity ?? null,
+    [...(config.groups ?? [])].sort((a, b) => a < b ? -1 : a > b ? 1 : 0),
+    Object.entries(config.claims ?? {}).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)]);
 }
 
 /** Stable browser-owner identity used by framework lifecycle adapters. */
@@ -183,6 +195,9 @@ class TogglyClientInstance {
   private readonly reporter: TelemetryReporter | null;
   private detachTelemetryLifecycle: (() => void) | null = null;
   private destroyed = false;
+  private generation = 0;
+  private requestVersion = 0;
+  private controllers = new Set<AbortController>();
 
   constructor(config: TogglyPluginOptions) {
     this.ownerKey = ownerKey(config);
@@ -201,7 +216,12 @@ class TogglyClientInstance {
       enableMetrics: true,
       hooks: [],
       ...config,
+      instanceId: config.instanceId?.trim() || undefined,
+      groups: config.groups ? [...config.groups] : undefined,
+      claims: config.claims ? { ...config.claims } : undefined,
     };
+
+    this.clearDefinitionsRevision();
 
     if (
       isBrowser() &&
@@ -213,6 +233,8 @@ class TogglyClientInstance {
         appKey: this.config.appKey,
         environment: this.config.environment,
         enableTelemetry: true,
+        instanceId: this.config.instanceId,
+        identity: this.config.identity,
         metricsBaseUrl: this.config.metricsBaseUrl,
         telemetryFlushIntervalMs: this.config.telemetryFlushIntervalMs,
         onDiagnostic: (code) => {
@@ -234,13 +256,17 @@ class TogglyClientInstance {
     }
   }
 
+  matchesContext(config: TogglyPluginOptions): boolean {
+    return getTogglyClientContextKey(config) === getTogglyClientContextKey(this.config);
+  }
+
   matchesOwner(config: TogglyPluginOptions): boolean {
     return this.ownerKey === ownerKey(config);
   }
 
-  recordCheck(flagKey: string, enabled: boolean): void {
+  captureCheck(): ReturnType<TelemetryReporter['captureCheck']> | undefined {
     if (!this.destroyed && this.config.enableUsageTracking && $isReady.get()) {
-      this.reporter?.recordCheck(flagKey, enabled ? 'enabled' : 'disabled');
+      return this.reporter?.captureCheck();
     }
   }
 
@@ -264,14 +290,16 @@ class TogglyClientInstance {
     return this.reporter?.flush() ?? Promise.resolve();
   }
 
-  destroy(): void {
+  destroy(flush = true): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.generation++;
+    this.controllers.forEach(controller => controller.abort());
     this.stopRefreshInterval();
     this.stopWebSocket();
     this.detachTelemetryLifecycle?.();
     this.detachTelemetryLifecycle = null;
-    this.reporter?.dispose();
+    this.reporter?.dispose({ flush });
   }
 
   setLocalGates(gates: LocalGate[]): void {
@@ -279,14 +307,14 @@ class TogglyClientInstance {
     this.localGateIndex = buildFlagGateIndex(this.localGates);
   }
 
-  getEffectiveFlag(
-    flagKey: string,
-    definition?: EvaluatedDefinitionValue,
-    defaultValue = false,
-    entityContext?: TogglyEntityContext | null,
-  ): boolean {
-    const remote = resolveEvaluatedDefinition(definition, entityContext, defaultValue);
-    return applyLocalGate(remote, flagKey, this.localGates, this.localGateIndex);
+  captureEvaluation() {
+    const localGates = this.localGates;
+    const localGateIndex = this.localGateIndex;
+    return (flagKey: string, definition: EvaluatedDefinitionValue | undefined,
+      defaultValue: boolean, entityContext: TogglyEntityContext | null) => {
+      const remote = resolveEvaluatedDefinition(definition, entityContext, defaultValue);
+      return applyLocalGate(remote, flagKey, localGates, localGateIndex);
+    };
   }
 
   registerContext<T>(kind: string, mapper: (entity: T) => TogglyEntityContext): void {
@@ -298,37 +326,11 @@ class TogglyClientInstance {
   }
 
   private get definitionsRevision(): string | null {
-    if (this.cachedDefinitionsRevision) {
-      return this.cachedDefinitionsRevision;
-    }
-    if (!canUseStorage() || !this.config.appKey) {
-      return null;
-    }
-    try {
-      return localStorage.getItem(
-        definitionsRevisionCacheKey(this.config.appKey, this.config.environment),
-      );
-    } catch {
-      return null;
-    }
+    return this.cache ? this.cachedDefinitionsRevision : null;
   }
 
   private cacheDefinitionsRevision(revision: string | null | undefined): void {
-    if (!revision || !this.config.appKey) {
-      return;
-    }
-    const normalized = revision.replace(/^"+|"+$/g, '');
-    this.cachedDefinitionsRevision = normalized;
-    if (canUseStorage()) {
-      try {
-        localStorage.setItem(
-          definitionsRevisionCacheKey(this.config.appKey, this.config.environment),
-          normalized,
-        );
-      } catch {
-        // Ignore storage failures
-      }
-    }
+    if (revision && this.cache) this.cachedDefinitionsRevision = revision.replace(/^"+|"+$/g, '');
   }
 
   private clearDefinitionsRevision(): void {
@@ -345,7 +347,7 @@ class TogglyClientInstance {
   }
 
   private getApiUrl(): string {
-    const { baseURI, appKey, environment, identity, groups, claims } = this.config;
+    const { baseURI, appKey, environment, instanceId, identity, groups, claims } = this.config;
 
     if (!appKey) {
       return '';
@@ -354,24 +356,29 @@ class TogglyClientInstance {
     const baseUrl = baseURI.replace(/\/$/, '');
     const url = new URL(`${baseUrl}/evaluated-signed/${appKey}/${environment}`);
 
-    appendEvaluationContext(url, { identity, groups, claims }, 'evaluated');
+    if (instanceId) url.searchParams.set('i', instanceId);
+    else appendEvaluationContext(url, { identity, groups, claims }, 'evaluated');
 
     return url.toString();
   }
 
-  async fetchFlags(): Promise<Flags> {
+  async fetchFlags(requestVersion = this.requestVersion): Promise<Flags> {
+    const generation = this.generation;
     const url = this.getApiUrl();
+    const controller = new AbortController();
+    this.controllers.add(controller);
+    const timeoutId = setTimeout(() => controller.abort(), this.config.connectTimeout);
 
     if (!url || !this.config.appKey) {
       if (this.config.isDebug) {
         console.log('[Toggly Client] Using flag defaults (no appKey):', this.config.flagDefaults);
       }
+      clearTimeout(timeoutId);
+      this.controllers.delete(controller);
       return { ...this.config.flagDefaults };
     }
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.config.connectTimeout);
       const pin = this.pendingDefinitionsPin;
       this.pendingDefinitionsPin = null;
       const fetchUrl = appendDefinitionsRevisionParam(url, pin);
@@ -386,13 +393,14 @@ class TogglyClientInstance {
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
+      if (generation !== this.generation || requestVersion !== this.requestVersion || this.destroyed) return {};
 
       if (response.status === 304) {
         if (this.cache) {
           if (this.config.isDebug) {
             console.log('[Toggly Client] 304 Not Modified — using cached flags');
           }
+          this.cacheDefinitionsRevision(extractDefinitionsRevision(response));
           this.lastError = null;
           return { ...this.cache };
         }
@@ -404,9 +412,6 @@ class TogglyClientInstance {
       }
 
       const responseRevision = extractDefinitionsRevision(response);
-      if (responseRevision) {
-        this.cacheDefinitionsRevision(responseRevision);
-      }
 
       const bodyText = await readResponseBody(response);
       const payload = await parseEvaluatedResponseBody(bodyText, {
@@ -417,6 +422,10 @@ class TogglyClientInstance {
         headers: buildDefinitionFetchHeaders({ Accept: 'application/json' }),
       });
       const flags = unwrapDefsPayload(payload) as Flags;
+      if (generation !== this.generation || requestVersion !== this.requestVersion || this.destroyed) return {};
+      this.cache = flags;
+      this.cachedDefinitionsRevision = null;
+      this.cacheDefinitionsRevision(responseRevision);
 
       if (this.config.isDebug) {
         console.log('[Toggly Client] Fetched flags:', flags);
@@ -425,11 +434,12 @@ class TogglyClientInstance {
       this.lastError = null;
       return flags;
     } catch (error) {
+      if (generation !== this.generation || requestVersion !== this.requestVersion || this.destroyed) return {};
       const fetchError = error instanceof Error ? error : new Error(String(error));
       this.lastError = fetchError;
       if (!this.destroyed) {
         this.config.onError?.('Error fetching feature flags', error);
-        $error.set(fetchError);
+        if (generation === this.generation && requestVersion === this.requestVersion && !this.destroyed) $error.set(fetchError);
       }
 
       if (this.config.isDebug) {
@@ -449,6 +459,9 @@ class TogglyClientInstance {
       }
 
       return { ...this.config.flagDefaults };
+    } finally {
+      clearTimeout(timeoutId);
+      this.controllers.delete(controller);
     }
   }
 
@@ -523,7 +536,7 @@ class TogglyClientInstance {
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
-      if (this.destroyed) return;
+      if (this.ws !== ws || this.destroyed) return;
       this.wsConnected = true;
       this.wsReconnectAttempt = 0;
       this.lastFallbackRefresh = Date.now();
@@ -533,7 +546,7 @@ class TogglyClientInstance {
     };
 
     ws.onmessage = (event) => {
-      if (this.destroyed) return;
+      if (this.ws !== ws || this.destroyed) return;
       const data = event.data;
 
       if (typeof data === 'string') {
@@ -567,7 +580,7 @@ class TogglyClientInstance {
     };
 
     ws.onclose = () => {
-      if (this.destroyed) return;
+      if (this.ws !== ws || this.destroyed) return;
       this.wsConnected = false;
       this.ws = null;
 
@@ -610,17 +623,24 @@ class TogglyClientInstance {
   }
 
   async init(): Promise<void> {
+    const generation = this.generation;
+    const requestVersion = ++this.requestVersion;
+    const isCurrent = () => !this.destroyed && generation === this.generation && requestVersion === this.requestVersion;
     try {
-      const flags = await this.fetchFlags();
-      if (this.destroyed) return;
+      const flags = await this.fetchFlags(requestVersion);
+      if (!isCurrent()) return;
       this.cache = flags;
       $flags.set(flags);
+      if (!isCurrent()) return;
       $isReady.set(true);
+      if (!isCurrent()) return;
       $error.set(this.lastError);
+      if (!isCurrent()) return;
 
       // Trigger afterRefresh hooks
-      this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags));
+      this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags), isCurrent);
 
+      if (!isCurrent()) return;
       this.startWebSocket();
 
       // Start refresh interval if configured
@@ -631,7 +651,7 @@ class TogglyClientInstance {
         this.startRefreshInterval();
       }
     } catch (error) {
-      if (this.destroyed) return;
+      if (!isCurrent()) return;
       $error.set(error as Error);
       $isReady.set(true); // Still mark as ready even on error
       console.error('[Toggly Client] Initialization error:', error);
@@ -639,20 +659,28 @@ class TogglyClientInstance {
   }
 
   async refresh(): Promise<void> {
+    const generation = this.generation;
+    const requestVersion = ++this.requestVersion;
+    const isCurrent = () => !this.destroyed && generation === this.generation && requestVersion === this.requestVersion;
     try {
-      const flags = await this.fetchFlags();
-      if (this.destroyed) return;
+      const flags = await this.fetchFlags(requestVersion);
+      if (!isCurrent()) return;
       this.cache = flags;
       $flags.set(flags);
+      if (!isCurrent()) return;
+      $isReady.set(true);
+      if (!isCurrent()) return;
       $error.set(this.lastError);
+      if (!isCurrent()) return;
 
       // Trigger afterRefresh hooks
-      await this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags));
+      await this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags), isCurrent);
 
       if (this.config.isDebug) {
         console.log('[Toggly Client] Flags refreshed');
       }
     } catch (error) {
+      if (!isCurrent()) return;
       console.error('[Toggly Client] Refresh error:', error);
     }
   }
@@ -695,15 +723,38 @@ class TogglyClientInstance {
     }
   }
 
+  async updateContext(config: TogglyPluginOptions): Promise<void> {
+    if (getTogglyClientContextKey(config) === getTogglyClientContextKey(this.config)) return;
+    this.generation++;
+    this.controllers.forEach(controller => controller.abort());
+    this.stopWebSocket();
+    this.config = { ...this.config, identity: config.identity, instanceId: config.instanceId?.trim() || undefined,
+      groups: config.groups ? [...config.groups] : undefined,
+      claims: config.claims ? { ...config.claims } : undefined,
+      flagDefaults: config.flagDefaults ?? this.config.flagDefaults };
+    this.cache = null;
+    this.clearDefinitionsRevision();
+    this.pendingDefinitionsPin = null;
+    this.reporter?.setContext({ instanceId: this.config.instanceId, identity: this.config.identity });
+    $isReady.set(false);
+    $flags.set({ ...this.config.flagDefaults });
+    $error.set(null);
+    const generation = this.generation;
+    await this.refresh();
+    if (!this.destroyed && generation === this.generation) {
+      this.startWebSocket();
+      if (this.config.featureFlagsRefreshInterval > 0) this.startRefreshInterval();
+    }
+  }
+
   setIdentity(identity: string): void {
-    this.config.identity = identity;
-    this.refresh(); // Refresh with new identity
+    void this.updateContext({ ...this.config, identity });
   }
 
   clearIdentity(): void {
-    this.config.identity = undefined;
-    this.refresh(); // Refresh without identity
+    void this.updateContext({ ...this.config, identity: undefined });
   }
+
 }
 
 /**
@@ -713,10 +764,11 @@ class TogglyClientInstance {
  */
 export async function initTogglyClient(config: TogglyPluginOptions): Promise<void> {
   if (clientStore.clientInstance?.matchesOwner(config)) {
-    return clientStore.clientInitPromise ?? Promise.resolve();
+    if (clientStore.clientInstance.matchesContext(config)) return clientStore.clientInitPromise ?? Promise.resolve();
+    return clientStore.clientInstance.updateContext(config);
   }
 
-  clientStore.clientInstance?.destroy();
+  clientStore.clientInstance?.destroy(false);
   const instance = new TogglyClientInstance(config);
   clientStore.clientInstance = instance;
   $isReady.set(false);
@@ -881,37 +933,39 @@ export function disposeTogglyClient(config?: TogglyPluginOptions): void {
  * @param kind - Registered context kind, required when entity is a domain object
  * @returns Readable atom with the flag value
  */
-export function $flag(
+function createFlagStore(
   key: string,
   defaultValue = false,
   entity?: TogglyEntityContext | Record<string, unknown> | null,
   kind?: string,
-): TogglyReadableAtom<boolean> {
+  consumer = false,
+): ConsumerAtom {
+  let pending: (() => void) | undefined;
   const flagAtom: TogglyReadableAtom<boolean> = computed(
     [$flags, $localGatesRevision, $isReady],
     (flags) => {
+      const definition = flags[key] === undefined ? undefined : JSON.parse(JSON.stringify(flags[key])) as EvaluatedDefinitionValue;
+      const instance = clientStore.clientInstance;
+      const record = instance?.captureCheck();
+      const evaluate = instance?.captureEvaluation();
       const entityContext = normalizeEntityContext(entity, kind);
-      if (!clientStore.clientInstance) {
-        return resolveEvaluatedDefinition(flags[key], entityContext, defaultValue);
-      }
-      const enabled = clientStore.clientInstance.getEffectiveFlag(
-        key,
-        flags[key],
-        defaultValue,
-        entityContext,
-      );
-      if (flagAtom.lc > 0) clientStore.clientInstance.recordCheck(key, enabled);
+      const enabled = evaluate ? evaluate(key, definition, defaultValue, entityContext)
+        : resolveEvaluatedDefinition(definition, entityContext, defaultValue);
+      const report = () => record?.(key, enabled ? 'enabled' : 'disabled');
+      if (flagAtom.lc > 0) { report(); pending = undefined; }
+      else if (consumer) pending = report;
       return enabled;
     },
   );
   const get = flagAtom.get.bind(flagAtom);
   flagAtom.get = () => {
     const hasSubscriber = flagAtom.lc > 0;
+    const record = clientStore.clientInstance?.captureCheck();
     const enabled = get();
-    if (!hasSubscriber) clientStore.clientInstance?.recordCheck(key, enabled);
+    if (!hasSubscriber && !consumer) record?.(key, enabled ? 'enabled' : 'disabled');
     return enabled;
   };
-  return flagAtom;
+  return Object.assign(flagAtom, { commit: () => { const report = pending; pending = undefined; report?.(); } });
 }
 
 /**
@@ -922,13 +976,15 @@ export function $flag(
  * @param negate - Whether to negate the result
  * @returns Readable atom with the evaluation result
  */
-export function $gate(
+function createGateStore(
   keys: string[],
   requirement: GateRequirement = 'all',
   negate = false,
   entity?: TogglyEntityContext | Record<string, unknown> | null,
   kind?: string,
-): TogglyReadableAtom<boolean> {
+  consumer = false,
+): ConsumerAtom {
+  let pending: (() => void) | undefined;
   let evaluatedLeaves: Array<[string, boolean]> = [];
   const gateAtom: TogglyReadableAtom<boolean> = computed(
     [$flags, $localGatesRevision, $isReady],
@@ -937,24 +993,24 @@ export function $gate(
         return !negate;
       }
 
+      const snapshot = JSON.parse(JSON.stringify(flags)) as Flags;
+      const instance = clientStore.clientInstance;
+      const record = instance?.captureCheck();
+      const evaluateFlag = instance?.captureEvaluation();
       const entityContext = normalizeEntityContext(entity, kind);
-      evaluatedLeaves = [];
+      const leaves: Array<[string, boolean]> = [];
       const evaluate = (key: string) => {
-        if (!clientStore.clientInstance) {
-          return resolveEvaluatedDefinition(flags[key], entityContext);
-        }
-        const enabled = clientStore.clientInstance.getEffectiveFlag(
-          key,
-          flags[key],
-          false,
-          entityContext,
-        );
-        evaluatedLeaves.push([key, enabled]);
-        if (gateAtom.lc > 0) clientStore.clientInstance.recordCheck(key, enabled);
+        const enabled = evaluateFlag ? evaluateFlag(key, snapshot[key], false, entityContext)
+          : resolveEvaluatedDefinition(snapshot[key], entityContext);
+        leaves.push([key, enabled]);
+        if (gateAtom.lc > 0) record?.(key, enabled ? 'enabled' : 'disabled');
         return enabled;
       };
 
       const isEnabled = requirement === 'any' ? keys.some(evaluate) : keys.every(evaluate);
+      evaluatedLeaves = leaves;
+      if (gateAtom.lc > 0) pending = undefined;
+      else if (consumer) pending = () => leaves.forEach(([key, result]) => record?.(key, result ? 'enabled' : 'disabled'));
 
       return negate ? !isEnabled : isEnabled;
     },
@@ -962,12 +1018,26 @@ export function $gate(
   const get = gateAtom.get.bind(gateAtom);
   gateAtom.get = () => {
     const hasSubscriber = gateAtom.lc > 0;
+    const record = clientStore.clientInstance?.captureCheck();
     const enabled = get();
-    if (!hasSubscriber) {
-      const instance = clientStore.clientInstance;
-      evaluatedLeaves.forEach(([key, result]) => instance?.recordCheck(key, result));
+    if (!hasSubscriber && !consumer) {
+      evaluatedLeaves.forEach(([key, result]) => record?.(key, result ? 'enabled' : 'disabled'));
     }
     return enabled;
   };
-  return gateAtom;
+  return Object.assign(gateAtom, { commit: () => { const report = pending; pending = undefined; report?.(); } });
+}
+
+/** Internal React adapter: pre-subscription reads are projections until commit. */
+export interface ConsumerAtom extends TogglyReadableAtom<boolean> { commit(): void }
+export const createConsumerFlag = (key: string, defaultValue = false, entity?: TogglyEntityContext | Record<string, unknown> | null, kind?: string): ConsumerAtom =>
+  createFlagStore(key, defaultValue, entity, kind, true);
+export const createConsumerGate = (keys: string[], requirement: GateRequirement = 'all', negate = false, entity?: TogglyEntityContext | Record<string, unknown> | null, kind?: string): ConsumerAtom =>
+  createGateStore(keys, requirement, negate, entity, kind, true);
+
+export function $flag(key: string, defaultValue = false, entity?: TogglyEntityContext | Record<string, unknown> | null, kind?: string): TogglyReadableAtom<boolean> {
+  return createFlagStore(key, defaultValue, entity, kind);
+}
+export function $gate(keys: string[], requirement: GateRequirement = 'all', negate = false, entity?: TogglyEntityContext | Record<string, unknown> | null, kind?: string): TogglyReadableAtom<boolean> {
+  return createGateStore(keys, requirement, negate, entity, kind);
 }

@@ -138,6 +138,9 @@ export const pluginOptionsSchema: GatsbyNode['pluginOptionsSchema'] = ({ Joi }) 
     allFeaturesEnabledDuringBuild: Joi.boolean()
       .default(false)
       .description('Enable all features during build'),
+    instanceId: Joi.string()
+      .optional()
+      .description('Host-minted browser instance token'),
     identity: Joi.string()
       .optional()
       .description('User identity for targeting'),

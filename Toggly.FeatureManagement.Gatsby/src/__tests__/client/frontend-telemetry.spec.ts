@@ -334,9 +334,8 @@ describe('frontend telemetry store facade', () => {
     await oldInit;
     expect(store.$flags.get()).toEqual({ New: true });
 
-    await vi.waitFor(() => expect(envelopes).toHaveLength(2));
+    await vi.waitFor(() => expect(envelopes).toHaveLength(1));
     expect(envelopes.map(({ k, e, f }) => ({ k, e, f }))).toEqual([
-      { k: 'old-app', e: 'Old', f: { OldFeature: { enabled: [0, 1] } } },
       { k: 'new-app', e: 'New', f: { NewFeature: { enabled: [0, 0, 1] } } },
     ]);
   });

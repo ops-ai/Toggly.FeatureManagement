@@ -120,6 +120,7 @@ During build, the plugin generates a `toggly-page-features.json` manifest that m
 | `featureFlagsRefreshInterval` | `number` | `180000` | Client refresh interval (ms); rare fallback while WebSocket is connected |
 | `enableLiveUpdates` | `boolean` | `true` | Browser WebSocket live updates for definitions |
 | `allFeaturesEnabledDuringBuild` | `boolean` | `false` | Enable all features during build |
+| `instanceId` | `string` | `undefined` | Host-minted browser token; takes precedence over client targeting |
 | `identity` | `string` | `undefined` | User identity for targeting |
 | `isDebug` | `boolean` | `false` | Enable debug logging |
 | `connectTimeout` | `number` | `5000` | API connection timeout (ms) |
@@ -159,8 +160,25 @@ await flushTelemetry();
 The same functions are available under `useToggly().telemetry`. The reporter
 flushes on hidden/pagehide and is disposed when its provider owner unmounts or
 when a different app, environment, or telemetry endpoint replaces it. Payloads
-contain only the app key, environment, aggregate feature variants, and metrics;
-identity, groups, claims, entity context, and timestamps are excluded.
+contain the app key, environment, aggregate feature variants and metrics, plus
+optional host-minted `i` or client-asserted `u`. A supplied `instanceId` takes
+precedence over identity and suppresses `u`, groups and claims on browser
+definitions requests. Without it, existing identity/groups/claims targeting
+continues. The server setting `AcceptClientGeneratedIdentitiesForMetrics` is off
+by default; HTTP 202 acknowledges ingestion, not identity acceptance.
+
+Change tokens or targeting through `initTogglyClient(updatedConfig)` or updated
+provider configuration. `setIdentity` and `clearIdentity` keep their existing
+synchronous signatures. `clearIdentity` clears the client-asserted identity;
+remove `instanceId` in updated configuration to clear a minted token. Context
+transitions retain queued events with their
+original attribution in one bounded reporter. A failed new-context refresh uses
+its defaults, never retired user definitions. Transport-owner replacement
+cancels/discards the retired reporter; ordinary provider disposal flushes.
+Gatsby keeps definitions and their validator together in memory. Context changes
+and cold starts fetch fresh definitions, ignoring legacy persisted validators
+that have no body. No token history or definitions are persisted. Mint tokens in
+your trusted host; never expose Backend keys in browser configuration.
 
 ## API Reference
 

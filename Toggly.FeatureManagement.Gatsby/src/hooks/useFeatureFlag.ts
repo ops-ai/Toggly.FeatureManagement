@@ -6,8 +6,9 @@
 
 import { useMemo } from 'react';
 import { useStore } from '@nanostores/react';
+import { useConsumerStore } from '../hooks/useConsumerStore.js';
 import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
-import { $flag, $isReady, $error } from '../client/store.js';
+import { createConsumerFlag, $isReady, $error } from '../client/store.js';
 import type { UseFeatureFlagResult } from '../types/index.js';
 
 /**
@@ -36,10 +37,10 @@ export function useFeatureFlag(
   kind?: string,
 ): UseFeatureFlagResult {
   const flag = useMemo(
-    () => $flag(flagKey, defaultValue, entity, kind),
+    () => createConsumerFlag(flagKey, defaultValue, entity, kind),
     [flagKey, defaultValue, entity, kind],
   );
-  const isEnabled = useStore(flag);
+  const isEnabled = useConsumerStore(flag);
   const isReady = useStore($isReady);
   const error = useStore($error);
 

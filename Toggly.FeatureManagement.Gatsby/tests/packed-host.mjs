@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawn } from 'node:child_process';
+import { bounded, cleanupOwned, closeBrowser, closeServer, runOwnedCommand, stopChild } from './owned-resources.mjs';
+import { spawn } from 'node:child_process';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -20,38 +21,14 @@ if (reporterTarball) {
 const currentGatsby = '5.16.1';
 
 function run(command, args, options = {}) {
-  return execFileSync(command, args, {
+  console.log('GATSBY_HOST_COMMAND', command, args.join(' '));
+  return runOwnedCommand(command, args, {
     cwd: options.cwd ?? sdkDirectory,
-    encoding: 'utf8',
     stdio: options.stdio ?? 'pipe',
-    env: {
-      ...process.env,
-      npm_config_audit: 'false',
-      npm_config_fund: 'false',
-      ...options.env,
-    },
-  });
+    env: { ...process.env, npm_config_audit: 'false', npm_config_fund: 'false', ...options.env },
+  }, 180_000);
 }
-
-function runAsync(command, args, options = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: options.cwd ?? sdkDirectory,
-      env: {
-        ...process.env,
-        npm_config_audit: 'false',
-        npm_config_fund: 'false',
-        ...options.env,
-      },
-      stdio: options.stdio ?? 'inherit',
-    });
-    child.on('error', reject);
-    child.on('close', (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${command} exited ${code}`));
-    });
-  });
-}
+const runAsync = (command, args, options = {}) => run(command, args, { stdio: 'inherit', ...options });
 
 const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' });
 const rawJwk = publicKey.export({ format: 'jwk' });
@@ -111,10 +88,11 @@ function writeHost(host, baseURI) {
 };
 `,
   );
-  run('mkdir', ['-p', join(host, 'src')]);
-  run('mkdir', ['-p', join(host, 'src', 'pages')]);
+  mkdirSync(join(host, 'src'), { recursive: true });
+  mkdirSync(join(host, 'src', 'pages'), { recursive: true });
   writeFileSync(join(host, 'src', 'pages', 'index.js'), `
-import React from 'react';
+import React, { useEffect } from 'react';
+import { hydrateRoot } from 'react-dom/client';
 import {
   Feature,
   FeatureGate,
@@ -127,7 +105,13 @@ import {
   useFeatureFlag,
 } from '@ops-ai/gatsby-feature-flags-toggly';
 
+function WarmConsumer() {
+  const { isEnabled } = useFeatureFlag('warmOn');
+  useEffect(() => { document.body.dataset.warm = 'committed'; }, []);
+  return <span>{isEnabled ? 'warm-on' : 'warm-off'}</span>;
+}
 export default function IndexPage() {
+  useEffect(() => { document.body.dataset.hydrated = 'true'; }, []);
   const hook = useFeatureFlag('hookOn');
   return <main>
     <p id="mounted">{hook.isReady ? 'ready' : 'loading'}</p>
@@ -138,6 +122,14 @@ export default function IndexPage() {
     <FeatureGate flags={['gateOn', 'gateSkipped']} requirement="any">
       <p id="gate">on</p>
     </FeatureGate>
+    <button id="warm" onClick={() => {
+      const container = document.createElement('div');
+      container.id = 'warm-root';
+      container.innerHTML = window.__TOGGLY_COLD_HTML__;
+      document.body.appendChild(container);
+      hydrateRoot(container, <WarmConsumer />);
+    }}>warm replay</button>
+    <button id="warm-flush" onClick={async () => { await flushTelemetry(); document.body.dataset.warmFlushed = 'true'; }}>warm flush</button>
     <button id="explicit" onClick={async () => {
       recordUsage('featureOn', 'blue');
       recordView('featureOff', 'green');
@@ -153,7 +145,7 @@ export default function IndexPage() {
     <button id="replacement" onClick={async () => {
       recordUsage('oldOnly');
       await initTogglyClient({
-        appKey: 'gatsby-replacement-host', environment: 'Preview',
+        appKey: 'gatsby-replacement-host', environment: 'Preview', identity: 'first-user',
         baseURI: ${JSON.stringify(baseURI)}, metricsBaseUrl: ${JSON.stringify(baseURI)},
         enableLiveUpdates: false, featureFlagsRefreshInterval: 0,
       });
@@ -161,8 +153,42 @@ export default function IndexPage() {
       await flushTelemetry();
       document.body.dataset.replacement = 'done';
     }}>replacement</button>
+    <button id="minted" onClick={async () => {
+      recordUsage('queuedBeforeToken');
+      await initTogglyClient({
+        appKey: 'gatsby-replacement-host', environment: 'Preview', identity: 'ignored-user',
+        instanceId: 'host-token', groups: ['private-group'], claims: { role: 'private-claim' },
+        baseURI: ${JSON.stringify(baseURI)}, metricsBaseUrl: ${JSON.stringify(baseURI)},
+        enableLiveUpdates: false, featureFlagsRefreshInterval: 0,
+      });
+      recordView('mintedView');
+      await flushTelemetry();
+      document.body.dataset.minted = 'done';
+    }}>minted</button>
+    <button id="identified" onClick={async () => {
+      recordUsage('queuedBeforeIdentity');
+      await initTogglyClient({
+        appKey: 'gatsby-replacement-host', environment: 'Preview', identity: 'second-user',
+        groups: ['staff'], claims: { role: 'admin' },
+        baseURI: ${JSON.stringify(baseURI)}, metricsBaseUrl: ${JSON.stringify(baseURI)},
+        enableLiveUpdates: false, featureFlagsRefreshInterval: 0,
+      });
+      recordView('identifiedView');
+      await flushTelemetry();
+      document.body.dataset.identified = 'done';
+    }}>identified</button>
   </main>;
 }
+`);
+  writeFileSync(join(host, 'warm-ssr.cjs'), `
+const React = require('react');
+const { renderToString } = require('react-dom/server');
+const { useFeatureFlag } = require('@ops-ai/gatsby-feature-flags-toggly');
+function WarmConsumer() {
+  const { isEnabled } = useFeatureFlag('warmOn');
+  return React.createElement('span', null, isEnabled ? 'warm-on' : 'warm-off');
+}
+console.log(renderToString(React.createElement(WarmConsumer)));
 `);
   writeFileSync(join(host, 'src', 'gated.js'), "import React from 'react'; export default () => <main>Gatsby packed SSG gate</main>;\n");
   writeFileSync(join(host, 'src', 'ssr.js'), `
@@ -197,7 +223,7 @@ import { createTogglyServerClient, type TogglyPluginOptions } from '@ops-ai/gats
 import { useFeatureFlag } from '@ops-ai/gatsby-feature-flags-toggly/hooks';
 import { Feature, FeatureGate } from '@ops-ai/gatsby-feature-flags-toggly/components';
 import { $gate } from '@ops-ai/gatsby-feature-flags-toggly/client';
-const config: TogglyPluginOptions = { appKey: 'packed-type-consumer', verifySignatures: true };
+const config: TogglyPluginOptions = { appKey: 'packed-type-consumer', verifySignatures: true, instanceId: 'host-token' };
 const result: Promise<boolean> = createTogglyServerClient(config).evaluateGate(['one'], 'any');
 const hookResult: ReturnType<typeof useFeatureFlag>['isEnabled'] = true;
 const gateResult: boolean = $gate(['one'], 'all').get();
@@ -276,8 +302,8 @@ const ssr = require('@ops-ai/gatsby-feature-flags-toggly/gatsby-ssr');
   );
 }
 
-function verifyTarball(tarball) {
-  const files = run('tar', ['-tzf', tarball]);
+async function verifyTarball(tarball) {
+  const files = await run('tar', ['-tzf', tarball]);
   for (const expected of [
     'package/dist/index.js',
     'package/dist/index.mjs',
@@ -296,11 +322,15 @@ function verifyTarball(tarball) {
   }
 }
 
+console.log(await run(process.execPath, ['--test', 'tests/cleanup.test.mjs']));
+
 const temporary = mkdtempSync(join(tmpdir(), 'toggly-gatsby-packed-host-'));
 const host = join(temporary, 'host');
 let definitions;
 let productionHost;
 let browser;
+let browserServer;
+let failure;
 let serverEnabled = true;
 const telemetryRequests = [];
 
@@ -326,9 +356,13 @@ try {
     { featureKey: 'serverOff', filters: [{ name: 'AlwaysOff', parameters: {} }] },
   ];
   const requests = [];
+  const evaluatedRequests = [];
+  let releaseInitialDefinitions;
+  const initialDefinitions = new Promise(resolve => { releaseInitialDefinitions = resolve; });
   definitions = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
     requests.push(url.pathname);
+    if (request.method === 'GET' && url.pathname.includes('/evaluated-signed/')) evaluatedRequests.push(url);
     response.setHeader('access-control-allow-origin', request.headers.origin ?? '*');
     response.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
     response.setHeader('access-control-allow-headers', 'content-type, content-encoding, x-toggly-sdk, x-toggly-sdk-version');
@@ -365,6 +399,7 @@ try {
       return;
     }
     if (url.pathname === '/evaluated-signed/gatsby-current-host/Production') {
+      try { await bounded(() => initialDefinitions, 'Cold hydration response release', 8000); } catch (error) { response.destroy(error); return; }
       response.end(envelope({
         runtimeOn: true,
         runtimeOff: false,
@@ -378,10 +413,11 @@ try {
     }
     if (url.pathname === '/evaluated-signed/gatsby-replacement-host/Preview') {
       response.end(JSON.stringify({
-        hookOn: false,
-        featureOn: false,
+        warmOn: true,
+        hookOn: url.searchParams.has('i'),
+        featureOn: url.searchParams.has('i'),
         featureOff: true,
-        gateOn: false,
+        gateOn: url.searchParams.has('i'),
         gateSkipped: true,
       }));
       return;
@@ -391,14 +427,15 @@ try {
   await new Promise((resolve) => definitions.listen(0, '127.0.0.1', resolve));
   const baseURI = `http://127.0.0.1:${definitions.address().port}`;
 
-  run('npm', ['run', 'build']);
-  const packed = JSON.parse(run('npm', ['pack', '--json', '--pack-destination', temporary]))[0];
+  await run('npm', ['run', 'build']);
+  const packed = JSON.parse(await run('npm', ['pack', '--json', '--pack-destination', temporary]))[0];
   const tarball = join(temporary, packed.filename);
-  verifyTarball(tarball);
+  console.log('PACKED_GATSBY_ARTIFACT', JSON.stringify({ version: packed.version, integrity: packed.integrity, shasum: packed.shasum }));
+  await verifyTarball(tarball);
 
-  run('mkdir', ['-p', host]);
+  mkdirSync(host, { recursive: true });
   writeHost(host, baseURI);
-  run(
+  await run(
     'npm',
     [
       'install',
@@ -415,7 +452,7 @@ try {
     { cwd: host },
   );
   assert.equal(
-    run(process.execPath, ['-p', "require('gatsby/package.json').version"], { cwd: host }).trim(),
+    (await run(process.execPath, ['-p', "require('gatsby/package.json').version"], { cwd: host })).trim(),
     currentGatsby,
   );
   assert.equal(
@@ -425,13 +462,14 @@ try {
         'utf8',
       ),
     ).version,
-    '1.0.0',
+    '1.1.0',
   );
-  run(join(host, 'node_modules', '.bin', 'playwright'), ['install', 'chromium'], {
+  console.log('PACKED_GATSBY_REGISTRY_GRAPH', await run('npm', ['ls', '@ops-ai/toggly-client-telemetry', '@ops-ai/toggly-hooks-types', '@ops-ai/toggly-signed-defs', '--json'], { cwd: host }));
+  await run(join(host, 'node_modules', '.bin', 'playwright'), ['install', 'chromium'], {
     cwd: host,
     stdio: 'inherit',
   });
-  run(join(host, 'node_modules', '.bin', 'tsc'), [
+  await run(join(host, 'node_modules', '.bin', 'tsc'), [
     '--noEmit', '--strict', '--module', 'ESNext', '--moduleResolution', 'Bundler',
     '--target', 'ES2022', '--types', 'react', 'consumer.mts',
   ], { cwd: host, stdio: 'inherit' });
@@ -440,8 +478,8 @@ try {
     cwd: host, env: { CI: 'true', GATSBY_TELEMETRY_DISABLED: '1' },
   });
 
-  const pageFeatures = JSON.parse(run('cat', [join(host, 'public', 'toggly-page-features.json')]));
-  const config = JSON.parse(run('cat', [join(host, 'public', 'toggly-config.json')]));
+  const pageFeatures = JSON.parse(readFileSync(join(host, 'public', 'toggly-page-features.json'), 'utf8'));
+  const config = JSON.parse(readFileSync(join(host, 'public', 'toggly-config.json'), 'utf8'));
   assert.equal(pageFeatures['/gated'], 'build-gate');
   assert.match(readFileSync(join(host, 'public', 'gated', 'index.html'), 'utf8'), /Gatsby packed SSG gate/);
   assert.deepEqual(config, {
@@ -456,7 +494,7 @@ try {
   await new Promise((resolve) => portProbe.close(resolve));
   productionHost = spawn(join(host, 'node_modules', '.bin', 'gatsby'), [
     'serve', '--host', '127.0.0.1', '--port', String(port),
-  ], { cwd: host, env: { ...process.env, CI: 'true', GATSBY_TELEMETRY_DISABLED: '1' }, stdio: 'inherit' });
+  ], { cwd: host, detached: process.platform !== 'win32', env: { ...process.env, CI: 'true', GATSBY_TELEMETRY_DISABLED: '1' }, stdio: 'inherit' });
   let startupError;
   productionHost.on('error', (error) => { startupError = error; });
   const deadline = Date.now() + 30_000;
@@ -493,7 +531,8 @@ try {
   const { chromium } = await import(
     pathToFileURL(join(host, 'node_modules', 'playwright', 'index.mjs')).href
   );
-  browser = await chromium.launch({ headless: true });
+  browserServer = await chromium.launchServer({ headless: true });
+  browser = await chromium.connect(browserServer.wsEndpoint());
   const page = await browser.newPage();
   const browserErrors = [];
   page.on('pageerror', (error) => browserErrors.push(error.message));
@@ -511,6 +550,9 @@ try {
     }
   });
   await page.goto(`http://127.0.0.1:${port}/`);
+  // Pin the original cold-hydration scenario; warm replay is exercised separately below.
+  await page.waitForFunction(() => document.body.dataset.hydrated === 'true', undefined, { timeout: 5000 });
+  releaseInitialDefinitions();
   try {
     await page.waitForFunction(
       () => document.querySelector('#mounted')?.textContent === 'ready',
@@ -535,6 +577,7 @@ try {
   await page.waitForFunction(() => document.body.dataset.explicit === 'done', undefined, { timeout: 10_000 });
   await waitForTelemetry(1, 'explicit flush');
   const explicit = telemetryRequests[0];
+  console.log('GATSBY_INITIAL_BROWSER_EVIDENCE', JSON.stringify({ errors: browserErrors, requests: evaluatedRequests.map(url => url.toString()), body: explicit.body }));
   assert.equal(explicit.encoding, 'gzip');
   assert.equal(explicit.origin, `http://127.0.0.1:${port}`);
   assert.equal(explicit.authorization, undefined);
@@ -575,17 +618,14 @@ try {
 
   await page.locator('#replacement').click();
   await page.waitForFunction(() => document.body.dataset.replacement === 'done', undefined, { timeout: 10_000 });
-  await waitForTelemetry(4, 'owner replacement flush');
+  await waitForTelemetry(3, 'owner replacement flush');
   const oldFinal = telemetryRequests.find((request) => request.body.k === 'gatsby-current-host' && request.body.f?.oldOnly);
   const replacement = telemetryRequests.find((request) => request.body.k === 'gatsby-replacement-host');
-  assert.deepEqual(oldFinal?.body, {
-    k: 'gatsby-current-host',
-    e: 'Production',
-    f: { oldOnly: { enabled: [0, 1] } },
-  });
+  assert.equal(oldFinal, undefined, 'transport replacement discards the retired queue');
   assert.deepEqual(replacement?.body, {
     k: 'gatsby-replacement-host',
     e: 'Preview',
+    u: 'first-user',
     f: {
       hookOn: { disabled: [1] },
       featureOn: { disabled: [1] },
@@ -594,10 +634,61 @@ try {
       newOnly: { enabled: [0, 0, 1] },
     },
   });
-  assert.equal(oldFinal?.encoding, 'identity');
   assert.equal(replacement?.encoding, 'gzip');
+
+  await page.locator('#minted').click();
+  await page.waitForFunction(() => document.body.dataset.minted === 'done', undefined, { timeout: 10_000 });
+  await waitForTelemetry(5, 'minted context flush');
+  assert.equal(await page.locator('#hook').textContent(), 'on');
+  assert.equal(await page.locator('#feature').textContent(), 'on');
+  assert.deepEqual(telemetryRequests[3].body, {
+    k: 'gatsby-replacement-host', e: 'Preview', u: 'first-user',
+    f: { queuedBeforeToken: { enabled: [0, 1] } },
+  });
+  assert.deepEqual(telemetryRequests[4].body, {
+    k: 'gatsby-replacement-host', e: 'Preview', i: 'host-token',
+    f: { hookOn: { enabled: [1] }, featureOn: { enabled: [1] }, gateOn: { enabled: [1] }, mintedView: { enabled: [0, 0, 1] } },
+  });
+  const mintedRequest = evaluatedRequests.find(url => url.searchParams.get('i') === 'host-token');
+  assert.ok(mintedRequest);
+  assert.equal(mintedRequest.searchParams.has('u'), false);
+  assert.equal(mintedRequest.searchParams.has('g'), false);
+  assert.equal(mintedRequest.searchParams.has('claim.role'), false);
+  await page.locator('#identified').click();
+  await page.waitForFunction(() => document.body.dataset.identified === 'done', undefined, { timeout: 10_000 });
+  await waitForTelemetry(7, 'identified context flush');
+  assert.equal(await page.locator('#hook').textContent(), 'off');
+  assert.deepEqual(telemetryRequests[5].body, {
+    k: 'gatsby-replacement-host', e: 'Preview', i: 'host-token',
+    f: { queuedBeforeIdentity: { enabled: [0, 1] } },
+  });
+  assert.deepEqual(telemetryRequests[6].body, {
+    k: 'gatsby-replacement-host', e: 'Preview', u: 'second-user',
+    f: { hookOn: { disabled: [1] }, featureOn: { disabled: [1] }, gateOn: { disabled: [1] }, gateSkipped: { enabled: [1] }, identifiedView: { enabled: [0, 0, 1] } },
+  });
+  const identifiedRequest = evaluatedRequests.find(url => url.searchParams.get('u') === 'second-user');
+  assert.ok(identifiedRequest);
+  assert.equal(identifiedRequest.searchParams.has('i'), false);
+  assert.equal(identifiedRequest.searchParams.get('g'), 'staff');
+  assert.equal(identifiedRequest.searchParams.get('claim.role'), 'admin');
   assert.deepEqual(browserErrors, []);
   console.log('PACKED_GATSBY_BROWSER_TELEMETRY_PASS');
+
+  // Render the cold HTML through the same installed package, then hydrate it in
+  // actual Chromium after the active owner is already ready. Only React's known
+  // discarded-hydration warnings belong to this deliberately mismatched probe.
+  const coldHtml = (await run(process.execPath, ['warm-ssr.cjs'], { cwd: host })).trim();
+  assert.equal(coldHtml, '<span>warm-off</span>');
+  await bounded(() => page.evaluate(html => { window.__TOGGLY_COLD_HTML__ = html; }, coldHtml), 'Warm hydration setup');
+  await page.locator('#warm').click();
+  await page.waitForFunction(() => document.body.dataset.warm === 'committed' && document.querySelector('#warm-root')?.textContent === 'warm-on', undefined, { timeout: 5000 });
+  await page.locator('#warm-flush').click();
+  await page.waitForFunction(() => document.body.dataset.warmFlushed === 'true', undefined, { timeout: 5000 });
+  await waitForTelemetry(8, 'committed warm hydration replay');
+  assert.deepEqual(telemetryRequests[7].body, { k: 'gatsby-replacement-host', e: 'Preview', u: 'second-user', f: { warmOn: { enabled: [1] } } });
+  assert.ok(browserErrors.length > 0, 'the warm probe actually exercised a discarded hydration render');
+  assert.deepEqual(browserErrors.map(message => message.match(/^Minified React error #(\d+);/)?.[1]), ['425', '423'], 'only the reproduced text-mismatch and hydration-recovery warnings are expected');
+  console.log('PACKED_GATSBY_WARM_HYDRATION_PASS', JSON.stringify({ committedChecks: 1, warnings: browserErrors }));
 
   async function renderSsr() {
     const response = await fetch(`http://127.0.0.1:${port}/ssr/`, { signal: AbortSignal.timeout(10_000) });
@@ -614,19 +705,22 @@ try {
   assert.match(disabledHtml, /<p>SSR_OFF_FALLBACK<\/p>/);
   assert.doesNotMatch(disabledHtml, /<p>SSR_ENABLED_GATE<\/p>|<p>SSR_DISABLED_LEAK<\/p>/);
   assert.ok(requests.slice(beforeSecondRequest).includes('/definitions-signed/gatsby-current-host/Production'));
+  assert.equal(telemetryRequests.length, 8, 'native server requests remain telemetry-silent');
   console.log('PACKED_GATSBY_PRODUCTION_SSR_PASS');
   assert.ok(requests.includes('/definitions-signed/gatsby-current-host/Production'));
   assert.ok(requests.includes('/evaluated-signed/gatsby-current-host/Production'));
   assert.ok(requests.includes('/.well-known/jwks'));
-  console.log(`PACKED_GATSBY_HOST_PASS ${JSON.stringify({ gatsby: currentGatsby, node: process.version })}`);
-} finally {
-  await browser?.close();
-  if (productionHost?.pid && productionHost.exitCode === null && productionHost.signalCode === null) {
-    const stopped = new Promise((resolve) => productionHost.once('close', resolve));
-    productionHost.kill('SIGTERM');
-    const forceStop = setTimeout(() => productionHost.kill('SIGKILL'), 5_000);
-    try { await stopped; } finally { clearTimeout(forceStop); }
-  }
-  if (definitions) await new Promise((resolve) => definitions.close(resolve));
-  rmSync(temporary, { recursive: true, force: true });
-}
+  console.log(`PACKED_GATSBY_HOST_PASS ${JSON.stringify({ gatsby: currentGatsby, react: '18.3.1', reporter: '1.1.0', typescript: '5.3.3', playwright: '1.58.2', chromium: browser.version(), node: process.version, actualEnvelopes: telemetryRequests.length })}`);
+} catch (error) { failure = error; }
+await cleanupOwned([
+  () => browser && bounded(() => browser.close(), 'Browser connection close'),
+  () => browserServer && closeBrowser(browserServer),
+  async () => {
+    if (productionHost?.pid && process.platform !== 'win32') {
+      try { process.kill(-productionHost.pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
+    }
+    await stopChild(productionHost);
+  },
+  () => definitions && closeServer(definitions),
+  () => rmSync(temporary, { recursive: true, force: true }),
+], failure);
