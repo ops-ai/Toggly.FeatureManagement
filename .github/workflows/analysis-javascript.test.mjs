@@ -59,6 +59,7 @@ const packedHostHarnesses = [
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs',
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/**',
   'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-host.mjs',
+  'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-browser-host.mjs',
   'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/tests/host/**'
 ];
 
@@ -152,6 +153,12 @@ test('runs the current Gatsby packed host on Node 24', () => {
   assert.match(install, /if: matrix\.sdk == 'Gatsby' \|\|/);
   assert.match(install, /working-directory: \$\{\{ matrix\.path \}\}\s+run: npm ci/);
   assert.doesNotMatch(install, /continue-on-error|npm ci \|\|/);
+});
+
+test('canonical Svelte host check also runs the real browser matrix', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../../Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/package.json', import.meta.url), 'utf8'));
+  assert.equal(manifest.scripts['test:host'], 'node scripts/test-host.mjs && npm run test:browser-host');
+  assert.equal(manifest.scripts['test:browser-host'], 'node scripts/test-browser-host.mjs');
 });
 
 test('selects system Chrome before packed Client-Core tests', () => {
