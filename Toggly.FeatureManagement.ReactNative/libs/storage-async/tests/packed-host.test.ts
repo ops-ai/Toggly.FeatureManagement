@@ -3,6 +3,12 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+const sharedArtifacts: string[] = JSON.parse(process.env.TOGGLY_SHARED_ARTIFACTS ?? '[]');
+const { packCore } = require('../../../tests/packed-core.cjs');
+let corePackage: { archive: string; dispose(): void };
+beforeAll(() => { corePackage = packCore(); }, 120000);
+afterAll(() => corePackage?.dispose());
+
 const packageDirectory = join(__dirname, '..');
 const fixtureDirectory = join(__dirname, 'fixtures', 'packed-host');
 const npmCacheDirectory = mkdtempSync(join(tmpdir(), 'toggly-asyncstorage-npm-cache-'));
@@ -36,6 +42,7 @@ describe('packed AsyncStorage hosts', () => {
 
       try {
         cpSync(fixtureDirectory, hostDirectory, { recursive: true });
+        cpSync(join(packageDirectory, '..', '..', 'tests', 'telemetry-consumer.cjs'), join(hostDirectory, 'telemetry-consumer.cjs'));
         const packageJsonPath = join(hostDirectory, 'package.json');
         const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
         Object.assign(packageJson.dependencies, {
@@ -47,7 +54,7 @@ describe('packed AsyncStorage hosts', () => {
         });
         writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
 
-        run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false', tarball], hostDirectory);
+        run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false', tarball, ...sharedArtifacts, corePackage.archive], hostDirectory);
         run('npm', ['run', 'typecheck'], hostDirectory);
         run('npm', ['run', 'verify'], hostDirectory);
       } finally {

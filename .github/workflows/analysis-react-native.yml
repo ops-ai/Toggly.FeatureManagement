@@ -83,6 +83,11 @@ jobs:
         working-directory: ${{ matrix.path }}
         run: ${{ matrix.test-cmd }}
 
+      - name: Test packed native consumers
+        if: matrix.sdk == 'React-Native'
+        working-directory: ${{ matrix.path }}
+        run: npm run test:packed
+
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
         if: always()

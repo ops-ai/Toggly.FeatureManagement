@@ -63,7 +63,7 @@ describe('maxCacheKeys LRU', () => {
     maxCacheKeys: number | null | undefined,
     identity?: string,
   ): TogglyService {
-    return new TogglyService({
+    return new TogglyService({ enableTelemetry: false,
       appKey,
       environment,
       identity,
@@ -118,7 +118,7 @@ describe('maxCacheKeys LRU', () => {
     jest.setSystemTime(new Date('2026-07-11T12:00:02.000Z'));
     service.dispose();
     mockFetch.mockRejectedValueOnce(new Error('offline'));
-    service = new TogglyService({
+    service = new TogglyService({ enableTelemetry: false,
       appKey,
       environment,
       identity: 'user-a',

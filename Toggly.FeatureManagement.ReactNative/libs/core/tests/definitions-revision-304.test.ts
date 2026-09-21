@@ -7,7 +7,7 @@ describe('304 definitions revision persistence', () => {
   afterEach(() => services.splice(0).forEach(service => service.dispose()));
 
   function create(storage: MemoryStorage, groups = ['beta']): TogglyService {
-    const service = new TogglyService({ appKey: 'app', identity: 'user', groups,
+    const service = new TogglyService({ enableTelemetry: false, appKey: 'app', identity: 'user', groups,
       claims: { plan: 'pro' }, storage, refreshInterval: 0, enableLiveUpdates: false });
     services.push(service);
     return service;

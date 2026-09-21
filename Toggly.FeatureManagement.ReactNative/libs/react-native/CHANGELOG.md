@@ -1,3 +1,14 @@
+## 1.4.0 — 2026-09-18
+
+### Added
+- Frontend telemetry options on `TogglyProvider` and usage, view, counter, gauge, and flush methods on `useToggly`, using the owning Core client reporter.
+- Best-effort AppState background/inactive flush and one bounded final flush on owner disposal.
+
+### Fixed
+- Preserve the provider owner across ordinary rerenders; retire it when app, environment, or collector configuration changes.
+- Keep feature hook results and metadata isolated from retired owners and late asynchronous completions.
+- Dispose the preinitialized provider owner after its last mounted consumer, and create a fresh owner on later remounts.
+
 ## 1.3.0
 
 2026-09-03

@@ -46,7 +46,7 @@ describe('Smoke test', () => {
       fetchViaHttps(url)
     );
 
-    const service = new TogglyService({
+    const service = new TogglyService({ enableTelemetry: false,
       appKey: appKey!,
       environment: 'Production',
       baseURI: 'https://definitions.toggly.io',

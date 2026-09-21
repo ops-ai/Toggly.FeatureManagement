@@ -1,3 +1,4 @@
+import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
 import type { CacheLruIndex, Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
 import {
   appendEvaluationContext,
@@ -180,6 +181,9 @@ export class TogglyService {
   private isInitialized = false;
   private initialization: Promise<TogglyInitResponse> | null = null;
   private disposed = false;
+  private readonly telemetry: TelemetryReporter;
+  private activeRequest?: AbortController;
+  private requestTimer?: ReturnType<typeof setTimeout>;
   private networkState: NetworkState | null = null;
   private appState: AppStateType = 'active';
   private stateChangeHandlers: Set<FeatureStateChangeHandler> = new Set();
@@ -226,6 +230,7 @@ export class TogglyService {
   }
 
   private reportError(message: string, error?: unknown): void {
+    if (this.disposed) return;
     this.lastError = error instanceof Error ? error.message : message;
     this.config.onError?.(
       error instanceof Error ? error : new Error(message)
@@ -234,6 +239,7 @@ export class TogglyService {
   }
 
   private emitEffectiveFlagsChanged(flags: FeatureFlags = this.features ?? {}): void {
+    if (this.disposed) return;
     this.eventEmitter.emit('effectiveFlagsChanged', flags);
   }
 
@@ -250,10 +256,12 @@ export class TogglyService {
     }
     try {
       const stored = await this.storage.get(STORAGE_KEYS.ETAG);
+      if (this.disposed) return;
       // Older releases stored a bare revision without its evaluation context.
       if (stored?.startsWith('{')) {
         const record = JSON.parse(stored) as { context: string; revision: string };
         const cached = await this.storage.get(await this.buildFeatureFlagsCacheKey());
+        if (this.disposed) return;
         if (typeof record.revision === 'string' && record.context === this.getContextCacheKey() && cached &&
             JSON.parse(cached).identity === record.context) {
           this.cachedDefinitionsRevision = record.revision;
@@ -265,7 +273,7 @@ export class TogglyService {
   }
 
   private async cacheDefinitionsRevision(revision: string | null | undefined): Promise<void> {
-    if (!revision) {
+    if (this.disposed || !revision) {
       return;
     }
     const normalized = revision.replace(/^"+|"+$/g, '');
@@ -280,16 +288,19 @@ export class TogglyService {
   }
 
   private scheduleDebouncedRefresh(forceRevisionReset = false): void {
+    if (this.disposed) return;
     if (this._refreshDebounceTimer) {
       clearTimeout(this._refreshDebounceTimer);
     }
     this._refreshDebounceTimer = setTimeout(() => {
       this._refreshDebounceTimer = null;
       const run = async () => {
+        if (this.disposed) return;
         if (forceRevisionReset) {
           this.cachedDefinitionsRevision = null;
           // Await deletes so refresh cannot rehydrate retired signing keys.
           await this.storage.delete(STORAGE_KEYS.ETAG);
+          if (this.disposed) return;
           await this.storage.delete(STORAGE_KEYS.JWKS);
         }
         await this.refresh();
@@ -330,6 +341,12 @@ export class TogglyService {
 
   constructor(config: TogglyConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.telemetry = createTelemetryReporter({
+      appKey: config.appKey, environment: config.environment,
+      enableTelemetry: config.enableTelemetry, metricsBaseUrl: config.metricsBaseUrl,
+      telemetryFlushIntervalMs: config.telemetryFlushIntervalMs,
+      onDiagnostic: config.onTelemetryDiagnostic,
+    });
     // Snapshot startup targeting before native subscriptions or asynchronous storage.
     this.identity = config.identity || null;
     this.groups = [...(config.groups ?? [])];
@@ -350,6 +367,7 @@ export class TogglyService {
     // Setup network info listener
     if (config.networkInfo) {
       this.networkUnsubscribe = config.networkInfo.subscribe((state) => {
+        if (this.disposed) return;
         const wasOffline = this.networkState?.isConnected === false;
         this.networkState = state;
         this.eventEmitter.emit('networkChanged', state);
@@ -362,14 +380,16 @@ export class TogglyService {
 
       // Get initial network state
       config.networkInfo.getState().then((state) => {
-        this.networkState = state;
-      });
+        if (!this.disposed) this.networkState = state;
+      }).catch(() => { /* Connectivity lookup cannot revive or fail an owner. */ });
     }
 
     // Setup app state listener
     if (config.appState) {
       this.appState = config.appState.getCurrentState();
       this.appStateUnsubscribe = config.appState.subscribe((state) => {
+        if (this.disposed) return;
+        if (state === 'background' || state === 'inactive') void this.flushTelemetry();
         const wasBackground = this.appState === 'background';
         this.appState = state;
         this.eventEmitter.emit('appStateChanged', state);
@@ -387,6 +407,7 @@ export class TogglyService {
    * @returns Promise resolving to the initialization response
    */
   async init(): Promise<TogglyInitResponse> {
+    if (this.disposed) return this.retiredResponse();
     if (this.initialization) return this.initialization;
     this.initialization = this.initialize();
     try {
@@ -403,15 +424,18 @@ export class TogglyService {
     } else {
       // Try to get stored device ID
       let storedId = await this.storage.get(STORAGE_KEYS.DEVICE_ID);
+      if (this.disposed) return this.retiredResponse();
       if (!storedId) {
         storedId = generateUUID();
         await this.storage.set(STORAGE_KEYS.DEVICE_ID, storedId);
       }
+      if (this.disposed) return this.retiredResponse();
       this.identity = storedId;
     }
 
     // Load cached definitions revision for conditional HTTP requests
     await this.loadCachedDefinitionsRevision();
+    if (this.disposed) return this.retiredResponse();
 
     // Perform initial refresh
     const response = await this.performRefresh();
@@ -500,7 +524,8 @@ export class TogglyService {
       );
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(
+      this.activeRequest = controller;
+      const timeoutId = this.requestTimer = setTimeout(
         () => controller.abort(),
         this.config.requestTimeout
       );
@@ -512,6 +537,8 @@ export class TogglyService {
       });
 
       clearTimeout(timeoutId);
+      this.requestTimer = undefined;
+      if (this.disposed) return this.retiredResponse();
 
       const responseRevision = extractDefinitionsRevision(response);
 
@@ -519,10 +546,12 @@ export class TogglyService {
         // Not modified, use cached
         this.lastChecked = new Date();
         const cachedFlags = await this.getCachedFeatureFlags();
+        if (this.disposed) return this.retiredResponse();
         // A conditional hit can refresh the validator for this cached context.
         if (revision) {
           await this.cacheDefinitionsRevision(responseRevision);
         }
+        if (this.disposed) return this.retiredResponse();
         this.features = cachedFlags;
         this.emitEffectiveFlagsChanged(cachedFlags);
         return {
@@ -536,6 +565,7 @@ export class TogglyService {
       }
 
       const bodyText = await this.readResponseBody(response);
+      if (this.disposed) return this.retiredResponse();
       let flags: FeatureFlags;
 
       if (this.config.verifySignatures) {
@@ -555,13 +585,16 @@ export class TogglyService {
         flags = (data?.defs ?? data?.data ?? data) as FeatureFlags;
       }
 
+      if (this.disposed) return this.retiredResponse();
       // Track changes
       const previousFlags = this.features;
       this.features = flags;
 
       // Cache the flags
       await this.cacheFeatureFlags(flags);
+      if (this.disposed) return this.retiredResponse();
       await this.cacheDefinitionsRevision(responseRevision);
+      if (this.disposed) return this.retiredResponse();
 
       this.lastChecked = new Date();
       this.lastSynced = new Date();
@@ -569,6 +602,7 @@ export class TogglyService {
 
       // Execute afterRefresh hooks
       await this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags));
+      if (this.disposed) return this.retiredResponse();
 
       // Emit refreshed event
       this.eventEmitter.emit('refreshed', flags);
@@ -584,11 +618,13 @@ export class TogglyService {
         flags,
       };
     } catch (error) {
+      if (this.disposed) return this.retiredResponse();
       const hadLastKnownGood = this.features !== null;
       this.reportError('Error fetching feature flags', error);
 
       // Fall back to cache or defaults
       const cachedFlags = await this.getCachedFeatureFlags();
+      if (this.disposed) return this.retiredResponse();
       this.features = cachedFlags;
       this.emitEffectiveFlagsChanged(cachedFlags);
 
@@ -600,6 +636,9 @@ export class TogglyService {
         error: this.lastError ?? undefined,
       };
     } finally {
+      if (this.requestTimer) clearTimeout(this.requestTimer);
+      this.requestTimer = undefined;
+      this.activeRequest = undefined;
       this.featuresLoading = false;
     }
   }
@@ -666,6 +705,7 @@ export class TogglyService {
   }
 
   private async saveLruIndex(index: CacheLruIndex): Promise<void> {
+    if (this.disposed) return;
     try {
       await this.storage.set(STORAGE_KEYS.CACHE_LRU, serializeCacheLruIndex(index));
     } catch (error) {
@@ -695,6 +735,7 @@ export class TogglyService {
     await this.runSerializedLruMutation(async () => {
       try {
         let index = await this.loadLruIndex();
+        if (this.disposed) return;
         const toEvict = selectCacheLruKeysToEvict(index, maxKeys as number, { protectKeys }).filter(
           (key) => this.isTrackedCacheKey(key),
         );
@@ -702,6 +743,7 @@ export class TogglyService {
           return;
         }
         for (const key of toEvict) {
+          if (this.disposed) return;
           try {
             await this.storage.delete(key);
           } catch {
@@ -734,7 +776,7 @@ export class TogglyService {
    * Wait for features to finish loading.
    */
   private async waitForFeaturesLoaded(): Promise<void> {
-    while (this.featuresLoading) {
+    while (this.featuresLoading && !this.disposed) {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
   }
@@ -749,7 +791,9 @@ export class TogglyService {
 
     try {
       const cacheKey = await this.buildFeatureFlagsCacheKey();
+      if (this.disposed) return this.config.featureDefaults ?? {};
       const cached = await this.storage.get(cacheKey);
+      if (this.disposed) return this.config.featureDefaults ?? {};
 
       if (cached) {
         const cacheData: TogglyFeatureFlagsCache = JSON.parse(cached);
@@ -771,11 +815,13 @@ export class TogglyService {
   private async cacheFeatureFlags(flags: FeatureFlags): Promise<void> {
     try {
       const cacheKey = await this.buildFeatureFlagsCacheKey();
+      if (this.disposed) return;
       const cacheData: TogglyFeatureFlagsCache = {
         identity: this.getContextCacheKey(),
         flags: JSON.stringify(flags),
       };
       await this.storage.set(cacheKey, JSON.stringify(cacheData));
+      if (this.disposed) return;
       await this.touchCacheKey(cacheKey);
       await this.enforceMaxCacheKeys([cacheKey]);
     } catch (error) {
@@ -785,16 +831,19 @@ export class TogglyService {
 
   private async getJwks(): Promise<JwkSet> {
     const cached = await this.storage.get(STORAGE_KEYS.JWKS);
+    if (this.disposed) throw new Error('Toggly owner is disposed');
     if (cached) {
       return JSON.parse(cached) as JwkSet;
     }
 
-    const response = await fetch(`${this.config.baseURI}/.well-known/jwks`);
+    const response = await fetch(`${this.config.baseURI}/.well-known/jwks`, { signal: this.activeRequest?.signal });
+    if (this.disposed) throw new Error('Toggly owner is disposed');
     if (!response.ok) {
       throw new Error(`Failed to fetch JWKs: ${response.status}`);
     }
 
     const jwks = (await response.json()) as JwkSet;
+    if (this.disposed) throw new Error('Toggly owner is disposed');
     await this.storage.set(STORAGE_KEYS.JWKS, JSON.stringify(jwks));
     return jwks;
   }
@@ -834,13 +883,17 @@ export class TogglyService {
    * Clear cached feature flags.
    */
   async clearCache(): Promise<void> {
+    if (this.disposed) return;
     this.features = null;
     this.cachedDefinitionsRevision = null;
 
     try {
       const cacheKey = await this.buildFeatureFlagsCacheKey();
+      if (this.disposed) return;
       await this.storage.delete(cacheKey);
+      if (this.disposed) return;
       await this.storage.delete(STORAGE_KEYS.ETAG);
+      if (this.disposed) return;
       await this.storage.delete(STORAGE_KEYS.JWKS);
       await this.removeCacheKeysFromLruIndex([cacheKey]);
     } catch (error) {
@@ -853,21 +906,25 @@ export class TogglyService {
    * @param identity New identity string
    */
   async setIdentity(identity: string | null): Promise<TogglyInitResponse> {
+    if (this.disposed) return this.retiredResponse();
     const previousIdentity = this.identity;
 
     // Execute beforeIdentify hooks
     const dataMap = await this.hookExecutor.executeBeforeIdentify(
       identity ?? ''
     );
+    if (this.disposed) return this.retiredResponse();
 
     if (identity) {
       this.identity = identity;
     } else {
       // Fall back to device ID
       let deviceId = await this.storage.get(STORAGE_KEYS.DEVICE_ID);
+      if (this.disposed) return this.retiredResponse();
       if (!deviceId) {
         deviceId = generateUUID();
         await this.storage.set(STORAGE_KEYS.DEVICE_ID, deviceId);
+        if (this.disposed) return this.retiredResponse();
       }
       this.identity = deviceId;
     }
@@ -875,10 +932,12 @@ export class TogglyService {
     // Clear cache if identity changed
     if (previousIdentity !== this.identity) {
       await this.clearCache();
+      if (this.disposed) return this.retiredResponse();
     }
 
     // Execute afterIdentify hooks
     await this.hookExecutor.executeAfterIdentify(this.identity, dataMap);
+    if (this.disposed) return this.retiredResponse();
 
     // Emit event
     this.eventEmitter.emit('identityChanged', {
@@ -893,8 +952,10 @@ export class TogglyService {
    * Set evaluation context (identity, groups, claims) and refresh flags.
    */
   async setContext(context: TogglyEvaluationContext): Promise<TogglyInitResponse> {
+    if (this.disposed) return this.retiredResponse();
     if (context.identity !== undefined) {
       const identityResponse = await this.setIdentity(context.identity ?? null);
+      if (this.disposed) return this.retiredResponse();
       if (context.groups === undefined && context.claims === undefined) {
         return identityResponse;
       }
@@ -931,7 +992,9 @@ export class TogglyService {
   ): boolean {
     const flags = this.features ?? this.config.featureDefaults ?? {};
     const remote = resolveEvaluatedDefinition(flags[featureKey], entityContext);
-    return applyLocalGate(remote, featureKey, this.localGates, this.localGateIndex);
+    const enabled = applyLocalGate(remote, featureKey, this.localGates, this.localGateIndex);
+    this.telemetry.recordCheck(featureKey, enabled ? 'enabled' : 'disabled');
+    return enabled;
   }
 
   registerContext<T>(kind: string, mapper: (entity: T) => TogglyEntityContext): void {
@@ -985,12 +1048,6 @@ export class TogglyService {
     negate: boolean,
     entityContext?: TogglyEntityContext | null,
   ): boolean {
-    const flags = this.features ?? this.config.featureDefaults ?? {};
-
-    if (featureKeys.length > 0 && Object.keys(flags).length === 0) {
-      return negate;
-    }
-
     if (featureKeys.length === 1) {
       const isEnabled = this.getEffectiveFlag(featureKeys[0], entityContext);
       return negate ? !isEnabled : isEnabled;
@@ -1030,6 +1087,7 @@ export class TogglyService {
    * Ensure features are loaded before evaluation.
    */
   private async ensureFeaturesLoaded(): Promise<void> {
+    if (this.disposed) return;
     if (this.features !== null) {
       return;
     }
@@ -1040,7 +1098,8 @@ export class TogglyService {
     }
 
     // Load from cache or defaults
-    this.features = await this.getCachedFeatureFlags();
+    const flags = await this.getCachedFeatureFlags();
+    if (!this.disposed) this.features = flags;
   }
 
   /**
@@ -1048,7 +1107,7 @@ export class TogglyService {
    * Uses the global WebSocket provided by the React Native runtime.
    */
   private startWebSocket(): void {
-    if (!this.config.appKey || !this.config.enableLiveUpdates) {
+    if (this.disposed || !this.config.appKey || !this.config.enableLiveUpdates) {
       return;
     }
 
@@ -1064,12 +1123,14 @@ export class TogglyService {
       const ws = new WebSocket(url);
 
       ws.onopen = () => {
+        if (this.disposed || this._ws !== ws) return;
         this._wsConnected = true;
         this._wsReconnectAttempt = 0;
         this._lastFallbackRefresh = Date.now();
       };
 
       ws.onmessage = (event: MessageEvent) => {
+        if (this.disposed || this._ws !== ws) return;
         const data = typeof event.data === 'string' ? event.data : '';
 
         if (data === 'update' || data === 'flags-updated') {
@@ -1099,12 +1160,14 @@ export class TogglyService {
       };
 
       ws.onclose = () => {
+        if (this.disposed || this._ws !== ws) return;
         this._wsConnected = false;
         this._ws = null;
         this.scheduleWsReconnect();
       };
 
       ws.onerror = (err: Event) => {
+        if (this.disposed || this._ws !== ws) return;
         console.error('[Toggly] WebSocket error:', err);
       };
 
@@ -1119,6 +1182,7 @@ export class TogglyService {
    * Schedule a WebSocket reconnection attempt after a delay.
    */
   private scheduleWsReconnect(): void {
+    if (this.disposed) return;
     if (this._wsReconnectTimer) {
       clearTimeout(this._wsReconnectTimer);
     }
@@ -1160,6 +1224,7 @@ export class TogglyService {
    */
   private startRefreshTimer(): void {
     this.stopRefreshTimer();
+    if (this.disposed) return;
 
     if (this.config.appKey && this.config.refreshInterval > 0) {
       this.refreshTimer = setInterval(() => {
@@ -1285,11 +1350,24 @@ export class TogglyService {
     };
   }
 
-  /**
-   * Dispose the service and clean up resources.
-   */
+  /** Record an explicit feature usage; this does not evaluate the feature. */
+  recordUsage(featureKey: string, variant = 'enabled'): void { this.telemetry.recordUsage(featureKey, variant); }
+  recordView(featureKey: string, variant = 'enabled'): void { this.telemetry.recordView(featureKey, variant); }
+  incrementCounter(metricKey: string, value = 1): void { this.telemetry.incrementCounter(metricKey, value); }
+  setGauge(metricKey: string, value: number): void { this.telemetry.setGauge(metricKey, value); }
+  flushTelemetry(): Promise<void> { return this.telemetry.flush(); }
+
+  private retiredResponse(): TogglyInitResponse {
+    return { status: 'cached' as TogglyLoadStatus, flags: this.config.featureDefaults };
+  }
+
+  /** Retire the owner synchronously and attempt one bounded final telemetry envelope. */
   dispose(): void {
+    if (this.disposed) return;
     this.disposed = true;
+    this.telemetry.dispose();
+    this.activeRequest?.abort();
+    if (this.requestTimer) clearTimeout(this.requestTimer);
     this.stopWebSocket();
     this.stopRefreshTimer();
     this.networkUnsubscribe?.();

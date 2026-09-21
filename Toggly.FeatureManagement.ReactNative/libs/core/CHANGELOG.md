@@ -1,3 +1,12 @@
+## 1.8.0 — 2026-09-18
+
+### Added
+- Default-on, bounded frontend telemetry for clients with an app key, with `enableTelemetry: false` opt-out and independent collector configuration.
+- `recordUsage`, `recordView`, `incrementCounter`, `setGauge`, and `flushTelemetry`. Actual effective feature checks count once per evaluated leaf; usage and views remain explicit.
+
+### Fixed
+- Keep disposed clients terminal across delayed storage, network, identity changes, timers, and live-update initialization.
+
 ## 1.7.4 — 2026-09-08
 
 ### Fixed

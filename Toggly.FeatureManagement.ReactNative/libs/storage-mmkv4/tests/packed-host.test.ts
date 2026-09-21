@@ -3,6 +3,12 @@ import { cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+const sharedArtifacts: string[] = JSON.parse(process.env.TOGGLY_SHARED_ARTIFACTS ?? '[]');
+const { packCore } = require('../../../tests/packed-core.cjs');
+let corePackage: { archive: string; dispose(): void };
+beforeAll(() => { corePackage = packCore(); }, 120000);
+afterAll(() => corePackage?.dispose());
+
 const packageDirectory = resolve(__dirname, '..');
 const fixturesDirectory = join(__dirname, 'fixtures', 'packed-host');
 
@@ -33,10 +39,11 @@ describe('packed MMKV 4 host', () => {
       const packed = JSON.parse(run('npm', ['pack', '--json'], packageDirectory));
       tarball = join(packageDirectory, packed[0].filename);
       cpSync(fixturesDirectory, temporaryDirectory, { recursive: true });
+      cpSync(join(packageDirectory, '..', '..', 'tests', 'telemetry-consumer.cjs'), join(temporaryDirectory, 'telemetry-consumer.cjs'));
 
       run(
         'npm',
-        ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false', tarball],
+        ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false', tarball, ...sharedArtifacts, corePackage.archive],
         temporaryDirectory
       );
       run('npm', ['run', 'typecheck'], temporaryDirectory);

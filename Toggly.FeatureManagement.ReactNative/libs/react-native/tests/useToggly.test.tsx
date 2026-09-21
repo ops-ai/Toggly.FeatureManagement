@@ -399,3 +399,22 @@ describe('useToggly', () => {
     expect(unsubscribeIdentity).toHaveBeenCalled();
   });
 });
+
+it('keeps features, identity and delayed operations scoped to the current owner', async () => {
+  let finish!: () => void;
+  const old = createMockService({ refresh: jest.fn(() => new Promise<void>(resolve => { finish = resolve; })) });
+  const next = createMockService({ currentIdentity: 'next-user', currentFeatures: { feature1: false } });
+  let result: ReturnType<typeof useToggly>;
+  function Child() { result = useToggly(); return null; }
+  const value = (toggly: any) => ({ toggly, isReady: true, isLoading: false, error: null });
+  const host = render(<TogglyContext.Provider value={value(old)}><Child /></TogglyContext.Provider>);
+  let pending!: Promise<void>;
+  act(() => { pending = result.refresh(); });
+  host.rerender(<TogglyContext.Provider value={value(next)}><Child /></TogglyContext.Provider>);
+  expect(result!.features).toEqual({ feature1: false });
+  expect(result!.identity).toBe('next-user');
+  expect(result!.isRefreshing).toBe(false);
+  await act(async () => { finish(); await pending; });
+  expect(result!.features).toEqual({ feature1: false });
+  expect(result!.identity).toBe('next-user');
+});

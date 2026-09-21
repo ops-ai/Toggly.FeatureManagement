@@ -2,7 +2,6 @@ import React, {
   useState,
   useEffect,
   useRef,
-  useCallback,
   ReactNode,
 } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
@@ -134,69 +133,67 @@ function tryCreateNetInfoProvider(): NetworkInfoProvider | undefined {
  * </TogglyProvider>
  * ```
  */
-export function TogglyProvider({
-  children,
-  onReady,
-  onError,
-  loadingComponent,
-  waitForInit = true,
-  ...config
+export function TogglyProvider(props: TogglyProviderProps): React.ReactElement {
+  // A new app/environment/collector is a different owner, including all child hook state.
+  const ownerKey = JSON.stringify([props.appKey, props.environment, props.baseURI,
+    props.enableTelemetry, props.metricsBaseUrl, props.telemetryFlushIntervalMs]);
+  return <TogglyProviderOwner key={ownerKey} {...props} />;
+}
+
+function TogglyProviderOwner({
+  children, onReady, onError, loadingComponent, waitForInit = true, ...config
 }: TogglyProviderProps): React.ReactElement {
   const [isReady, setIsReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [_featuresRevision, setFeaturesRevision] = useState(0);
   const togglyRef = useRef<TogglyService | null>(null);
-  const isInitializedRef = useRef(false);
-
-  // Initialize Toggly service
-  const initToggly = useCallback(async () => {
-    if (isInitializedRef.current) return;
-    isInitializedRef.current = true;
-
-    try {
-      // Create providers
-      const appStateProvider = createAppStateProvider();
-      const networkInfoProvider = config.networkInfo ?? tryCreateNetInfoProvider();
-
-      // Create service with providers
-      const service = new TogglyService({
-        ...config,
-        onError,
-        appState: appStateProvider,
-        networkInfo: networkInfoProvider,
-      });
-
-      togglyRef.current = service;
-      service.on('effectiveFlagsChanged', () => {
-        setFeaturesRevision((revision) => revision + 1);
-      });
-      service.on('error', (event) => {
-        const payload = event.data as { error?: unknown } | undefined;
-        setError(new Error(String(payload?.error ?? 'Toggly error')));
-      });
-
-      // Initialize
-      await service.init();
-
-      setIsReady(true);
-      setIsLoading(false);
-      onReady?.();
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Initialization failed');
-      setError(error);
-      setIsLoading(false);
-      onError?.(error);
-    }
-  }, [config, onReady, onError]);
+  const initialConfig = useRef(config);
+  const callbacks = useRef({ onReady, onError });
+  callbacks.current = { onReady, onError };
 
   useEffect(() => {
-    initToggly();
-
+    let retired = false;
+    const settings = initialConfig.current;
+    const service = new TogglyService({
+      ...settings,
+      onError: error => callbacks.current.onError?.(error),
+      appState: createAppStateProvider(),
+      networkInfo: settings.networkInfo ?? tryCreateNetInfoProvider(),
+    });
+    togglyRef.current = service;
+    setIsReady(false);
+    setIsLoading(true);
+    setError(null);
+    // Publish the owner for waitForInit=false without waiting for network/storage.
+    setFeaturesRevision(revision => revision + 1);
+    service.on('effectiveFlagsChanged', () => {
+      if (!retired) setFeaturesRevision(revision => revision + 1);
+    });
+    service.on('error', event => {
+      if (!retired) {
+        const payload = event.data as { error?: unknown } | undefined;
+        setError(new Error(String(payload?.error ?? 'Toggly error')));
+      }
+    });
+    void service.init().then(() => {
+      if (retired) return;
+      setIsReady(true);
+      setIsLoading(false);
+      callbacks.current.onReady?.();
+    }).catch(err => {
+      if (retired) return;
+      const failure = err instanceof Error ? err : new Error('Initialization failed');
+      setError(failure);
+      setIsLoading(false);
+      callbacks.current.onError?.(failure);
+    });
     return () => {
-      togglyRef.current?.dispose();
+      retired = true;
+      service.dispose();
+      if (togglyRef.current === service) togglyRef.current = null;
     };
-  }, [initToggly]);
+  }, []);
 
   // Handle identity changes from props
   useEffect(() => {
@@ -269,25 +266,54 @@ export async function createTogglyProvider(
     networkInfo: networkInfoProvider,
   });
 
-  await service.init();
+  try {
+    await service.init();
+  } catch (error) {
+    service.dispose();
+    throw error;
+  }
 
-  // Return a pre-initialized provider component
-  return function PreInitializedTogglyProvider({
-    children,
-  }: {
-    children: ReactNode;
-  }) {
-    const contextValue: TogglyContextValue = {
-      toggly: service,
-      isReady: true,
-      isLoading: false,
-      error: null,
-    };
-
-    return (
-      <TogglyContext.Provider value={contextValue}>
-        {children}
-      </TogglyContext.Provider>
-    );
+  // A configured factory shares one explicit owner across its mounted providers.
+  // Once its last mount retires, a later mount gets a fresh owner and reporter.
+  let prepared: TogglyService | null = service;
+  let mounts = 0;
+  let preparedReady = true;
+  return function PreInitializedTogglyProvider({ children }: { children: ReactNode }) {
+    const [value, setValue] = useState<TogglyContextValue | null>(() => prepared ? {
+      toggly: prepared, isReady: preparedReady, isLoading: !preparedReady, error: null,
+    } : null);
+    useEffect(() => {
+      let retired = false;
+      const alreadyReady = prepared !== null && preparedReady;
+      const owner = prepared ?? new TogglyService({
+        ...config, appState: createAppStateProvider(),
+        networkInfo: config.networkInfo ?? tryCreateNetInfoProvider(),
+      });
+      prepared = owner;
+      preparedReady = alreadyReady;
+      mounts++;
+      const publish = (isReady: boolean, error: Error | null = null) => {
+        if (!retired) setValue({ toggly: owner, isReady, isLoading: !isReady && !error, error });
+      };
+      const unsubscribe = owner.on('effectiveFlagsChanged', () => publish(owner.initialized));
+      publish(alreadyReady);
+      if (!alreadyReady) void owner.init().then(() => {
+        if (prepared === owner) preparedReady = true;
+        publish(true);
+      }).catch(error => {
+        publish(false, error instanceof Error ? error : new Error('Initialization failed'));
+      });
+      return () => {
+        retired = true;
+        unsubscribe();
+        mounts--;
+        if (mounts === 0) {
+          owner.dispose();
+          if (prepared === owner) { prepared = null; preparedReady = false; }
+        }
+      };
+    }, []);
+    if (!value?.isReady) return <></>;
+    return <TogglyContext.Provider value={value}>{children}</TogglyContext.Provider>;
   };
 }

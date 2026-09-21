@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type {
+  TogglyService,
   FeatureFlags,
   TogglyDebugInfo,
   TogglyEntityContext,
@@ -12,7 +13,7 @@ import { useTogglyContext } from '../contexts/TogglyContext';
 /**
  * Result of the useToggly hook
  */
-export interface UseTogglyResult {
+export interface UseTogglyResult extends Pick<TogglyService, 'recordUsage' | 'recordView' | 'incrementCounter' | 'setGauge' | 'flushTelemetry'> {
   /**
    * Whether the SDK is initialized and ready
    */
@@ -108,36 +109,37 @@ export interface UseTogglyResult {
 export function useToggly(): UseTogglyResult {
   const { toggly, isReady } = useTogglyContext();
 
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [identity, setIdentityState] = useState<string | null>(
-    toggly.currentIdentity
-  );
-  const [features, setFeatures] = useState<FeatureFlags | null>(
-    toggly.currentFeatures
-  );
+  const currentOwner = useRef(toggly);
+  currentOwner.current = toggly;
+  const [snapshot, setSnapshot] = useState(() => ({
+    owner: toggly, identity: toggly.currentIdentity, features: toggly.currentFeatures,
+    isRefreshing: false,
+  }));
+  const visible = snapshot.owner === toggly ? snapshot : {
+    owner: toggly, identity: toggly.currentIdentity, features: toggly.currentFeatures,
+    isRefreshing: false,
+  };
+  const update = useCallback((changes: Partial<typeof snapshot>) => {
+    if (currentOwner.current !== toggly) return;
+    setSnapshot(previous => ({
+      ...(previous.owner === toggly ? previous : {
+        owner: toggly, identity: toggly.currentIdentity, features: toggly.currentFeatures,
+        isRefreshing: false,
+      }), ...changes,
+    }));
+  }, [toggly]);
 
-  // Update state when features change
   useEffect(() => {
     if (!isReady) return;
-
-    const unsubscribe = toggly.on('refreshed', (event) => {
-      setFeatures(event.data as FeatureFlags);
+    let retired = false;
+    const offFeatures = toggly.on('refreshed', event => {
+      if (!retired) update({ features: event.data as FeatureFlags });
     });
-
-    return unsubscribe;
-  }, [toggly, isReady]);
-
-  // Update identity state when it changes
-  useEffect(() => {
-    if (!isReady) return;
-
-    const unsubscribe = toggly.on('identityChanged', (event) => {
-      const data = event.data as { newIdentity: string | null };
-      setIdentityState(data.newIdentity);
+    const offIdentity = toggly.on('identityChanged', event => {
+      if (!retired) update({ identity: (event.data as { newIdentity: string | null }).newIdentity });
     });
-
-    return unsubscribe;
-  }, [toggly, isReady]);
+    return () => { retired = true; offFeatures(); offIdentity(); };
+  }, [toggly, isReady, update]);
 
   const isFeatureOn = useCallback(
     async (
@@ -162,22 +164,22 @@ export function useToggly(): UseTogglyResult {
   );
 
   const refresh = useCallback(async (): Promise<void> => {
-    setIsRefreshing(true);
+    update({ isRefreshing: true });
     try {
       await toggly.refresh();
-      setFeatures(toggly.currentFeatures);
+      update({ features: toggly.currentFeatures });
     } finally {
-      setIsRefreshing(false);
+      update({ isRefreshing: false });
     }
-  }, [toggly]);
+  }, [toggly, update]);
 
   const setIdentity = useCallback(
     async (newIdentity: string | null): Promise<void> => {
       await toggly.setIdentity(newIdentity);
-      setIdentityState(toggly.currentIdentity);
-      setFeatures(toggly.currentFeatures);
+      update({ identity: toggly.currentIdentity });
+      update({ features: toggly.currentFeatures });
     },
-    [toggly]
+    [toggly, update]
   );
 
   const getDebugInfo = useCallback((): TogglyDebugInfo => {
@@ -198,11 +200,20 @@ export function useToggly(): UseTogglyResult {
     [toggly]
   );
 
+  const telemetry = useMemo(() => ({
+    recordUsage: (key: string, variant?: string) => toggly.recordUsage(key, variant),
+    recordView: (key: string, variant?: string) => toggly.recordView(key, variant),
+    incrementCounter: (key: string, value?: number) => toggly.incrementCounter(key, value),
+    setGauge: (key: string, value: number) => toggly.setGauge(key, value),
+    flushTelemetry: () => toggly.flushTelemetry(),
+  }), [toggly]);
+
   return {
+    ...telemetry,
     isReady,
-    isRefreshing,
-    identity,
-    features,
+    isRefreshing: visible.isRefreshing,
+    identity: visible.identity,
+    features: visible.features,
     isFeatureOn,
     isFeatureOff,
     refresh,

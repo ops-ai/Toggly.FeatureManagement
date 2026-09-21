@@ -106,9 +106,31 @@ describe('TogglyProvider', () => {
     expect(queryByText('Children')).toBeNull();
   });
 
-  // Note: The waitForInit=false test is removed because it requires complex mock setup
-  // for the context value creation timing that's difficult to test reliably.
-  // The functionality is verified manually in the example app.
+  it('publishes an unready owner with waitForInit=false and retires it before late init', async () => {
+    let finish!: () => void;
+    mockInit.mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+    let value: any;
+    const onReady = jest.fn();
+    function Child() { value = useTogglyContext(); return <div>Early child</div>; }
+    const host = render(<TogglyProvider appKey="local" waitForInit={false} onReady={onReady}><Child /></TogglyProvider>);
+    expect(host.getByText('Early child')).toBeTruthy();
+    expect(value.isReady).toBe(false);
+    host.unmount();
+    await act(async () => { finish(); });
+    expect(mockDispose).toHaveBeenCalledTimes(1);
+    expect(onReady).not.toHaveBeenCalled();
+  });
+
+  it('creates a live replacement owner during StrictMode effect replay', async () => {
+    let value: any;
+    function Child() { value = useTogglyContext(); return null; }
+    const host = render(<React.StrictMode><TogglyProvider appKey="local"><Child /></TogglyProvider></React.StrictMode>);
+    await waitFor(() => expect(value?.isReady).toBe(true));
+    expect(mockInit).toHaveBeenCalledTimes(2);
+    expect(mockDispose).toHaveBeenCalledTimes(1);
+    expect(value.toggly).toBe((TogglyService as jest.Mock).mock.results[1].value);
+    host.unmount(); expect(mockDispose).toHaveBeenCalledTimes(2);
+  });
 
   it('calls onReady callback when initialized', async () => {
     const onReady = jest.fn();
@@ -337,4 +359,39 @@ describe('createTogglyProvider', () => {
       })
     ).rejects.toThrow('Init failed');
   });
+});
+
+describe('provider owner lifetime', () => {
+  it('keeps the initialized owner alive across ordinary rerenders', async () => {
+    jest.clearAllMocks(); mockInit.mockResolvedValue(undefined);
+    const { rerender, unmount, getByText } = render(<TogglyProvider appKey="stable"><div>Owner child</div></TogglyProvider>);
+    await waitFor(() => expect(getByText('Owner child')).toBeTruthy());
+    expect(mockDispose).not.toHaveBeenCalled();
+    rerender(<TogglyProvider appKey="stable"><div>Owner child</div></TogglyProvider>);
+    expect(TogglyService).toHaveBeenCalledTimes(1);
+    expect(mockDispose).not.toHaveBeenCalled();
+    unmount(); expect(mockDispose).toHaveBeenCalledTimes(1);
+  });
+  it('retires the previous app/environment owner and initializes its replacement', async () => {
+    jest.clearAllMocks(); mockInit.mockResolvedValue(undefined);
+    const { rerender, getByText } = render(<TogglyProvider appKey="first" environment="Old"><div>Switch child</div></TogglyProvider>);
+    await waitFor(() => expect(getByText('Switch child')).toBeTruthy());
+    rerender(<TogglyProvider appKey="second" environment="New"><div>Switch child</div></TogglyProvider>);
+    await waitFor(() => expect(TogglyService).toHaveBeenCalledTimes(2));
+    expect(TogglyService).toHaveBeenLastCalledWith(expect.objectContaining({ appKey: 'second', environment: 'New' }));
+    expect(mockDispose).toHaveBeenCalledTimes(1);
+  });
+});
+
+it('releases a preinitialized owner after its last mount and creates a fresh remount owner', async () => {
+  jest.clearAllMocks(); mockInit.mockResolvedValue(undefined);
+  const Provider = await createTogglyProvider({ appKey: 'prepared' });
+  const first = render(<Provider><div>Prepared</div></Provider>);
+  const second = render(<Provider><div>Shared prepared</div></Provider>);
+  first.unmount(); expect(mockDispose).not.toHaveBeenCalled();
+  second.unmount(); expect(mockDispose).toHaveBeenCalledTimes(1);
+  const remount = render(<Provider><div>Remounted</div></Provider>);
+  await waitFor(() => expect(remount.getByText('Remounted')).toBeTruthy());
+  expect(TogglyService).toHaveBeenCalledTimes(2); expect(mockInit).toHaveBeenCalledTimes(2);
+  remount.unmount(); expect(mockDispose).toHaveBeenCalledTimes(2);
 });

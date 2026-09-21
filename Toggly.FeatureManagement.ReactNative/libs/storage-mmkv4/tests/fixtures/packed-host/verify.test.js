@@ -27,3 +27,5 @@ test('uses the MMKV 4 factory and remove API', async () => {
   expect(instance.set).toHaveBeenCalledWith('toggly:definitions', '{}');
   expect(instance.remove).toHaveBeenCalledWith('toggly:definitions');
 });
+
+require('./telemetry-consumer.cjs')(() => createMMKV4StorageAdapter());

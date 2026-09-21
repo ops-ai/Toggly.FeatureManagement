@@ -3,6 +3,12 @@ import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+const sharedArtifacts: string[] = JSON.parse(process.env.TOGGLY_SHARED_ARTIFACTS ?? '[]');
+const { packCore } = require('../../../tests/packed-core.cjs');
+let corePackage: { archive: string; dispose(): void };
+beforeAll(() => { corePackage = packCore(); }, 120000);
+afterAll(() => corePackage?.dispose());
+
 const packageDirectory = join(__dirname, '..');
 const corePackageDirectory = join(packageDirectory, '..', 'core');
 const fixtureDirectory = join(__dirname, 'fixtures', 'packed-host');
@@ -18,7 +24,7 @@ function run(command: string, args: string[], cwd: string): string {
 
 describe('packed legacy MMKV hosts', () => {
   beforeAll(() => {
-    run('npm', ['ci'], corePackageDirectory);
+    run('npm', sharedArtifacts.length ? ['install', '--no-save', '--package-lock=false', ...sharedArtifacts] : ['ci'], corePackageDirectory);
     run('npm', ['run', 'build'], corePackageDirectory);
   }, 120000);
 
@@ -31,13 +37,14 @@ describe('packed legacy MMKV hosts', () => {
 
       try {
         cpSync(fixtureDirectory, hostDirectory, { recursive: true });
+        cpSync(join(packageDirectory, '..', '..', 'tests', 'telemetry-consumer.cjs'), join(hostDirectory, 'telemetry-consumer.cjs'));
         const hostPackage = JSON.parse(readFileSync(join(hostDirectory, 'package.json'), 'utf8'));
         hostPackage.dependencies['react-native-mmkv'] = mmkvVersion;
         writeFileSync(join(hostDirectory, 'package.json'), JSON.stringify(hostPackage, null, 2));
 
         run(
           'npm',
-          ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false', tarball],
+          ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false', tarball, ...sharedArtifacts, corePackage.archive],
           hostDirectory
         );
         run('npm', ['run', 'typecheck'], hostDirectory);
