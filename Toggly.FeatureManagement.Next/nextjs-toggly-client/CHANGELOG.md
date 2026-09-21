@@ -1,3 +1,18 @@
+## 1.5.0
+
+2026-09-18
+
+### Added
+
+- Expose the typed compact browser telemetry companion through provider context.
+  Configuration forwards opt-out, collector URL and flush interval options.
+- Count effective hook/component checks, including cached and local/entity-gated
+  values, without duplicate evaluations from result renders or implicit views.
+- Replace provider ownership when app/environment changes, retain StrictMode
+  replay, and flush/release resources on real unmount.
+- Validate packed production hosts on Next.js14,15,16 with real CORS/gzip telemetry,
+  lifecycle flushing, SSR silence and trusted transport exclusion.
+
 ## 1.4.1
 
 2026-09-04

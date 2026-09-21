@@ -1,3 +1,19 @@
+## 1.12.0
+
+2026-09-18
+
+### Added
+
+- Add a compact browser telemetry companion with explicit usage/view/counter/gauge
+  APIs, bounded aggregation, separate collector configuration and lifecycle flushing.
+- Select a browser entry without trusted telemetry transports while preserving the
+  default Node and Edge behavior. Browser checks now count effective short-circuited
+  leaves once; hydration and refresh snapshots remain silent.
+- Preserve legacy identity/variant arguments and category opt-outs. Browser legacy
+  attributed counters become app-level; unsupported measures and observations emit
+  no data and report bounded diagnostics.
+- Isolate reinitialization and late async completions from disposed browser owners.
+
 ## 1.11.1
 
 2026-09-17

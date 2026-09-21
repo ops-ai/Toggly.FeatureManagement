@@ -46,7 +46,7 @@ describe('TogglyProvider identity safety [OPS-828]', () => {
     vi.restoreAllMocks()
   })
 
-  it('does not publish a new identity when setIdentity refresh fails', async () => {
+  it('keeps the new identity and defaults when setIdentity refresh rejects', async () => {
     mockFetch
       .mockResolvedValueOnce(
         createMockResponse({
@@ -92,15 +92,15 @@ describe('TogglyProvider identity safety [OPS-828]', () => {
       ).rejects.toThrow('refresh failed')
     })
 
-    expect(result.current.identity.identity).toBe('user-a')
-    expect(result.current.flag.isEnabled).toBe(true)
-    expect(localStorageMock.setItem).not.toHaveBeenCalledWith(
+    expect(result.current.identity.identity).toBe('user-b')
+    expect(result.current.flag.isEnabled).toBe(false)
+    expect(localStorageMock.setItem).toHaveBeenCalledWith(
       'toggly:identity',
       'user-b',
     )
   })
 
-  it('seeds React features from persisted last-known-good defs', async () => {
+  it('does not migrate unscoped legacy flags into an unproven identity scope', async () => {
     localStorageMock.store['toggly:features'] = JSON.stringify({
       'feature-a': true,
       'feature-b': false,
@@ -128,14 +128,14 @@ describe('TogglyProvider identity safety [OPS-828]', () => {
     const { result } = renderHook(() => useToggly(), { wrapper: Wrapper })
 
     // Seeded before/during init — persisted flags visible even if fetch fails
-    expect(result.current.features['feature-a']).toBe(true)
-    expect(result.current.features['feature-b']).toBe(false)
+    expect(result.current.features['feature-a']).toBeUndefined()
+    expect(result.current.features['feature-b']).toBeUndefined()
 
     await waitFor(() => {
       expect(result.current.isReady).toBe(true)
     })
 
-    expect(result.current.features['feature-a']).toBe(true)
+    expect(result.current.features['feature-a']).toBeUndefined()
   })
 
   it('keeps React features synced with client state when refresh fails', async () => {
