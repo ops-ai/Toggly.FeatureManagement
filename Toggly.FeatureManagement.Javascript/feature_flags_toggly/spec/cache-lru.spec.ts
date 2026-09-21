@@ -150,6 +150,35 @@ describe('maxCacheKeys LRU', () => {
     expect(localStorage.getItem(revisionKey)).toBe('"etag-1"');
   });
 
+  it.each([[false, 1], [true, 1], [true, 3]])('evicts scoped revisions with bodies without additional cache slots (variants=%s, limit=%s)', async (variants, limit) => {
+    const enableVariants = variants as boolean;
+    const maxCacheKeys = limit as number;
+    const revisionKey = (identity: string) => StorageKeys.definitionsRevisionCacheKey(appKey, environment,
+      `v2:${enableVariants ? 'variants' : 'evaluated'}:${evaluationContextCacheKey({ identity })}`);
+    mockFetch.mockImplementation(async () => ({
+      ok: true, status: 200,
+      headers: { get: (key: string) => key.toLowerCase() === 'etag' ? 'revision-' + Toggly.identity : null },
+      json: async () => enableVariants ? { A: { enabled: true, variant: 'blue' } } : { A: true },
+    }));
+    await Toggly.init({ appKey, environment, identity: 'user-a', enableVariants, maxCacheKeys,
+      featureFlagsRefreshInterval: 0, enableLiveUpdates: false, enableTelemetry: false });
+    for (const identity of ['user-b', 'user-c']) {
+      jest.setSystemTime(Date.now() + 1000);
+      await Toggly.setContext({ identity });
+    }
+    expect(localStorage.getItem(revisionKey('user-a'))).toBeNull();
+    expect(localStorage.getItem(revisionKey('user-b'))).toBeNull();
+    expect(localStorage.getItem(revisionKey('user-c'))).toBe('revision-user-c');
+    expect(Object.keys(localStorage).filter(key => key.startsWith('toggly:revision:'))).toHaveLength(1);
+    expect(Object.keys(JSON.parse(localStorage.getItem(StorageKeys.cacheLruKey)!).entries)).toHaveLength(enableVariants ? Math.max(2, maxCacheKeys) : 1);
+    if (enableVariants) expect(Toggly.getVariant('A')?.name).toBe('blue');
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 200, headers: { get: () => null },
+      json: async () => enableVariants ? { A: { enabled: false } } : { A: false } });
+    expect(await Toggly.setContext({ identity: 'user-a' })).toEqual({ A: false });
+    expect(new Headers(mockFetch.mock.calls[mockFetch.mock.calls.length - 1][1]?.headers).has('If-None-Match')).toBe(false);
+    expect(Toggly.isFeatureOn('A')).toBe(false);
+  });
+
   it('removes cleared flags and variants keys from the LRU index', async () => {
     await initWithMaxCacheKeys(2);
 

@@ -17,6 +17,8 @@
   gates and assigned variants, before aggregate gate negation.
 
 ### Fixed
+- Remove scoped revision validators with evicted cached definitions without
+  counting validators as additional cache entries.
 - Apply multi-field context updates and clears together, reconnecting live updates
   once with the final context while preserving identity hooks.
 - Keep boolean and variant response bodies isolated when switching modes and

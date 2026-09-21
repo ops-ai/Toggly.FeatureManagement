@@ -756,6 +756,15 @@ export class Toggly {
       for (const key of toEvict) {
         try {
           localStorage.removeItem(key);
+          // Revision slots follow scoped flags; a variant body may be evicted first.
+          const flagsKey = key.startsWith('toggly:flags:') ? key : Object.keys(index.entries).find(candidate =>
+            candidate.startsWith('toggly:flags:') &&
+            candidate.replace(/^toggly:flags:(.*?):v3:variants:/, 'toggly:variants:$1:') === key,
+          );
+          const revisionKey = flagsKey?.replace(
+            /^toggly:flags:(.*?):v3:(variants|evaluated):/, 'toggly:revision:$1:v2:$2:',
+          );
+          if (revisionKey && revisionKey !== flagsKey) localStorage.removeItem(revisionKey);
         } catch {
           /* ignore per-key removal failures */
         }
