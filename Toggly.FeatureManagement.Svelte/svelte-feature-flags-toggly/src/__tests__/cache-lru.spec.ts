@@ -5,12 +5,12 @@ import { Toggly } from '../services/toggly.service'
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
 
-function flagsCacheKeyForContext(appKey: string, environment: string, identity: string): string {
-  return `toggly:flags:${appKey}:${environment}:${evaluationContextCacheKey({ identity })}`
+function flagsCacheKeyForContext(appKey: string, environment: string, identity: string, mode = 'evaluated'): string {
+  return `toggly:flags:${appKey}:${environment}:${JSON.stringify([mode, ['context', evaluationContextCacheKey({ identity })]])}`
 }
 
 function variantsCacheKeyForContext(appKey: string, environment: string, identity: string): string {
-  return `toggly:variants:${appKey}:${environment}:${evaluationContextCacheKey({ identity })}`
+  return `toggly:variants:${appKey}:${environment}:${JSON.stringify(['variants', ['context', evaluationContextCacheKey({ identity })]])}`
 }
 
 function okResponse(body: unknown) {
@@ -151,7 +151,7 @@ describe('maxCacheKeys LRU', () => {
     })
     await variantsService.setContext({ identity: 'user-a' })
 
-    const flagsKey = flagsCacheKeyForContext(appKey, environment, 'user-a')
+    const flagsKey = flagsCacheKeyForContext(appKey, environment, 'user-a', 'variants')
     const variantsKey = variantsCacheKeyForContext(appKey, environment, 'user-a')
 
     variantsService.clearFeatureFlagsCache()

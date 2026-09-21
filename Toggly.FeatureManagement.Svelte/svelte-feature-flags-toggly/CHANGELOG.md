@@ -1,3 +1,28 @@
+## 1.11.0
+
+2026-09-19
+
+### Added
+
+- Add default-enabled, bounded frontend telemetry for keyed browser clients,
+  including effective feature and variant checks plus explicit usage, view,
+  counter, gauge, and flush APIs [OPS-1283].
+- Dispose browser, polling, and telemetry resources when the Svelte owner is
+  replaced, and prevent delayed initialization from publishing stale state.
+
+### Changed
+
+- Accept a host-minted `instanceId` in options and `setContext`; forward it to
+  definitions and telemetry ahead of client identity, groups, and claims.
+  Otherwise telemetry may carry client identity; server acceptance of those
+  identities remains off by default.
+- Preserve queued event attribution and evaluated variants across identity and
+  token transitions, including reentrant evaluation callbacks.
+- Separate persisted definitions and revisions by targeting context and response
+  mode, including returning to a prior token with a conditional 304 response.
+- Failed explicit context refreshes still reject, but retain the new context's
+  cache or defaults instead of restoring the previous user's definitions/token.
+
 ## 1.10.2
 
 2026-09-13

@@ -1,11 +1,6 @@
-import { writable, derived, get } from 'svelte/store'
+import { writable, derived, get, type Writable } from 'svelte/store'
 import type { TogglyService } from '../services/toggly.service'
 import type { EvaluatedVariantDef, VariantResult } from '../services/variant.types'
-
-/**
- * Store for the Toggly service instance
- */
-export const togglyServiceStore = writable<TogglyService | null>(null)
 
 /**
  * Store for feature flags (key-value pairs)
@@ -19,6 +14,42 @@ export const togglyVariantsStore = writable<{ [key: string]: EvaluatedVariantDef
 
 /** Bumped when device-local gates change (triggers derived stores to recompute). */
 export const togglyLocalGatesRevision = writable(0)
+
+/** Replacing the service releases the previous owner before exposing the new one. */
+const serviceStore = writable<TogglyService | null>(null)
+let currentService: TogglyService | null = null
+function setService(next: TogglyService | null): void {
+  if (next === currentService) return
+  const previous = currentService
+  currentService = next
+  previous?.dispose()
+  // Do not expose a prior app/environment's projections to the new owner.
+  togglyFlagsStore.set({})
+  togglyVariantsStore.set({})
+  serviceStore.set(next)
+}
+
+/** @internal Publish one owner and its initial projections as one store transition. */
+export function _setTogglyServiceSnapshot(
+  next: TogglyService,
+  flags: { [key: string]: boolean },
+  variants: { [key: string]: EvaluatedVariantDef },
+): void {
+  if (next === currentService) return
+  const previous = currentService
+  currentService = next
+  previous?.dispose()
+  // Publish projections while subscribers still have no owner. The service
+  // transition then coalesces these updates into one consumer evaluation.
+  togglyFlagsStore.set(flags)
+  togglyVariantsStore.set(variants)
+  serviceStore.set(next)
+}
+export const togglyServiceStore: Writable<TogglyService | null> = {
+  subscribe: serviceStore.subscribe,
+  set: setService,
+  update(updater) { setService(updater(currentService)) },
+}
 
 /**
  * Get the Toggly service instance from the store
@@ -76,13 +107,17 @@ export function createVariantStore(featureKey: string) {
  * Derived store for a feature's variant configuration value only.
  */
 export function createVariantValueStore(featureKey: string) {
-  return derived(togglyVariantsStore, ($defs): unknown | null => {
-    const entry = $defs[featureKey]
-    if (!entry?.variant) {
-      return null
-    }
-    return entry.configurationValue ?? null
-  })
+  return derived(
+    [togglyVariantsStore, togglyLocalGatesRevision, togglyServiceStore],
+    ([$defs, _revision, service]): unknown | null => {
+      if (service) return service.getVariantValue(featureKey)
+      const entry = $defs[featureKey]
+      if (!entry?.variant) {
+        return null
+      }
+      return entry.configurationValue ?? null
+    },
+  )
 }
 
 /**
@@ -119,4 +154,26 @@ export async function evaluateFeatureGate(
 ): Promise<boolean> {
   const service = getTogglyService()
   return await service.evaluateFeatureGate(featureKeys, requirement, negate)
+}
+
+/** Record explicit usage without evaluating the feature. */
+export function recordUsage(featureKey: string, variant = 'enabled'): void {
+  getTogglyService().recordUsage(featureKey, variant)
+}
+
+/** Record an explicit view without evaluating the feature. */
+export function recordView(featureKey: string, variant = 'enabled'): void {
+  getTogglyService().recordView(featureKey, variant)
+}
+
+export function incrementCounter(metricKey: string, value = 1): void {
+  getTogglyService().incrementCounter(metricKey, value)
+}
+
+export function setGauge(metricKey: string, value: number): void {
+  getTogglyService().setGauge(metricKey, value)
+}
+
+export function flushTelemetry(): Promise<void> {
+  return getTogglyService().flushTelemetry()
 }
