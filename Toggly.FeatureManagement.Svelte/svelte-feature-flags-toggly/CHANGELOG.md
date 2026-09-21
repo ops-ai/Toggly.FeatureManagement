@@ -24,6 +24,8 @@
   cache or defaults instead of restoring the previous user's definitions/token.
 
 ### Fixed
+- Build configured definitions URL paths correctly and remove client targeting
+  query parameters when a minted instance ID is used in either response mode.
 
 - Remove scoped revision validators with evicted cached definitions, keeping
   context changes within the configured cache limit. A live client's304 response

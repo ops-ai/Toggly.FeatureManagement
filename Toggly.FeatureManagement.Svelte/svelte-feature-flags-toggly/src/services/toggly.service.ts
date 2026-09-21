@@ -1,6 +1,6 @@
 import type { CacheLruIndex, EvaluatedDefinitions, Hook, TogglyEntityContext, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
 import {
-  buildEvaluatedSignedUrl,
+  appendEvaluationContext,
   evaluationContextCacheKey,
   isCacheLruEnabled,
   evaluateStoredFeatureKeys,
@@ -691,16 +691,17 @@ export class Toggly implements TogglyService {
     const contextKey = this._contextCacheKey()
 
     try {
-      const url = buildEvaluatedSignedUrl(
-        this._config.baseURI ?? 'https://definitions.toggly.io',
-        appKey,
-        env,
-        this._config.instanceId?.trim() ? undefined : this._getEvaluationContext(),
-        this._config.enableVariants ?? false,
-      )
-
-      const scopedUrl = new URL(url)
-      if (this._config.instanceId?.trim()) scopedUrl.searchParams.set('i', this._config.instanceId.trim())
+      const scopedUrl = new URL(this._config.baseURI ?? 'https://definitions.toggly.io')
+      const mode = this._config.enableVariants ? 'variants' : 'evaluated'
+      const path = this._config.enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed'
+      scopedUrl.pathname = `${scopedUrl.pathname.replace(/\/$/, '')}/${path}/${appKey}/${env}`
+      const instanceId = this._config.instanceId?.trim()
+      if (instanceId) {
+        for (const key of [...scopedUrl.searchParams.keys()]) {
+          if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) scopedUrl.searchParams.delete(key)
+        }
+        scopedUrl.searchParams.set('i', instanceId)
+      } else appendEvaluationContext(scopedUrl, this._getEvaluationContext(), mode)
       const pin = this._pendingDefinitionsPin
       this._pendingDefinitionsPin = null
       const fetchUrl = appendDefinitionsRevisionParam(scopedUrl.toString(), pin)
