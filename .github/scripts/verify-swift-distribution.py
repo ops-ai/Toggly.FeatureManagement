@@ -72,12 +72,12 @@ let package = Package(name: "DistributionConsumer", platforms: [.macOS(.v11), .i
 import TogglySwiftUI
 import TogglyUIKit
 import TogglyCombine
-precondition(togglyCoreVersion == togglySwiftUIVersion)
+precondition(togglyVersion == togglySwiftUIVersion)
 #if canImport(UIKit) && !os(watchOS)
-precondition(togglyCoreVersion == togglyUIKitVersion)
+precondition(togglyVersion == togglyUIKitVersion)
 #endif
-precondition(togglyCoreVersion == togglyCombineVersion)
-print("Four Git products imported at " + togglyCoreVersion)
+precondition(togglyVersion == togglyCombineVersion)
+print("Four Git products imported at " + togglyVersion)
 ''')
     run(['swift', 'package', '--disable-sandbox', 'resolve'], consumer)
     pins = json.loads((consumer / 'Package.resolved').read_text())

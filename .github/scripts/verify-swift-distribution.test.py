@@ -96,7 +96,7 @@ class DistributionTests(unittest.TestCase):
             for product in distribution.PRODUCTS:
                 source = fixture / 'Sources' / product
                 source.mkdir(parents=True)
-                version = product[0].lower() + product[1:] + 'Version'
+                version = 'togglyVersion' if product == 'TogglyCore' else product[0].lower() + product[1:] + 'Version'
                 (source / 'Version.swift').write_text('public let ' + version + ' = "fixture"\n')
             products = ','.join('.library(name: "' + p + '", targets: ["' + p + '"])' for p in distribution.PRODUCTS)
             targets = ','.join('.target(name: "' + p + '")' for p in distribution.PRODUCTS)
