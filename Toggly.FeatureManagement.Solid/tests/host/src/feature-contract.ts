@@ -1,4 +1,18 @@
 import type { FeatureProps } from '@ops-ai/solid-feature-flags-toggly';
+import type { Toggly, TogglyOptions } from '@ops-ai/solid-feature-flags-toggly';
+
+export function telemetryContract(toggly: Toggly): Promise<void> {
+  toggly.recordUsage('feature', 'control');
+  toggly.recordView('feature');
+  toggly.incrementCounter('orders', 2);
+  toggly.setGauge('cart', 3);
+  return toggly.flushTelemetry();
+}
+export const telemetryOptions: TogglyOptions = {
+  enableTelemetry: true,
+  metricsBaseUrl: 'https://metrics.example/base',
+  telemetryFlushIntervalMs: 45000,
+};
 
 type RequireFalse<T extends false> = T;
 

@@ -11,6 +11,8 @@ import {
 } from '@ops-ai/toggly-hooks-types';
 import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions } from '@ops-ai/toggly-signed-defs';
 import { applyLocalGate, buildFlagGateIndex, type LocalGate } from '@ops-ai/toggly-local-gates';
+import { createTelemetryReporter, type TelemetryOptions } from '@ops-ai/toggly-client-telemetry';
+import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
 
 export type { TogglyEntityContext, TogglyEvaluationContext, EvaluatedDefinitions, LocalGate };
 export interface TogglyOptions extends TogglyEvaluationContext {
@@ -39,6 +41,11 @@ export interface TogglyOptions extends TogglyEvaluationContext {
    */
   storage?: Pick<Storage, 'getItem' | 'setItem'>;
   localGates?: LocalGate[];
+  enableTelemetry?: boolean;
+  metricsBaseUrl?: string;
+  telemetryFlushIntervalMs?: number;
+  telemetryFetch?: TelemetryOptions['fetch'];
+  onTelemetryDiagnostic?: TelemetryOptions['onDiagnostic'];
 }
 export interface ClientState {
   definitions: EvaluatedDefinitions;
@@ -86,12 +93,28 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
   let reconnect: ReturnType<typeof setTimeout> | undefined;
   let debounce: ReturnType<typeof setTimeout> | undefined;
   let liveStarted = false;
+  const requestTimeouts = new Set<ReturnType<typeof setTimeout>>();
+  const reporter =
+    typeof window !== 'undefined' &&
+    typeof document !== 'undefined' &&
+    options.appKey?.trim() &&
+    options.enableTelemetry !== false
+      ? createTelemetryReporter({
+          appKey: options.appKey,
+          environment: options.environment,
+          metricsBaseUrl: options.metricsBaseUrl,
+          telemetryFlushIntervalMs: options.telemetryFlushIntervalMs,
+          fetch: options.telemetryFetch,
+          onDiagnostic: options.onTelemetryDiagnostic,
+        })
+      : undefined;
+  const detachTelemetry = reporter ? attachBrowserLifecycle(reporter) : undefined;
   const emit = (next: Partial<ClientState>) => {
     state = { ...state, ...next };
     listeners.forEach((listener) => listener(state));
   };
   const flags = () => ({ ...state.definitions });
-  const headers = { 'X-Toggly-Sdk': 'solidjs', 'X-Toggly-Sdk-Version': '0.2.0' };
+  const headers = { 'X-Toggly-Sdk': 'solidjs', 'X-Toggly-Sdk-Version': '0.3.0' };
 
   const isCurrent = (current: number) => current === generation && !disposed;
 
@@ -158,6 +181,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
     controller = new AbortController();
     const controllerForRequest = controller;
     const timeout = setTimeout(() => controllerForRequest.abort(), config.connectTimeout ?? 10000);
+    requestTimeouts.add(timeout);
     const fetchImpl: typeof fetch = (url, init) =>
       (config.fetch ?? fetch)(url, {
         ...init,
@@ -183,6 +207,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
         emit({ error: error instanceof Error ? error : new Error(String(error)) });
     } finally {
       clearTimeout(timeout);
+      requestTimeouts.delete(timeout);
       if (isCurrent(current)) emit({ loading: false });
     }
     return flags();
@@ -201,7 +226,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
     );
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     url.searchParams.set('sdk', 'solidjs');
-    url.searchParams.set('sdkVersion', '0.2.0');
+    url.searchParams.set('sdkVersion', '0.3.0');
     if (revision) url.searchParams.set('rev', revision);
     try {
       socket = new WebSocket(url);
@@ -249,6 +274,21 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
 
   return {
     flags,
+    recordUsage(key: string, variant = 'enabled') {
+      reporter?.recordUsage(key, variant);
+    },
+    recordView(key: string, variant = 'enabled') {
+      reporter?.recordView(key, variant);
+    },
+    incrementCounter(key: string, value = 1) {
+      reporter?.incrementCounter(key, value);
+    },
+    setGauge(key: string, value: number) {
+      reporter?.setGauge(key, value);
+    },
+    async flushTelemetry(): Promise<void> {
+      await reporter?.flush();
+    },
     /** Replace request-produced public state when a SolidStart route loader changes. */
     hydrate(snapshot: TogglySnapshot) {
       if (disposed) return;
@@ -266,7 +306,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
     refresh,
     /** Called by the browser provider on mount, never by module import. */
     start() {
-      if (disposed || liveStarted) return;
+      if (disposed || liveStarted || typeof window === 'undefined') return;
       liveStarted = true;
       if ((config.refreshInterval ?? 180000) > 0 && config.appKey)
         poll = setInterval(() => {
@@ -286,14 +326,16 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
       negate = false,
       entity?: TogglyEntityContext,
     ) {
-      return evaluateResolvedKeys([...keys], requirement, negate, (key) =>
-        applyLocalGate(
+      return evaluateResolvedKeys([...keys], requirement, negate, (key) => {
+        const enabled = applyLocalGate(
           resolveEvaluatedDefinition(state.definitions[key], entity),
           key,
           gates,
           gateIndex,
-        ),
-      );
+        );
+        reporter?.recordCheck(key, enabled ? 'enabled' : 'disabled');
+        return enabled;
+      });
     },
     async setContext(next: TogglyEvaluationContext) {
       if (disposed) return;
@@ -309,15 +351,17 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
       const index = buildFlagGateIndex(next);
       gates = next;
       gateIndex = index;
-      emit({});
+      emit({ definitions: { ...state.definitions } });
     },
     notifyLocalGatesChanged() {
-      emit({});
+      emit({ definitions: { ...state.definitions } });
     },
     dispose() {
       disposed = true;
       generation++;
       controller?.abort();
+      requestTimeouts.forEach(clearTimeout);
+      requestTimeouts.clear();
       clearInterval(poll);
       clearTimeout(reconnect);
       clearTimeout(debounce);
@@ -327,6 +371,8 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
         socket.close();
       }
       listeners.clear();
+      detachTelemetry?.();
+      reporter?.dispose();
     },
   };
 }

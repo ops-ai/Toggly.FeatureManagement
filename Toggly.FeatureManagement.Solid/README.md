@@ -75,6 +75,27 @@ function Dashboard() {
 
 For an owner without context, call `createToggly(config)` within a component or `createRoot`. Owner disposal unsubscribes, aborts HTTP and closes timers/sockets automatically. `createClient(config)` is the lower-level non-reactive instance API: explicitly call `refresh`, `start` and `dispose`, and use `subscribe` to observe state. There is no global client.
 
+## Browser telemetry
+
+Browser clients send batched feature checks and explicit business events by default when an application key is configured. Set `enableTelemetry: false` to opt out. Server rendering and the Node server entrypoint do not create a frontend reporter. Each client owns its queue; hooks and components share their provider's client.
+
+```tsx
+const toggly = useToggly();
+toggly.recordUsage('Checkout', 'control');
+toggly.recordView('Checkout', 'control');
+toggly.incrementCounter('orders');
+toggly.setGauge('cartItems', 3);
+await toggly.flushTelemetry();
+```
+
+The same methods are available on `toggly.client` and standalone `createClient` instances. Usage and view are explicit events; rendering a component does not record either. Checks reflect actually evaluated leaves after entity/local gates and before negation, preserving all/any short circuiting. A cached unchanged `useFeatureFlag` accessor does not evaluate its leaves again. Changed reactive inputs and direct `evaluate` calls count; loading/error updates and raw snapshot reads do not. Check variants are `enabled` or `disabled`; explicit usage/view may supply a configured variant label.
+
+`metricsBaseUrl` defaults to `https://metrics.toggly.io` independently of `baseURI`; an explicit base path is preserved. `telemetryFlushIntervalMs` defaults to 45000 and accepts 30000–60000 milliseconds with schedule jitter. Invalid intervals use the default; invalid URLs disable telemetry without affecting evaluation. `onTelemetryDiagnostic` receives bounded payload-free diagnostic codes. `telemetryFetch` optionally supplies an independent metrics transport.
+
+Telemetry contains application/environment, feature counts and application-level counter/gauge values. It excludes identity, claims, groups and entity context and is never persisted. Counter deltas are nonnegative integers and gauges finite nonnegative values; metric keys must match configured metrics. Variant labels use 1–64 ASCII letters, digits, underscores or hyphens. Queues and retries are bounded; delivery is best effort. Ordinary sends use native gzip when available; hidden-page/pagehide and disposal flush uncompressed with fetch keepalive.
+
+Solid owner cleanup disposes its reporter synchronously; use `flushTelemetry` before disposal when you need to await a send attempt. Standalone clients require explicit `dispose()`. Remount the provider to change application, environment or telemetry options; this releases the previous queue without relabeling events. SolidStart route snapshots update the existing targeting session while retaining its reporter, and leaving the owning route releases it. Trusted server telemetry retains its separate transport and ownership.
+
 ## Identity and targeting
 
 ```ts

@@ -15,7 +15,12 @@ try {
   const overlays = [
     process.env.TOGGLY_NODE_CORE_TARBALL,
     process.env.TOGGLY_SIGNED_DEFS_TARBALL,
+    process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL,
   ].filter(Boolean);
+  if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL)
+    console.log(
+      'Local telemetry tarball: intermediate integration evidence; registry acceptance pending.',
+    );
   execFileSync(
     process.execPath,
     [

@@ -7,6 +7,7 @@ export default defineConfig({
         plugins: [solid()],
         test: {
           name: 'browser',
+          setupFiles: ['tests/setup.ts'],
           environment: 'jsdom',
           include: ['tests/*.test.ts', 'tests/*.test.tsx'],
           exclude: ['tests/server.test.ts'],

@@ -30,6 +30,11 @@ export * from './client';
 
 export interface Toggly {
   client: TogglyClient;
+  recordUsage: TogglyClient['recordUsage'];
+  recordView: TogglyClient['recordView'];
+  incrementCounter: TogglyClient['incrementCounter'];
+  setGauge: TogglyClient['setGauge'];
+  flushTelemetry: TogglyClient['flushTelemetry'];
   hydrate(snapshot: TogglySnapshot): void;
   flags: Accessor<EvaluatedDefinitions>;
   loading: Accessor<boolean>;
@@ -51,6 +56,7 @@ export function createToggly(
   if (!getOwner()) throw new Error('createToggly must run inside a Solid owner');
   const client = createClient(options, initialSnapshot);
   const [state, setState] = createSignal<ClientState>(client.state(), { equals: false });
+  const definitions = createMemo(() => state().definitions);
   const unsubscribe = client.subscribe((next) => setState(next));
   const [started, setStarted] = createSignal(!initialSnapshot && !isServer);
   const [resource, { mutate, refetch }] = createResource(
@@ -72,17 +78,22 @@ export function createToggly(
   });
   return {
     client,
+    recordUsage: client.recordUsage,
+    recordView: client.recordView,
+    incrementCounter: client.incrementCounter,
+    setGauge: client.setGauge,
+    flushTelemetry: client.flushTelemetry,
     resource,
     hydrate(snapshot) {
       client.hydrate(snapshot);
       mutate(client.flags());
       if (mounted) refetch();
     },
-    flags: () => state().definitions,
+    flags: definitions,
     loading: () => state().loading,
     error: () => state().error,
     evaluate(keys, requirement, negate, entity) {
-      state();
+      definitions();
       return client.evaluate(keys, requirement, negate, entity);
     },
   };
@@ -94,10 +105,11 @@ export function TogglyProvider(props: {
   snapshot?: TogglySnapshot;
   children?: JSX.Element;
 }): JSX.Element {
-  let previous = untrack(() => props.snapshot);
+  const snapshot = createMemo(() => props.snapshot);
+  let previous = untrack(snapshot);
   const toggly = createToggly(props.config, previous);
   createEffect(() => {
-    const next = props.snapshot;
+    const next = snapshot();
     if (next && next !== previous) {
       previous = next;
       untrack(() => toggly.hydrate(next));

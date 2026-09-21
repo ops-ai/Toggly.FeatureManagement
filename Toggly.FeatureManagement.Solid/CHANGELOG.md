@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.0 — 2026-09-18
+
+### Added
+
+- Browser telemetry enabled by default with an application key, with independent endpoint, interval and opt-out options.
+- Explicit `recordUsage`, `recordView`, `incrementCounter`, `setGauge` and awaitable `flushTelemetry` on clients and the Solid facade. Metrics are application-level and contain no identity or entity data.
+- Effective feature checks shared across direct evaluations, hooks and components; hidden-page and owner cleanup flush pending events.
+
+### Fixed
+
+- Keep memoized feature reads and loading/error updates from duplicating checks. Initial snapshot hydration no longer reapplies the same provider input.
+- Release outstanding definition-request timeout resources during synchronous owner disposal.
+
 ## 0.2.0 — 2026-09-12
 
 ### Changed

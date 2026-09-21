@@ -1,9 +1,12 @@
 import { A, createAsync, useSearchParams } from '@solidjs/router';
-import { Show } from 'solid-js';
+import { Show, onMount } from 'solid-js';
 import { Feature, TogglyProvider, useToggly } from '@ops-ai/solid-feature-flags-toggly';
 import { getFlags } from '../lib/flags';
 function Status() {
   const flags = useToggly();
+  onMount(() => {
+    Object.assign(window, { telemetry: flags });
+  });
   return (
     <>
       <p data-testid="identity">{flags.client.context().identity}</p>
@@ -27,6 +30,7 @@ export default function Home() {
             config={{
               appKey: import.meta.env.VITE_TOGGLY_APP_KEY,
               baseURI: import.meta.env.VITE_TOGGLY_BASE_URL,
+              metricsBaseUrl: import.meta.env.VITE_TOGGLY_METRICS_URL,
               refreshInterval: 0,
             }}
           >
