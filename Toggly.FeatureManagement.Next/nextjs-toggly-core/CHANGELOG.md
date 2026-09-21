@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- Discard inherited instance tokens from configured frontend URLs after token
+  clearing or identity changes, while preserving unrelated query values.
+
 - Preserve frontend definition endpoint paths and remove existing targeting query
   values when a minted instance token is active, including local evaluation.
 

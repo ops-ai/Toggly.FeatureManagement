@@ -53,6 +53,40 @@ describe('browser compact telemetry boundary', () => {
     expect(url.searchParams.get('claim.role')).toBe(evaluationMode === 'local' ? null : 'admin')
     expect(new Headers(options?.headers).get('x-toggly-identity')).toBe('owner')
   })
+  it.each(['remote', 'local'] as const)('never revives configured tokens across %s context transitions', async evaluationMode => {
+    fetchMock.mockImplementation(async (url, init) => {
+      if (url.includes('/api/frontend/telemetry')) {sent.push({url,init:init!,body:JSON.parse(init!.body as string)}); return {status:202}}
+      return new Response(JSON.stringify(evaluationMode === 'local' ? [{featureKey:'On',filters:[{name:'AlwaysOn',parameters:{}}]}] : {defs:{On:true}}), {status:200})
+    })
+    for (const initialToken of [undefined, '', '   ']) {
+      sent.length = 0; fetchMock.mockClear()
+      const value = client({evaluationMode, instanceId:initialToken, identity:'alice', baseUri:'https://defs.invalid/prefix/?keep=one&keep=two&i=retired&i=older&g=base', persistFeatures:false})
+      const check = async (token: string | undefined, identity = 'alice', initial = false) => {
+        if (evaluationMode === 'local' && !initial) await value.refresh()
+        const requests = fetchMock.mock.calls.filter(([url]) => !url.includes('/api/frontend/telemetry'))
+        const [request, options] = requests[requests.length - 1]
+        const url = new URL(request)
+        expect(url.pathname).toBe(`/prefix/${evaluationMode === 'local' ? 'definitions' : 'evaluated'}-signed/browser/Test`)
+        expect(url.searchParams.getAll('keep')).toEqual(['one','two'])
+        expect(url.searchParams.getAll('i')).toEqual(token ? [token] : [])
+        expect(url.searchParams.getAll('g')).toEqual(token ? [] : ['base'])
+        expect(url.searchParams.get('u')).toBe(!token && evaluationMode === 'remote' ? identity : null)
+        expect(new Headers(options?.headers).get('x-toggly-identity')).toBe(token ? null : identity)
+        expect(await value.isFeatureOn('On')).toBe(true)
+        await value.flushTelemetry()
+      }
+      await value.init(); await check(undefined, 'alice', true)
+      await value.setContext({instanceId:' mint-a '}); await check('mint-a')
+      await value.setContext({instanceId:'mint-b'}); await check('mint-b')
+      await value.setContext({instanceId:'   '}); await check(undefined)
+      await value.setContext({instanceId:'mint-c'}); await check('mint-c')
+      await value.setIdentity('bob'); await check(undefined, 'bob')
+      expect(sent.map(({body})=>body)).toEqual([
+        {u:'alice'}, {i:'mint-a'}, {i:'mint-b'}, {u:'alice'}, {i:'mint-c'}, {u:'bob'},
+      ].map(context=>({k:'browser',e:'Test',...context,f:{On:{enabled:[1]}}})))
+      value.destroy()
+    }
+  })
   it('preserves canonical group snapshot keys across Unicode input permutations', async () => {
     const storage = new Map<string, string>()
     vi.stubGlobal('localStorage', {getItem:(key:string)=>storage.get(key)??null,setItem:(key:string,value:string)=>storage.set(key,value)})

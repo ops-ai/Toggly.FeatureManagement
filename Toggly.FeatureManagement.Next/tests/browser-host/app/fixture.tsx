@@ -44,6 +44,28 @@ export default function Fixture() {
         }
         return results
       },
+      async verifyInheritedTokens() {
+        const results: boolean[] = []
+        for (const evaluationMode of ['remote', 'local'] as const) {
+          for (const instanceId of [undefined, '', '   ']) {
+            const client = createTogglyClient({appKey:'inherited-fixture',environment:'Test',evaluationMode,instanceId,identity:'alice',baseUri:`${location.origin}/inherited-fixture/?keep=one&keep=two&i=retired&i=older&g=base`,metricsBaseUrl:metrics,enableLiveUpdates:false,refreshInterval:0,persistFeatures:false})
+            const check = async (initial = false) => {
+              if (evaluationMode === 'local' && !initial) await client.refresh()
+              results.push(await client.isFeatureOn('On'))
+              await client.flushTelemetry()
+            }
+            try {
+              await client.init(); await check(true)
+              await client.setContext({instanceId:' mint-a '}); await check()
+              await client.setContext({instanceId:'mint-b'}); await check()
+              await client.setContext({instanceId:'   '}); await check()
+              await client.setContext({instanceId:'mint-c'}); await check()
+              await client.setIdentity('bob'); await check()
+            } finally {client.destroy()}
+          }
+        }
+        return results
+      },
       async verifyCache() {
         const config = {appKey:'cache-fixture', environment:'Test', identity:'cache-user', instanceId:'cache-a', baseUri:`${location.origin}/cache-fixture`, metricsBaseUrl:metrics, persistFeatures:true, enableLiveUpdates:false, refreshInterval:0, enableTelemetry:false, featureDefaults:{On:false}}
         const client = createTogglyClient(config)

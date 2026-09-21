@@ -39,11 +39,15 @@ await new Promise((resolve, reject) => {collector.once('error', reject); collect
   const identities = []
   const cacheRequests = []
   const mintedUrls = []
+  const inheritedUrls = []
   await page.setRequestInterception(true)
   page.on('request', request => {
     const url = new URL(request.url())
     if (url.pathname.startsWith('/url-fixture/')) {
       mintedUrls.push({path:url.pathname,query:[...url.searchParams],identity:request.headers()['x-toggly-identity']})
+      void request.respond({status:200,contentType:'application/json',body:JSON.stringify(url.pathname.includes('/definitions-signed/') ? [{featureKey:'On',filters:[{name:'AlwaysOn',parameters:{}}]}] : {defs:{On:true}})})
+    } else if (url.pathname.startsWith('/inherited-fixture/')) {
+      inheritedUrls.push({path:url.pathname,query:[...url.searchParams],identity:request.headers()['x-toggly-identity']})
       void request.respond({status:200,contentType:'application/json',body:JSON.stringify(url.pathname.includes('/definitions-signed/') ? [{featureKey:'On',filters:[{name:'AlwaysOn',parameters:{}}]}] : {defs:{On:true}})})
     } else if (url.pathname.startsWith('/cache-fixture/')) {
       const token=url.searchParams.get('i'), revision=`rev-${token}`
@@ -132,6 +136,15 @@ await new Promise((resolve, reject) => {collector.once('error', reject); collect
   telemetry.length=0
   assert.equal(await page.evaluate(()=>window.fixture.verifyReentrantCheck()),true)
   assert.deepEqual(telemetry,[{k:'cache-fixture',e:'Test',i:'cache-a',f:{On:{enabled:[1]}}},{k:'cache-fixture',e:'Test',i:'cache-b',f:{After:{enabled:[0,1]}}}])
+  telemetry.length=0
+  assert.deepEqual(await page.evaluate(()=>window.fixture.verifyInheritedTokens()),Array(36).fill(true))
+  const contexts=[{u:'alice'},{i:'mint-a'},{i:'mint-b'},{u:'alice'},{i:'mint-c'},{u:'bob'}]
+  assert.deepEqual(inheritedUrls,['evaluated','definitions'].flatMap(mode=>Array.from({length:3},()=>contexts.map(context=>({
+    path:`/inherited-fixture/${mode}-signed/inherited-fixture/Test`,
+    query:[['keep','one'],['keep','two'],...(context.i ? [['i',context.i]] : [['g','base'],...(mode==='evaluated' ? [['u',context.u]] : [])])],
+    identity:context.i ? undefined : context.u,
+  }))).flat()),'initial absent/blank tokens, rotation, explicit clear and identity-only clear never revive configured tokens in either mode')
+  assert.deepEqual(telemetry,Array.from({length:6},()=>contexts.map(context=>({k:'inherited-fixture',e:'Test',...context,f:{On:{enabled:[1]}}}))).flat(),'each actual evaluation retains its exact current owner attribution')
   await page.evaluate(() => window.fixture.unmount())
   assert.deepEqual(errors, [])
   console.log('Browser passed: hooks/components/cache/local/identity/refresh, CORS/gzip/compact metrics, pagehide/unmount/remount/replacement; token A-B-A/persisted 304 public results and reentrant check capture')

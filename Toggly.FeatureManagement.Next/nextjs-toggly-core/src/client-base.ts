@@ -506,10 +506,11 @@ export function createClient(
   function frontendDefinitionsUrl(mode: 'evaluated' | 'definitions'): URL {
     const url = new URL(config.baseUri)
     url.pathname = `${url.pathname.replace(/\/+$/, '')}/${mode}-signed/${config.appKey}/${config.environment}`
+    url.searchParams.delete('i')
     const instanceId = config.instanceId?.trim()
     if (instanceId) {
       for (const key of [...url.searchParams.keys()]) {
-        if (key === 'i' || key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) url.searchParams.delete(key)
+        if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) url.searchParams.delete(key)
       }
       url.searchParams.set('i', instanceId)
     }
