@@ -48,8 +48,12 @@ Set `enableTelemetry: false` to disable the browser reporter.
 disables app-level business metrics. Invalid intervals use the default. Invalid
 collector URLs disable telemetry without changing evaluation; use absolute
 HTTP(S) URLs without credentials, query or fragment. Browser payloads contain
-only app/environment, feature/variant counts and numeric metrics, excluding
-identity, groups, claims, entity data, timestamps and metric attribution.
+app/environment, feature/variant counts and numeric metrics. A host-provided
+`instanceId` is sent as `i`; otherwise configured `identity` is sent as `u`.
+The server's default-off application setting controls acceptance of client-asserted
+`u`. Groups, claims, entity data, timestamps and metric attribution remain excluded.
+The SDK never mints tokens or uses Backend keys. With a nonblank `instanceId`,
+definition requests use `?i=` and suppress user, groups and claims targeting.
 
 Requests omit credentials and use native gzip when available. Buffers, timeout
 and retries are bounded. Hidden/pagehide flushing uses plain keepalive requests.
@@ -57,9 +61,18 @@ Island unmount and Astro navigation detach island subscriptions while the shared
 browser owner remains available to other islands. Call `destroyTogglyClient()`
 when the application releases the browser client; it synchronously releases its
 resources and initiates one bounded final flush. Reinitializing with another
-app/environment or telemetry configuration disposes the previous owner without
-relabeling queued events. Identical initialization is idempotent. Identity
-refresh on the same owner preserves queued events.
+app/environment or telemetry transport configuration cancels the previous owner
+and discards its unsent events. Identical initialization is idempotent. Compatible
+`initTogglyClient({...config, instanceId, identity, groups, claims})` calls update
+attribution on the same reporter; `setIdentity()` and `clearIdentity()` keep their
+synchronous signatures. Accepted events and retries retain their original `i`/`u`.
+
+Astro caches definitions and their validator only in active browser memory.
+Changing targeting context or response mode clears that pair before fetching;
+failed new-context fetches use defaults rather than retired-user definitions.
+Returning to a retired context fetches a full body. Cold starts remove legacy
+persisted revision-only entries and never send an orphan validator. No persistent
+body cache is introduced.
 
 SSR/build imports create no frontend telemetry resources. Server `Feature.astro`,
 SSG behavior, middleware and trusted server telemetry retain their existing
@@ -382,7 +395,9 @@ interface TogglyConfig {
   /** Connection timeout in milliseconds (default: 5000) */
   connectTimeout?: number;
   
-  /** User identity for targeting (optional) */
+  /** Host-minted browser instance token; takes precedence over user targeting */
+  instanceId?: string;
+  /** User identity for targeting and optional client-asserted browser telemetry */
   identity?: string;
   
   /**

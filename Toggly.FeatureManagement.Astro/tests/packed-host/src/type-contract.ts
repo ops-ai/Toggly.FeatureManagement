@@ -17,4 +17,4 @@ export function browserTelemetryTypes() {
   const completion: Promise<void> = flushTelemetry();
   destroyTogglyClient(); return completion;
 }
-export const telemetryConfig: TogglyIntegrationOptions = {enableTelemetry: true, enableMetrics: true, metricsBaseUrl: 'https://collector.example/base', telemetryFlushIntervalMs: 45000};
+export const telemetryConfig: TogglyIntegrationOptions = {instanceId: 'host-minted', identity: 'client-asserted',enableTelemetry: true, enableMetrics: true, metricsBaseUrl: 'https://collector.example/base', telemetryFlushIntervalMs: 45000};

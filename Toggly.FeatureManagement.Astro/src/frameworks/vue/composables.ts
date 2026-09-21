@@ -53,15 +53,11 @@ export function useFeatureGate(
   const flags = useStore($flags);
   const localGatesRevision = useStore($localGatesRevision);
   const isReady = useTogglyReady();
-  const keysKey = flagKeys.join('\0');
-
-  const gateAtom = computed(() => $gate(flagKeys, requirement, negate));
 
   const enabled = computed(() => {
     void flags.value;
     void localGatesRevision.value;
-    void keysKey;
-    return gateAtom.value.get();
+    return $gate(flagKeys, requirement, negate).get();
   });
 
   return { enabled, isReady };

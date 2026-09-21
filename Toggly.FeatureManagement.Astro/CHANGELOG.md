@@ -1,12 +1,4 @@
-## 1.15.1
-
-2026-09-17
-
-### Fixed
-- Default usage/metrics HTTPS host is `https://metrics.toggly.io/`.
-
-
-## [1.16.0] - 2026-09-18
+## [1.16.0] - 2026-09-21
 
 ### Added
 - Shared browser telemetry across React, Vue, Svelte and native Astro client components, enabled by default with an app key and configurable collector/interval/opt-out.
@@ -19,7 +11,18 @@
 - Isolate app/environment replacement and prevent delayed initialization or refresh from restoring disposed resources.
 
 ### Changed
-- Browser telemetry excludes targeting identity and attributes. Server/build telemetry ownership remains unchanged.
+- Forward host-provided `instanceId` as `i`, otherwise `identity` as `u`, using public shared reporter 1.1.0. Minted definitions targeting suppresses user/groups/claims; server/build telemetry ownership remains unchanged.
+- Compatible browser initialization and existing identity methods preserve admitted event/retry attribution in one bounded reporter. Transport replacement cancels/discards old unsent events; final disposal retains bounded flushing.
+- Count each Vue gate refresh once even while Nano Stores retains unobserved projections; mixed-island refresh remains current during pending hooks.
+- Capture owner, assigned variant and local gates before host callbacks. Fence reentrant publication and stale context responses.
+- Retain validators only with the active matching in-memory definitions body; remove legacy persisted orphan revisions. Context/mode transitions and cold starts fetch full bodies, and failed transitions cannot restore retired-user flags.
+
+## 1.15.1
+
+2026-09-17
+
+### Fixed
+- Default usage/metrics HTTPS host is `https://metrics.toggly.io/`.
 
 ## 1.15.0
 

@@ -9,12 +9,12 @@ beforeEach(()=>{bodies=[];definitions={On:true,Off:false};vi.stubGlobal('Compres
 afterEach(async()=>{store.__resetClient();await Promise.resolve();vi.unstubAllGlobals();vi.useRealTimers();});
 const flush=async()=>telemetry.flushTelemetry?.();
 
-it('counts direct effective leaves once, preserves short circuit and excludes identity',async()=>{
+it('counts direct effective leaves once, preserves short circuit and includes only configured client identity',async()=>{
  await store.initTogglyClient({...config,identity:'private',groups:['private'],claims:{role:'private'}});
  expect(store.$flag('On').get()).toBe(true);expect(store.$gate(['Off','Skipped'],'all',true).get()).toBe(true);
  expect(store.$gate(['On','Skipped'],'any').get()).toBe(true);
  telemetry.recordUsage?.('On');telemetry.recordView?.('On','control');telemetry.incrementCounter?.('orders',2);telemetry.setGauge?.('cart',3);
- await flush();expect(bodies.map(x=>x.body)).toEqual([{k:'one',e:'Test',f:{On:{enabled:[2,1],control:[0,0,1]},Off:{disabled:[1]}},m:{orders:2,cart:3}}]);
+ await flush();expect(bodies.map(x=>x.body)).toEqual([{k:'one',e:'Test',u:'private',f:{On:{enabled:[2,1],control:[0,0,1]},Off:{disabled:[1]}},m:{orders:2,cart:3}}]);
  expect(bodies[0].url).toBe('https://collector.test/base/api/frontend/telemetry');expect(bodies[0].init.credentials).toBe('omit');
 });
 
@@ -67,21 +67,20 @@ it('memoized projections stay silent while subscribed dependency reevaluations c
  stop();await store.refreshFlags();await flush();expect(bodies).toEqual([]);
 });
 
-it('identity refresh preserves explicit events and replacement final-flushes original labels',async()=>{
+it('identity refresh preserves explicit events and owner replacement discards retired queues',async()=>{
  await store.initTogglyClient(config);telemetry.recordUsage('Queued');store.setIdentity('private-user');
  await vi.waitFor(()=>expect((fetch as any).mock.calls.some(([url]:[string])=>url.includes('private-user'))).toBe(true));
  await flush();expect(bodies[0].body).toEqual({k:'one',e:'Test',f:{Queued:{enabled:[0,1]}}});bodies=[];
  telemetry.recordView('Old');await store.initTogglyClient({...config,appKey:'two',environment:'New'});await Promise.resolve();
- await vi.waitFor(()=>expect(bodies).toHaveLength(1));expect(bodies[0].body).toEqual({k:'one',e:'Test',f:{Old:{enabled:[0,0,1]}}});
- telemetry.recordUsage('New');await flush();expect(bodies[1].body).toEqual({k:'two',e:'New',f:{New:{enabled:[0,1]}}});
+ expect(bodies).toEqual([]);
+ telemetry.recordUsage('New');await flush();expect(bodies[0].body).toEqual({k:'two',e:'New',f:{New:{enabled:[0,1]}}});
 });
 
 it('changing telemetry ownership options replaces the reporter even for the same app',async()=>{
  await store.initTogglyClient(config);telemetry.recordUsage('Accepted');
  await store.initTogglyClient({...config,enableTelemetry:false});
- await vi.waitFor(()=>expect(bodies).toHaveLength(1));
- expect(bodies[0].body.f.Accepted.enabled).toEqual([0,1]);
- telemetry.recordUsage('Suppressed');await flush();expect(bodies).toHaveLength(1);
+ expect(bodies).toEqual([]);
+ telemetry.recordUsage('Suppressed');await flush();expect(bodies).toEqual([]);
 });
 it('SSR initialization and explicit browser methods create no resources',async()=>{
  vi.useFakeTimers();vi.stubGlobal('window',undefined);vi.stubGlobal('document',undefined);

@@ -4,7 +4,7 @@ import {createRoot,type Root} from 'react-dom/client';
 import {effectScope} from 'vue';
 import {get} from 'svelte/store';
 import {useVariant as useReactVariant} from '../../frameworks/react/Feature.js';
-import {useVariant as useVueVariant} from '../../frameworks/vue/composables.js';
+import {useVariant as useVueVariant, useFeatureGate as useVueGate} from '../../frameworks/vue/composables.js';
 import {featureVariant} from '../../frameworks/svelte/stores.js';
 import * as store from '../../client/store.js';
 let root:Root|undefined;let element:HTMLDivElement;let bodies:any[]=[];
@@ -25,4 +25,11 @@ it('React Vue and Svelte variants share one effective evaluator and reporter',as
  await act(async()=>{store.setLocalGates([{id:'local',flagKeys:['Experiment'],isEnabled:()=>false}]);store.notifyLocalGatesChanged();});
  expect(element.textContent).toBe('none');expect(value.value).toBeNull();expect(get(featureVariant('Experiment'))).toBeNull();
  await store.flushTelemetry();expect(bodies).toEqual([{k:'app',e:'Test',f:{Experiment:{disabled:[3]}}}]);scope.stop();
+});
+
+it('Vue gate consumers count each effective refresh once instead of reading a silent warm projection',async()=>{
+ const scope=effectScope();const value=scope.run(()=>useVueGate(['Experiment']))!;
+ expect(value.enabled.value).toBe(true);await store.flushTelemetry();expect(bodies[0].f.Experiment.control).toEqual([1]);bodies=[];
+ await store.refreshFlags();expect(value.enabled.value).toBe(true);await store.flushTelemetry();
+ expect(bodies).toEqual([{k:'app',e:'Test',f:{Experiment:{control:[1]}}}]);scope.stop();
 });

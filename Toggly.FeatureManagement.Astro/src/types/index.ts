@@ -46,7 +46,9 @@ export interface TogglyConfig {
   isDebug?: boolean;
   /** Connection timeout in milliseconds (default: 5000) */
   connectTimeout?: number;
-  /** User identity for targeting (optional) */
+  /** Host-minted browser instance token. Takes precedence over identity/groups/claims; never minted by this SDK. */
+  instanceId?: string;
+  /** User identity for targeting and optional client-asserted browser telemetry (optional) */
   identity?: string;
   /** User groups for targeting (optional) */
   groups?: string[];

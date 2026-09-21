@@ -80,7 +80,7 @@
     "@ops-ai/toggly-local-gates": "^1.0.1",
     "@ops-ai/toggly-signed-defs": "^1.2.8",
     "glob": "^10.3.10",
-    "@ops-ai/toggly-client-telemetry": "^1.0.0"
+    "@ops-ai/toggly-client-telemetry": "^1.1.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.0",
