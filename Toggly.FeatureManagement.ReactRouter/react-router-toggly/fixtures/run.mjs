@@ -73,9 +73,12 @@ for (const row of selected) {
   console.log(`\n${row.name}: ${version}, React ${row.react}, Router ${row.router}, Vite ${row.vite}`);
   await command('npm', ['install', '--ignore-scripts'], host, env);
   await command('npm', ['ls', 'react', 'react-dom', 'react-router'], host, env);
-  for (const task of ['typecheck', 'build', 'test']) {
+  for (const task of ['typecheck', 'build']) {
     await command('npm', ['run', task], host, env);
   }
+  // These controls must exit naturally and do not share the trusted-server worker's force-exit boundary.
+  await command(node, ['--test', 'browser-cleanup.test.mjs'], host, env);
+  await command('npm', ['run', 'test'], host, env);
   writeFileSync(
     join(here, '.runs', `${row.name}-evidence.json`),
     JSON.stringify({ ...row, nodeVersion: version, sdkVersion: manifest.version, reporterVersion: JSON.parse(readFileSync(join(host, 'node_modules/@ops-ai/toggly-client-telemetry/package.json'),'utf8')).version }, null, 2),

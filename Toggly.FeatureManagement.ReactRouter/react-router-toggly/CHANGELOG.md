@@ -8,6 +8,7 @@
 - Public usage, view, app-level counter, latest-value gauge and awaitable flush methods on the provider context.
 
 ### Fixed
+- Preserve immutable selected definitions through entity/local callbacks and keep only the newest overlapping refresh and asynchronous hook completion.
 - Count effective local/entity-gated browser checks once per evaluated leaf, preserving short circuit and negation without duplicate component evaluation.
 - Isolate telemetry and hydrated snapshots when app/environment changes; release browser resources on real unmount while preserving StrictMode replay.
 - Capture original flag and attribution snapshots before reentrant callbacks; isolate failed/new contexts and late responses.

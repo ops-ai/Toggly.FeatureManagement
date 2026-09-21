@@ -52,12 +52,15 @@ if (process.argv[2] === '--scenario') {
   test('command output keeps stderr out of structured stdout', async () => {
     assert.equal(await runOwnedCommand(process.execPath, ['-e', `console.error('diagnostic');console.log('[]')`], {}), '[]\n')
   })
-  test('command deadline kills an actual hung child and its descendant process group', { timeout: 10000 }, async () => {
+  for (const phase of ['command', 'startup']) test(`${phase} deadline kills an actual hung child and its descendant process group`, { timeout: 10000 }, async () => {
     const root = mkdtempSync(join(tmpdir(), 'router-command-test-'))
     const pidFile = join(root, 'pids.json')
     try {
       const script = `const {spawn}=require('node:child_process');const {writeFileSync}=require('node:fs');const c=spawn(process.execPath,['-e','setInterval(()=>{},1000)']);c.on('spawn',()=>writeFileSync(process.argv[1],JSON.stringify([process.pid,c.pid])));setInterval(()=>{},1000)`
-      await assert.rejects(runOwnedCommand(process.execPath, ['-e', script, pidFile], {}, 300), /Packed host failed/)
+      await assert.rejects(runOwnedCommand(process.execPath, ['-e', script, pidFile], {}, 300, phase === 'startup' ? { ready: () => false, timeout: 300 } : undefined), error => {
+        assert.equal(error.cause.message, `Packed host ${phase} exceeded 300ms`)
+        return true
+      })
       const pids = JSON.parse(readFileSync(pidFile, 'utf8'))
       for (const pid of pids) {
         const deadline = Date.now() + 2000

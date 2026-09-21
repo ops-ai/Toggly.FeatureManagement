@@ -162,6 +162,7 @@ function TogglyProviderOwner({
   });
   const flagsRef = useRef<FeatureFlags>(serverContext?.flags ?? mergedConfig?.featureDefaults ?? {});
   const generationRef = useRef(0);
+  const updateRevisionRef = useRef(0);
   const [telemetry] = useState(() => createBrowserTelemetry({ ...config, ...contextRef.current }));
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -205,9 +206,9 @@ function TogglyProviderOwner({
   const localGatesListenersRef = useRef(new Set<() => void>());
 
   const captureEvaluation = useCallback(() => {
-    const capturedFlags = flagsRef.current;
-    const gates = localGatesRef.current;
-    const index = localGateIndexRef.current;
+    const capturedFlags = JSON.parse(JSON.stringify(flagsRef.current)) as FeatureFlags;
+    const gates = localGatesRef.current.map(gate => ({ ...gate, flagKeys: [...gate.flagKeys] }));
+    const index = buildFlagGateIndex(gates);
     const record = telemetry.captureCheck();
     return (featureKey: string, defaultValue = false, entityContext?: TogglyEntityContext | null): boolean => {
       const remote = coreIsFeatureEnabled(capturedFlags, featureKey, defaultValue, entityContext);
@@ -257,9 +258,9 @@ function TogglyProviderOwner({
   }, [mergedConfig?.localGates, setLocalGates]);
 
   const executeAfterRefresh = useCallback(
-    async (newFlags: FeatureFlags, generation: number): Promise<void> => {
+    async (newFlags: FeatureFlags, generation: number, revision: number): Promise<void> => {
       for (const hook of hooks) {
-        if (!mountedRef.current || generation !== generationRef.current) return;
+        if (!mountedRef.current || generation !== generationRef.current || revision !== updateRevisionRef.current) return;
         if (hook.afterRefresh) {
           try {
             await hook.afterRefresh(newFlags);
@@ -319,12 +320,12 @@ function TogglyProviderOwner({
 
   // Update flags and trigger callbacks
   const updateFlags = useCallback(
-    async (newFlags: FeatureFlags, generation: number) => {
-      if (!mountedRef.current || generation !== generationRef.current) return;
+    async (newFlags: FeatureFlags, generation: number, revision: number) => {
+      if (!mountedRef.current || generation !== generationRef.current || revision !== updateRevisionRef.current) return;
       flagsRef.current = newFlags;
       setFlags(newFlags);
-      await executeAfterRefresh(newFlags, generation);
-      if (mountedRef.current && generation === generationRef.current) onFlagsChange?.(newFlags);
+      await executeAfterRefresh(newFlags, generation, revision);
+      if (mountedRef.current && generation === generationRef.current && revision === updateRevisionRef.current) onFlagsChange?.(newFlags);
     },
     [executeAfterRefresh, onFlagsChange]
   );
@@ -421,7 +422,8 @@ function TogglyProviderOwner({
         claims: { ...(context?.claims ?? contextRef.current.claims) },
       };
       installContext(target);
-      await updateFlags(await fetchFlags(target), generation);
+      const revision = ++updateRevisionRef.current;
+      await updateFlags(await fetchFlags(target), generation, revision);
       for (let i = hooks.length - 1; i >= 0; i--) {
         if (!mountedRef.current || generation !== generationRef.current) return;
         const hook = hooks[i];
@@ -440,13 +442,17 @@ function TogglyProviderOwner({
     const generation = ++generationRef.current;
     const target = { ...contextRef.current, identity: undefined, instanceId: undefined };
     installContext(target);
-    await updateFlags(await fetchFlags(target), generation);
+    const revision = ++updateRevisionRef.current;
+    await updateFlags(await fetchFlags(target), generation, revision);
     if (mountedRef.current && generation === generationRef.current) setIsReady(true);
   }, [fetchFlags, updateFlags, installContext]);
 
   const refresh = useCallback(async (): Promise<void> => {
+    if (!mountedRef.current) return;
     const generation = generationRef.current;
-    await updateFlags(await fetchFlags(contextRef.current), generation);
+    const revision = ++updateRevisionRef.current;
+    await updateFlags(await fetchFlags(contextRef.current), generation, revision);
+    if (mountedRef.current && generation === generationRef.current && revision === updateRevisionRef.current) setIsReady(true);
   }, [fetchFlags, updateFlags]);
 
   // Add hook
@@ -658,8 +664,9 @@ function TogglyProviderOwner({
     if (!serverContext && mergedConfig?.appKey) {
       logger.debug('No server context, initializing client-side');
       const generation = generationRef.current;
+      const revision = ++updateRevisionRef.current;
       fetchFlags(contextRef.current).then((newFlags) => {
-        if (!mountedRef.current || generation !== generationRef.current) return;
+        if (!mountedRef.current || generation !== generationRef.current || revision !== updateRevisionRef.current) return;
         flagsRef.current = newFlags;
         setFlags(newFlags);
         setIsReady(true);
