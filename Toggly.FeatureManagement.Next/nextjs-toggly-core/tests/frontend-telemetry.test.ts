@@ -31,6 +31,28 @@ describe('browser compact telemetry boundary', () => {
     clients.forEach(value => value.destroy()); await new Promise(resolve => setImmediate(resolve))
     vi.restoreAllMocks(); vi.unstubAllGlobals()
   })
+  it.each(['remote', 'local'] as const)('scrubs minted targeting from the %s endpoint while preserving its path and unrelated queries', async evaluationMode => {
+    const value = client({evaluationMode, instanceId:' mint ', baseUri:'https://defs.invalid/prefix/?keep=ok&u=old&userId=old&g=one&g=two&claim.role=old&i=old&i=older', enableTelemetry:false})
+    await value.init()
+    const [request, options] = fetchMock.mock.calls[0]
+    const url = new URL(request)
+    expect(url.pathname).toBe(`/prefix/${evaluationMode === 'local' ? 'definitions' : 'evaluated'}-signed/browser/Test`)
+    expect([...url.searchParams]).toEqual([['keep','ok'],['i','mint']])
+    expect(new Headers(options?.headers).get('x-toggly-identity')).toBeNull()
+  })
+  it.each(['remote', 'local'] as const)('retains established no-token targeting for the %s endpoint', async evaluationMode => {
+    const value = client({evaluationMode, baseUri:'https://defs.invalid/prefix/?keep=ok&g=base&claim.base=yes', groups:['current'], claims:{role:'admin'}, enableTelemetry:false})
+    await value.init()
+    const [request, options] = fetchMock.mock.calls[0]
+    const url = new URL(request)
+    expect(url.pathname).toBe(`/prefix/${evaluationMode === 'local' ? 'definitions' : 'evaluated'}-signed/browser/Test`)
+    expect(url.searchParams.get('keep')).toBe('ok')
+    expect(url.searchParams.get('claim.base')).toBe('yes')
+    expect(url.searchParams.getAll('g')).toEqual(evaluationMode === 'local' ? ['base'] : ['base','current'])
+    expect(url.searchParams.get('u')).toBe(evaluationMode === 'local' ? null : 'owner')
+    expect(url.searchParams.get('claim.role')).toBe(evaluationMode === 'local' ? null : 'admin')
+    expect(new Headers(options?.headers).get('x-toggly-identity')).toBe('owner')
+  })
   it('preserves canonical group snapshot keys across Unicode input permutations', async () => {
     const storage = new Map<string, string>()
     vi.stubGlobal('localStorage', {getItem:(key:string)=>storage.get(key)??null,setItem:(key:string,value:string)=>storage.set(key,value)})

@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- Preserve frontend definition endpoint paths and remove existing targeting query
+  values when a minted instance token is active, including local evaluation.
+
 - Preserve the existing empty-gate result for browser and trusted clients without
   recording feature checks, and retain locale-independent group cache ordering.
 - Restore persisted mixed boolean and entity-gate definitions with their matching

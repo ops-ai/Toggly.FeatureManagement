@@ -503,6 +503,19 @@ export function createClient(
     })
   }
 
+  function frontendDefinitionsUrl(mode: 'evaluated' | 'definitions'): URL {
+    const url = new URL(config.baseUri)
+    url.pathname = `${url.pathname.replace(/\/+$/, '')}/${mode}-signed/${config.appKey}/${config.environment}`
+    const instanceId = config.instanceId?.trim()
+    if (instanceId) {
+      for (const key of [...url.searchParams.keys()]) {
+        if (key === 'i' || key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) url.searchParams.delete(key)
+      }
+      url.searchParams.set('i', instanceId)
+    }
+    return url
+  }
+
   /**
    * Fetch evaluated-signed definitions (remote / client rail).
    * Returns defs plus whether this attempt applied a new revision (miss) or reused cache (hit).
@@ -517,7 +530,7 @@ export function createClient(
     }
 
     const expected = generation
-    const fetchUrl = new URL(
+    const fetchUrl = policy.frontend ? frontendDefinitionsUrl('evaluated') : new URL(
       API_ENDPOINTS.evaluatedSigned(
         config.baseUri,
         config.appKey,
@@ -614,7 +627,7 @@ export function createClient(
     const expected = generation
     const pin = pendingDefinitionsPin
     pendingDefinitionsPin = null
-    const baseUrl = API_ENDPOINTS.definitionsSigned(
+    const baseUrl = policy.frontend ? frontendDefinitionsUrl('definitions').toString() : API_ENDPOINTS.definitionsSigned(
       config.baseUri,
       config.appKey,
       config.environment

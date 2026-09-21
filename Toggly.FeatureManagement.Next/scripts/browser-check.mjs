@@ -38,10 +38,14 @@ await new Promise((resolve, reject) => {collector.once('error', reject); collect
   let remoteEnabled = true
   const identities = []
   const cacheRequests = []
+  const mintedUrls = []
   await page.setRequestInterception(true)
   page.on('request', request => {
     const url = new URL(request.url())
-    if (url.pathname.startsWith('/cache-fixture/')) {
+    if (url.pathname.startsWith('/url-fixture/')) {
+      mintedUrls.push({path:url.pathname,query:[...url.searchParams],identity:request.headers()['x-toggly-identity']})
+      void request.respond({status:200,contentType:'application/json',body:JSON.stringify(url.pathname.includes('/definitions-signed/') ? [{featureKey:'On',filters:[{name:'AlwaysOn',parameters:{}}]}] : {defs:{On:true}})})
+    } else if (url.pathname.startsWith('/cache-fixture/')) {
       const token=url.searchParams.get('i'), revision=`rev-${token}`
       const conditional=request.headers()['if-none-match']?.replaceAll('"','')
       cacheRequests.push({token, conditional})
@@ -60,6 +64,8 @@ await new Promise((resolve, reject) => {collector.once('error', reject); collect
       && window.fixture.current.isReady, {timeout: 10000}, expected)
   }
   await state('on')
+  assert.deepEqual(await page.evaluate(() => window.fixture.verifyMintedUrls()), [true,true])
+  assert.deepEqual(mintedUrls, ['evaluated','definitions'].map(mode => ({path:`/url-fixture/${mode}-signed/url-fixture/Test`,query:[['keep','ok'],['i','mint']],identity:undefined})), 'both installed browser modes suppress every old targeting value')
   assert.deepEqual(await page.evaluate(async () => {
     const owner = window.fixture.current
     return Promise.all(['all', 'any'].flatMap(requirement => [false, true].map(negate => owner.evaluateFeatureGate([], requirement, negate))))

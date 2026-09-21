@@ -36,6 +36,14 @@ export default function Fixture() {
         current.client.recordUsage('On', 'ignored-user'); current.client.recordView('On', 'ignored-user', 'control')
         current.telemetry.incrementCounter('orders', 2); current.telemetry.setGauge('cart', 9); current.telemetry.setGauge('cart', 3)
       },
+      async verifyMintedUrls() {
+        const results = []
+        for (const evaluationMode of ['remote', 'local'] as const) {
+          const client = createTogglyClient({appKey:'url-fixture',environment:'Test',evaluationMode,instanceId:' mint ',identity:'private',groups:['private'],claims:{role:'private'},baseUri:`${location.origin}/url-fixture/?keep=ok&u=old&userId=old&g=one&g=two&claim.role=old&i=old&i=older`,enableTelemetry:false,enableLiveUpdates:false,refreshInterval:0})
+          try {await client.init(); results.push(await client.isFeatureOn('On'))} finally {client.destroy()}
+        }
+        return results
+      },
       async verifyCache() {
         const config = {appKey:'cache-fixture', environment:'Test', identity:'cache-user', instanceId:'cache-a', baseUri:`${location.origin}/cache-fixture`, metricsBaseUrl:metrics, persistFeatures:true, enableLiveUpdates:false, refreshInterval:0, enableTelemetry:false, featureDefaults:{On:false}}
         const client = createTogglyClient(config)
