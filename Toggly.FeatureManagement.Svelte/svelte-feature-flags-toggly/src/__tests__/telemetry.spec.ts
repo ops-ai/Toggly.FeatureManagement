@@ -282,6 +282,9 @@ describe('Svelte frontend telemetry ownership and evaluations', () => {
     }
   })
 
+  // Preserve all 2000 entries: admission alone takes ~2s under local coverage,
+  // while the hosted coverage runner exceeded the 5s default (~9.1s total).
+  // Bound this stress case at 15s; flush/recovery remain awaited without sleeps.
   it('shares admission bounds across context transitions and recovers after flushing', async () => {
     const diagnostics: string[] = []
     const owner = service({ onError: message => diagnostics.push(message) })
@@ -301,7 +304,7 @@ describe('Svelte frontend telemetry ownership and evaluations', () => {
     await owner.flushTelemetry()
     expect(envelope(20)).toEqual({ k: 'test-app', e: 'Test', i: 'overflow', m: { recovered: 1 } })
     owner.dispose()
-  })
+  }, 15_000)
 
   it('clears in-memory revisions with nonpersistent definitions before the next fetch', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ A: true }), { headers: { ETag: 'a' } })))
