@@ -198,14 +198,20 @@ class TogglyClientInstance {
       return '';
     }
 
-    const baseUrl = baseURI!.replace(/\/$/, '');
+    const url = new URL(baseURI!);
     const path = enableVariants
       ? `/evaluated-variants-signed/${appKey}/${environment}`
       : `/evaluated-signed/${appKey}/${environment}`;
-    const url = new URL(`${baseUrl}${path}`);
+    url.pathname = `${url.pathname.replace(/\/$/, '')}${path}`;
 
-    if (instanceId?.trim()) url.searchParams.set('i', instanceId.trim());
-    else appendEvaluationContext(
+    if (instanceId?.trim()) {
+      for (const key of [...url.searchParams.keys()]) {
+        if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) {
+          url.searchParams.delete(key);
+        }
+      }
+      url.searchParams.set('i', instanceId.trim());
+    } else appendEvaluationContext(
       url,
       { identity, groups, claims },
       enableVariants ? 'variants' : 'evaluated',
@@ -707,7 +713,7 @@ class TogglyClientInstance {
  * @param config - Toggly configuration
  */
 export async function initTogglyClient(config: TogglyConfig): Promise<void> {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  // Explicit Node initialization loads definitions; telemetry and background work stay browser-gated.
   if (clientInstance?.matchesOwner(config)) {
     await clientInstance.updateContext(config);
     return;

@@ -82,8 +82,24 @@ it('changing telemetry ownership options replaces the reporter even for the same
  expect(bodies).toEqual([]);
  telemetry.recordUsage('Suppressed');await flush();expect(bodies).toEqual([]);
 });
-it('SSR initialization and explicit browser methods create no resources',async()=>{
- vi.useFakeTimers();vi.stubGlobal('window',undefined);vi.stubGlobal('document',undefined);
- await store.initTogglyClient(config);telemetry.recordUsage('On');telemetry.incrementCounter('orders');await flush();
- expect(fetch).not.toHaveBeenCalled();expect(vi.getTimerCount()).toBe(0);
+it('explicit Node initialization loads definitions without frontend telemetry or background resources',async()=>{
+ vi.useFakeTimers();
+ const windowListener=vi.spyOn(window,'addEventListener');
+ const documentListener=vi.spyOn(document,'addEventListener');
+ const socket=vi.fn();vi.stubGlobal('WebSocket',socket);
+ const interval=vi.spyOn(globalThis,'setInterval');
+ vi.stubGlobal('window',undefined);vi.stubGlobal('document',undefined);
+ definitions={FlagOn:true,FlagOff:false};
+ await store.initTogglyClient({...config,featureFlagsRefreshInterval:30000,enableLiveUpdates:true});
+ expect(store.$flags.get()).toEqual({FlagOn:true,FlagOff:false});
+ expect(store.$isReady.get()).toBe(true);
+ expect(fetch).toHaveBeenCalledTimes(1);
+ expect(vi.getTimerCount()).toBe(0);
+ expect(store.$flag('FlagOn').get()).toBe(true);
+ expect(store.$flag('FlagOff').get()).toBe(false);
+ telemetry.recordUsage('FlagOn');telemetry.recordView('FlagOn');telemetry.incrementCounter('orders');telemetry.setGauge('cart',2);await flush();
+ expect(bodies).toEqual([]);expect(fetch).toHaveBeenCalledTimes(1);
+ expect(socket).not.toHaveBeenCalled();expect(interval).not.toHaveBeenCalled();
+ expect(windowListener).not.toHaveBeenCalled();expect(documentListener).not.toHaveBeenCalled();
+ windowListener.mockRestore();documentListener.mockRestore();interval.mockRestore();
 });

@@ -183,3 +183,26 @@ it('retains selected local callbacks when an earlier gate replaces a later callb
  expect(store.$gate(['First','Later']).get()).toBe(true);await flush();
  expect(bodies[0].f).toEqual({First:{enabled:[1]},Later:{enabled:[1]}});
 });
+
+
+it.each([false,true])('constructs the definitions pathname and suppresses every minted targeting query mode=%s',async enableVariants=>{
+ defs=enableVariants?{defs:{On:{enabled:true,variant:'blue'}}}:{On:true};
+ await init({enableVariants,instanceId:' minted ',identity:'alice',groups:['team'],claims:{role:'reader'},
+  baseURI:'https://definitions.test/prefix/?u=old&userId=legacy&g=first&g=second&claim.role=admin&claim.role=staff&claim.plan=paid&keep=one&keep=two#fragment'});
+ const url=requests[0].url;
+ expect(url.pathname).toBe(`/prefix/${enableVariants?'evaluated-variants-signed':'evaluated-signed'}/app/Test`);
+ expect(url.searchParams.get('i')).toBe('minted');
+ expect([...url.searchParams.keys()].some(key=>['u','userId','g'].includes(key)||key.startsWith('claim.'))).toBe(false);
+ expect(url.searchParams.getAll('keep')).toEqual(['one','two']);
+ expect(store.$flag('On').get()).toBe(true);
+ if(enableVariants) expect(store.getVariant('On')?.name).toBe('blue');
+});
+it.each([false,true])('preserves no-token targeting and unrelated base query fields mode=%s',async enableVariants=>{
+ defs=enableVariants?{defs:{On:{enabled:true,variant:'blue'}}}:{On:true};
+ await init({enableVariants,identity:'alice',groups:['team'],claims:{role:'reader'},baseURI:'https://definitions.test/prefix/?keep=one&keep=two'});
+ const url=requests[0].url;
+ expect(url.pathname).toBe(`/prefix/${enableVariants?'evaluated-variants-signed':'evaluated-signed'}/app/Test`);
+ expect(url.searchParams.getAll('keep')).toEqual(['one','two']);
+ expect(url.searchParams.get('i')).toBeNull();expect(url.searchParams.get(enableVariants?'userId':'u')).toBe('alice');
+ expect(url.searchParams.get('g')).toBe('team');expect(url.searchParams.get('claim.role')).toBe('reader');
+});

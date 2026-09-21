@@ -5,6 +5,8 @@
 - Explicit usage, view, counter, latest-value gauge and awaitable flush methods; synchronous browser client disposal with bounded final flushing.
 
 ### Fixed
+- Preserve explicit Node definitions initialization while frontend telemetry, polling, WebSocket and lifecycle resources remain browser-only.
+- Append definitions endpoints to the configured URL pathname and suppress all pre-existing client targeting query fields when a minted token is supplied.
 - Snapshot nested entity rules before callbacks and stop superseded refresh hooks before they publish retired results.
 - Count effective checks and assigned variants once through the shared evaluator, preserving local/entity gates and short circuit.
 - Avoid telemetry from unobserved computed-store maintenance or duplicate native component hydration subscriptions.
