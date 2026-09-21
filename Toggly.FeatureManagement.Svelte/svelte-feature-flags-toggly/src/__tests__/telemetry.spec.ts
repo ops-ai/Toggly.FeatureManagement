@@ -249,6 +249,60 @@ describe('Svelte frontend telemetry ownership and evaluations', () => {
     owner.dispose()
   })
 
+  it('preserves retry bytes and ordered gauges while tokens change during backoff', async () => {
+    vi.useFakeTimers()
+    const owner = service({ identity: 'alice' })
+    try {
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+        if (!url.startsWith(metricsBaseUrl)) return new Response('{}')
+        requests.push({ url, init: init! })
+        return new Response(null, { status: requests.length === 1 ? 429 : 202 })
+      }))
+      owner.setGauge('active', 1)
+      const sending = owner.flushTelemetry()
+      for (let i = 0; i < 30; i++) await Promise.resolve()
+      expect(requests).toHaveLength(1)
+      await owner.setContext({ instanceId: 'token-a' })
+      owner.setGauge('active', 2)
+      await owner.setContext({ instanceId: 'token-b' })
+      owner.setGauge('active', 3)
+      const pending = owner.flushTelemetry()
+      await vi.advanceTimersByTimeAsync(30_000)
+      await Promise.all([sending, pending])
+      expect(requests[0].init.body).toBe(requests[1].init.body)
+      expect(requests.map((_, index) => envelope(index))).toEqual([
+        { k: 'test-app', e: 'Test', u: 'alice', m: { active: 1 } },
+        { k: 'test-app', e: 'Test', u: 'alice', m: { active: 1 } },
+        { k: 'test-app', e: 'Test', i: 'token-a', m: { active: 2 } },
+        { k: 'test-app', e: 'Test', i: 'token-b', m: { active: 3 } },
+      ])
+    } finally {
+      owner.dispose()
+      vi.useRealTimers()
+    }
+  })
+
+  it('shares admission bounds across context transitions and recovers after flushing', async () => {
+    const diagnostics: string[] = []
+    const owner = service({ onError: message => diagnostics.push(message) })
+    for (let context = 0; context < 20; context++) {
+      await owner.setContext({ instanceId: 'token-' + context })
+      for (let entry = 0; entry < 100; entry++) owner.incrementCounter('metric-' + entry)
+    }
+    await owner.setContext({ instanceId: 'overflow' })
+    owner.incrementCounter('overflow')
+    await owner.flushTelemetry()
+    const sent = requests.map((_, index) => envelope(index))
+    expect(sent).toHaveLength(20)
+    expect(sent.reduce((count, body) => count + Object.keys(body.m as object).length, 0)).toBe(2000)
+    expect(sent.some(body => body.i === 'overflow')).toBe(false)
+    expect(diagnostics).toEqual(['Toggly telemetry: buffer-full'])
+    owner.incrementCounter('recovered')
+    await owner.flushTelemetry()
+    expect(envelope(20)).toEqual({ k: 'test-app', e: 'Test', i: 'overflow', m: { recovered: 1 } })
+    owner.dispose()
+  })
+
   it('clears in-memory revisions with nonpersistent definitions before the next fetch', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ A: true }), { headers: { ETag: 'a' } })))
     const owner = service({ instanceId: 'token-a', enableTelemetry: false })
