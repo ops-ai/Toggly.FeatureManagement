@@ -41,3 +41,11 @@ test('a stale detach cannot unregister a later attachment from disposal cleanup'
   expect(attachBrowserLifecycle(reporter)).toBe(current);
   window.dispatchEvent(new Event('pagehide')); expect(flush).toHaveBeenCalledTimes(1); reporter.dispose();
 });
+test('keyless transitions detach listeners and explicit reattachment works after activation', async () => {
+  const {window}=browser();const reporter=createTelemetryReporter({});const flush=jest.spyOn(reporter,'flush');
+  attachBrowserLifecycle(reporter);window.dispatchEvent(new Event('pagehide'));expect(flush).not.toHaveBeenCalled();
+  reporter.setContext({appKey:'app'});attachBrowserLifecycle(reporter);window.dispatchEvent(new Event('pagehide'));expect(flush).toHaveBeenCalledTimes(1);
+  reporter.setContext({appKey:''});window.dispatchEvent(new Event('pagehide'));expect(flush).toHaveBeenCalledTimes(1);
+  reporter.setContext({appKey:'next'});attachBrowserLifecycle(reporter);window.dispatchEvent(new Event('pagehide'));expect(flush).toHaveBeenCalledTimes(2);
+  reporter.dispose({flush:false}); await reporter.flush();expect(jest.getTimerCount()).toBe(0);
+});

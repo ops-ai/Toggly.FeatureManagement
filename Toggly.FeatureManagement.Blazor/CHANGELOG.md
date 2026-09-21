@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.10.0 — 2026-09-19
+
+### Added
+- Added `IFrontendIdentitySession.SetIdentityAsync` to atomically replace a frontend targeting context and minted token for definitions and telemetry.
+
+### Fixed
+- Preserve accepted telemetry attribution and gauge ordering across login, logout and token rotation while sharing one bounded queue.
+- Isolate signed snapshots and conditional requests by minted token; context replacement clears the previous token.
+
+
 ## 3.9.0 — 2026-09-18
 
 ### Added

@@ -1,6 +1,6 @@
 # Android SDK release
 
-The version in root `build.gradle.kts` applies to all five Maven modules. Keep `SdkIdentity.SDK_VERSION`, installation examples, and the customer changelog aligned. The current candidate is 1.6.0; publishing is a separate delivery step.
+The version in root `build.gradle.kts` applies to all five Maven modules. Keep `SdkIdentity.SDK_VERSION`, installation examples, and the customer changelog aligned. The current candidate is 1.7.0; publishing is a separate delivery step.
 
 Use JDK 17 or the hosted JDK 21 matrix with the configured Android SDK:
 
