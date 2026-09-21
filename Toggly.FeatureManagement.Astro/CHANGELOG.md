@@ -6,6 +6,7 @@
 
 ### Fixed
 - Preserve explicit Node definitions initialization while frontend telemetry, polling, WebSocket and lifecycle resources remain browser-only.
+- Remove inherited instance tokens when a context starts without a token or explicitly clears it, keeping definitions and telemetry attribution aligned.
 - Append definitions endpoints to the configured URL pathname and suppress all pre-existing client targeting query fields when a minted token is supplied.
 - Snapshot nested entity rules before callbacks and stop superseded refresh hooks before they publish retired results.
 - Count effective checks and assigned variants once through the shared evaluator, preserving local/entity gates and short circuit.

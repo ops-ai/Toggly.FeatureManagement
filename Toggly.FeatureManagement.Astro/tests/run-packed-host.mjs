@@ -138,12 +138,12 @@ const definitions = createServer(async (request, response) => {
   const requestUrl = new URL(request.url, 'http://fixture');
   if (requestUrl.pathname.includes('/identity-host/')) {
     const mode = requestUrl.pathname.includes('variants') ? 'variants' : 'boolean';
-    const token = requestUrl.searchParams.get('i') ?? requestUrl.searchParams.get('u') ?? 'anonymous';
+    const token = requestUrl.searchParams.get('i') ?? requestUrl.searchParams.get('u') ?? requestUrl.searchParams.get('userId') ?? 'anonymous';
     const revision = `${mode}-${token}`;
-    identityRequests.push({mode, token, query: Object.fromEntries(requestUrl.searchParams), validator: request.headers['if-none-match']});
+    identityRequests.push({mode, token, url: requestUrl.href, query: Object.fromEntries(requestUrl.searchParams), validator: request.headers['if-none-match']});
     response.setHeader('ETag', revision);
     if (request.headers['if-none-match'] === revision) {response.writeHead(304);response.end();return;}
-    const enabled = token !== 'token-b';
+    const enabled = !['token-b', 'retired', 'older'].includes(token);
     response.end(JSON.stringify(await signed(mode === 'variants' ? {Visible:{enabled,variant:'blue'},Hidden:{enabled:false}} : {Visible:enabled,Hidden:false})));
     return;
   }
@@ -335,6 +335,44 @@ async function waitForHost(url) {
     assert.ok(telemetry.some(body=>body.u==='client-alice'&&body.f?.Visible?.[enableVariants?'blue':'enabled']?.[0]>0));
     assert.ok(telemetry.every(body=>!(body.i&&body.u)));
     telemetry.length=0;
+  }
+  // Preserve the existing signed/ABA assertions above; independently exercise
+  // explicit URL-token clearing through the actual packed public init API.
+  for (const enableVariants of [false, true]) {
+    identityRequests.length = 0;
+    telemetry.length = 0;
+    await evaluate(async enableVariants => {
+      const sdk = window.telemetry;
+      const inherited = new URL(window.__TOGGLY_CONFIG__.baseURI);
+      inherited.search = 'i=retired&i=older&keep=one&keep=two';
+      const base = {...window.__TOGGLY_CONFIG__, appKey:'identity-host', baseURI:inherited.href, enableVariants,
+        verifySignatures:false, enableLiveUpdates:false, featureFlagsRefreshInterval:0, identity:'bob'};
+      const tokens = [undefined, '', ' A ', 'B', '', undefined];
+      for (let index=0;index<tokens.length;index++) {
+        await sdk.initTogglyClient({...base, instanceId:tokens[index]});
+        await sdk.refreshFlags();
+        if (sdk.$flags.get().Visible !== true || (enableVariants && sdk.getVariant('Visible')?.name !== 'blue')) throw Error('Cleared token selected retired definitions');
+        sdk.recordUsage('URL'+index);
+        await sdk.flushTelemetry();
+      }
+      sdk.destroyTogglyClient();
+    }, enableVariants);
+    assert(identityRequests.length >= 6);
+    for (const request of identityRequests) {
+      const url = new URL(request.url);
+      assert.deepEqual(url.searchParams.getAll('keep'), ['one','two']);
+      assert(!['retired','older'].includes(url.searchParams.get('i')));
+      assert(url.pathname.includes(enableVariants?'/evaluated-variants-signed/':'/evaluated-signed/'));
+    }
+    const expected = [undefined, undefined, 'A', 'B', undefined, undefined];
+    for (let index=0;index<expected.length;index++) {
+      const packets = telemetry.filter(body=>body.f?.['URL'+index]);
+      assert.equal(packets.length,1);
+      assert.deepEqual(packets[0].f['URL'+index], {enabled:[0,1]});
+      assert.equal(packets[0].i,expected[index]);
+      assert.equal(packets[0].u,expected[index]?undefined:'bob');
+    }
+    console.log('PASS inherited URL token initial/blank/rotation/clear', enableVariants?'variants':'boolean');
   }
   await page.close();
   await stopHost();

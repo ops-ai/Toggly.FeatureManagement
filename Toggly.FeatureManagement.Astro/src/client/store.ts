@@ -204,6 +204,8 @@ class TogglyClientInstance {
       : `/evaluated-signed/${appKey}/${environment}`;
     url.pathname = `${url.pathname.replace(/\/$/, '')}${path}`;
 
+    // Attribution belongs to the current context, never to inherited URL defaults.
+    url.searchParams.delete('i');
     if (instanceId?.trim()) {
       for (const key of [...url.searchParams.keys()]) {
         if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) {

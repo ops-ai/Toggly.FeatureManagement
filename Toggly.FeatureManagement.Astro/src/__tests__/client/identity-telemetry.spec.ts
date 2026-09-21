@@ -206,3 +206,21 @@ it.each([false,true])('preserves no-token targeting and unrelated base query fie
  expect(url.searchParams.get('i')).toBeNull();expect(url.searchParams.get(enableVariants?'userId':'u')).toBe('alice');
  expect(url.searchParams.get('g')).toBe('team');expect(url.searchParams.get('claim.role')).toBe('reader');
 });
+
+it.each([false,true])('never revives inherited i during initial, blank, rotated or cleared context mode=%s',async enableVariants=>{
+ defs=enableVariants?{defs:{On:{enabled:true,variant:'blue'}}}:{On:true};
+ const baseURI='https://definitions.test/prefix?i=retired&i=older&keep=one&keep=two';
+ for (const instanceId of [undefined,'',' A ','B','',undefined]) {
+  await init({enableVariants,baseURI,identity:'bob',instanceId});
+  await store.refreshFlags();
+  const url=requests.at(-1)!.url;
+  expect(url.pathname).toBe(`/prefix/${enableVariants?'evaluated-variants-signed':'evaluated-signed'}/app/Test`);
+  expect(url.searchParams.getAll('keep')).toEqual(['one','two']);
+  expect(url.searchParams.getAll('i')).toEqual(instanceId?.trim()?[instanceId.trim()]:[]);
+  expect(url.searchParams.get(enableVariants?'userId':'u')).toBe(instanceId?.trim()?null:'bob');
+  expect(store.$flag('On').get()).toBe(true);
+  if(enableVariants)expect(store.getVariant('On')?.name).toBe('blue');
+ }
+ await flush();
+ expect(bodies.every(body=>body.i?['A','B'].includes(body.i):body.u==='bob')).toBe(true);
+});
