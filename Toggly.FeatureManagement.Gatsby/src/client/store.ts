@@ -5,8 +5,19 @@
  * This module includes its own embedded Toggly client implementation.
  */
 
-import { atom, computed, type ReadableAtom } from 'nanostores';
-import type { TogglyPluginOptions, Flags, GateRequirement } from '../types/index.js';
+import { atom, computed } from 'nanostores';
+import {
+  createTelemetryReporter,
+  type TelemetryReporter,
+} from '@ops-ai/toggly-client-telemetry';
+import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
+import type {
+  TogglyPluginOptions,
+  Flags,
+  GateRequirement,
+  TogglyReadableAtom,
+  TogglyWritableAtom,
+} from '../types/index.js';
 import {
   appendEvaluationContext,
   normalizeEntityContext,
@@ -42,30 +53,45 @@ import {
   type WsSyncMessage,
 } from '../utils/ws-sync.js';
 
-/**
- * Atom containing all feature flags
- */
-export const $flags = atom<Flags>({});
+type ClientStoreState = {
+  flags: TogglyWritableAtom<Flags>;
+  isReady: TogglyWritableAtom<boolean>;
+  error: TogglyWritableAtom<Error | null>;
+  localGatesRevision: TogglyWritableAtom<number>;
+  clientInstance: TogglyClientInstance | null;
+  clientInitPromise: Promise<void> | null;
+};
 
-/**
- * Atom indicating if flags are loaded and ready
- */
-export const $isReady = atom<boolean>(false);
+// Gatsby can load the browser plugin's CommonJS entry alongside application
+// ESM entries. Keep the browser owner and atoms in one realm-wide registry so
+// those compiled entry points cannot create independent client snapshots.
+const CLIENT_STORE_KEY = Symbol.for('@ops-ai/gatsby-feature-flags-toggly/client-store-v1');
+const clientStoreGlobal = globalThis as Record<PropertyKey, unknown>;
+const createClientStore = (): ClientStoreState => ({
+  flags: atom<Flags>({}),
+  isReady: atom<boolean>(false),
+  error: atom<Error | null>(null),
+  localGatesRevision: atom(0),
+  clientInstance: null,
+  clientInitPromise: null,
+});
+const browserRealm = typeof window !== 'undefined' && typeof document !== 'undefined';
+const clientStore = browserRealm
+  ? (clientStoreGlobal[CLIENT_STORE_KEY] as ClientStoreState | undefined) ?? createClientStore()
+  : createClientStore();
+if (browserRealm) clientStoreGlobal[CLIENT_STORE_KEY] = clientStore;
 
-/**
- * Atom containing any error that occurred during initialization
- */
-export const $error = atom<Error | null>(null);
+/** Atom containing all feature flags. */
+export const $flags = clientStore.flags;
 
-/**
- * Bumped when device-local gates change so computed atoms re-evaluate.
- */
-export const $localGatesRevision = atom(0);
+/** Atom indicating if flags are loaded and ready. */
+export const $isReady = clientStore.isReady;
 
-/**
- * Internal client instance storage
- */
-let clientInstance: TogglyClientInstance | null = null;
+/** Atom containing any error that occurred during initialization. */
+export const $error = clientStore.error;
+
+/** Bumped when device-local gates change so computed atoms re-evaluate. */
+export const $localGatesRevision = clientStore.localGatesRevision;
 
 const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000;
 
@@ -95,6 +121,8 @@ type ClientConfig = Required<
     | 'onError'
     | 'allowedKeyIds'
     | 'maxSignatureAgeSeconds'
+    | 'metricsBaseUrl'
+    | 'telemetryFlushIntervalMs'
   >
 > & {
   identity?: string;
@@ -105,7 +133,31 @@ type ClientConfig = Required<
   onError?: TogglyPluginOptions['onError'];
   allowedKeyIds?: string[];
   maxSignatureAgeSeconds?: number;
+  metricsBaseUrl?: string;
+  telemetryFlushIntervalMs?: number;
 };
+
+function ownerKey(config: TogglyPluginOptions): string {
+  return JSON.stringify([
+    config.appKey,
+    config.environment ?? 'Production',
+    config.baseURI ?? 'https://definitions.toggly.io',
+    config.metricsBaseUrl ?? 'https://metrics.toggly.io',
+    config.enableTelemetry ?? true,
+    config.enableUsageTracking ?? true,
+    config.enableMetrics ?? true,
+    config.telemetryFlushIntervalMs ?? 45000,
+  ]);
+}
+
+/** Stable browser-owner identity used by framework lifecycle adapters. */
+export function getTogglyClientOwnerKey(config: TogglyPluginOptions): string {
+  return ownerKey(config);
+}
+
+function isBrowser(): boolean {
+  return typeof window !== 'undefined' && typeof document !== 'undefined';
+}
 
 /**
  * Internal client implementation
@@ -127,8 +179,13 @@ class TogglyClientInstance {
   private cachedDefinitionsRevision: string | null = null;
   private pendingDefinitionsPin: string | null = null;
   private lastFallbackRefresh = 0;
+  private readonly ownerKey: string;
+  private readonly reporter: TelemetryReporter | null;
+  private detachTelemetryLifecycle: (() => void) | null = null;
+  private destroyed = false;
 
   constructor(config: TogglyPluginOptions) {
+    this.ownerKey = ownerKey(config);
     this.config = {
       baseURI: 'https://definitions.toggly.io',
       verifySignatures: false,
@@ -139,9 +196,33 @@ class TogglyClientInstance {
       isDebug: false,
       connectTimeout: 5 * 1000,
       allFeaturesEnabledDuringBuild: false,
+      enableTelemetry: true,
+      enableUsageTracking: true,
+      enableMetrics: true,
       hooks: [],
       ...config,
     };
+
+    if (
+      isBrowser() &&
+      this.config.appKey &&
+      this.config.enableTelemetry &&
+      (this.config.enableUsageTracking || this.config.enableMetrics)
+    ) {
+      this.reporter = createTelemetryReporter({
+        appKey: this.config.appKey,
+        environment: this.config.environment,
+        enableTelemetry: true,
+        metricsBaseUrl: this.config.metricsBaseUrl,
+        telemetryFlushIntervalMs: this.config.telemetryFlushIntervalMs,
+        onDiagnostic: (code) => {
+          console.warn(`[Toggly Client] Telemetry diagnostic: ${code}`);
+        },
+      });
+      this.detachTelemetryLifecycle = attachBrowserLifecycle(this.reporter);
+    } else {
+      this.reporter = null;
+    }
 
     // Register initial hooks
     if (this.config.hooks) {
@@ -151,6 +232,46 @@ class TogglyClientInstance {
     if (this.config.localGates) {
       this.setLocalGates(this.config.localGates);
     }
+  }
+
+  matchesOwner(config: TogglyPluginOptions): boolean {
+    return this.ownerKey === ownerKey(config);
+  }
+
+  recordCheck(flagKey: string, enabled: boolean): void {
+    if (!this.destroyed && this.config.enableUsageTracking && $isReady.get()) {
+      this.reporter?.recordCheck(flagKey, enabled ? 'enabled' : 'disabled');
+    }
+  }
+
+  recordUsage(featureKey: string, variant?: string): void {
+    if (this.config.enableUsageTracking) this.reporter?.recordUsage(featureKey, variant);
+  }
+
+  recordView(featureKey: string, variant?: string): void {
+    if (this.config.enableUsageTracking) this.reporter?.recordView(featureKey, variant);
+  }
+
+  incrementCounter(metricKey: string, value = 1): void {
+    if (this.config.enableMetrics) this.reporter?.incrementCounter(metricKey, value);
+  }
+
+  setGauge(metricKey: string, value: number): void {
+    if (this.config.enableMetrics) this.reporter?.setGauge(metricKey, value);
+  }
+
+  flushTelemetry(): Promise<void> {
+    return this.reporter?.flush() ?? Promise.resolve();
+  }
+
+  destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    this.stopRefreshInterval();
+    this.stopWebSocket();
+    this.detachTelemetryLifecycle?.();
+    this.detachTelemetryLifecycle = null;
+    this.reporter?.dispose();
   }
 
   setLocalGates(gates: LocalGate[]): void {
@@ -306,8 +427,10 @@ class TogglyClientInstance {
     } catch (error) {
       const fetchError = error instanceof Error ? error : new Error(String(error));
       this.lastError = fetchError;
-      this.config.onError?.('Error fetching feature flags', error);
-      $error.set(fetchError);
+      if (!this.destroyed) {
+        this.config.onError?.('Error fetching feature flags', error);
+        $error.set(fetchError);
+      }
 
       if (this.config.isDebug) {
         console.error('[Toggly Client] Error fetching flags:', error);
@@ -330,11 +453,13 @@ class TogglyClientInstance {
   }
 
   private scheduleDebouncedRefresh(forceRevisionReset = false): void {
+    if (this.destroyed) return;
     if (this.refreshDebounceTimer) {
       clearTimeout(this.refreshDebounceTimer);
     }
     this.refreshDebounceTimer = setTimeout(() => {
       this.refreshDebounceTimer = null;
+      if (this.destroyed) return;
       if (forceRevisionReset) {
         this.clearDefinitionsRevision();
       }
@@ -372,6 +497,9 @@ class TogglyClientInstance {
   }
 
   startWebSocket(): void {
+    if (this.destroyed) {
+      return;
+    }
     if (!this.config.appKey) {
       return;
     }
@@ -395,6 +523,7 @@ class TogglyClientInstance {
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
+      if (this.destroyed) return;
       this.wsConnected = true;
       this.wsReconnectAttempt = 0;
       this.lastFallbackRefresh = Date.now();
@@ -404,6 +533,7 @@ class TogglyClientInstance {
     };
 
     ws.onmessage = (event) => {
+      if (this.destroyed) return;
       const data = event.data;
 
       if (typeof data === 'string') {
@@ -437,12 +567,14 @@ class TogglyClientInstance {
     };
 
     ws.onclose = () => {
+      if (this.destroyed) return;
       this.wsConnected = false;
       this.ws = null;
 
       const delay = getNextReconnectDelayMs(this.wsReconnectAttempt);
       this.wsReconnectAttempt += 1;
       this.wsReconnectTimer = setTimeout(() => {
+        if (this.destroyed) return;
         this.startWebSocket();
       }, delay);
     };
@@ -480,6 +612,7 @@ class TogglyClientInstance {
   async init(): Promise<void> {
     try {
       const flags = await this.fetchFlags();
+      if (this.destroyed) return;
       this.cache = flags;
       $flags.set(flags);
       $isReady.set(true);
@@ -498,6 +631,7 @@ class TogglyClientInstance {
         this.startRefreshInterval();
       }
     } catch (error) {
+      if (this.destroyed) return;
       $error.set(error as Error);
       $isReady.set(true); // Still mark as ready even on error
       console.error('[Toggly Client] Initialization error:', error);
@@ -507,6 +641,7 @@ class TogglyClientInstance {
   async refresh(): Promise<void> {
     try {
       const flags = await this.fetchFlags();
+      if (this.destroyed) return;
       this.cache = flags;
       $flags.set(flags);
       $error.set(this.lastError);
@@ -523,11 +658,12 @@ class TogglyClientInstance {
   }
 
   private startRefreshInterval(): void {
-    if (this.refreshInterval) {
+    if (this.refreshInterval || this.destroyed) {
       return;
     }
 
     this.refreshInterval = setInterval(() => {
+      if (this.destroyed) return;
       if (
         this.wsConnected &&
         Date.now() - this.lastFallbackRefresh < FALLBACK_REFRESH_INTERVAL
@@ -576,25 +712,35 @@ class TogglyClientInstance {
  * @param config - Toggly configuration
  */
 export async function initTogglyClient(config: TogglyPluginOptions): Promise<void> {
-  if (clientInstance) {
-    console.warn('[Toggly Client] Client already initialized');
-    return;
+  if (clientStore.clientInstance?.matchesOwner(config)) {
+    return clientStore.clientInitPromise ?? Promise.resolve();
   }
 
-  clientInstance = new TogglyClientInstance(config);
-  await clientInstance.init();
+  clientStore.clientInstance?.destroy();
+  const instance = new TogglyClientInstance(config);
+  clientStore.clientInstance = instance;
+  $isReady.set(false);
+  $flags.set({ ...config.flagDefaults });
+  $error.set(null);
+  const promise = instance.init();
+  clientStore.clientInitPromise = promise;
+  try {
+    await promise;
+  } finally {
+    if (clientStore.clientInstance === instance) clientStore.clientInitPromise = null;
+  }
 }
 
 /**
  * Manually refresh feature flags
  */
 export async function refreshFlags(): Promise<void> {
-  if (!clientInstance) {
+  if (!clientStore.clientInstance) {
     console.error('[Toggly Client] Client not initialized');
     return;
   }
 
-  await clientInstance.refresh();
+  await clientStore.clientInstance.refresh();
 }
 
 /**
@@ -603,32 +749,32 @@ export async function refreshFlags(): Promise<void> {
  * @param identity - User identifier
  */
 export function setIdentity(identity: string): void {
-  if (!clientInstance) {
+  if (!clientStore.clientInstance) {
     console.error('[Toggly Client] Client not initialized');
     return;
   }
 
-  clientInstance.setIdentity(identity);
+  clientStore.clientInstance.setIdentity(identity);
 }
 
 /**
  * Clear user identity
  */
 export function clearIdentity(): void {
-  if (!clientInstance) {
+  if (!clientStore.clientInstance) {
     console.error('[Toggly Client] Client not initialized');
     return;
   }
 
-  clientInstance.clearIdentity();
+  clientStore.clientInstance.clearIdentity();
 }
 
 /**
  * Stop automatic refresh interval
  */
 export function stopRefreshInterval(): void {
-  if (clientInstance) {
-    clientInstance.stopRefreshInterval();
+  if (clientStore.clientInstance) {
+    clientStore.clientInstance.stopRefreshInterval();
   }
 }
 
@@ -636,8 +782,8 @@ export function stopRefreshInterval(): void {
  * Stop WebSocket live updates and cancel pending reconnect/debounce timers
  */
 export function stopWebSocket(): void {
-  if (clientInstance) {
-    clientInstance.stopWebSocket();
+  if (clientStore.clientInstance) {
+    clientStore.clientInstance.stopWebSocket();
   }
 }
 
@@ -645,11 +791,11 @@ export function stopWebSocket(): void {
  * Add a hook dynamically
  */
 export function addHook(hook: Hook): void {
-  if (!clientInstance) {
+  if (!clientStore.clientInstance) {
     console.error('[Toggly Client] Client not initialized');
     return;
   }
-  clientInstance.hookExecutor.addHook(hook);
+  clientStore.clientInstance.hookExecutor.addHook(hook);
 }
 
 /**
@@ -657,33 +803,73 @@ export function addHook(hook: Hook): void {
  * @returns true if hook was found and removed, false otherwise
  */
 export function removeHook(name: string): boolean {
-  if (!clientInstance) {
+  if (!clientStore.clientInstance) {
     console.error('[Toggly Client] Client not initialized');
     return false;
   }
-  return clientInstance.hookExecutor.removeHook(name);
+  return clientStore.clientInstance.hookExecutor.removeHook(name);
 }
 
 /**
  * Register device-local post-filter gates
  */
 export function setLocalGates(gates: LocalGate[]): void {
-  if (!clientInstance) {
+  if (!clientStore.clientInstance) {
     console.error('[Toggly Client] Client not initialized');
     return;
   }
-  clientInstance.setLocalGates(gates);
+  clientStore.clientInstance.setLocalGates(gates);
 }
 
 /**
  * Notify subscribers that local gate state changed (no network)
  */
 export function notifyLocalGatesChanged(): void {
-  if (!clientInstance) {
+  if (!clientStore.clientInstance) {
     console.error('[Toggly Client] Client not initialized');
     return;
   }
-  clientInstance.notifyLocalGatesChanged();
+  clientStore.clientInstance.notifyLocalGatesChanged();
+}
+
+/** Record an explicit feature usage in compact browser telemetry. */
+export function recordUsage(featureKey: string, variant?: string): void {
+  clientStore.clientInstance?.recordUsage(featureKey, variant);
+}
+
+/** Record an explicit feature view in compact browser telemetry. */
+export function recordView(featureKey: string, variant?: string): void {
+  clientStore.clientInstance?.recordView(featureKey, variant);
+}
+
+/** Increment an application-level compact counter. */
+export function incrementCounter(metricKey: string, value = 1): void {
+  clientStore.clientInstance?.incrementCounter(metricKey, value);
+}
+
+/** Set an application-level compact gauge. */
+export function setGauge(metricKey: string, value: number): void {
+  clientStore.clientInstance?.setGauge(metricKey, value);
+}
+
+/** Flush compact browser telemetry. */
+export function flushTelemetry(): Promise<void> {
+  return clientStore.clientInstance?.flushTelemetry() ?? Promise.resolve();
+}
+
+/** Dispose the current browser client owner. */
+export function disposeTogglyClient(config?: TogglyPluginOptions): void {
+  if (
+    config &&
+    clientStore.clientInstance &&
+    !clientStore.clientInstance.matchesOwner(config)
+  ) return;
+  clientStore.clientInstance?.destroy();
+  clientStore.clientInstance = null;
+  clientStore.clientInitPromise = null;
+  $flags.set({});
+  $isReady.set(false);
+  $error.set(null);
 }
 
 /**
@@ -697,17 +883,35 @@ export function notifyLocalGatesChanged(): void {
  */
 export function $flag(
   key: string,
-  defaultValue: boolean = false,
+  defaultValue = false,
   entity?: TogglyEntityContext | Record<string, unknown> | null,
   kind?: string,
-): ReadableAtom<boolean> {
-  return computed([$flags, $localGatesRevision], (flags) => {
-    const entityContext = normalizeEntityContext(entity, kind);
-    if (!clientInstance) {
-      return resolveEvaluatedDefinition(flags[key], entityContext, defaultValue);
-    }
-    return clientInstance.getEffectiveFlag(key, flags[key], defaultValue, entityContext);
-  });
+): TogglyReadableAtom<boolean> {
+  const flagAtom: TogglyReadableAtom<boolean> = computed(
+    [$flags, $localGatesRevision, $isReady],
+    (flags) => {
+      const entityContext = normalizeEntityContext(entity, kind);
+      if (!clientStore.clientInstance) {
+        return resolveEvaluatedDefinition(flags[key], entityContext, defaultValue);
+      }
+      const enabled = clientStore.clientInstance.getEffectiveFlag(
+        key,
+        flags[key],
+        defaultValue,
+        entityContext,
+      );
+      if (flagAtom.lc > 0) clientStore.clientInstance.recordCheck(key, enabled);
+      return enabled;
+    },
+  );
+  const get = flagAtom.get.bind(flagAtom);
+  flagAtom.get = () => {
+    const hasSubscriber = flagAtom.lc > 0;
+    const enabled = get();
+    if (!hasSubscriber) clientStore.clientInstance?.recordCheck(key, enabled);
+    return enabled;
+  };
+  return flagAtom;
 }
 
 /**
@@ -721,23 +925,49 @@ export function $flag(
 export function $gate(
   keys: string[],
   requirement: GateRequirement = 'all',
-  negate: boolean = false,
+  negate = false,
   entity?: TogglyEntityContext | Record<string, unknown> | null,
   kind?: string,
-): ReadableAtom<boolean> {
-  return computed([$flags, $localGatesRevision], (flags) => {
-    if (keys.length === 0) {
-      return !negate;
+): TogglyReadableAtom<boolean> {
+  let evaluatedLeaves: Array<[string, boolean]> = [];
+  const gateAtom: TogglyReadableAtom<boolean> = computed(
+    [$flags, $localGatesRevision, $isReady],
+    (flags) => {
+      if (keys.length === 0) {
+        return !negate;
+      }
+
+      const entityContext = normalizeEntityContext(entity, kind);
+      evaluatedLeaves = [];
+      const evaluate = (key: string) => {
+        if (!clientStore.clientInstance) {
+          return resolveEvaluatedDefinition(flags[key], entityContext);
+        }
+        const enabled = clientStore.clientInstance.getEffectiveFlag(
+          key,
+          flags[key],
+          false,
+          entityContext,
+        );
+        evaluatedLeaves.push([key, enabled]);
+        if (gateAtom.lc > 0) clientStore.clientInstance.recordCheck(key, enabled);
+        return enabled;
+      };
+
+      const isEnabled = requirement === 'any' ? keys.some(evaluate) : keys.every(evaluate);
+
+      return negate ? !isEnabled : isEnabled;
+    },
+  );
+  const get = gateAtom.get.bind(gateAtom);
+  gateAtom.get = () => {
+    const hasSubscriber = gateAtom.lc > 0;
+    const enabled = get();
+    if (!hasSubscriber) {
+      const instance = clientStore.clientInstance;
+      evaluatedLeaves.forEach(([key, result]) => instance?.recordCheck(key, result));
     }
-
-    const entityContext = normalizeEntityContext(entity, kind);
-    const evaluate = (key: string) =>
-      clientInstance
-        ? clientInstance.getEffectiveFlag(key, flags[key], false, entityContext)
-        : resolveEvaluatedDefinition(flags[key], entityContext);
-
-    const isEnabled = requirement === 'any' ? keys.some(evaluate) : keys.every(evaluate);
-
-    return negate ? !isEnabled : isEnabled;
-  });
+    return enabled;
+  };
+  return gateAtom;
 }

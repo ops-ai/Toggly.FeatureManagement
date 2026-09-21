@@ -1,3 +1,22 @@
+## 1.10.0
+
+2026-09-18
+
+### Added
+- Add default-on, bounded browser telemetry for effective feature checks,
+  explicit usage/views, counters, and gauges [OPS-1288].
+- Add independent usage and metrics category controls, custom ingestion URL and
+  flush interval configuration, lifecycle flushing, and explicit flush/dispose
+  APIs.
+- Exercise packed Gatsby 5 with React 18 in a real production browser against a
+  cross-origin collector, including gzip, pagehide, and owner replacement.
+
+### Fixed
+- Share one browser client owner across Gatsby's compiled CommonJS and ESM
+  entries while keeping SSR module state request-local.
+- Stop disposed or replaced initialization and refresh work from restoring stale
+  state or attributing events to a new app/environment.
+
 ## 1.9.0
 
 2026-09-03

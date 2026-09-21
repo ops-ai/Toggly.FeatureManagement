@@ -15,6 +15,9 @@ export type {
   FeatureProps,
   FeatureGateProps,
   TogglyProviderProps,
+  TogglyTelemetry,
+  TogglyReadableAtom,
+  TogglyWritableAtom,
 } from './types/index.js';
 
 // Export hooks
@@ -35,6 +38,12 @@ export {
   setIdentity,
   clearIdentity,
   stopRefreshInterval,
+  disposeTogglyClient,
+  recordUsage,
+  recordView,
+  incrementCounter,
+  setGauge,
+  flushTelemetry,
 } from './client/store.js';
 
 // Export server client (for SSR/SSG use cases)

@@ -61,6 +61,8 @@ export function FeatureGate({
   const keysKey = flagKeys.join('\0');
   const gateAtom = useMemo(
     () => $gate(flagKeys, requirement, negate, context, contextKind),
+    // The joined key preserves both membership and short-circuit order.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [keysKey, requirement, negate, context, contextKind],
   );
   const isEnabled = useStore(gateAtom);

@@ -1,7 +1,38 @@
-import type { Hook, EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
+import type { Hook, EvaluatedDefinitions } from '@ops-ai/toggly-hooks-types';
 import type { LocalGate } from '@ops-ai/toggly-local-gates';
 
 export type { LocalGate };
+
+type Primitive = boolean | number | string;
+type ReadonlyStoreValue<Value> = Value extends undefined
+  ? Value
+  : Value extends (...args: never[]) => unknown
+    ? Value
+    : Value extends Primitive
+      ? Value
+      : Value extends Record<PropertyKey, unknown>
+        ? Readonly<Value>
+        : Value;
+
+/** Framework-neutral structural type exposed by Gatsby's reactive stores. */
+export interface TogglyReadableAtom<Value> {
+  get(): Value;
+  readonly lc: number;
+  listen(
+    listener: (value: ReadonlyStoreValue<Value>, oldValue: ReadonlyStoreValue<Value>) => void,
+  ): () => void;
+  notify(oldValue?: ReadonlyStoreValue<Value>): void;
+  off(): void;
+  subscribe(
+    listener: (value: ReadonlyStoreValue<Value>, oldValue?: ReadonlyStoreValue<Value>) => void,
+  ): () => void;
+  readonly value: Value | undefined;
+}
+
+/** Writable form of a Gatsby reactive store. */
+export interface TogglyWritableAtom<Value> extends TogglyReadableAtom<Value> {
+  set(value: Value): void;
+}
 
 /**
  * Toggly configuration options for Gatsby plugin
@@ -60,6 +91,21 @@ export interface TogglyPluginOptions {
   
   /** Connection timeout in milliseconds */
   connectTimeout?: number;
+
+  /** Enable compact browser telemetry (default: true when appKey is present) */
+  enableTelemetry?: boolean;
+
+  /** Enable automatic checks and explicit usage/view events (default: true) */
+  enableUsageTracking?: boolean;
+
+  /** Enable explicit application counters and gauges (default: true) */
+  enableMetrics?: boolean;
+
+  /** Base URL for compact telemetry ingestion */
+  metricsBaseUrl?: string;
+
+  /** Telemetry flush interval in milliseconds (30000-60000; default: 45000) */
+  telemetryFlushIntervalMs?: number;
   
   /** Hooks to extend SDK behavior at key lifecycle points */
   hooks?: Hook[];
@@ -163,6 +209,18 @@ export interface UseTogglyResult {
   
   /** Function to manually refresh flags */
   refreshFlags: () => Promise<void>;
+
+  /** Explicit compact browser telemetry helpers */
+  telemetry: TogglyTelemetry;
+}
+
+/** Explicit compact browser telemetry helpers. These do not evaluate feature flags. */
+export interface TogglyTelemetry {
+  recordUsage: (featureKey: string, variant?: string) => void;
+  recordView: (featureKey: string, variant?: string) => void;
+  incrementCounter: (metricKey: string, value?: number) => void;
+  setGauge: (metricKey: string, value: number) => void;
+  flush: () => Promise<void>;
 }
 
 /**

@@ -115,7 +115,7 @@ During build, the plugin generates a `toggly-page-features.json` manifest that m
 |--------|------|---------|-------------|
 | `appKey` | `string` | **required** | Your Toggly application key |
 | `environment` | `string` | `'Production'` | Environment name (e.g., 'Staging', 'Dev') |
-| `baseURI` | `string` | `'https://client.toggly.io'` | Toggly API base URL |
+| `baseURI` | `string` | `'https://definitions.toggly.io'` | Toggly definitions API base URL |
 | `flagDefaults` | `object` | `{}` | Default flag values when API unavailable |
 | `featureFlagsRefreshInterval` | `number` | `180000` | Client refresh interval (ms); rare fallback while WebSocket is connected |
 | `enableLiveUpdates` | `boolean` | `true` | Browser WebSocket live updates for definitions |
@@ -123,6 +123,44 @@ During build, the plugin generates a `toggly-page-features.json` manifest that m
 | `identity` | `string` | `undefined` | User identity for targeting |
 | `isDebug` | `boolean` | `false` | Enable debug logging |
 | `connectTimeout` | `number` | `5000` | API connection timeout (ms) |
+| `enableTelemetry` | `boolean` | `true` | Enable bounded browser telemetry when an app key is present |
+| `enableUsageTracking` | `boolean` | `true` | Enable automatic checks and explicit usage/view events |
+| `enableMetrics` | `boolean` | `true` | Enable explicit counters and gauges |
+| `metricsBaseUrl` | `string` | `'https://metrics.toggly.io'` | Absolute HTTP(S) telemetry base URL |
+| `telemetryFlushIntervalMs` | `number` | `45000` | Flush interval from 30000 through 60000 ms |
+
+### Browser telemetry
+
+The browser store owns one reporter for the active application and environment.
+It records each effective feature leaf after entity and device-local gates are
+applied and before a gate result is negated. `any` and `all` gates preserve
+short-circuit evaluation, so skipped leaves are not counted. Definition fetch,
+hydration projection, SSR, builds, keyless configuration, and opted-out
+categories stay silent. Rendering does not create automatic view events.
+
+Explicit APIs never evaluate a feature:
+
+```ts
+import {
+  recordUsage,
+  recordView,
+  incrementCounter,
+  setGauge,
+  flushTelemetry,
+} from '@ops-ai/gatsby-feature-flags-toggly';
+
+recordUsage('checkout', 'experiment-a');
+recordView('pricing');
+incrementCounter('orders');
+setGauge('cartValue', 19.5);
+await flushTelemetry();
+```
+
+The same functions are available under `useToggly().telemetry`. The reporter
+flushes on hidden/pagehide and is disposed when its provider owner unmounts or
+when a different app, environment, or telemetry endpoint replaces it. Payloads
+contain only the app key, environment, aggregate feature variants, and metrics;
+identity, groups, claims, entity context, and timestamps are excluded.
 
 ## API Reference
 

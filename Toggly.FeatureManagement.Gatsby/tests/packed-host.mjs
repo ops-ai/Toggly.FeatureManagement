@@ -1,15 +1,22 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
+import { gunzipSync } from 'node:zlib';
 
 const packageDirectory = dirname(fileURLToPath(import.meta.url));
 const sdkDirectory = dirname(packageDirectory);
+const reporterOverride = process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL;
+const reporterTarball = reporterOverride ? resolve(reporterOverride) : undefined;
+if (reporterTarball) {
+  assert.ok(statSync(reporterTarball).isFile(), 'local reporter override must be an existing tarball');
+  console.log('LOCAL_TELEMETRY_TARBALL: registry acceptance pending');
+}
 const currentGatsby = '5.16.1';
 
 function run(command, args, options = {}) {
@@ -83,6 +90,7 @@ function writeHost(host, baseURI) {
       appKey: 'gatsby-current-host',
       environment: 'Production',
       baseURI: ${JSON.stringify(baseURI)},
+      metricsBaseUrl: ${JSON.stringify(baseURI)},
       verifySignatures: true,
       enableLiveUpdates: false,
       flagDefaults: { serverOff: false }
@@ -104,6 +112,58 @@ function writeHost(host, baseURI) {
 `,
   );
   run('mkdir', ['-p', join(host, 'src')]);
+  run('mkdir', ['-p', join(host, 'src', 'pages')]);
+  writeFileSync(join(host, 'src', 'pages', 'index.js'), `
+import React from 'react';
+import {
+  Feature,
+  FeatureGate,
+  flushTelemetry,
+  incrementCounter,
+  initTogglyClient,
+  recordUsage,
+  recordView,
+  setGauge,
+  useFeatureFlag,
+} from '@ops-ai/gatsby-feature-flags-toggly';
+
+export default function IndexPage() {
+  const hook = useFeatureFlag('hookOn');
+  return <main>
+    <p id="mounted">{hook.isReady ? 'ready' : 'loading'}</p>
+    <p id="hook">{hook.isEnabled ? 'on' : 'off'}</p>
+    <Feature flag="featureOn" loading={<p id="feature">loading</p>}>
+      <p id="feature">on</p>
+    </Feature>
+    <FeatureGate flags={['gateOn', 'gateSkipped']} requirement="any">
+      <p id="gate">on</p>
+    </FeatureGate>
+    <button id="explicit" onClick={async () => {
+      recordUsage('featureOn', 'blue');
+      recordView('featureOff', 'green');
+      incrementCounter('orders', 2);
+      setGauge('cartValue', 19.5);
+      await flushTelemetry();
+      document.body.dataset.explicit = 'done';
+    }}>explicit</button>
+    <button id="exit" onClick={() => {
+      recordUsage('exitFeature');
+      document.body.dataset.exit = 'queued';
+    }}>exit</button>
+    <button id="replacement" onClick={async () => {
+      recordUsage('oldOnly');
+      await initTogglyClient({
+        appKey: 'gatsby-replacement-host', environment: 'Preview',
+        baseURI: ${JSON.stringify(baseURI)}, metricsBaseUrl: ${JSON.stringify(baseURI)},
+        enableLiveUpdates: false, featureFlagsRefreshInterval: 0,
+      });
+      recordView('newOnly');
+      await flushTelemetry();
+      document.body.dataset.replacement = 'done';
+    }}>replacement</button>
+  </main>;
+}
+`);
   writeFileSync(join(host, 'src', 'gated.js'), "import React from 'react'; export default () => <main>Gatsby packed SSG gate</main>;\n");
   writeFileSync(join(host, 'src', 'ssr.js'), `
 import React from 'react';
@@ -188,12 +248,10 @@ const ssr = require('@ops-ai/gatsby-feature-flags-toggly/gatsby-ssr');
   assert.equal(await server.evaluateGate(['serverOn', 'serverOff'], 'all'), false);
   assert.equal(await server.evaluateGate(['serverOn', 'serverOff'], 'any'), true);
 
-  await sdk.initTogglyClient(config);
-  assert.equal(sdk.$flags.get().runtimeOn, true);
-  assert.equal(sdk.$flags.get().runtimeOff, false);
+  sdk.$flags.set({ runtimeOn: true, runtimeOff: false });
+  sdk.$isReady.set(true);
   assert.equal(sdk.$gate(['runtimeOn', 'runtimeOff'], 'all').get(), false);
   assert.equal(sdk.$gate(['runtimeOn', 'runtimeOff'], 'any').get(), true);
-  sdk.stopRefreshInterval();
 
   const html = renderToStaticMarkup(
     ssr.wrapRootElement({ element: React.createElement('main', null,
@@ -208,6 +266,7 @@ const ssr = require('@ops-ai/gatsby-feature-flags-toggly/gatsby-ssr');
   assert.match(html, /RUNTIME_OFF_FALLBACK/);
   assert.match(html, /RUNTIME_ANY_GATE/);
   assert.doesNotMatch(html, /RUNTIME_DISABLED_LEAK|RUNTIME_ALL_LEAK/);
+  sdk.$isReady.set(false);
   console.log('PACKED_GATSBY_RUNTIME_PASS');
 })().catch((error) => {
   console.error(error);
@@ -241,7 +300,25 @@ const temporary = mkdtempSync(join(tmpdir(), 'toggly-gatsby-packed-host-'));
 const host = join(temporary, 'host');
 let definitions;
 let productionHost;
+let browser;
 let serverEnabled = true;
+const telemetryRequests = [];
+
+async function waitForTelemetry(count, phase) {
+  const deadline = Date.now() + 10_000;
+  while (telemetryRequests.length < count) {
+    assert.ok(Date.now() < deadline,
+      `Gatsby ${phase}: collector received ${telemetryRequests.length}/${count} envelopes within 10 seconds`);
+    await delay(20);
+  }
+}
+
+async function requestBody(request) {
+  const chunks = [];
+  for await (const chunk of request) chunks.push(chunk);
+  const body = Buffer.concat(chunks);
+  return request.headers['content-encoding'] === 'gzip' ? gunzipSync(body) : body;
+}
 
 try {
   const serverDefinitions = [
@@ -249,9 +326,31 @@ try {
     { featureKey: 'serverOff', filters: [{ name: 'AlwaysOff', parameters: {} }] },
   ];
   const requests = [];
-  definitions = createServer((request, response) => {
+  definitions = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
     requests.push(url.pathname);
+    response.setHeader('access-control-allow-origin', request.headers.origin ?? '*');
+    response.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
+    response.setHeader('access-control-allow-headers', 'content-type, content-encoding, x-toggly-sdk, x-toggly-sdk-version');
+    if (request.method === 'OPTIONS') {
+      response.writeHead(204).end();
+      return;
+    }
+    if (url.pathname === '/cors-probe' && request.method === 'POST') {
+      response.writeHead(202).end();
+      return;
+    }
+    if (url.pathname === '/api/frontend/telemetry' && request.method === 'POST') {
+      telemetryRequests.push({
+        encoding: request.headers['content-encoding'] ?? 'identity',
+        origin: request.headers.origin,
+        authorization: request.headers.authorization,
+        cookie: request.headers.cookie,
+        body: JSON.parse((await requestBody(request)).toString('utf8')),
+      });
+      response.writeHead(202).end();
+      return;
+    }
     response.setHeader('content-type', 'application/json');
     if (url.pathname === '/.well-known/jwks') {
       response.end(JSON.stringify(jwks));
@@ -266,7 +365,25 @@ try {
       return;
     }
     if (url.pathname === '/evaluated-signed/gatsby-current-host/Production') {
-      response.end(envelope({ runtimeOn: true, runtimeOff: false }));
+      response.end(envelope({
+        runtimeOn: true,
+        runtimeOff: false,
+        hookOn: true,
+        featureOn: true,
+        featureOff: false,
+        gateOn: true,
+        gateSkipped: false,
+      }));
+      return;
+    }
+    if (url.pathname === '/evaluated-signed/gatsby-replacement-host/Preview') {
+      response.end(JSON.stringify({
+        hookOn: false,
+        featureOn: false,
+        featureOff: true,
+        gateOn: false,
+        gateSkipped: true,
+      }));
       return;
     }
     response.writeHead(404).end(JSON.stringify({ error: 'not found' }));
@@ -289,8 +406,10 @@ try {
       `gatsby@${currentGatsby}`,
       'react@18.3.1',
       'react-dom@18.3.1',
-      'typescript@5.9.3',
+      'typescript@5.3.3',
       '@types/react@18.3.28',
+      'playwright@1.58.2',
+      ...(reporterTarball ? [reporterTarball] : []),
       tarball,
     ],
     { cwd: host },
@@ -299,11 +418,22 @@ try {
     run(process.execPath, ['-p', "require('gatsby/package.json').version"], { cwd: host }).trim(),
     currentGatsby,
   );
-  // Match the SDK's compiler contract: skip dependency declaration internals,
-  // while strict checks and negative assertions validate the packed public API.
+  assert.equal(
+    JSON.parse(
+      readFileSync(
+        join(host, 'node_modules', '@ops-ai', 'toggly-client-telemetry', 'package.json'),
+        'utf8',
+      ),
+    ).version,
+    '1.0.0',
+  );
+  run(join(host, 'node_modules', '.bin', 'playwright'), ['install', 'chromium'], {
+    cwd: host,
+    stdio: 'inherit',
+  });
   run(join(host, 'node_modules', '.bin', 'tsc'), [
-    '--noEmit', '--strict', '--skipLibCheck', '--module', 'ESNext', '--moduleResolution', 'Bundler',
-    '--target', 'ES2022', 'consumer.mts',
+    '--noEmit', '--strict', '--module', 'ESNext', '--moduleResolution', 'Bundler',
+    '--target', 'ES2022', '--types', 'react', 'consumer.mts',
   ], { cwd: host, stdio: 'inherit' });
   await runAsync(process.execPath, ['consumer.mjs'], { cwd: host });
   await runAsync(join(host, 'node_modules', '.bin', 'gatsby'), ['build'], {
@@ -340,6 +470,135 @@ try {
     assert.ok(Date.now() < deadline, 'Gatsby production server starts within 30 seconds');
     await delay(100);
   }
+
+  const javascriptFiles = [];
+  const collectJavaScript = (directory) => {
+    for (const entry of readdirSync(directory)) {
+      const path = join(directory, entry);
+      if (statSync(path).isDirectory()) collectJavaScript(path);
+      else if (path.endsWith('.js')) javascriptFiles.push(path);
+    }
+  };
+  collectJavaScript(join(host, 'public'));
+  const browserBundle = javascriptFiles.map((path) => readFileSync(path, 'utf8')).join('\n');
+  for (const serverOnly of [
+    '/definitions-signed/',
+    '@grpc/grpc-js',
+    '@grpc/proto-loader',
+    'toggly-usage-stats',
+  ]) {
+    assert.doesNotMatch(browserBundle, new RegExp(serverOnly.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  }
+
+  const { chromium } = await import(
+    pathToFileURL(join(host, 'node_modules', 'playwright', 'index.mjs')).href
+  );
+  browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+  const browserErrors = [];
+  page.on('pageerror', (error) => browserErrors.push(error.message));
+  page.on('requestfailed', (request) => {
+    // Synthetic pagehide marks already delivered keepalive resources aborted
+    // in Chromium. Collector receipt and the explicit CORS status probe below
+    // are the authoritative transport assertions.
+    if (!request.url().startsWith(baseURI)) {
+      browserErrors.push(`request failed: ${request.url()} ${request.failure()?.errorText ?? ''}`);
+    }
+  });
+  page.on('console', (message) => {
+    if (message.type() === 'error' || message.text().includes('Telemetry diagnostic')) {
+      browserErrors.push(message.text());
+    }
+  });
+  await page.goto(`http://127.0.0.1:${port}/`);
+  try {
+    await page.waitForFunction(
+      () => document.querySelector('#mounted')?.textContent === 'ready',
+      undefined,
+      { timeout: 10_000 },
+    );
+  } catch (error) {
+    console.error('Gatsby browser diagnostics', {
+      mounted: await page.locator('#mounted').textContent().catch(() => null),
+      body: await page.locator('body').textContent().catch(() => null),
+      browserErrors,
+      definitionRequests: requests,
+      resources: await page.evaluate(() => performance.getEntriesByType('resource').map((entry) => entry.name)),
+    });
+    throw error;
+  }
+  assert.equal(await page.locator('#hook').textContent(), 'on');
+  assert.equal(await page.locator('#feature').textContent(), 'on');
+  assert.equal(await page.locator('#gate').textContent(), 'on');
+
+  await page.locator('#explicit').click();
+  await page.waitForFunction(() => document.body.dataset.explicit === 'done', undefined, { timeout: 10_000 });
+  await waitForTelemetry(1, 'explicit flush');
+  const explicit = telemetryRequests[0];
+  assert.equal(explicit.encoding, 'gzip');
+  assert.equal(explicit.origin, `http://127.0.0.1:${port}`);
+  assert.equal(explicit.authorization, undefined);
+  assert.equal(explicit.cookie, undefined);
+  assert.deepEqual(Object.keys(explicit.body).sort(), ['e', 'f', 'k', 'm']);
+  assert.deepEqual(explicit.body, {
+    k: 'gatsby-current-host',
+    e: 'Production',
+    f: {
+      hookOn: { enabled: [1] },
+      featureOn: { enabled: [1], blue: [0, 1] },
+      gateOn: { enabled: [1] },
+      featureOff: { green: [0, 0, 1] },
+    },
+    m: { orders: 2, cartValue: 19.5 },
+  });
+  assert.equal(
+    await page.evaluate(async (collector) => {
+      const response = await fetch(`${collector}/cors-probe`, {
+        signal: AbortSignal.timeout(5000),
+        method: 'POST',
+        credentials: 'omit',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      return response.status;
+    }, baseURI),
+    202,
+  );
+
+  await page.locator('#exit').click();
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  await waitForTelemetry(2, 'pagehide flush');
+  assert.equal(telemetryRequests[1].encoding, 'identity');
+  assert.deepEqual(telemetryRequests[1].body.f, {
+    exitFeature: { enabled: [0, 1] },
+  });
+
+  await page.locator('#replacement').click();
+  await page.waitForFunction(() => document.body.dataset.replacement === 'done', undefined, { timeout: 10_000 });
+  await waitForTelemetry(4, 'owner replacement flush');
+  const oldFinal = telemetryRequests.find((request) => request.body.k === 'gatsby-current-host' && request.body.f?.oldOnly);
+  const replacement = telemetryRequests.find((request) => request.body.k === 'gatsby-replacement-host');
+  assert.deepEqual(oldFinal?.body, {
+    k: 'gatsby-current-host',
+    e: 'Production',
+    f: { oldOnly: { enabled: [0, 1] } },
+  });
+  assert.deepEqual(replacement?.body, {
+    k: 'gatsby-replacement-host',
+    e: 'Preview',
+    f: {
+      hookOn: { disabled: [1] },
+      featureOn: { disabled: [1] },
+      gateOn: { disabled: [1] },
+      gateSkipped: { enabled: [1] },
+      newOnly: { enabled: [0, 0, 1] },
+    },
+  });
+  assert.equal(oldFinal?.encoding, 'identity');
+  assert.equal(replacement?.encoding, 'gzip');
+  assert.deepEqual(browserErrors, []);
+  console.log('PACKED_GATSBY_BROWSER_TELEMETRY_PASS');
+
   async function renderSsr() {
     const response = await fetch(`http://127.0.0.1:${port}/ssr/`, { signal: AbortSignal.timeout(10_000) });
     assert.equal(response.status, 200, 'production Gatsby SSR request succeeds');
@@ -361,6 +620,7 @@ try {
   assert.ok(requests.includes('/.well-known/jwks'));
   console.log(`PACKED_GATSBY_HOST_PASS ${JSON.stringify({ gatsby: currentGatsby, node: process.version })}`);
 } finally {
+  await browser?.close();
   if (productionHost?.pid && productionHost.exitCode === null && productionHost.signalCode === null) {
     const stopped = new Promise((resolve) => productionHost.once('close', resolve));
     productionHost.kill('SIGTERM');
