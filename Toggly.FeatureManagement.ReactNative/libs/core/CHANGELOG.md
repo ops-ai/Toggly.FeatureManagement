@@ -6,6 +6,7 @@
 - `recordUsage`, `recordView`, `incrementCounter`, `setGauge`, and `flushTelemetry`. Actual effective feature checks count once per evaluated leaf; usage and views remain explicit.
 
 ### Fixed
+- Repair retired asynchronous cache writes and validate response body/validator pairs before cold conditional requests.
 - Keep captured evaluations, cached bodies and validators, and pending refresh/identity callbacks scoped to their current owner; restore offline cached state and retire validators with replaced or evicted bodies.
 - Keep disposed clients terminal across delayed storage, network, identity changes, timers, and live-update initialization.
 

@@ -81,6 +81,7 @@ export function useFeatureFlag(
   const currentOwner = useRef(toggly);
   currentOwner.current = toggly;
   const request = useRef(0);
+  const effectiveChange = useRef({ version: 0, pending: Promise.resolve() });
   const [resultOwner, setResultOwner] = useState(toggly);
   useEffect(() => () => { request.current++; }, [toggly]);
 
@@ -125,15 +126,20 @@ export function useFeatureFlag(
     if (!isReady) return;
 
     const unsubscribe = toggly.on('effectiveFlagsChanged', () => {
-      evaluate();
+      effectiveChange.current = { version: effectiveChange.current.version + 1, pending: evaluate() };
     });
 
     return unsubscribe;
   }, [toggly, isReady, evaluate]);
 
   const refresh = useCallback(async () => {
+    const version = effectiveChange.current.version;
     await toggly.refresh();
-    await evaluate();
+    if (currentOwner.current !== toggly) return;
+    // Core may already have triggered this consumer through its effective event.
+    // A no-event refresh (for example offline) still needs an evaluation.
+    if (effectiveChange.current.version === version) await evaluate();
+    else await effectiveChange.current.pending;
   }, [toggly, evaluate]);
 
   return {
@@ -192,6 +198,7 @@ export function useFeatureGate(
   const currentOwner = useRef(toggly);
   currentOwner.current = toggly;
   const request = useRef(0);
+  const effectiveChange = useRef({ version: 0, pending: Promise.resolve() });
   const [resultOwner, setResultOwner] = useState(toggly);
   useEffect(() => () => { request.current++; }, [toggly]);
 
@@ -242,15 +249,20 @@ export function useFeatureGate(
     if (!isReady) return;
 
     const unsubscribe = toggly.on('effectiveFlagsChanged', () => {
-      evaluate();
+      effectiveChange.current = { version: effectiveChange.current.version + 1, pending: evaluate() };
     });
 
     return unsubscribe;
   }, [toggly, isReady, evaluate]);
 
   const refresh = useCallback(async () => {
+    const version = effectiveChange.current.version;
     await toggly.refresh();
-    await evaluate();
+    if (currentOwner.current !== toggly) return;
+    // Core may already have triggered this consumer through its effective event.
+    // A no-event refresh (for example offline) still needs an evaluation.
+    if (effectiveChange.current.version === version) await evaluate();
+    else await effectiveChange.current.pending;
   }, [toggly, evaluate]);
 
   return {

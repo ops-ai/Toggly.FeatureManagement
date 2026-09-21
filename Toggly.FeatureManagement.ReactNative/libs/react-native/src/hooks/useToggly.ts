@@ -142,6 +142,8 @@ export function useToggly(): UseTogglyResult {
     const offIdentity = toggly.on('identityChanged', event => {
       if (!retired) update({ identity: (event.data as { newIdentity: string | null }).newIdentity });
     });
+    // Initialization can publish before an early-mounted consumer subscribes.
+    update({ features: toggly.currentFeatures, identity: toggly.currentIdentity });
     return () => { retired = true; offFeatures(); offIdentity(); };
   }, [toggly, isReady, update]);
 

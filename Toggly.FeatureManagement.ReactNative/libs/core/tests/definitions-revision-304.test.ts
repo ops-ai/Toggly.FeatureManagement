@@ -24,7 +24,7 @@ describe('304 definitions revision persistence', () => {
       headers: new Map(updated ? [['ETag', `"${updated}"`]] : []) });
     expect((await first.refresh()).flags).toEqual({ enabled: true });
     expect(JSON.parse((await storage.get('@toggly:etag'))!)).toEqual({
-      context: originalRecord.context, revision: updated ?? 'revision-1',
+      context: originalRecord.context, revision: updated ?? 'revision-1', writeId: originalRecord.writeId,
     });
     first.dispose();
 

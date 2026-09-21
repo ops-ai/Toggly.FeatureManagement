@@ -857,7 +857,7 @@
     "node_modules/@ops-ai/react-native-toggly-core": {
       "version": "1.8.0",
       "resolved": "file:core.tgz",
-      "integrity": "sha512-hnfBNa4ez6NEWXdbR1JlocGG79x5T9fs93fj2plU5azsgyZ07DRuN0RNrSPurLJ8WT6zjNbqiXdq9072J0Imtw==",
+      "integrity": "sha512-lltefrEBbaQhjifh15WHTOKfV6B4CF3dPcRq3mKzgqHY0Dze7A+9w67k0bjg9MOvANHzrUSK2lmPiRS4DD2L3w==",
       "license": "MIT",
       "dependencies": {
         "@ops-ai/toggly-client-telemetry": "^1.1.0",

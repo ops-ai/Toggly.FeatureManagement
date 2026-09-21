@@ -164,3 +164,47 @@ it('stops a superseded context publication before invoking its remaining observe
   await t.setIdentity('bob');await next;
   expect(t.currentIdentity).toBe('carol');expect(seen).not.toContain('bob');expect(seen).toContain('carol');
 });
+
+it.each([{kind:'body',signed:false},{kind:'validator',signed:false},{kind:'body',signed:true},{kind:'validator',signed:true}])('repairs a retired asynchronous $kind write across ABA before cold304 restoration (signed=$signed)',async({kind,signed})=>{
+ const values=new Map<string,string>();let hold=false;let release!:()=>void;let blocked=false;
+ const storage={get:async(key:string)=>values.get(key)??null,delete:async(key:string)=>{values.delete(key)},set:async(key:string,value:string)=>{
+   if(hold&&!blocked&&(kind==='body'?key.startsWith('@toggly:featureFlagsCache:'):key==='@toggly:etag')){blocked=true;await new Promise<void>(resolve=>{release=resolve})}values.set(key,value);
+ }};
+ let phase='old';
+ (fetch as jest.Mock).mockImplementation(async(url:string,init:RequestInit)=>{requests.push({url:new URL(url),init});return phase==='cold'?{status:304,ok:false,headers:new Map()}:response({On:phase!=='old',Off:phase==='old'},phase)});
+ const owner=client({storage,instanceId:'A',enableTelemetry:false,featureDefaults:{On:false,Off:true},maxCacheKeys:8,useSignedDefinitions:signed});await owner.init();hold=true;
+ const pending=owner.refresh();for(let n=0;n<100&&!release;n++)await new Promise(resolve=>setTimeout(resolve,1));expect(release).toBeDefined();
+ phase='new';await owner.setContext({instanceId:'B'});await owner.setContext({instanceId:'A'});expect(owner.currentFeatures).toEqual({On:true,Off:false});
+ release();await pending;owner.dispose({flush:false});
+ const revision=JSON.parse(values.get('@toggly:etag')!);expect(revision.revision).toBe('new');
+ const body=[...values].filter(([key])=>key.startsWith('@toggly:featureFlagsCache:')).map(([,raw])=>JSON.parse(raw)).find(body=>body.identity===revision.context);
+ expect(JSON.parse(body.flags)).toEqual({On:true,Off:false});expect(body.writeId).toEqual(revision.writeId);expect(typeof revision.writeId).toBe('string');
+ phase='cold';const cold=client({storage,instanceId:'A',enableTelemetry:false,featureDefaults:{On:false,Off:true},maxCacheKeys:8,useSignedDefinitions:signed});await cold.init();
+ expect(new Headers(requests.at(-1)!.init.headers).get('If-None-Match')).toBe('new');
+ expect(cold.currentFeatures).toEqual({On:true,Off:false});expect(await cold.isFeatureOn('On')).toBe(true);expect(await cold.isFeatureOn('Off')).toBe(false);
+});
+
+it.each(['body','validator'] as const)('rejects a mismatched persisted pair after a separate adapter delays its %s write',async(kind)=>{
+ const values=new Map<string,string>();let hold=false;let release!:()=>void;let blocked=false;
+ const plain={get:async(key:string)=>values.get(key)??null,delete:async(key:string)=>{values.delete(key)},set:async(key:string,value:string)=>{values.set(key,value)}};
+ const delayed={...plain,set:async(key:string,value:string)=>{if(hold&&!blocked&&(kind==='body'?key.startsWith('@toggly:featureFlagsCache:'):key==='@toggly:etag')){blocked=true;await new Promise<void>(resolve=>{release=resolve})}values.set(key,value)}};
+ let phase='old';(fetch as jest.Mock).mockImplementation(async(url:string,init:RequestInit)=>{requests.push({url:new URL(url),init});return response({On:phase!=='old'},phase)});
+ const owner=client({storage:delayed,instanceId:'A',enableTelemetry:false});await owner.init();hold=true;
+ const pending=owner.refresh();for(let n=0;n<100&&!release;n++)await new Promise(resolve=>setTimeout(resolve,1));expect(release).toBeDefined();
+ owner.dispose({flush:false});phase='new';const replacement=client({storage:plain,instanceId:'A',enableTelemetry:false});await replacement.init();
+ release();await pending;replacement.dispose({flush:false});
+ const cold=client({storage:plain,instanceId:'A',enableTelemetry:false,featureDefaults:{On:false}});await cold.init();
+ expect(new Headers(requests.at(-1)!.init.headers).has('If-None-Match')).toBe(false);expect(await cold.isFeatureOn('On')).toBe(true);
+});
+it('repairs a retired body even when its storage mutation rejects after overwriting the newer value',async()=>{
+ const values=new Map<string,string>();let hold=false;let release!:()=>void;let blocked=false;
+ const storage={get:async(key:string)=>values.get(key)??null,delete:async(key:string)=>{values.delete(key)},set:async(key:string,value:string)=>{
+  const retired=hold&&!blocked&&key.startsWith('@toggly:featureFlagsCache:');if(retired){blocked=true;await new Promise<void>(resolve=>{release=resolve})}values.set(key,value);if(retired)throw new Error('retired storage failure');
+ }};
+ let latest=false;(fetch as jest.Mock).mockImplementation(async()=>response({On:latest},latest?'new':'old'));
+ const owner=client({storage,instanceId:'A',enableTelemetry:false});await owner.init();hold=true;
+ const pending=owner.refresh();for(let n=0;n<100&&!release;n++)await new Promise(resolve=>setTimeout(resolve,1));expect(release).toBeDefined();
+ latest=true;await owner.setContext({instanceId:'B'});await owner.setContext({instanceId:'A'});release();await pending;
+ const revision=JSON.parse(values.get('@toggly:etag')!);const body=[...values].filter(([key])=>key.startsWith('@toggly:featureFlagsCache:')).map(([,value])=>JSON.parse(value)).find(body=>body.identity===revision.context);
+ expect(body.writeId).toBe(revision.writeId);expect(JSON.parse(body.flags)).toEqual({On:true});expect(owner.currentFeatures).toEqual({On:true});
+});

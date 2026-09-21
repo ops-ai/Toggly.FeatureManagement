@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const { createHash } = require('node:crypto');
-const { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } = require('node:fs');
+const { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { run } = require('./packed-process.cjs');
@@ -23,7 +23,9 @@ module.exports.verifyStorage = async function verifyStorage(packageDirectory, co
     writeFileSync(manifestPath,JSON.stringify(manifest,null,2)+'\n');
     const lockPath=join(packageDirectory,'tests/fixtures/packed-locks',`${label}.json`);
     if(process.env.TOGGLY_UPDATE_PACKED_LOCK==='1') {
-      await execute('npm',['install','--package-lock-only','--ignore-scripts','--no-audit','--no-fund']);
+      // Preserve the registry graph while npm refreshes the actual candidate archives.
+      if (existsSync(lockPath)) cpSync(lockPath,join(root,'package-lock.json'));
+      await execute('npm',['install','--package-lock-only','--ignore-scripts','--no-audit','--no-fund','./core.tgz','./storage.tgz']);
       mkdirSync(resolve(lockPath,'..'),{recursive:true});cpSync(join(root,'package-lock.json'),lockPath);
       console.log(`Generated genuine storage lock ${label}; acceptance not run`);return;
     }

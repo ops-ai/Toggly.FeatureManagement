@@ -6,6 +6,7 @@
 - Best-effort AppState background/inactive flush and one bounded final flush on owner disposal.
 
 ### Fixed
+- Synchronize early-mounted public state when initialization completes; count manual hook refreshes once while retaining reactive and offline evaluations.
 - Cancel queued delivery when replacing the app/environment/collector owner while preserving normal final-unmount flush.
 - Preserve the provider owner across ordinary rerenders; retire it when app, environment, or collector configuration changes.
 - Keep feature hook results and metadata isolated from retired owners and late asynchronous completions.

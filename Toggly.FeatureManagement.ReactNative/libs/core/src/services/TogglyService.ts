@@ -68,6 +68,38 @@ const STORAGE_KEYS = {
   CACHE_LRU: '@toggly:cache-lru',
 } as const;
 
+// Only in-flight cache mutations are retained. Later writes may finish without
+// waiting for a retired storage operation; that operation repairs the latest value
+// if its eventual completion overwrites it. Owners sharing storage share this fence.
+const pendingCacheMutations = new WeakMap<TogglyStorage, Map<string, {
+  desired: { value: string | null }; pending: number;
+}>>();
+
+async function mutateCache(storage: TogglyStorage, key: string, value: string | null): Promise<void> {
+  let mutations = pendingCacheMutations.get(storage);
+  if (!mutations) { mutations = new Map(); pendingCacheMutations.set(storage, mutations); }
+  const desired = { value };
+  let state = mutations.get(key);
+  if (!state) { state = { desired, pending: 0 }; mutations.set(key, state); }
+  state.desired = desired;
+  state.pending++;
+  let applied = desired;
+  const write = async () => applied.value === null ? storage.delete(key) : storage.set(key, applied.value);
+  try {
+    try { await write(); }
+    finally {
+      // Repair even when a storage provider mutates and then rejects its promise.
+      while (applied !== state.desired) { applied = state.desired; await write(); }
+    }
+  } finally {
+    state.pending--;
+    if (state.pending === 0) mutations.delete(key);
+  }
+}
+
+type CachedBody = TogglyFeatureFlagsCache & { writeId?: string };
+type CachedRevision = { context: string; revision: string; writeId?: string };
+
 /**
  * Fallback polling interval when WebSocket is connected (20 minutes)
  */
@@ -255,7 +287,7 @@ export class TogglyService {
 
   private decodeCachedFlags(raw: string | null, context: string): FeatureFlags | undefined {
     if (!raw) return undefined;
-    const record = JSON.parse(raw) as TogglyFeatureFlagsCache;
+    const record = JSON.parse(raw) as CachedBody;
     if (record.identity !== context || typeof record.flags !== 'string') return undefined;
     const flags = JSON.parse(record.flags) as unknown;
     if (!flags || typeof flags !== 'object' || Array.isArray(flags)) return undefined;
@@ -278,12 +310,14 @@ export class TogglyService {
     try {
       const stored = await this.storage.get(STORAGE_KEYS.ETAG);
       if (!current() || !stored?.startsWith('{')) return;
-      const record = JSON.parse(stored) as {context: string; revision: string};
+      const record = JSON.parse(stored) as CachedRevision;
       if (record.context !== context || typeof record.revision !== 'string') return;
       const key = await this.buildFeatureFlagsCacheKey(context);
       if (!current()) return;
-      const flags = this.decodeCachedFlags(await this.storage.get(key), context);
-      if (!current() || !flags) return;
+      const raw = await this.storage.get(key);
+      const flags = this.decodeCachedFlags(raw, context);
+      const body = raw ? JSON.parse(raw) as CachedBody : null;
+      if (!current() || !flags || !record.writeId || record.writeId !== body?.writeId) return;
       this.features = flags;
       this.cachedDefinitionsRevision = record.revision;
     } catch (error) {
@@ -303,9 +337,11 @@ export class TogglyService {
     try {
       const key = await this.buildFeatureFlagsCacheKey(context);
       if (!current()) return;
-      const body = this.decodeCachedFlags(await this.storage.get(key), context);
-      if (!current() || !body || JSON.stringify(body) !== flags) return;
-      await this.storage.set(STORAGE_KEYS.ETAG, JSON.stringify({context, revision: normalized}));
+      const raw = await this.storage.get(key);
+      const body = this.decodeCachedFlags(raw, context);
+      const writeId = raw ? (JSON.parse(raw) as CachedBody).writeId : undefined;
+      if (!current() || !body || !writeId || JSON.stringify(body) !== flags) return;
+      await mutateCache(this.storage, STORAGE_KEYS.ETAG, JSON.stringify({context, revision: normalized, writeId}));
     } catch (error) {
       if (current()) this.reportError('Error writing definitions revision cache', error);
     }
@@ -323,7 +359,7 @@ export class TogglyService {
         if (forceRevisionReset) {
           this.cachedDefinitionsRevision = null;
           // Await deletes so refresh cannot rehydrate retired signing keys.
-          await this.storage.delete(STORAGE_KEYS.ETAG);
+          await mutateCache(this.storage, STORAGE_KEYS.ETAG, null);
           if (this.disposed) return;
           await this.storage.delete(STORAGE_KEYS.JWKS);
         }
@@ -797,7 +833,7 @@ export class TogglyService {
     const record = JSON.parse(stored) as {context?: string};
     if (typeof record.context !== 'string') return;
     const revisionKey = await this.buildFeatureFlagsCacheKey(record.context);
-    if (!this.disposed && revisionKey === cacheKey) await this.storage.delete(STORAGE_KEYS.ETAG);
+    if (!this.disposed && revisionKey === cacheKey) await mutateCache(this.storage, STORAGE_KEYS.ETAG, null);
   }
 
   private async enforceMaxCacheKeys(protectKeys: string[]): Promise<void> {
@@ -820,7 +856,7 @@ export class TogglyService {
           try {
             await this.removePairedRevision(key);
             if (this.disposed) return;
-            await this.storage.delete(key);
+            await mutateCache(this.storage, key, null);
           } catch {
             /* ignore per-key removal failures */
           }
@@ -867,7 +903,12 @@ export class TogglyService {
     try {
       const cacheKey = await this.buildFeatureFlagsCacheKey(context);
       if (!current()) return this.config.featureDefaults ?? {};
-      const flags = this.decodeCachedFlags(await this.storage.get(cacheKey), context);
+      const raw = await this.storage.get(cacheKey);
+      const flags = this.decodeCachedFlags(raw, context);
+      const storedRevision = await this.storage.get(STORAGE_KEYS.ETAG);
+      const revision = storedRevision?.startsWith('{') ? JSON.parse(storedRevision) as CachedRevision : null;
+      const body = raw ? JSON.parse(raw) as CachedBody : null;
+      if (revision?.context === context && revision.writeId && revision.writeId !== body?.writeId) return this.config.featureDefaults ?? {};
       if (!current()) return this.config.featureDefaults ?? {};
       if (flags) {
         await this.touchCacheKey(cacheKey);
@@ -885,11 +926,11 @@ export class TogglyService {
     const generation = this.generation;
     const operation = this.refreshOperation;
     const current = () => !this.disposed && generation === this.generation && operation === this.refreshOperation;
-    const encoded = JSON.stringify({identity: context, flags: JSON.stringify(flags)});
+    const encoded = JSON.stringify({identity: context, flags: JSON.stringify(flags), writeId: generateUUID()});
     try {
       const cacheKey = await this.buildFeatureFlagsCacheKey(context);
       if (!current()) return;
-      await this.storage.set(cacheKey, encoded);
+      await mutateCache(this.storage, cacheKey, encoded);
       if (!current()) return;
       await this.touchCacheKey(cacheKey);
       if (!current()) return;
@@ -967,9 +1008,9 @@ export class TogglyService {
     try {
       const cacheKey = await this.buildFeatureFlagsCacheKey();
       if (this.disposed) return;
-      await this.storage.delete(cacheKey);
+      await mutateCache(this.storage, cacheKey, null);
       if (this.disposed) return;
-      await this.storage.delete(STORAGE_KEYS.ETAG);
+      await mutateCache(this.storage, STORAGE_KEYS.ETAG, null);
       if (this.disposed) return;
       await this.storage.delete(STORAGE_KEYS.JWKS);
       await this.removeCacheKeysFromLruIndex([cacheKey]);
