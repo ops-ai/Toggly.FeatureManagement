@@ -1,3 +1,22 @@
+## 0.5.0
+
+2026-09-20
+
+### Added
+- Browser-only compact frontend telemetry for effective `getFlag` evaluations,
+  explicit usage/views, counters, and gauges through `@ops-ai/toggly-client-telemetry` 1.1.0.
+- `flushTelemetry()`, `setContext(...)`, and synchronous `dispose({ flush })`,
+  including browser lifecycle, websocket, reconnect, and in-flight definition cleanup.
+- Minted `instanceId` on definitions (`?i=`) and telemetry body `i`; client
+  `identity` is sent as `u` only when `instanceId` is absent.
+- A conditional browser entry plus an explicit `/browser` entry; portable
+  server and edge imports remain telemetry-silent.
+
+### Changed
+- Added independent telemetry configuration and category opt-outs.
+- Added packed CJS, ESM, strict declaration, and real-browser collector
+  acceptance to the canonical JavaScript analysis and release gate.
+
 ## 0.4.0
 
 2026-09-08

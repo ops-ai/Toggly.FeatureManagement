@@ -69,8 +69,10 @@ abstract class TogglyCacheProvider {
 /// the definitions revision (ETag) across app restarts.
 ///
 /// When supplied via [TogglyConfig.cacheProvider], the SDK reads and writes
-/// revision through this interface for WebSocket `?rev=` sync and
-/// `If-None-Match` conditional fetches. Revisions are scoped per evaluation
+/// revision through this interface for WebSocket `?rev=` sync. HTTP
+/// `If-None-Match` uses the revision stored with each validated flags/variants
+/// body instead; this shared revision alone cannot authorize a 304 response.
+/// Revisions are scoped per evaluation
 /// [identity] (the same context cache key used for flags/variants: user,
 /// groups, and claims) so multiple users on one app each retain their own ETag.
 ///

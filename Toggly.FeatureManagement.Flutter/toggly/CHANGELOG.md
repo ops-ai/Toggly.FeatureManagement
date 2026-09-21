@@ -1,3 +1,36 @@
+## 1.12.0
+
+2026-09-19
+
+### Added
+- Frontend telemetry reports aggregated feature checks and explicit usage,
+  views, counters, and gauges when an application key is configured. It is
+  enabled by default and can be disabled with `TogglyConfig.enableTelemetry`.
+- `Toggly.flushTelemetry()` awaits a best-effort send; app backgrounding and
+  disposal also trigger a bounded final send.
+- Configure `metricsBaseUrl` and `telemetryFlushIntervalMs` independently of
+  the definitions endpoint.
+
+- Host-minted `instanceId` targeting and telemetry attribution, atomic token
+  replacement through `setIdentity`, and explicit rotation/clearing through
+  `setInstanceId`. Minted IDs take precedence over client identities.
+- Client identities, including generated ephemeral identities, are sent as `u`
+  when no minted ID is configured. Acceptance depends on the application's
+  default-off server setting; a 202 does not confirm identity acceptance.
+
+### Fixed
+- Conditional requests reuse a revision only with its validated flags or variant
+  body for the same application, environment, identity, and response mode.
+  Missing or older cache metadata triggers a full fetch while retaining offline
+  fallback; flags revisions cannot suppress the first variant assignment fetch.
+- Identity changes seal accepted telemetry without relabeling queued or retried
+  events. Definitions and revisions reject late responses from previous contexts,
+  including token rotation back to an earlier value.
+- Flutter Web uses credential-free fetch, native browser gzip with plain JSON
+  fallback, and bounded plain keepalive sends on hidden/pagehide/disposal.
+- Checks evaluated during a reentrant local/entity callback retain the original
+  flags, variant, and attribution while recording the final gate outcome.
+
 ## 1.11.1
 
 2026-08-30
@@ -413,4 +446,3 @@
 * Feature Gate unit tests
 * Documentation
 * License
-

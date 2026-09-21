@@ -14,7 +14,8 @@ final class SmokeTests: XCTestCase {
             environment: "Production",
             baseURI: "https://definitions.toggly.io",
             refreshInterval: 0,
-            useSignedDefinitions: true
+            useSignedDefinitions: true,
+            enableTelemetry: false
         )
 
         let service = TogglyService(config: config)
@@ -39,7 +40,8 @@ final class SmokeTests: XCTestCase {
             baseURI: "https://definitions.toggly.io",
             refreshInterval: 0,
             useSignedDefinitions: true,
-            enableLiveUpdates: true
+            enableLiveUpdates: true,
+            enableTelemetry: false
         )
 
         let service = TogglyService(config: config)
