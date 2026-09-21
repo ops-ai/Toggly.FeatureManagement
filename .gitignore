@@ -362,3 +362,8 @@ Toggly.FeatureManagement.ReactNative/libs/storage-mmkv/dist
 Toggly.FeatureManagement.ReactNative/libs/storage-async/dist
 Toggly.FeatureManagement.Remix/remix-toggly-client/dist
 Toggly.FeatureManagement.Remix/remix-toggly-server/dist
+
+# Root Swift Package Manager entry point
+/.build/
+/.swiftpm/
+/Package.resolved
