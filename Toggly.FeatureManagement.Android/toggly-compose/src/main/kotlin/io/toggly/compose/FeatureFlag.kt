@@ -94,7 +94,9 @@ fun rememberFeatureGate(
 
     if (context == null && contextKind == null) {
         return remember(service, featureFlags, featureKeys, requirement, negate) {
-            evaluateSnapshotFeatureGate(featureFlags, featureKeys, requirement, negate, service::recordCachedCheck)
+            evaluateSnapshotFeatureGate(featureFlags, featureKeys, requirement, negate) { key, enabled ->
+                service.recordCachedCheck(key, enabled, featureFlags)
+            }
         }
     }
 
