@@ -1,6 +1,13 @@
 ## 1.10.0
 
-2026-09-19
+2026-09-20
+
+### Fixed
+
+- Keep evaluated and variant cache bodies separate, invalidate ambiguous legacy
+  validators, and remove paired validators when bounded cache entries are evicted.
+  Cached 304 results retain the correct flags and assigned variant in either mode.
+- Report the current SDK version in definitions and live-update requests.
 
 ### Added
 

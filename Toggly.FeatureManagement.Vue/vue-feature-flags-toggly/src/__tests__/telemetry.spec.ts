@@ -305,7 +305,7 @@ describe('Vue frontend telemetry', () => {
     expect(onError.mock.calls.some(args=>String(args[0]).includes('buffer-full'))).toBe(true);
     await service.flushTelemetry(); expect(sent.length).toBeGreaterThan(0); expect(sent.length).toBeLessThanOrEqual(2000);
     expect(sent.reduce((size,x)=>size+Buffer.byteLength(JSON.stringify(x.body)),0)).toBeLessThanOrEqual(262144);
-  });
+  }, 15_000); // Full 2200-context admission workload; coverage on hosted runners exceeds the default 5s.
   it('rejects foreign owner captures, orphan revisions and delimiter collisions', async () => {
     const first=client({identity:'alice|g:staff',persistCache:true}); const second=client({identity:'alice',groups:['staff'],persistCache:true});
     expect((first as any)._contextCacheKey()).not.toBe((second as any)._contextCacheKey());

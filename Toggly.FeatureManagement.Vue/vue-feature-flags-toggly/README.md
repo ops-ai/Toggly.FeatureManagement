@@ -167,7 +167,11 @@ await service.setContext({ identity: '' }) // clear identity and any previous to
 `setContext` updates only supplied fields. Supplying `identity` without `instanceId`
 clears the previous token. Existing queued events retain their original attribution;
 new events use the new context and share the same bounded queue. Definitions and
-revisions are scoped to the context and token. If refresh fails, the Promise still
+revisions are scoped to the context, token and response mode. Evaluated and variant
+bodies remain separate; `maxCacheKeys` evicts each body's matching validator too.
+Legacy cached bodies remain available, but ambiguous old validators are not reused.
+Assigned variants stay in memory when persistence is disabled or unavailable.
+If refresh fails, the Promise still
 rejects, while the new context retains its matching cache or configured defaults;
 the previous identity, token and definitions are not restored. Reinitialization
 cancels pending telemetry before replacing the configuration; call

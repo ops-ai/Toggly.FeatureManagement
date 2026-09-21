@@ -8,7 +8,7 @@ vi.stubGlobal('fetch', mockFetch);
 const SDK_FETCH_OPTIONS = expect.objectContaining({
   headers: expect.objectContaining({
     'X-Toggly-Sdk': 'vue',
-    'X-Toggly-Sdk-Version': '1.4.1',
+    'X-Toggly-Sdk-Version': '1.10.0',
   }),
 });
 
@@ -674,13 +674,13 @@ describe('Toggly Service', () => {
       const s = createWsService({ appKey: 'mykey', environment: 'Prod' });
       s.startWebSocket();
       expect(mockWsInstances).toHaveLength(1);
-      expect(mockWsInstances[0].url).toBe('wss://definitions.toggly.io/mykey/ws?sdk=vue&sdkVersion=1.4.1');
+      expect(mockWsInstances[0].url).toBe('wss://definitions.toggly.io/mykey/ws?sdk=vue&sdkVersion=1.10.0');
     });
 
     it('should build ws:// URL from http:// baseURI', () => {
       const s = createWsService({ appKey: 'mykey', baseURI: 'http://local.test', environment: 'Prod' });
       s.startWebSocket();
-      expect(mockWsInstances[0].url).toBe('ws://local.test/mykey/ws?sdk=vue&sdkVersion=1.4.1');
+      expect(mockWsInstances[0].url).toBe('ws://local.test/mykey/ws?sdk=vue&sdkVersion=1.10.0');
     });
 
     it('should set _wsConnected on onopen', () => {
@@ -953,9 +953,9 @@ describe('Toggly Service', () => {
       expect(service.getVariant('V')).toBeNull();
     });
 
-    it('falls back to cached flags when variants cache is missing', async () => {
+    it('falls back to matching variant-mode flags when variants cache is missing', async () => {
       localStorage.setItem(
-        'toggly:flags:flags-only:Production',
+        'toggly:variant-flags:flags-only:Production',
         JSON.stringify({ Fallback: true }),
       );
       mockFetch.mockRejectedValueOnce(new Error('network'));

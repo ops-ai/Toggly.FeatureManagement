@@ -3,12 +3,20 @@ import { gunzipSync } from 'node:zlib'
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import {withResources, closeServer, ownBrowser, bounded} from './host-resources.mjs'
 
 // Both tools resolve from the isolated consumer, never the SDK source tree.
 const require = createRequire(join(process.cwd(), 'package.json'))
 const { preview } = await import(join(dirname(require.resolve('vite/package.json')), 'dist/node/index.js'))
-const { default: puppeteer } = await import(require.resolve('puppeteer-core'))
+async function launchBrowser() {
+  const {default: puppeteer} = await import(require.resolve('puppeteer-core'))
+  return puppeteer.launch({executablePath: process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true, args: ['--no-sandbox']})
+}
+export async function verifyBrowser(launch = launchBrowser) {
+return withResources(async defer => {
 const server = await preview({ preview: { host: '127.0.0.1', port: 0 } })
+defer(() => closeServer(server.httpServer))
 const telemetry = []
 const headers = []
 let preflights = 0
@@ -27,20 +35,30 @@ const collector = createServer((request, response) => {
     response.writeHead(202); response.end()
   })
 })
-await new Promise(resolve => collector.listen(0, '127.0.0.1', resolve))
-let browser
-try {
-  browser = await puppeteer.launch({executablePath: process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true, args: ['--no-sandbox']})
-  const page = await browser.newPage()
+defer(() => closeServer(collector))
+await new Promise((resolve, reject) => {collector.once('error', reject); collector.listen(0, '127.0.0.1', resolve)})
+  const browser = await launch()
+  ownBrowser(defer, browser)
+  const page = await bounded(() => browser.newPage(), 'Browser page', 10000)
+  const evaluate = (callback, argument) => bounded(() => page.evaluate(callback, argument), 'Browser evaluation', 10000)
   const errors = []
   page.on('pageerror', error => errors.push(error.message))
   page.on('console', message => {if (message.type() === 'error') errors.push(message.text())})
   let remoteEnabled = true
   const identities = []
+  const cacheRequests = []
   await page.setRequestInterception(true)
   page.on('request', request => {
     const url = new URL(request.url())
-    if (url.pathname.startsWith('/definitions-fixture/')) {
+    if (url.pathname.startsWith('/cache-fixture/')) {
+      const variants = url.pathname.includes('evaluated-variants-signed')
+      const token = url.searchParams.get('i')
+      const revision = `${variants ? 'variants' : 'evaluated'}-${token}`
+      const conditional = request.headers()['if-none-match']?.replaceAll('"', '')
+      cacheRequests.push({token, variants, conditional})
+      const defs = variants ? {On: {enabled: token !== 'token-b', variant: 'blue', configurationValue: 7}} : {On: false}
+      void request.respond(conditional === revision ? {status: 304} : {status: 200, contentType: 'application/json', headers: {etag: revision}, body: JSON.stringify({defs})})
+    } else if (url.pathname.startsWith('/definitions-fixture/')) {
       identities.push(Object.fromEntries(url.searchParams))
       void request.respond({status: 200, contentType: 'application/json', body: JSON.stringify({defs: {release: {enabled: remoteEnabled, variant: 'control'}, second: {enabled: true, variant: 'control'}}})})
     } else void request.continue()
@@ -60,18 +78,18 @@ try {
   await page.click('#context'); await contextResponse; await state('off')
   assert.ok(identities.some(query => (query.u ?? query.userId) === 'second-user'))
   remoteEnabled = true; await page.click('#refresh'); await state('on')
-  await page.evaluate(() => window.fixture.service.flushTelemetry())
+  await evaluate(() => window.fixture.service.flushTelemetry())
   assert.ok(telemetry.some(body => body.f?.release?.control?.[0] > 1))
   assert.ok(telemetry.some(body => body.f?.release?.disabled?.[0] > 0))
   assert.ok(telemetry.every(body => Object.values(body.f ?? {}).every(variants => Object.values(variants).every(counts => counts.length === 1))), 'rendering is not an implicit view or usage')
   assert.ok(telemetry.some(body => body.u === 'first-user'))
   assert.ok(telemetry.some(body => body.u === 'second-user'))
-  await page.evaluate(async () => {await window.fixture.service.setContext({instanceId: 'fixture-mint', groups: ['ignored'], claims: {role: 'ignored'}}); await window.fixture.service.flushTelemetry()})
+  await evaluate(async () => {await window.fixture.service.setContext({instanceId: 'fixture-mint', groups: ['ignored'], claims: {role: 'ignored'}}); await window.fixture.service.flushTelemetry()})
   await state('on')
-  await page.evaluate(() => window.fixture.service.flushTelemetry())
+  await evaluate(() => window.fixture.service.flushTelemetry())
   assert.ok(identities.some(query => query.i === 'fixture-mint' && !query.u && !query.userId && !query.g && !query['claim.role']))
   telemetry.length = 0
-  await page.evaluate(async () => {window.fixture.recordTelemetry(); await window.fixture.service.flushTelemetry()})
+  await evaluate(async () => {window.fixture.recordTelemetry(); await window.fixture.service.flushTelemetry()})
   const expected = {k: 'fixture', e: 'Test', i: 'fixture-mint', f: {release: {enabled: [0, 1], control: [0, 0, 1]}}, m: {orders: 2, cart: 3}}
   assert.deepEqual(telemetry, [expected])
   assert.ok(preflights > 0, 'real cross-origin preflight')
@@ -82,24 +100,32 @@ try {
     while (telemetry.length < expectedCount && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20))
     assert.equal(telemetry.length, expectedCount)
   }
-  await page.evaluate(() => {window.fixture.recordTelemetry(); window.dispatchEvent(new Event('pagehide'))})
+  await evaluate(() => {window.fixture.recordTelemetry(); window.dispatchEvent(new Event('pagehide'))})
   await count(2); assert.deepEqual(telemetry[1], expected)
   assert.equal(headers.at(-1)['content-encoding'], undefined, 'pagehide is plain keepalive with i')
-  await page.evaluate(() => {window.fixture.recordTelemetry(); window.fixture.unmount()})
+  await evaluate(() => {window.fixture.recordTelemetry(); window.fixture.unmount()})
   await count(3); assert.deepEqual(telemetry[2], expected)
-  assert.equal(await page.evaluate(() => window.fixture.activeSubscriptions), 0)
+  assert.equal(await evaluate(() => window.fixture.activeSubscriptions), 0)
   assert.equal(await page.$eval('#app', element => element.innerHTML), '')
-  await page.evaluate(() => window.fixture.remount()); await state('on')
-  assert.equal(await page.evaluate(() => window.fixture.service !== window.fixture.previousService), true)
-  await page.evaluate(() => window.fixture.service.flushTelemetry())
+  await evaluate(() => window.fixture.remount()); await state('on')
+  assert.equal(await evaluate(() => window.fixture.service !== window.fixture.previousService), true)
+  await evaluate(() => window.fixture.service.flushTelemetry())
   assert.ok(telemetry[3].f.release.control[0] > 0)
   assert.equal(telemetry[3].u, 'first-user'); assert.equal(telemetry[3].i, undefined)
-  await page.evaluate(() => window.fixture.unmount())
-  assert.equal(await page.evaluate(() => window.fixture.activeSubscriptions), 0)
+  await evaluate(() => window.fixture.unmount())
+  assert.equal(await evaluate(() => window.fixture.activeSubscriptions), 0)
+  telemetry.length = 0
+  const cache = await evaluate(() => window.fixture.verifyCache())
+  assert.deepEqual(cache, {results: [{flags: {On: true}, active: true, variant: {name: 'blue', configurationValue: 7}}, {flags: {On: false}, active: false, variant: null}], second: false, returned: {On: true}, active: true, persisted: {On: true}, variant: {name: 'blue', configurationValue: 7}})
+  assert.deepEqual(telemetry, [
+    {k: 'cache-true', e: 'Test', i: 'token-a', f: {On: {blue: [2]}}},
+    {k: 'cache-false', e: 'Test', i: 'token-a', f: {On: {disabled: [1]}}},
+  ])
+  assert.ok(cacheRequests.some(value => value.variants && value.conditional === 'variants-token-a'))
+  assert.ok(cacheRequests.some(value => !value.variants && value.conditional === 'evaluated-token-a'))
+  assert.ok(cacheRequests.some(value => value.token === 'token-b' && value.conditional === undefined))
   assert.deepEqual(errors, [])
-  console.log('Browser passed: plugin/hooks/components, local/context/refresh, real CORS/gzip i/u/checks/metrics/plain keepalive i/pagehide/unmount/remount')
-} finally {
-  if (browser) await browser.close()
-  await new Promise(resolve => server.httpServer.close(resolve))
-  await new Promise(resolve => collector.close(resolve))
+  console.log('Browser passed: plugin/hooks/components, local/context/refresh, real CORS/gzip i/u/checks/metrics/plain keepalive i/pagehide/unmount/remount; response-mode and token ABA 304 cache/public results')
+})
 }
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await verifyBrowser()

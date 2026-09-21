@@ -40,6 +40,39 @@ const fixture = {
   get service() {return service},
   get previousService() {return previousService},
   get activeSubscriptions() {return activeSubscriptions},
+  async verifyCache() {
+    const options = {environment: 'Test', instanceId: 'token-a', metricsBaseUrl: new URLSearchParams(location.search).get('metrics')!, baseURI: `${location.origin}/cache-fixture`, persistCache: true, enableLiveUpdates: false}
+    const results = []
+    for (const enableVariants of [true, false]) {
+      const config = {...options, appKey: `cache-${enableVariants}`, enableVariants}
+      const first = new Toggly().init(config)
+      await first._loadFeatures(true); first.dispose()
+      const other = new Toggly().init({...config, enableVariants: !enableVariants})
+      await other._loadFeatures(true); other.dispose()
+      const restored = new Toggly().init(config)
+      try {
+        const flags = await restored._loadFeatures(true, {strict: true})
+        const active = restored.getEffectiveFlagValue('On')
+        const variant = enableVariants ? restored.getVariant('On') : null
+        await restored.flushTelemetry()
+        results.push({flags, active, variant})
+      } finally {restored.dispose()}
+    }
+    const config = {...options, appKey: 'cache-aba', enableVariants: true, enableTelemetry: false}
+    const owner = new Toggly().init(config)
+    try {
+      await owner._loadFeatures(true)
+      await owner.setContext({instanceId: 'token-b'})
+      const second = owner.getEffectiveFlagValue('On')
+      await owner.setContext({instanceId: 'token-a'})
+      const returned = await owner._loadFeatures(true, {strict: true})
+      const active = owner.getEffectiveFlagValue('On')
+      owner.dispose()
+      const reloaded = new Toggly().init(config)
+      try {return {results, second, returned, active, persisted: await reloaded._loadFeatures(true, {strict: true}), variant: reloaded.getVariant('On')}}
+      finally {reloaded.dispose()}
+    } finally {owner.dispose()}
+  },
   recordTelemetry() {
     service.recordUsage('release'); service.recordView('release', 'control')
     service.incrementCounter('orders', 2); service.setGauge('cart', 9); service.setGauge('cart', 3)

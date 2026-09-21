@@ -3,17 +3,19 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import {withResources, bounded, stopChild} from './host-resources.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const temporary = await mkdtemp(join(tmpdir(), 'toggly-vue-host-'));
-const run = (command, args, cwd) =>
-  new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd, stdio: 'inherit' });
+const run = (command, args, cwd) => withResources(async defer => {
+  const child = spawn(command, args, {cwd, stdio: 'inherit'});
+  defer(() => stopChild(child));
+  const finished = new Promise((resolve, reject) => {
     child.on('error', reject);
-    child.on('close', (code) =>
-      code === 0 ? resolve() : reject(new Error(`${command} exited ${code}`)),
-    );
+    child.on('close', code => code === 0 ? resolve() : reject(new Error(`${command} exited ${code}`)));
   });
+  await bounded(() => finished, command, 180000);
+});
 
 const telemetryArtifact = process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL;
 if (telemetryArtifact) console.log(`LOCAL INTEGRATION ARTIFACT: ${telemetryArtifact}; registry acceptance remains pending`);
@@ -27,6 +29,7 @@ try {
   const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
   if (manifest.dependencies['@ops-ai/toggly-client-telemetry'] !== '^1.1.0') throw new Error('Reporter transition API minimum must be ^1.1.0');
   await run('npm', ['run', 'build'], root);
+  await run(process.execPath, ['--test', join(root, 'scripts/browser-cleanup.test.mjs')], root);
   await run('npm', ['pack', '--pack-destination', temporary], root);
   const archive = (await readdir(temporary)).find((entry) => entry.endsWith('.tgz'));
   if (!archive) throw new Error('npm pack did not produce a Vue SDK archive');
