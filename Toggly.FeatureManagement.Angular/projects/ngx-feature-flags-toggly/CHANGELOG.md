@@ -10,6 +10,7 @@
 
 ### Fixed
 - Remove paired scoped revisions when their cached bodies are evicted; clearing evaluated flags preserves independent variant-mode caches.
+- Keep live conditional refreshes from recreating persisted revisions after their bodies are evicted. Group cache keys retain deterministic, locale-independent ordering.
 - Keep evaluated and variant-response cache bodies separate, including conditional refreshes after reload. Clearing cached definitions also clears the in-memory conditional revision.
 
 ## 2.8.3

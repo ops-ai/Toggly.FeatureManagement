@@ -168,7 +168,12 @@ export class TogglyService implements ITogglyService, OnDestroy {
       return evaluationContextCacheKey(context)
     }
     return `v2:${encodeURIComponent(JSON.stringify([
-      context.identity ?? '', [...(context.groups ?? [])].sort(),
+      context.identity ?? '', [...(context.groups ?? [])].sort((a, b) => {
+        // Cache keys use UTF-16 ordering, independent of the browser's locale.
+        if (a < b) return -1
+        if (a > b) return 1
+        return 0
+      }),
       Object.entries(normalizeEvaluationClaims(context.claims) ?? {}).sort(([a], [b]) => a.localeCompare(b)),
     ]))}`
   }
@@ -515,6 +520,8 @@ export class TogglyService implements ITogglyService, OnDestroy {
 
   private _writeCachedRevision(revision: string): void {
     if (!this._canPersist) return
+    // A live owner may retain its memory snapshot after another owner evicts storage.
+    if (this._readCachedFlags() === null || (this._enableVariants && this._readCachedVariants() === null)) return
     try {
       localStorage.setItem(this._revisionCacheKey, revision)
     } catch { /* storage full or unavailable */ }
@@ -664,10 +671,8 @@ export class TogglyService implements ITogglyService, OnDestroy {
         },
       )
       if (generation !== this._generation || this._destroyed) return this._features
-      if (loaded.revision) {
-        this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
-      }
       if (loaded.notModified) {
+        if (loaded.revision) this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
         this._lastFallbackRefresh = Date.now()
         return this._features
       }
@@ -681,16 +686,17 @@ export class TogglyService implements ITogglyService, OnDestroy {
         if (this._features) {
           this._writeCachedVariants(defs)
           this._writeCachedFlags(this._features)
-          this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
         }
       } else {
         this._variants = null
         this._features = asEvaluatedDefinitions(raw)
         if (this._features) {
           this._writeCachedFlags(this._features)
-          this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
         }
       }
+      // Persist the validator only after its response-mode bodies are present.
+      if (loaded.revision) this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
+      if (this._features) this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
     } catch (error) {
       if (generation !== this._generation || this._destroyed) return this._features
       this._reportError('Error fetching feature flags', error)

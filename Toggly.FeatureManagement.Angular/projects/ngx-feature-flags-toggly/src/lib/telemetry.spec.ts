@@ -49,6 +49,16 @@ describe('Angular frontend telemetry', () => {
     await settle();
     Object.defineProperty(globalThis, 'CompressionStream', { configurable:true, writable:true, value:compression });
   });
+  it('canonicalizes group cache keys with stable UTF-16 ordering across input permutations', () => {
+    const groups = ['ä', '2', 'A', '😀', 'a', '10', 'Z', 'a'];
+    const original = [...groups];
+    const first = create({ identity:'alice', groups, enableTelemetry:false });
+    const reversed = create({ identity:'alice', groups:[...groups].reverse(), enableTelemetry:false });
+    const expected = `v2:${encodeURIComponent(JSON.stringify(['alice', ['10', '2', 'A', 'Z', 'a', 'a', 'ä', '😀'], []]))}`;
+    expect((first as any)._contextCacheKey).toBe(expected);
+    expect((reversed as any)._contextCacheKey).toBe(expected);
+    expect(groups).toEqual(original);
+  });
   it('records direct checks once, before negation, with client attribution but no definitions headers', async () => {
     const service = create({ identity:'private-user', groups:['private-group'], claims:{role:'private-role'} });
     expect(await service.isFeatureOn('On')).toBeTrue();
@@ -439,6 +449,34 @@ describe('Angular frontend telemetry', () => {
       return new Response(JSON.stringify(enableVariants?{On:{enabled:false}}:{On:false}),{headers:{etag:'replacement'}});
     });
     await service.setContext({instanceId:'mint-0'}); expect(await service.isFeatureOn('On')).toBeFalse();
+  });
+
+  for (const enableVariants of [false, true]) it(`does not recreate evicted ${enableVariants ? 'variant' : 'evaluated'} validators after a live 304`, async () => {
+    let time = 0;
+    spyOn(Date, 'now').and.callFake(() => ++time);
+    (globalThis.fetch as jasmine.Spy).and.callFake(async (url:RequestInfo|URL, init?:RequestInit) => {
+      const token = new URL(String(url)).searchParams.get('i');
+      const revision = `revision-${token}`;
+      if (new Headers(init?.headers).get('If-None-Match') === revision) {
+        return new Response(null, {status:304, headers:{etag:revision}});
+      }
+      return new Response(JSON.stringify(enableVariants ? {On:{enabled:true,variant:'blue',configurationValue:7}} : {On:true}), {headers:{etag:revision}});
+    });
+    const options = {persistCache:true,enableTelemetry:false,enableVariants,maxCacheKeys:enableVariants ? 2 : 1};
+    const first = create({...options,instanceId:'mint-a'});
+    await first.isFeatureOn('On');
+    const oldRevision = (first as any)._revisionCacheKey;
+    const oldFlags = (first as any)._flagsCacheKey;
+    const second = create({...options,instanceId:'mint-b'});
+    await second.isFeatureOn('On');
+    expect(localStorage.getItem(oldFlags)).toBeNull();
+    expect(localStorage.getItem(oldRevision)).toBeNull();
+    expect(await (first as any)._loadFeatures(true)).toEqual({On:true});
+    expect(await first.isFeatureOn('On')).toBeTrue();
+    if (enableVariants) expect(await first.getVariant('On')).toEqual({name:'blue',configurationValue:7});
+    expect(localStorage.getItem(oldFlags)).toBeNull();
+    expect(localStorage.getItem(oldRevision)).toBeNull();
+    expect(localStorage.getItem((second as any)._revisionCacheKey)).toBe('revision-mint-b');
   });
 
   it('removes paired revisions across application eviction without deleting legacy or protected revisions', async () => {
