@@ -108,7 +108,7 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
     // Dynamic import keeps browser transports out of SSR execution and allows deterministic hydration.
     const { connectBrowser } = await import('./client.js');
     if (disposed || ownGeneration !== generation) return;
-    stop = connectBrowser(
+    const disconnect = connectBrowser(
       snapshot,
       options,
       (definitions, verification) => {
@@ -122,6 +122,10 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
       },
       session,
     );
+    // Fetch/socket observers can retire or replace this generation synchronously
+    // before connection construction returns its resource handle.
+    if (disposed || ownGeneration !== generation) disconnect();
+    else stop = disconnect;
   };
   return {
     subscribe: store.subscribe,

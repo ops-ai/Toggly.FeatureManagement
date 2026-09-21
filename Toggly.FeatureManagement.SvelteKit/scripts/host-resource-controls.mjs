@@ -42,22 +42,26 @@ try {
   await rm(dir, { recursive: true, force: true });
 }
 
-for (const mode of ['graceful', 'close-rejects', 'close-hangs']) {
+for (const mode of ['graceful', 'close-rejects', 'close-hangs', 'close-and-kill-rejects']) {
   const browser = await chromium.launchServer({ headless: true, timeout: 30000 });
   const pid = browser.process().pid;
   const originalClose = browser.close.bind(browser);
-  if (mode === 'close-rejects')
+  if (mode === 'close-rejects' || mode === 'close-and-kill-rejects')
     browser.close = async () => {
       throw new Error('injected close rejection');
     };
   if (mode === 'close-hangs') browser.close = () => new Promise(() => {});
+  if (mode === 'close-and-kill-rejects')
+    browser.kill = async () => {
+      throw new Error('injected kill rejection');
+    };
   try {
     assert(alive(pid)); // Deliberate-leak negative control must detect the real browser first.
     if (mode === 'graceful') await closeBrowser(browser);
     else
       await assert.rejects(
         closeBrowser(browser),
-        /injected close rejection|browser close exceeded/,
+        /injected close rejection|injected kill rejection|browser close exceeded/,
       );
     await gone(pid);
     console.log(`CONTROL actual browser ${mode}: PID ${pid} gone`);
@@ -139,4 +143,4 @@ try {
   server.close();
   await rm(temporary, { recursive: true, force: true });
 }
-console.log('All 6 owned-resource controls passed');
+console.log('All 7 owned-resource controls passed');

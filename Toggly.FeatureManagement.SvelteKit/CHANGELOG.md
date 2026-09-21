@@ -2,6 +2,10 @@
 
 ## 0.2.0 — 2026-09-18
 
+### Fixed
+
+- Retire requests, sockets and polling created during a callback that disposes the browser store or replaces its route context.
+
 ### Added
 
 - Accept an optional host-minted instance token through the explicit public server snapshot projection and browser context; otherwise use identity attribution. Context updates preserve queued attribution and clear omitted tokens.
