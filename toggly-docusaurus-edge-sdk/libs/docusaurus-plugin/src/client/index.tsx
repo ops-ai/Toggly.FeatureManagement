@@ -42,7 +42,7 @@ export interface TogglyContextValue extends Pick<
 const TogglyContext = createContext<TogglyContextValue | null>(null);
 // Consumer-facing flags remain a mutable copy; render reads share the private
 // snapshot captured by the committed evaluator, without recording during render.
-const RenderFlagsContext = createContext<Flags | null>(null);
+const RenderFlagsContext = createContext<{ flags: Flags; defaults: Flags } | null>(null);
 
 declare const __TOGGLY_BUILD_FLAGS__: Flags | undefined;
 declare const __TOGGLY_STATIC_GATING__: boolean | undefined;
@@ -234,7 +234,10 @@ function TargetOwner({
   telemetry: BrowserTelemetry;
 }): React.JSX.Element {
   const staticGating = isStaticGatingMode();
-  const [client] = useState(() => createProviderClient(config, telemetry));
+  const [defaults] = useState<Flags>(() => ({ ...config.flagDefaults }));
+  const [client] = useState(() =>
+    createProviderClient({ ...config, flagDefaults: defaults }, telemetry)
+  );
   const [flags, setFlags] = useState<Flags>(() =>
     staticGating
       ? usePageSnapshot
@@ -304,6 +307,7 @@ function TargetOwner({
     [client, staticGating, evaluateFlag]
   );
   const publicFlags = useMemo(() => ({ ...flags }), [flags]);
+  const renderSnapshot = useMemo(() => ({ flags, defaults }), [flags, defaults]);
   const value = useMemo<TogglyContextValue>(
     () => ({
       flags: publicFlags,
@@ -320,7 +324,7 @@ function TargetOwner({
     [client, publicFlags, isReady, getFlag, evaluateFlag, error]
   );
   return (
-    <RenderFlagsContext.Provider value={flags}>
+    <RenderFlagsContext.Provider value={renderSnapshot}>
       <TogglyContext.Provider value={value}>{children}</TogglyContext.Provider>
     </RenderFlagsContext.Provider>
   );
@@ -351,8 +355,8 @@ export function useFlag(
   defaultValue?: boolean
 ): { enabled: boolean; isReady: boolean } {
   const { isReady, evaluateFlag } = useToggly();
-  const flags = useContext(RenderFlagsContext)!;
-  const enabled = flags[flagKey] ?? defaultValue ?? false;
+  const { flags, defaults } = useContext(RenderFlagsContext)!;
+  const enabled = flags[flagKey] ?? defaultValue ?? defaults[flagKey] ?? false;
   const evaluated = useRef<{
     flags: Flags;
     key: string;
@@ -386,7 +390,7 @@ export interface FeatureProps {
   children: ReactNode;
   /** When true, render children when the feature is off */
   negate?: boolean;
-  /** Default value if flag is not found (default: false) */
+  /** Explicit fallback before configured flagDefaults, then false if absent. */
   defaultValue?: boolean;
   /**
    * HTML element to use as wrapper (default: 'div').
@@ -461,15 +465,15 @@ export function Feature({
   flag,
   children,
   negate = false,
-  defaultValue = false,
+  defaultValue,
   as: Element = 'div',
 }: FeatureProps): React.JSX.Element {
   const context = useContext(TogglyContext);
-  const renderFlags = useContext(RenderFlagsContext);
+  const renderSnapshot = useContext(RenderFlagsContext);
   const lastStatic = useRef<{
     evaluate: TogglyContextValue['evaluateFlag'];
     flag: string;
-    fallback: boolean;
+    fallback: boolean | undefined;
   }>();
   useEffect(() => {
     if (!isStaticGatingMode() || !context?.isReady) return;
@@ -484,12 +488,12 @@ export function Feature({
     context.evaluateFlag(flag, defaultValue);
   }, [context?.evaluateFlag, context?.isReady, flag, defaultValue]);
   const wrapperStyle = getWrapperStyle(Element);
-  const buildFlags = renderFlags ?? readBuildFlagsSnapshot();
+  const buildFlags = renderSnapshot?.flags ?? readBuildFlagsSnapshot();
 
   // The original owner shares the baked SSG map. A replacement owner uses
   // its own defaults so another application's snapshot cannot cross owners.
   if (isStaticGatingMode() && buildFlags) {
-    const enabled = buildFlags[flag] ?? defaultValue;
+    const enabled = buildFlags[flag] ?? defaultValue ?? renderSnapshot?.defaults[flag] ?? false;
     const show = negate ? !enabled : enabled;
     if (!show) {
       return <></>;
@@ -531,7 +535,7 @@ function FeatureClient({
   flag,
   children,
   negate = false,
-  defaultValue = false,
+  defaultValue,
   as: Element = 'div',
 }: FeatureProps): React.JSX.Element {
   const { enabled, isReady } = useFlag(flag, defaultValue);

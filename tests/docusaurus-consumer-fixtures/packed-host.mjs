@@ -386,6 +386,16 @@ export default function Page() {
 }`
   );
   write(
+    "src/pages/fallback.jsx",
+    `import React, {useEffect} from 'react';
+import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
+import { TogglyProvider, useToggly, useFlag, Feature } from '@ops-ai/toggly-docusaurus-plugin/client';
+const cases = [{key:'configured',expected:true},{key:'explicitOff',fallback:false,expected:false},{key:'explicitOn',fallback:true,expected:true},{key:'flagOff',fallback:true,expected:false},{key:'missing',expected:false}];
+function Reader({item}) { const t=useToggly(); const result=useFlag(item.key,item.fallback); useEffect(()=>{window.fallbackTelemetry=t;},[t]); return <span id={'fallback-'+item.key}>{result.isReady ? String(result.enabled) : 'pending'}</span>; }
+export default function FallbackPage() { const {siteConfig}=useDocusaurusContext(); const config={...siteConfig.customFields.toggly,instanceId:'fallback-token',flagDefaults:{configured:true,explicitOff:true,explicitOn:false,flagOff:true}}; return <TogglyProvider config={config}>{cases.map(item=><React.Fragment key={item.key}><Reader item={item}/><Feature flag={item.key} defaultValue={item.fallback} negate={!item.expected}><span id={'feature-'+item.key}>visible</span></Feature></React.Fragment>)}</TogglyProvider>; }
+`,
+  );
+  write(
     'docs/enabled.md',
     '---\nslug: /enabled\nx-feature: flagOn\n---\n# Enabled page\n\nENABLED_DOC_CONTENT\n'
   );
@@ -819,7 +829,8 @@ console.log('PACKED_DOCUSAURUS_PUBLIC_CONSUMERS_PASS');
   staticPage.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
-  await staticPage.goto(await serve(staticOutput));
+  const staticUrl = await serve(staticOutput);
+  await staticPage.goto(staticUrl);
   await staticPage.locator('#ready').filter({ hasText: 'ready' }).waitFor();
   await staticPage.waitForLoadState('networkidle');
   assert.equal(await staticPage.locator('#flag-off').count(), 0);
@@ -876,6 +887,97 @@ console.log('PACKED_DOCUSAURUS_PUBLIC_CONSUMERS_PASS');
   assert.deepEqual(pageErrors, []);
   assert.deepEqual(consoleErrors, []);
   await bounded(() => staticPage.close(), 'Static page close');
+  for (const [mode, url] of [
+    ["runtime", runtimeUrl],
+    ["static", staticUrl],
+  ]) {
+    const fallbackPage = await bounded(
+      () => browser.newPage(),
+      "Fallback page creation",
+      15000,
+    );
+    const before = telemetry.length;
+    const beforeRequests = requests.length;
+    const errors = [];
+    fallbackPage.on("pageerror", (error) => errors.push(error.message));
+    fallbackPage.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    await fallbackPage.goto(url + "/fallback/");
+    await fallbackPage
+      .locator("#fallback-configured")
+      .filter({ hasText: "true" })
+      .waitFor();
+    const cases = [
+      ["configured", undefined, true],
+      ["explicitOff", false, false],
+      ["explicitOn", true, true],
+      ["flagOff", true, false],
+      ["missing", undefined, false],
+    ];
+    for (const [key, , expected] of cases) {
+      assert.equal(
+        await fallbackPage.locator("#fallback-" + key).textContent(),
+        String(expected),
+        mode + " hook " + key,
+      );
+      assert.equal(
+        await fallbackPage.locator("#feature-" + key).count(),
+        1,
+        mode + " Feature " + key,
+      );
+    }
+    const direct = await bounded(
+      () =>
+        fallbackPage.evaluate(async (cases) => {
+          const t = window.fallbackTelemetry;
+          const results = cases.map(([key, fallback]) =>
+            t.evaluateFlag(key, fallback),
+          );
+          await t.flushTelemetry();
+          return results;
+        }, cases),
+      "Fallback evaluation",
+      30000,
+    );
+    assert.deepEqual(
+      direct,
+      cases.map(([, , expected]) => expected),
+    );
+    assert.deepEqual(
+      telemetry
+        .slice(before)
+        .filter((packet) => packet.body.i === "fallback-token")
+        .map((packet) => packet.body),
+      [
+        {
+          k: "docusaurus-packed-host",
+          e: "Production",
+          i: "fallback-token",
+          f: {
+            configured: { enabled: [3] },
+            explicitOff: { disabled: [3] },
+            explicitOn: { enabled: [3] },
+            flagOff: { disabled: [3] },
+            missing: { disabled: [3] },
+          },
+        },
+      ],
+    );
+    if (mode === "static")
+      assert.equal(
+        requests.length,
+        beforeRequests,
+        "static fallback consumers do not fetch",
+      );
+    assert.deepEqual(errors, []);
+    await bounded(() => fallbackPage.close(), "Fallback page close");
+    console.log(
+      "PACKED_DEFAULT_FALLBACK_PASS",
+      mode,
+      "five hook/Feature/direct results, 15 exact checks",
+    );
+  }
   console.log(
     `PACKED_DOCUSAURUS_HOST_PASS ${JSON.stringify({ docusaurus: currentDocusaurus, react: currentReact, node: process.version })}`
   );

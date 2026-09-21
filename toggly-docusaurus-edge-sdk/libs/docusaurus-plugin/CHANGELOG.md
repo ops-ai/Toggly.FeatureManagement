@@ -12,6 +12,7 @@
 - Effective checks for cached hooks, direct reads, static browser gates and navbar evaluations, with pagehide and final owner cleanup flushing.
 
 ### Fixed
+- Match hook and Feature rendering to direct evaluation for missing flags, preserving explicit fallbacks before configured defaults in runtime and static modes.
 - Preserve minted-token query filtering through Docusaurus browser transpilation.
 - Remove incremental build metadata during clean so the next build restores every public artifact.
 - Capture selected flag values before telemetry diagnostics, preserve signing-key and WebSocket paths with configured URL queries, and keep connection deadlines active through response-body verification.

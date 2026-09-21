@@ -602,3 +602,72 @@ it('keeps finite Provider diagnostic record/evaluate reentry in one disposable o
     remove.mockRestore();
   }
 });
+
+it.each([false, true])(
+  'matches configured and explicit fallbacks in runtime/static=%s public consumers',
+  async (staticGating) => {
+    const c = collector();
+    vi.stubGlobal('__TOGGLY_STATIC_GATING__', staticGating);
+    vi.stubGlobal('__TOGGLY_BUILD_FLAGS__', { present: false });
+    const { Feature } = await import('./index');
+    let context!: TogglyContextValue;
+    const cases = [
+      { key: 'configured', fallback: undefined, expected: true },
+      { key: 'explicitOff', fallback: false, expected: false },
+      { key: 'explicitOn', fallback: true, expected: true },
+      { key: 'present', fallback: true, expected: false },
+      { key: 'missing', fallback: undefined, expected: false },
+    ];
+    function Reader({ item }: { item: (typeof cases)[number] }) {
+      context = useToggly();
+      const result = useFlag(item.key, item.fallback);
+      return (
+        <span data-testid={item.key}>{result.isReady ? String(result.enabled) : 'pending'}</span>
+      );
+    }
+    const fetch = vi.fn(async () => new Response('{"present":false}'));
+    const host = render(
+      <TogglyProvider
+        config={{
+          appKey: 'app',
+          instanceId: 'fallback-token',
+          fetch,
+          telemetryFetch: c.telemetryFetch,
+          flagDefaults: { configured: true, explicitOff: true, explicitOn: false, present: true },
+        }}
+      >
+        {cases.map((item) => (
+          <React.Fragment key={item.key}>
+            <Reader item={item} />
+            <Feature flag={item.key} defaultValue={item.fallback} negate={!item.expected}>
+              <span data-testid={'feature-' + item.key}>visible</span>
+            </Feature>
+          </React.Fragment>
+        ))}
+      </TogglyProvider>
+    );
+    await waitFor(() => expect(context.isReady).toBe(true));
+    const direct = cases.map((item) => context.evaluateFlag(item.key, item.fallback));
+    await context.flushTelemetry();
+    expect(direct).toEqual(cases.map((item) => item.expected));
+    for (const item of cases) {
+      expect(host.getByTestId(item.key).textContent).toBe(String(item.expected));
+      expect(host.queryByTestId('feature-' + item.key)).not.toBeNull();
+    }
+    expect(c.bodies).toEqual([
+      {
+        k: 'app',
+        e: 'Production',
+        i: 'fallback-token',
+        f: {
+          configured: { enabled: [3] },
+          explicitOff: { disabled: [3] },
+          explicitOn: { enabled: [3] },
+          present: { disabled: [3] },
+          missing: { disabled: [3] },
+        },
+      },
+    ]);
+    expect(fetch).toHaveBeenCalledTimes(staticGating ? 0 : 1);
+  }
+);
