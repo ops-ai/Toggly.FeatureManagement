@@ -23,6 +23,7 @@ import {
   registerContext as registerEntityContext,
 } from '../core';
 import type { TogglyEntityContext } from '../core';
+import { createBrowserTelemetry, type FrontendTelemetry } from './telemetry';
 import { appendSdkQueryParams } from './sdk-identity';
 import {
   applyLocalGate,
@@ -41,7 +42,7 @@ import type {
 /**
  * Toggly context value
  */
-export interface TogglyContextValue {
+export interface TogglyContextValue extends FrontendTelemetry {
   /** Current feature flags */
   flags: FeatureFlags;
   /** Whether the client is initialized */
@@ -114,7 +115,16 @@ const TogglyContext = createContext<TogglyContextValue | undefined>(undefined);
 /**
  * Toggly Provider component
  */
-export function TogglyProvider({
+export function TogglyProvider(props: TogglyProviderProps): ReactElement {
+  const config = props.config ?? (props.serverContext ? {appKey: props.serverContext.appKey, environment: props.serverContext.environment} : undefined);
+  const ownerKey = JSON.stringify([config?.appKey ?? '', config?.environment ?? 'Production', config?.enableTelemetry, config?.enableUsageTracking, config?.enableMetrics, config?.metricsBaseUrl, config?.telemetryFlushIntervalMs]);
+  const snapshot = props.serverContext;
+  const matchesOwner = (!snapshot?.appKey || snapshot.appKey === config?.appKey) &&
+    (!snapshot?.environment || snapshot.environment === (config?.environment ?? 'Production'));
+  return <TogglyProviderOwner key={ownerKey} {...props} config={config} serverContext={matchesOwner ? snapshot : undefined} />;
+}
+
+function TogglyProviderOwner({
   children,
   serverContext,
   config,
@@ -130,6 +140,17 @@ export function TogglyProvider({
     () => createLogger(mergedConfig?.debug ?? false),
     [mergedConfig?.debug]
   );
+
+  const [telemetry] = useState(() => createBrowserTelemetry(config ?? {}));
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    telemetry.activate();
+    return () => {
+      mountedRef.current = false;
+      queueMicrotask(() => {if (!mountedRef.current) telemetry.dispose();});
+    };
+  }, [telemetry]);
 
   // Initialize state from server context
   const [flags, setFlags] = useState<FeatureFlags>(
@@ -160,14 +181,16 @@ export function TogglyProvider({
         defaultValue,
         entityContext,
       );
-      return applyLocalGate(
+      const result = applyLocalGate(
         remote,
         featureKey,
         localGatesRef.current,
         localGateIndexRef.current
       );
+      telemetry.recordCheck(featureKey, result);
+      return result;
     },
-    [flags, localGatesRevision]
+    [flags, localGatesRevision, telemetry]
   );
 
   const registerContext = useCallback(
@@ -230,6 +253,7 @@ export function TogglyProvider({
   // Fetch flags from API
   const fetchFlags = useCallback(
     async (userIdentity?: string): Promise<FeatureFlags> => {
+      if (!mountedRef.current) return flags;
       if (!mergedConfig?.appKey) {
         logger.debug('No appKey, using current flags.');
         return flags;
@@ -264,9 +288,10 @@ export function TogglyProvider({
   // Update flags and trigger callbacks
   const updateFlags = useCallback(
     async (newFlags: FeatureFlags) => {
+      if (!mountedRef.current) return;
       setFlags(newFlags);
       await executeAfterRefresh(newFlags);
-      onFlagsChange?.(newFlags);
+      if (mountedRef.current) onFlagsChange?.(newFlags);
     },
     [executeAfterRefresh, onFlagsChange]
   );
@@ -351,11 +376,13 @@ export function TogglyProvider({
         }
       }
 
+      if (!mountedRef.current) return;
       setIdentity(newIdentity);
 
       // Fetch new flags with identity
       const newFlags = await fetchFlags(newIdentity);
       await updateFlags(newFlags);
+      if (!mountedRef.current) return;
 
       // Execute afterIdentify hooks
       for (let i = hooks.length - 1; i >= 0; i--) {
@@ -372,7 +399,7 @@ export function TogglyProvider({
         }
       }
 
-      setIsReady(true);
+      if (mountedRef.current) setIsReady(true);
     },
     [hooks, fetchFlags, updateFlags, logger]
   );
@@ -597,6 +624,7 @@ export function TogglyProvider({
     if (!serverContext && mergedConfig?.appKey) {
       logger.debug('No server context, initializing client-side');
       fetchFlags(identity).then((newFlags) => {
+        if (!mountedRef.current) return;
         setFlags(newFlags);
         setIsReady(true);
       });
@@ -605,6 +633,7 @@ export function TogglyProvider({
 
   const contextValue = useMemo<TogglyContextValue>(
     () => ({
+      ...telemetry.api,
       flags,
       isReady,
       identity,
@@ -622,6 +651,7 @@ export function TogglyProvider({
       subscribeLocalGatesChanged,
     }),
     [
+      telemetry,
       flags,
       isReady,
       identity,

@@ -27,6 +27,7 @@ if (!existsSync(tarball)) {
   throw new Error(`Expected packed tarball at ${tarball}`);
 }
 
+if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) console.log('LOCAL TELEMETRY ARTIFACT: registry acceptance remains pending');
 const selected = matrix.filter((row) => !process.env.HOST || row.name === process.env.HOST);
 for (const row of selected) {
   const node = process.env[`NODE${row.nodeMajor}`] || process.execPath;
@@ -46,7 +47,7 @@ for (const row of selected) {
     scripts: {
       build: 'react-router build',
       typecheck: 'react-router typegen && tsc --noEmit',
-      test: 'node --test --test-force-exit host.test.mjs',
+      test: 'node --test --test-force-exit host.test.mjs browser.test.mjs',
     },
     dependencies: {
       '@ops-ai/react-router-toggly': tarball,
@@ -55,11 +56,13 @@ for (const row of selected) {
       'react-router': row.router,
       '@react-router/node': row.router,
       isbot: '^5.1.0',
+      ...(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL ? {'@ops-ai/toggly-client-telemetry': process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL} : {}),
     },
     devDependencies: {
       '@react-router/dev': row.router,
       vite: row.vite,
       typescript: '5.9.3',
+      'puppeteer-core': '25.10.0',
       '@types/react': row.react.startsWith('18.') ? '18.3.28' : '19.2.14',
       '@types/react-dom': row.react.startsWith('18.') ? '18.3.7' : '19.2.3',
       '@types/node': '^22.0.0',

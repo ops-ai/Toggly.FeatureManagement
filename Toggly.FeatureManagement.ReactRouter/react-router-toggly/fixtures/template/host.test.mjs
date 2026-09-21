@@ -37,7 +37,7 @@ test('browser production chunks exclude server-only modules', async () => {
     )
   ).join('\n');
   assert.equal(
-    /from[\"']ws[\"']|require\([\"']ws[\"']\)|grpc-js|createServerClient|node:fs|node:crypto/.test(
+    /from[\"']ws[\"']|require\([\"']ws[\"']\)|grpc-js|createServerClient|node:fs|node:crypto|\/api\/usage\/stats|\/api\/metrics|protobufjs|UsageBatcher|MetricsBatcher/.test(
       source,
     ),
     false,
