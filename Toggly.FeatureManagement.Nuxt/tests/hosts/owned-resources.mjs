@@ -38,3 +38,21 @@ export async function launchBrowser(chromium,own) {
  own(()=>bounded(()=>browser.close(),'browser connection close'))
  return browser
 }
+
+// One abortable deadline covers response headers and consumption of the whole body.
+export async function readHttp(url,options={},milliseconds=5000) {
+ const controller=new AbortController()
+ try {
+  return await bounded(async()=>{
+   const response=await fetch(url,{...options,signal:controller.signal})
+   return {ok:response.ok,status:response.status,headers:response.headers,body:await response.text()}
+  },'HTTP response',milliseconds)
+ } finally {controller.abort()}
+}
+
+// SSR identity belongs only to the initial document request, never browser metrics.
+export async function clearBrowserHeaders(page,protocol) {
+ await page.context().setExtraHTTPHeaders({})
+ await page.setExtraHTTPHeaders({})
+ if(protocol)await protocol.send('Network.setExtraHTTPHeaders',{headers:{}})
+}

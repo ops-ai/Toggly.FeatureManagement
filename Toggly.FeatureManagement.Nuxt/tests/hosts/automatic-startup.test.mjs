@@ -1,4 +1,4 @@
-import {withResources,closeServer,stopChild,launchBrowser} from './owned-resources.mjs'
+import {withResources,closeServer,stopChild,launchBrowser,readHttp,clearBrowserHeaders} from './owned-resources.mjs'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { spawn } from 'node:child_process'
@@ -39,7 +39,7 @@ export async function verifyAutomaticStartup(work, chromium) {
     let response
     for (let i = 0; i < 100; i++) {
       if (host.exitCode !== null || host.signalCode !== null) throw new Error('configured host exited before startup')
-      try { response = await fetch(url); if (response.ok) break } catch {}
+      try { response = await readHttp(url,{},1000); if (response.ok) break } catch {}
       await new Promise(resolve => setTimeout(resolve, 100))
     }
     assert(response?.ok, 'configured production host starts')
@@ -63,6 +63,7 @@ export async function verifyAutomaticStartup(work, chromium) {
       await route.continue()
     })
     await page.goto(url, { waitUntil: 'domcontentloaded' })
+    await clearBrowserHeaders(page)
     await startup
     await page.waitForFunction(() => document.querySelector('#mounted')?.textContent === 'true')
     assert.equal(await page.locator('#target').textContent(), 'true', 'server snapshot survives hydration while startup is pending')

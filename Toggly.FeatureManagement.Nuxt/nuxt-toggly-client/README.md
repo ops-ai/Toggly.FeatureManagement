@@ -32,8 +32,9 @@ behavior; a ready hydration snapshot can render boolean gates synchronously.
 ## Frontend telemetry
 
 Configured browser clients send compact feature checks and
-app-level metrics by default. SSR projection, refresh projection, keyless
-clients, and server rendering remain silent. Configure the independent browser
+app-level metrics by default. SSR projection, keyless clients, and server
+rendering remain silent. Refresh alone is not a check; mounted consumers that
+recompute their visibility evaluate effective local/entity gates and record checks. Configure the independent browser
 transport through `enableTelemetry`, `metricsBaseUrl`, and
 `telemetryFlushIntervalMs` (30–60 seconds). Existing
 `enableUsageTracking: false` and `enableMetrics: false` settings opt out of
@@ -45,11 +46,15 @@ const toggly = createToggly({
   metricsBaseUrl: 'https://metrics.toggly.io',
 })
 
+await toggly.init()
 toggly.telemetry.recordUsage('checkout', 'blue')
 toggly.telemetry.recordView('checkout')
 toggly.telemetry.incrementCounter('checkout-completed')
 toggly.telemetry.setGauge('cart-items', 3)
 await toggly.telemetry.flushTelemetry()
+
+// When the application owner is finally disposed:
+toggly.client.destroy()
 ```
 
 The legacy `recordUsage(feature, identity?, variant?)` and `recordView`
@@ -65,5 +70,6 @@ whole-number values to `telemetry.incrementCounter` and current values to
 Browser identity changes clear an omitted token. Failed refreshes retain the new
 context and matching cache/defaults. Persisted feature bodies and validators are
 scoped together by context and response mode, bounded to eight snapshots per
-route/mode. SSR hydration and ordinary refresh projection remain check-free;
-pending consumer checks cannot overwrite a newer projection or unmounted UI.
+route/mode. Cold hydration remains check-free; actual mounted consumer
+recomputation records checks. Pending consumer results cannot overwrite a newer
+evaluation or unmounted UI.

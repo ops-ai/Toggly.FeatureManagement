@@ -76,3 +76,16 @@ it('captures selected local definitions before a hook mutates their filter',asyn
  await client.init();client.addHook({getMetadata:()=>({name:'mutate'}),beforeEvaluation:()=>{client.getDefinitions().get('Raw')!.filters[0].name='AlwaysOff'}})
  expect(await client.isFeatureOn('Raw')).toBe(true)
 })
+
+it.each(['local','remote'] as const)('constructs minted %s path and scrubs all repeated targeting query values',async evaluationMode=>{
+ vi.mocked(fetch).mockImplementation(async()=>new Response(JSON.stringify(evaluationMode==='local'?[]:{Flag:true})))
+ const client=owner({evaluationMode,baseUri:'https://defs.invalid/base/?u=old&u=older&userId=secret&g=one&g=two&claim.plan=paid&claim.role=staff&keep=a&keep=b&i=stale',instanceId:' minted '})
+ await client.init();const [input,request]=vi.mocked(fetch).mock.calls[0];const url=new URL(String(input))
+ expect(url.pathname).toBe(`/base/${evaluationMode==='local'?'definitions-signed':'evaluated-signed'}/context/Production`)
+ expect([...url.searchParams]).toEqual([['keep','a'],['keep','b'],['i','minted']])
+ expect(new Headers(request?.headers).has('x-toggly-identity')).toBe(false)
+})
+it('preserves non-minted targeting and unrelated base query values',async()=>{
+ const client=owner({baseUri:'https://defs.invalid/base?keep=yes',instanceId:undefined,groups:['staff'],claims:{role:'admin'}});await client.init()
+ const url=new URL(String(vi.mocked(fetch).mock.calls[0][0]));expect(url.pathname).toBe('/base/evaluated-signed/context/Production');expect(url.searchParams.get('u')).toBe('alice');expect(url.searchParams.get('g')).toBe('staff');expect(url.searchParams.get('claim.role')).toBe('admin');expect(url.searchParams.get('keep')).toBe('yes')
+})

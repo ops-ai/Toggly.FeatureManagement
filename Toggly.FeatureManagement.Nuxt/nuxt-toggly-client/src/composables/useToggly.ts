@@ -18,7 +18,7 @@ let globalConfig: TogglyClientConfig | null = null
  */
 export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
   if (typeof window !== 'undefined' && globalClient) {
-    globalClient.destroy()
+    globalClient.destroy({flush: false})
     globalClient = null
   }
   const isReady = ref(false)
@@ -26,6 +26,8 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
   const error = ref<Error | null>(null)
   const features = ref<Record<string, boolean>>({ ...config.featureDefaults })
   const identity = ref<string | undefined>(config.identity)
+  let operation = 0
+  const current = (expected: number) => expected === operation && (typeof window === 'undefined' || globalClient === client)
 
   // Merge config with defaults
   const mergedConfig: TogglyClientConfig = {
@@ -85,12 +87,14 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     },
 
     async init(newConfig?: TogglyConfig) {
+      const expected = ++operation
       isLoading.value = true
       error.value = null
 
       try {
-        const defs = await client.init(newConfig)
-        features.value = defs as Record<string, boolean>
+        await client.init(newConfig)
+        if (!current(expected)) return
+        features.value = client.state.features as Record<string, boolean>
         isReady.value = true
 
         // Check if client encountered an error (it catches internally)
@@ -102,29 +106,34 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
         identity.value = client.identity
         persistIdentity()
       } catch (e) {
+        if (!current(expected)) return
         error.value = e as Error
         // Still mark as ready since we use defaults
         isReady.value = true
       } finally {
-        isLoading.value = false
+        if (current(expected)) isLoading.value = false
       }
     },
 
     async refresh() {
+      const expected = ++operation
       isLoading.value = true
       error.value = client.state.error
 
       try {
-        const defs = await client.refresh()
-        features.value = defs as Record<string, boolean>
+        await client.refresh()
+        if (!current(expected)) return
+        features.value = client.state.features as Record<string, boolean>
+        isReady.value = client.state.initialized
         error.value = client.state.error
 
       } catch (e) {
+        if (!current(expected)) return
         features.value = client.state.features as Record<string, boolean>
         error.value = e as Error
         throw e
       } finally {
-        isLoading.value = false
+        if (current(expected)) isLoading.value = false
       }
     },
 
@@ -133,16 +142,24 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     },
 
     async setContext(update) {
+      const expected = ++operation
+      isLoading.value = true
       try {
         await client.setContext(update)
+        if (!current(expected)) return
+        isReady.value = client.state.initialized
         error.value = client.state.error
       } catch (e) {
+        if (!current(expected)) return
         error.value = e as Error
         throw e
       } finally {
-        identity.value = client.identity
-        features.value = client.state.features as Record<string, boolean>
-        persistIdentity()
+        if (current(expected)) {
+          isLoading.value = false
+          identity.value = client.identity
+          features.value = client.state.features as Record<string, boolean>
+          persistIdentity()
+        }
       }
     },
 

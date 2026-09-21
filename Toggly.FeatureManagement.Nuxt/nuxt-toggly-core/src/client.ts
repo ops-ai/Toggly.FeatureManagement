@@ -60,6 +60,7 @@ export function createTogglyClient(
   const hookExecutor = new HookExecutor()
   const frontend = Boolean(initialConfig.frontendTelemetryFactory)
   let generation = 0
+  let refreshOperation = 0
   let refreshIntervalId: ReturnType<typeof setInterval> | null = null
   let destroyed = false
   let telemetry: TrustedTelemetryRuntime | null = null
@@ -259,13 +260,16 @@ export function createTogglyClient(
   }
 
   function notifyFeaturesRefresh(): void {
-    featuresRefreshListeners.forEach((listener) => {
+    const expected = generation
+    const operation = refreshOperation
+    for (const listener of featuresRefreshListeners) {
+      if (frontend && (destroyed || expected !== generation || operation !== refreshOperation)) return
       try {
         listener()
       } catch (error) {
         console.error('[Toggly] Feature refresh listener error:', error)
       }
-    })
+    }
   }
 
   function discardHydratedSnapshotForIdentity(identity: string | undefined): void {
@@ -321,7 +325,7 @@ export function createTogglyClient(
       features: JSON.parse(JSON.stringify(Object.fromEntries(keys.map(key => [key,state.features[key]])))) as FeatureDefinitions,
       definitions: new Map(JSON.parse(JSON.stringify(keys.filter(key => state.definitions.has(key)).map(key => [key,state.definitions.get(key)]))) as [string,FeatureDefinitionModel][]),
       local: isLocalEvaluation(), owner: {...config, groups: config.groups ? [...config.groups] : undefined, claims: {...config.claims}},
-      gates: [...localGates], index: new Map(localGateIndex),
+      gates: localGates.map(gate => ({...gate, flagKeys: [...gate.flagKeys]})), index: new Map(localGateIndex),
       record: runtime?.captureCheck?.() ?? (runtime?.usageEnabled ? runtime.recordCheck.bind(runtime) : undefined),
     }
   }
@@ -436,10 +440,20 @@ export function createTogglyClient(
     const endpoint = local
       ? API_ENDPOINTS.definitionsSigned
       : API_ENDPOINTS.evaluatedSigned
-    const fetchUrl = new URL(
+    // Frontend base queries are independent of the definitions pathname.
+    // Keep trusted endpoint construction on its existing compatibility path.
+    const fetchUrl = frontend ? new URL(config.baseUri) : new URL(
       endpoint(config.baseUri, config.appKey, config.environment)
     )
-    if (frontend && config.instanceId?.trim()) fetchUrl.searchParams.set('i', config.instanceId.trim())
+    if (frontend) {
+      fetchUrl.pathname = `${fetchUrl.pathname.replace(/\/$/, '')}/${local ? 'definitions-signed' : 'evaluated-signed'}/${config.appKey}/${config.environment}`
+    }
+    if (frontend && config.instanceId?.trim()) {
+      for (const key of [...fetchUrl.searchParams.keys()]) {
+        if (['i', 'u', 'userId', 'g'].includes(key) || key.startsWith('claim.')) fetchUrl.searchParams.delete(key)
+      }
+      fetchUrl.searchParams.set('i', config.instanceId.trim())
+    }
     else if (!local) {
       appendEvaluationContext(
         fetchUrl,
@@ -757,6 +771,8 @@ export function createTogglyClient(
       }
 
       const expected = frontend ? ++generation : generation
+      const operation = ++refreshOperation
+      const current = () => !frontend || (!destroyed && expected === generation && operation === refreshOperation)
       if (frontend) {stopWebSocket(); stopRefreshInterval(); refreshInFlight = false}
       // Merge new config if provided
       if (newConfig) {
@@ -788,9 +804,9 @@ export function createTogglyClient(
 
         try {
           await refreshFeatures({ reportRefreshError: false })
-          if (frontend && (destroyed || expected !== generation)) return state.features
+          if (!current()) return state.features
         } catch {
-          if (frontend && (destroyed || expected !== generation)) return state.features
+          if (!current()) return state.features
           // Preserve last-known-good / defaults; refreshFeatures already recorded a hit when applicable.
           if (
             state.definitions.size === 0 &&
@@ -804,11 +820,11 @@ export function createTogglyClient(
 
         state.initialized = true
 
-        if (destroyed || (frontend && expected !== generation)) return state.features
+        if (destroyed || !current()) return state.features
 
         // Execute afterRefresh hooks
-        await hookExecutor.executeAfterRefresh(state.features)
-        if (destroyed || (frontend && expected !== generation)) return state.features
+        await hookExecutor.executeAfterRefresh(state.features, current)
+        if (destroyed || !current()) return state.features
         notifyFeaturesRefresh()
 
         // Start auto-refresh
@@ -819,7 +835,7 @@ export function createTogglyClient(
 
         return state.features
       } catch (error) {
-        if (frontend && (destroyed || expected !== generation)) return state.features
+        if (!current()) return state.features
         state.error = error as Error
 
         if (
@@ -835,7 +851,7 @@ export function createTogglyClient(
 
         return state.features
       } finally {
-        if (!frontend || expected === generation) {state.loading = false; hasHydratedEvaluatedSnapshot = false}
+        if (current()) {state.loading = false; hasHydratedEvaluatedSnapshot = false}
       }
     },
 
@@ -844,15 +860,18 @@ export function createTogglyClient(
         throw new Error('[Toggly] Client has been destroyed')
       }
 
+      if (frontend && refreshInFlight) return state.features
       const expected = generation
+      const operation = ++refreshOperation
+      const current = () => !frontend || (!destroyed && expected === generation && operation === refreshOperation)
       const { features, performed } = await refreshFeatures()
       if (performed) {
         // Execute afterRefresh hooks
-        await hookExecutor.executeAfterRefresh(state.features)
-        if (frontend && (destroyed || expected !== generation)) return state.features
+        await hookExecutor.executeAfterRefresh(state.features, current)
+        if (!current()) return state.features
         notifyFeaturesRefresh()
       }
-      return features
+      return frontend ? state.features : features
     },
 
     async isFeatureOn(
@@ -916,12 +935,26 @@ export function createTogglyClient(
         )
       }
 
-      const captured = frontend ? captureEvaluation(featureKeys) : undefined
+      const selectedKeys = frontend ? [...featureKeys] : featureKeys
+      const captured = frontend ? captureEvaluation(selectedKeys) : undefined
       const entityContext = normalizeEntityContext(context, kind)
 
-      if (featureKeys.length === 0) return !negate
+      if (!frontend) {
+        const dataMaps = []
+        for (const key of featureKeys) {
+          dataMaps.push({key, dataMap: await hookExecutor.executeBeforeEvaluation(key, config.featureDefaults?.[key])})
+        }
+        const checks = featureKeys.map(key => evaluateAndRecordCheck(key, entityContext, overrides))
+        const result = featureKeys.length === 0 ? true : requirement === 'any' ? checks.some(Boolean) : checks.every(Boolean)
+        for (const {key, dataMap} of dataMaps) {
+          const keyResult = getEffectiveFlag(key, entityContext, overrides)
+          hookExecutor.executeAfterEvaluation(key, dataMap, keyResult).catch(() => {})
+        }
+        return negate ? !result : result
+      }
+      if (selectedKeys.length === 0) return !negate
       let result = requirement !== 'any'
-      for (const key of featureKeys) {
+      for (const key of selectedKeys) {
         const dataMap = await hookExecutor.executeBeforeEvaluation(
           key,
           (captured?.owner ?? config).featureDefaults?.[key],
@@ -1134,7 +1167,7 @@ export function createTogglyClient(
       else await telemetry?.flushAll()
     },
 
-    destroy(): void {
+    destroy(options?: {flush?: boolean}): void {
       destroyed = true
       generation++
       stopWebSocket()
@@ -1144,7 +1177,7 @@ export function createTogglyClient(
         void telemetry.close()
         telemetry = null
       }
-      frontendTelemetry?.dispose()
+      frontendTelemetry?.dispose(options)
       frontendTelemetry = null
       frontendTelemetrySignature = null
     },

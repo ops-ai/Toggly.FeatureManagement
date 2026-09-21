@@ -1,4 +1,5 @@
-import {bounded,withResources,closeServer,stopChild,runOwned,launchBrowser} from './owned-resources.mjs'
+import {verifyBrowserCleanup} from './browser-cleanup.mjs'
+import {bounded,withResources,closeServer,stopChild,runOwned,launchBrowser,readHttp,clearBrowserHeaders} from './owned-resources.mjs'
 import { mkdtemp, cp, writeFile, readFile, mkdir, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, resolve, join } from 'node:path'
@@ -23,6 +24,15 @@ const work = await mkdtemp(join(tmpdir(), `nuxt-toggly-${version}-`))
 own(() => rm(work,{recursive:true,force:true}))
 console.log(`Host evidence: ${work}; Nuxt ${version}; Node ${process.version}`)
 const telemetryRequests = []
+async function waitForTelemetry(start,predicate) {
+  const deadline = Date.now() + 5000
+  do {
+    const request = telemetryRequests.slice(start).find(request => request.payload && predicate(request))
+    if (request) return request
+    await new Promise(resolve => setTimeout(resolve,20))
+  } while (Date.now() < deadline)
+  throw Error('Expected telemetry POST did not reach collector')
+}
 const collector = createHttpServer((request, response) => {
   response.setHeader('Access-Control-Allow-Origin', '*')
   response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -141,6 +151,7 @@ for (const forbidden of ['api/usage/stats', 'api/metrics', '@grpc/grpc-js', '@gr
   assert(!browserBundle.includes(forbidden), `browser output must exclude trusted telemetry transport: ${forbidden}`)
 }
 const { chromium } = await import(pathToFileURL(join(work, 'node_modules/playwright/index.mjs')).href)
+await verifyBrowserCleanup(chromium)
 const { createServer: createNetServer } = await import('node:net')
 const probe = createNetServer(); await new Promise(r => probe.listen(0, '127.0.0.1', r)); const port = probe.address().port; await new Promise(r => probe.close(r))
 const host = spawn(process.execPath, ['.output/server/index.mjs'], { cwd: work, stdio: 'inherit', env: { ...process.env, PORT: String(port), NITRO_PORT: String(port), HOST: '127.0.0.1' } })
@@ -149,14 +160,14 @@ await withResources(async ownHost => {
   ownHost(()=>stopChild(host))
   let browser
   let response
-  for (let i = 0; i < 100; i++) { try { response = await fetch(url); if (response.ok) break } catch {} await new Promise(r => setTimeout(r, 100)) }
+  for (let i = 0; i < 100; i++) { try { response = await readHttp(url,{},1000); if (response.ok) break } catch {} await new Promise(r => setTimeout(r, 100)) }
   assert(response?.ok, 'production host starts')
-  const html = await response.text()
+  const html = response.body
   assert.match(html, /id="gate"/); assert.match(html, /id="negated"/); assert.doesNotMatch(html, /id="all"/)
   const [alice, bob] = await Promise.all(['alice', 'bob'].map(async identity => {
     const headers = { 'x-toggly-identity': identity }
-    const data = await (await fetch(url + '/api/context', { headers })).json()
-    const html = await (await fetch(url, { headers })).text()
+    const data = JSON.parse((await readHttp(url + '/api/context', { headers })).body)
+    const html = (await readHttp(url, { headers })).body
     return { data, html }
   }))
   assert.equal(alice.data.enabled, true); assert.equal(bob.data.enabled, false)
@@ -172,19 +183,25 @@ await withResources(async ownHost => {
     const protocol = await page.context().newCDPSession(page)
     await protocol.send('Network.enable')
     await protocol.send('Network.setBlockedURLs',{urls:['https://*','http://definitions.toggly.io/*','http://metrics.toggly.io/*']})
+    return protocol
   }
 
   if (process.env.NUXT_TRACE_EVALUATIONS === '1') {
     const diagnostic = await browser.newPage({extraHTTPHeaders:{'x-toggly-identity':'alice'}})
     ownHost(()=>bounded(()=>diagnostic.close(),'diagnostic page close'))
-    await blockProduction(diagnostic)
+    const diagnosticProtocol = await blockProduction(diagnostic)
+    diagnostic.on('requestfailed', request => console.log('DIAGNOSTIC_REQUEST_FAILURE', request.url(), request.failure()?.errorText))
+    diagnostic.on('console', message => console.log('DIAGNOSTIC_CONSOLE', message.text()))
     await diagnostic.goto(url+'?evaluationDiagnostic=1')
     await diagnostic.waitForFunction(()=>document.querySelector('#mounted')?.textContent==='true')
-    await diagnostic.setExtraHTTPHeaders({})
+    await clearBrowserHeaders(diagnostic,diagnosticProtocol)
     for (const phase of ['initialize','identity','refresh']) {
       const start=telemetryRequests.length
       const calls=await bounded(()=>diagnostic.evaluate(phase=>window.evaluationDiagnostic(phase),phase),'diagnostic evaluation',30000)
-      console.log('EVALUATION_PROVENANCE',JSON.stringify({phase,calls,packets:telemetryRequests.slice(start).filter(request=>request.payload).map(request=>request.payload)}))
+      const packets = telemetryRequests.slice(start).filter(request=>request.payload).map(request=>request.payload)
+      console.log('EVALUATION_PROVENANCE',JSON.stringify({phase,calls,packets,requests:telemetryRequests.slice(start).map(request=>({method:request.method,headers:request.headers}))}))
+      const expected = {initialize:{Enabled:{enabled:[7]},Disabled:{disabled:[2]}},identity:{Enabled:{enabled:[6],disabled:[10]},Disabled:{disabled:[5]},Targeted:{disabled:[2]}},refresh:{Enabled:{disabled:[6]},Disabled:{disabled:[3]},Targeted:{disabled:[2]}}}
+      assert.deepEqual(packets.map(packet=>packet.f),[expected[phase]],'diagnostic phase retains exact effective and skipped-leaf counts')
     }
     await diagnostic.close()
     telemetryRequests.length=0
@@ -193,7 +210,7 @@ await withResources(async ownHost => {
   await page.setExtraHTTPHeaders({ 'x-toggly-identity': 'alice' })
   const errors = []
   const outbound = []
-  await blockProduction(page)
+  const pageProtocol = await blockProduction(page)
   page.on('request',request=>{const target=new URL(request.url());if(target.hostname!=='127.0.0.1')outbound.push(target.origin)})
   page.on('pageerror', error => errors.push(error.message))
   page.on('console', msg => { if (/hydration|mismatch/i.test(msg.text())) errors.push(msg.text()); if (/Toggly|telemetry/i.test(msg.text())) console.log(`Browser console: ${msg.text()}`) })
@@ -202,7 +219,7 @@ await withResources(async ownHost => {
   // The request-scoped SSR identity header belongs only to the initial page
   // request. Remove the Playwright context header before frontend telemetry so
   // the collector can verify owner attribution without ambient identity headers.
-  await page.setExtraHTTPHeaders({})
+  await clearBrowserHeaders(page,pageProtocol)
   assert.equal(await page.locator('#target').textContent(), 'true')
   assert.equal(await page.locator('#core-target').textContent(), 'true', 'public core agrees with hydrated Vue flags')
   assert.equal(await page.locator('#core-gate').textContent(), 'true', 'public core gates use hydrated flags')
@@ -211,10 +228,9 @@ await withResources(async ownHost => {
   await page.waitForFunction(() => document.querySelector('#initialized')?.textContent === 'true')
   const beforeColdFlush = telemetryRequests.length
   await page.locator('#flush-telemetry').click()
-  for (let i = 0; telemetryRequests.length <= beforeColdFlush && i < 50; i++) await new Promise(r => setTimeout(r, 100))
-  const coldPayload = telemetryRequests.slice(beforeColdFlush).find(request => request.payload?.k === 'fixture')?.payload
+  const coldPayload = (await waitForTelemetry(beforeColdFlush,request => request.payload.k === 'fixture')).payload
   assert(coldPayload?.f?.Enabled, 'cold browser UI evaluations are reported')
-  assert.deepEqual(coldPayload.f.Enabled.enabled, [3], 'cold initialization counts each actual UI evaluation once')
+  assert.deepEqual(coldPayload.f, {Enabled:{enabled:[7]},Disabled:{disabled:[2]}}, 'cold initialization counts actual consumers and skips the any gate later leaf')
   assert.equal(coldPayload.m, undefined, 'cold hydration/refresh projection emits no business metrics')
   await page.locator('#identity').click()
   await page.waitForFunction(() => document.querySelector('#flag')?.textContent === 'false')
@@ -222,27 +238,35 @@ await withResources(async ownHost => {
   assert.equal(await page.locator('#core-gate').textContent(), 'false')
   assert.equal(await page.locator('#gate').count(), 0)
   assert.equal(await page.locator('#directive').isVisible(), false)
+  const beforeIdentityFlush = telemetryRequests.length
+  await page.locator('#flush-telemetry').click()
+  let identityPayload
+  for (let i = 0; i < 50; i++) {
+    identityPayload = telemetryRequests.slice(beforeIdentityFlush).find(request => request.payload?.k === 'fixture')?.payload
+    if (identityPayload) break
+    await new Promise(r => setTimeout(r,100))
+  }
+  assert.deepEqual(identityPayload?.f, {Enabled:{enabled:[6],disabled:[10]},Disabled:{disabled:[5]},Targeted:{disabled:[2]}}, 'identity phase counts restored consumers and only evaluated leaves')
   const refreshed = page.waitForResponse(response => response.url().includes('/api/definitions/'))
   await page.locator('#refresh').click()
   await refreshed
   await page.waitForFunction(() => document.querySelector('#target')?.textContent === 'false')
   const beforeProjectionFlush = telemetryRequests.length
   await page.locator('#flush-telemetry').click()
-  for (let i = 0; telemetryRequests.length <= beforeProjectionFlush && i < 50; i++) await new Promise(r => setTimeout(r, 100))
-  const projectionPayload = telemetryRequests.slice(beforeProjectionFlush).find(request => request.payload?.k === 'fixture')?.payload
+  const projectionPayload = (await waitForTelemetry(beforeProjectionFlush,request => request.payload.k === 'fixture')).payload
   assert(projectionPayload?.f?.Enabled?.disabled, 'post-identity UI evaluations use the effective disabled outcome')
-  assert.deepEqual(projectionPayload.f.Enabled.enabled, [2], 'refresh subscriptions do not add enabled evaluations')
-  assert.deepEqual(projectionPayload.f.Enabled.disabled, [6], 'identity and refresh count only actual disabled evaluations')
+  assert.deepEqual(projectionPayload.f, {Enabled:{disabled:[6]},Disabled:{disabled:[3]},Targeted:{disabled:[2]}}, 'refresh phase checks every actual consumer with effective outcomes')
+  assert.deepEqual([identityPayload.f.Enabled.enabled[0],identityPayload.f.Enabled.disabled[0]+projectionPayload.f.Enabled.disabled[0]], [6,16], 'combined identity and refresh counts preserve all actual Enabled checks')
   const beforeTelemetry = telemetryRequests.length
   await page.locator('#telemetry').click()
-  for (let i = 0; telemetryRequests.length <= beforeTelemetry && i < 50; i++) await new Promise(r => setTimeout(r, 100))
-  const compact = telemetryRequests.find(request => request.payload?.m?.['fixture-counter'] === 2)
+  const compact = await waitForTelemetry(beforeTelemetry,request => request.payload.m?.['fixture-counter'] === 2)
   assert(compact, 'explicit frontend telemetry reaches the cross-origin collector')
   assert.deepEqual(Object.keys(compact.payload).sort(), ['e', 'f', 'k', 'm', 'u'])
   assert.equal(compact.payload.u,'bob')
   assert.equal(compact.headers['content-encoding'], 'gzip')
   assert.equal(compact.headers.cookie, undefined)
   assert.equal(compact.headers.authorization, undefined)
+  assert.equal(compact.headers['x-toggly-identity'], undefined, 'SSR-only identity header is absent from native SDK telemetry')
   assert(telemetryRequests.some(request => request.method === 'OPTIONS'), 'collector observed a real CORS preflight')
   assert.deepEqual(compact.payload.f.Enabled.disabled, [1])
   assert.deepEqual(compact.payload.f.Enabled.blue, [0, 1])
@@ -254,7 +278,7 @@ await withResources(async ownHost => {
   assert(telemetryRequests.some(request => request.payload?.m?.['pagehide-counter'] === 1), 'pagehide flushes with browser lifecycle handling')
   await page.locator('#replace-owner').click()
   for (let i = 0; !telemetryRequests.some(request => request.payload?.k === 'new-app') && i < 50; i++) await new Promise(r => setTimeout(r, 100))
-  assert(telemetryRequests.some(request => request.payload?.k === 'old-app' && request.payload?.m?.['old-owner-count'] === 1))
+  assert(!telemetryRequests.some(request => request.payload?.k === 'old-app'), 'replacement discards retired owner events')
   assert(telemetryRequests.some(request => request.payload?.k === 'new-app' && request.payload?.m?.['new-owner-count'] === 1))
   assert(!JSON.stringify(telemetryRequests).includes('stale-owner-count'))
   const mintedRequests=[]

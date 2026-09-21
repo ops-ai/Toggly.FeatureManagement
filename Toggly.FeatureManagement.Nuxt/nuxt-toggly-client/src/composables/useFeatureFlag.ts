@@ -51,26 +51,11 @@ export function useFeatureFlag(featureKey: string | Ref<string>): UseFeatureFlag
     }
   }
 
-  // Check feature when ready or key changes
+  // Vue batches readiness and definitions publication into one effective UI check.
   watch(
-    [() => toggly.isReady.value, key],
-    async () => {
-      await checkFeature()
-    },
-    { immediate: true }
-  )
-
-  // Also check when features change
-  watch(
-    () => toggly.features.value,
-    () => {
-      request++
-      isLoading.value = false
-      // Refresh/hydration projection is state synchronization, not a new
-      // consumer evaluation, so it remains telemetry-silent.
-      enabled.value = toggly.features.value[key.value] === true
-    },
-    { deep: true }
+    [() => toggly.isReady.value, key, () => toggly.features.value],
+    () => { void checkFeature() },
+    { immediate: true, deep: true }
   )
 
   return {

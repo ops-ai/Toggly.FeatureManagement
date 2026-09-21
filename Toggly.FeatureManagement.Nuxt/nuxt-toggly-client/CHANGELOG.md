@@ -9,7 +9,9 @@
 - Ignore unrelated SSR/legacy snapshots for minted contexts and tolerate unavailable browser storage.
 
 ### Changed
-- Replacing a browser client disposes the previous telemetry owner, and hydration or refresh projection does not generate feature checks.
+- Replacing a browser client cancels and discards its retired telemetry owner; final disposal can flush.
+- Mounted composables and components recompute effective local/entity gates and count actual checks after refreshed definitions, while cold hydration remains silent.
+- Fence stale facade publications and pending UI results across refresh, context changes, replacement and disposal.
 - Browser legacy `measure` and `observe` calls are payload-free no-ops with bounded diagnostics. Legacy usage/view keep identity as the second argument and use only the third argument as the variant.
 
 ## 1.2.2 — 2026-09-12

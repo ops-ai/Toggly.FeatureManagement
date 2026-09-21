@@ -74,33 +74,11 @@ export function useFeatureGate(
     }
   }
 
-  // Check gate when ready or when inputs change
+  // Vue batches readiness and definitions publication into one effective UI check.
   watch(
-    [() => toggly.isReady.value, keys, req, neg, entity, kind],
-    async ([ready]) => {
-      if (ready) {
-        await checkGate()
-      }
-    },
-    { immediate: true }
-  )
-
-  // Also check when features change (sync local map for boolean defs)
-  watch(
-    () => toggly.features.value,
-    () => {
-      request++
-      isLoading.value = false
-      // Refresh/hydration projection is state synchronization, not a new
-      // consumer evaluation, so it remains telemetry-silent.
-      enabled.value = evaluateGate(
-        toggly.features.value,
-        keys.value,
-        req.value,
-        neg.value
-      )
-    },
-    { deep: true }
+    [() => toggly.isReady.value, keys, req, neg, entity, kind, () => toggly.features.value],
+    () => { if (toggly.isReady.value) void checkGate() },
+    { immediate: true, deep: true }
   )
 
   return {

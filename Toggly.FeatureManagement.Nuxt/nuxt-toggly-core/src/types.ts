@@ -419,5 +419,5 @@ export interface TogglyClient {
   flushTelemetry(): Promise<void>
 
   /** Destroy the client and cleanup (best-effort telemetry flush). */
-  destroy(): void
+  destroy(options?: {flush?: boolean}): void
 }

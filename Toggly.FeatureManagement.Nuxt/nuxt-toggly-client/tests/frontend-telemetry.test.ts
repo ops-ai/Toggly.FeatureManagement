@@ -79,6 +79,7 @@ describe('browser telemetry facade', () => {
       .map(async ([, init]) => payloadFrom(init)))
     expect(payloads.some(payload => payload.k === 'new' && payload.m?.['new-count'] === 1)).toBe(true)
     expect(JSON.stringify(payloads)).not.toContain('stale-count')
+    expect(JSON.stringify(payloads)).not.toContain('old-count')
   })
 
   it('keeps unsupported legacy measurements payload-free with bounded diagnostics', async () => {
@@ -262,11 +263,11 @@ describe('browser telemetry facade', () => {
     } finally {Object.defineProperty(globalThis,'localStorage',getter)}
   })
 
-  it.each(['flag','gate'])('keeps refreshed projection after a pending %s hook without counting refresh', async kind => {
+  it.each(['flag','gate'])('counts actual %s recomputation while fencing the pending old result', async kind => {
     const owner = createToggly({appKey:'projection',instanceId:'mint',refreshInterval:0,enableLiveUpdates:false})
     await owner.init()
-    let release!:()=>void
-    owner.client.addHook({getMetadata:()=>({name:'pending'}), beforeEvaluation:()=>new Promise<void>(resolve=>{release=resolve})})
+    let release!:()=>void; let held = false
+    owner.client.addHook({getMetadata:()=>({name:'pending'}), beforeEvaluation:()=>{if (!held) {held = true; return new Promise<void>(resolve=>{release=resolve})}}})
     const wrapper=mount(defineComponent({setup(){const state=kind==='flag'?useFeatureFlag('Flag'):useFeatureGate(['Flag']);return()=>h('span',String(state.isEnabled.value))}}), {global:{provide:{[TOGGLY_INJECTION_KEY as symbol]:owner}}})
     try {
       await flushPromises()
@@ -275,7 +276,7 @@ describe('browser telemetry facade', () => {
       release(); await flushPromises(); expect(wrapper.text()).toBe('false')
       await owner.telemetry.flushTelemetry()
       const packets=await Promise.all(vi.mocked(fetch).mock.calls.filter(([url])=>String(url).includes('/api/frontend/telemetry')).map(([,init])=>payloadFrom(init)))
-      expect(packets).toEqual([{k:'projection',e:'Production',i:'mint',f:{Flag:{enabled:[1]}}}])
+      expect(packets).toEqual([{k:'projection',e:'Production',i:'mint',f:{Flag:{enabled:[1],disabled:[1]}}}])
     } finally {release?.();wrapper.unmount()}
   })
 

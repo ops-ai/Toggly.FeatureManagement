@@ -31,7 +31,15 @@ onMounted(async () => { await updateCoreFlags(); mounted.value = true })
 async function identifyBob() { await toggly.setIdentity('bob'); await updateCoreFlags() }
 async function refresh() { await toggly.refresh(); await updateCoreFlags() }
 async function initialize() {
-  await toggly.init({ appKey: 'fixture', identity: 'alice', baseUri: location.origin + '/api/definitions', refreshInterval: 0, enableLiveUpdates: false })
+  const factory = toggly.client.config.frontendTelemetryFactory
+  const diagnostic = new URLSearchParams(location.search).has('evaluationDiagnostic') && factory
+  await toggly.init({ appKey: 'fixture', identity: 'alice', baseUri: location.origin + '/api/definitions', refreshInterval: 0, enableLiveUpdates: false,
+    ...(diagnostic ? {frontendTelemetryFactory: (config: any) => {
+      const runtime = diagnostic(config)
+      evaluationTrace.push({phase:evaluationPhase,kind:'factory',present:!!runtime,usageEnabled:runtime?.usageEnabled})
+      return runtime
+    }} : {}),
+  })
   initialized.value = true
 }
 async function emitTelemetry() {
@@ -67,7 +75,17 @@ onMounted(() => {
     if (phase === 'refresh') await refresh()
     await new Promise(resolve => setTimeout(resolve, 0))
     await flushTelemetry()
-    return evaluationTrace.slice(start)
+    return {
+      calls: evaluationTrace.slice(start),
+      config: {
+        appKey: toggly.client.config.appKey,
+        metricsBaseUrl: toggly.client.config.metricsBaseUrl,
+        enableTelemetry: toggly.client.config.enableTelemetry,
+        enableUsageTracking: toggly.client.config.enableUsageTracking,
+        frontendFactory: typeof toggly.client.config.frontendTelemetryFactory,
+        environmentDisabled: typeof process !== 'undefined' && process.env?.TOGGLY_DISABLE_TELEMETRY,
+      },
+    }
   }
   ;(window as any).verifyMinted = async () => {
     const options = {appKey:'minted-fixture',instanceId:'token-a',identity:'legacy',groups:['private'],claims:{plan:'secret'},persistFeatures:true,

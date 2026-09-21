@@ -101,6 +101,8 @@ remain local, as in the other packed hosts.
 
 The browser matrix also checks minted-token targeting and exact compact `i`
 payloads across owner replacement, token ABA and remote/local response-mode304
-round trips, captured reentrant checks, and plain pagehide keepalive. Eight
-real-resource failure/negative controls run before hosts. `record --lock-only`
+round trips, captured reentrant checks, and plain pagehide keepalive. Thirteen
+real-resource controls cover failures, deliberate leaks, command descendants and
+abortable HTTP header/body deadlines. Every host also verifies a real Playwright
+evaluation deadline closes its owned Chrome process. `record --lock-only`
 updates a maintained consumer graph with npm without claiming framework execution.
