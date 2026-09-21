@@ -59,6 +59,7 @@ const packedHostHarnesses = [
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs',
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/**',
   'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-host.mjs',
+  'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-browser-host.mjs',
   'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/tests/host/**'
 ];
 
@@ -157,6 +158,12 @@ test('runs the current Gatsby packed host on Node 24', () => {
 test('runs the complete packed Angular host matrix in the required test job', () => {
   const testJob = workflow.slice(workflow.indexOf('\n  test:'), workflow.indexOf('\n  test-docusaurus-host:'));
   assert.match(testJob, /- name: Verify packed Angular consumers in Chrome\s+if: matrix\.sdk == 'Angular'\s+working-directory: \$\{\{ matrix\.path \}\}\s+env:\s+CHROME_BIN: \/usr\/bin\/google-chrome\s+run: \|\s+test -x "\$CHROME_BIN"\s+npm run test:hosts/);
+});
+
+test('canonical Svelte host check also runs the real browser matrix', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../../Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/package.json', import.meta.url), 'utf8'));
+  assert.equal(manifest.scripts['test:host'], 'node scripts/test-host.mjs && npm run test:browser-host');
+  assert.equal(manifest.scripts['test:browser-host'], 'node scripts/test-browser-host.mjs');
 });
 
 test('selects system Chrome before packed Client-Core tests', () => {

@@ -11,6 +11,7 @@ import {
   isFeatureOn,
   isFeatureOff,
   evaluateFeatureGate,
+  _setTogglyServiceSnapshot,
 } from '../stores/toggly.store';
 import { Toggly } from '../services/toggly.service';
 
@@ -33,6 +34,22 @@ describe('Toggly Store', () => {
       const service = new Toggly({ featureDefaults: { F1: true } });
       togglyServiceStore.set(service);
       expect(get(togglyServiceStore)).toBe(service);
+    });
+
+    it('atomically replaces an owner with its initial projections', () => {
+      const first = new Toggly({ featureDefaults: { Old: true } });
+      const second = new Toggly({ featureDefaults: { New: true } });
+      const dispose = vi.spyOn(first, 'dispose');
+      togglyServiceStore.set(first);
+
+      _setTogglyServiceSnapshot(second, { New: true }, {});
+
+      expect(dispose).toHaveBeenCalledOnce();
+      expect(get(togglyServiceStore)).toBe(second);
+      expect(get(togglyFlagsStore)).toEqual({ New: true });
+
+      _setTogglyServiceSnapshot(second, { Ignored: true }, {});
+      expect(get(togglyFlagsStore)).toEqual({ New: true });
     });
   });
 
@@ -124,6 +141,11 @@ describe('Toggly Store', () => {
 
     it('createVariantValueStore returns null when variant name is missing', () => {
       togglyVariantsStore.set({ F: { enabled: true } });
+      expect(get(createVariantValueStore('F'))).toBeNull();
+    });
+
+    it('createVariantValueStore returns null when variant configuration is missing', () => {
+      togglyVariantsStore.set({ F: { enabled: true, variant: 'A' } });
       expect(get(createVariantValueStore('F'))).toBeNull();
     });
 

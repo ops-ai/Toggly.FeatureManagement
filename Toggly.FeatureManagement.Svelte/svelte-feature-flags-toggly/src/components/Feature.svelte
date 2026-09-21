@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte'
-  import { getTogglyService, togglyFlagsStore, togglyLocalGatesRevision } from '../stores/toggly.store'
+  import { onMount } from 'svelte'
+  import { togglyServiceStore, togglyFlagsStore, togglyLocalGatesRevision } from '../stores/toggly.store'
   import type { TogglyService } from '../services/toggly.service'
   import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
 
@@ -15,22 +15,17 @@
 
   let shouldShow: boolean = false
   let toggly: TogglyService | null = null
-  let unsubscribeFlags: (() => void) | null = null
-  let unsubscribeLocalGates: (() => void) | null = null
+  let alive = true
+  let generation = 0
+  let scheduled = false
 
   async function evaluateFeature() {
-    if (!toggly) {
-      try {
-        toggly = getTogglyService()
-      } catch (error) {
-        console.error('Toggly Feature component error:', error)
-        shouldShow = false
-        return
-      }
-    }
+    const owner = toggly
+    const current = generation
+    if (!owner) { shouldShow = false; return }
 
     // Check if we should show the feature during evaluation
-    shouldShow = toggly.shouldShowFeatureDuringEvaluation
+    shouldShow = owner.shouldShowFeatureDuringEvaluation
 
     const gate: string[] = []
 
@@ -42,42 +37,53 @@
       gate.push(...featureKeys)
     }
 
-    if (gate.length > 0 && toggly) {
+    if (gate.length > 0) {
       try {
-        shouldShow = await toggly.evaluateFeatureGate(
+        const result = await owner.evaluateFeatureGate(
           gate,
           requirement,
           negate,
           context,
           contextKind,
         )
+        if (alive && generation === current && toggly === owner) shouldShow = result
       } catch (error) {
-        console.error('Toggly Feature evaluation error:', error)
-        shouldShow = false
+        if (alive && generation === current && toggly === owner) {
+          console.error('Toggly Feature evaluation error:', error)
+          shouldShow = false
+        }
       }
     } else {
       shouldShow = !negate
     }
   }
 
+  function scheduleEvaluation() {
+    generation++
+    if (scheduled) return
+    scheduled = true
+    Promise.resolve().then(() => {
+      scheduled = false
+      if (alive) void evaluateFeature()
+    })
+  }
+
   // Reactive statement to re-evaluate when props change
-  $: if (toggly || featureKey || featureKeys || requirement || negate || context || contextKind) {
-    evaluateFeature()
+  $: if (featureKey || featureKeys || requirement || negate || context || contextKind) {
+    scheduleEvaluation()
   }
 
   onMount(() => {
-    evaluateFeature()
-    unsubscribeFlags = togglyFlagsStore.subscribe(() => {
-      evaluateFeature()
-    })
-    unsubscribeLocalGates = togglyLocalGatesRevision.subscribe(() => {
-      evaluateFeature()
-    })
-  })
-
-  onDestroy(() => {
-    unsubscribeFlags?.()
-    unsubscribeLocalGates?.()
+    const unsubscribers = [
+      togglyServiceStore.subscribe(service => { toggly = service; scheduleEvaluation() }),
+      togglyFlagsStore.subscribe(scheduleEvaluation),
+      togglyLocalGatesRevision.subscribe(scheduleEvaluation),
+    ]
+    return () => {
+      alive = false
+      generation++
+      unsubscribers.forEach(unsubscribe => unsubscribe())
+    }
   })
 </script>
 
