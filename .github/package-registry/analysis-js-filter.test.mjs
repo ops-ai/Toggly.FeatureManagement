@@ -57,3 +57,16 @@ test('Client-Telemetry runs coverage and packed consumers without shared depende
   assert.deepEqual(result.testMatrix, [{ sdk: 'Client-Telemetry', path: 'toggly-client-telemetry', 'test-cmd': 'npm run test:coverage && npm run test:packed', 'has-lint': false }]);
   assert.ok(result.requiredJobs.split(',').includes('test'));
 });
+
+test('Client-Core runs coverage and its packed browser host from the standalone package', () => {
+  const result = filterAnalysisJs('Client-Core');
+  assert.equal(result.needSharedDeps, false);
+  assert.deepEqual(result.testMatrix, [{
+    sdk: 'Client-Core',
+    path: 'toggly-docusaurus-edge-sdk/libs/core',
+    'test-cmd': 'npm run test:coverage && npm run test:packed',
+    'node-version': '24.x',
+    'has-lint': false,
+  }]);
+  assert.ok(result.requiredJobs.split(',').includes('test'));
+});

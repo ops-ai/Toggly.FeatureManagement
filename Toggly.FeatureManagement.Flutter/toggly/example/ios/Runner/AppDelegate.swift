@@ -7,7 +7,7 @@ import Flutter
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
+    // This example uses only Dart packages; no native plugins to register.
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 }

@@ -1,9 +1,9 @@
-/** Capture a request URL now, retaining malformed-URL failures until the request. */
+/** Probe the URL builder now, retaining malformed-URL failures until the request. */
 export function captureRequestUrl(build: () => string): () => string {
   try {
-    const url = build();
-    return () => url;
+    void build();
   } catch (error) {
     return () => { throw error; };
   }
+  return build;
 }

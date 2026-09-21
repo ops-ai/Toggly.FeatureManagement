@@ -28,8 +28,8 @@ internal class TelemetryReporter(
     enableTelemetry: Boolean = true,
     metricsBaseUrl: String = "https://metrics.toggly.io",
     telemetryFlushIntervalMs: Long = 45_000,
-    private val instanceId: String? = null,
-    private val identity: String? = null,
+    instanceId: String? = null,
+    identity: String? = null,
     private val onDiagnostic: ((String) -> Unit)? = null,
     scope: CoroutineScope = CoroutineScope(Dispatchers.IO),
     private val now: () -> Long = { SystemClock.elapsedRealtime() },
@@ -56,6 +56,21 @@ internal class TelemetryReporter(
     private data class Batch(val bytes: ByteArray, val entries: Int, val createdAt: Long)
     private data class Item(val feature: FeatureKey? = null, val delta: Feature? = null, val metric: String? = null, val value: Double = 0.0)
     private val lock = Any()
+    private var currentInstanceId = instanceId?.trim()?.takeIf { it.isNotEmpty() }
+    private var currentIdentity = identity?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** Seal admitted events before changing attribution; one queue, budget and transport lifetime. */
+    fun updateAttribution(instanceId: String?, identity: String?) = synchronized(lock) {
+        if (!enabled || disposed) return@synchronized
+        val minted = instanceId?.trim()?.takeIf { it.isNotEmpty() }
+        val user = identity?.trim()?.takeIf { it.isNotEmpty() }
+        if (minted == currentInstanceId && (minted != null || user == currentIdentity)) return@synchronized
+        sealPending()
+        currentInstanceId = minted
+        currentIdentity = user
+        // Metric kinds are scoped to the current attribution, not previous users.
+        queuedKinds = emptyMap()
+    }
     private val owner = CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job]))
     private val endpoint = endpoint(metricsBaseUrl)
     private val enabled = enableTelemetry && appKey.isNotBlank() && endpoint != null
@@ -90,6 +105,15 @@ internal class TelemetryReporter(
     }
 
     fun recordCheck(key: String, variant: String) = recordFeature(key, variant, 0)
+    /** A delayed UI snapshot can still evaluate under its captured attribution. */
+    fun recordCheck(key: String, variant: String, instanceId: String?, identity: String?) = synchronized(lock) {
+        val savedInstance = currentInstanceId
+        val savedIdentity = currentIdentity
+        updateAttribution(instanceId, identity)
+        recordCheck(key, variant)
+        updateAttribution(savedInstance, savedIdentity)
+    }
+
     fun recordUsage(key: String, variant: String = "enabled") = recordFeature(key, variant, 1)
     fun recordView(key: String, variant: String = "enabled") = recordFeature(key, variant, 2)
 
@@ -157,8 +181,8 @@ internal class TelemetryReporter(
 
     private fun encode(f: Map<String, Map<String, JsonArray>>, m: Map<String, Double>): ByteArray = buildJsonObject {
         put("k", appKey); put("e", environment)
-        val minted = instanceId?.trim().orEmpty()
-        val user = identity?.trim().orEmpty()
+        val minted = currentInstanceId.orEmpty()
+        val user = currentIdentity.orEmpty()
         if (minted.isNotEmpty()) put("i", minted) else if (user.isNotEmpty()) put("u", user)
         if (f.isNotEmpty()) put("f", JsonObject(f.mapValues { JsonObject(it.value) }))
         if (m.isNotEmpty()) put("m", JsonObject(m.mapValues { (_, value) ->
@@ -224,17 +248,24 @@ internal class TelemetryReporter(
             }.also { flight = it; it.start() }
     }
 
+    // Caller holds lock. Encoded bytes retain their attribution across later transitions/retries.
+    private fun sealPending() {
+        if (pendingEntries == 0) return
+        val sealed = batches()
+        queued.addAll(sealed)
+        queuedEntries += pendingEntries
+        queuedBytes += sealed.sumOf { it.bytes.size.toLong() }
+        queuedKinds = metrics.mapValues { it.value.value.counter }
+        features.clear(); metrics.clear(); pendingEntries = 0; pendingUpperBytes = 0
+    }
+
     private suspend fun drain() {
         while (currentCoroutineContext().isActive) {
             val batch = synchronized(lock) {
                 if (disposed && finalAttempted) return
                 if (queued.isEmpty()) {
                     if (pendingEntries == 0) return
-                    queued.addAll(batches())
-                    queuedEntries = pendingEntries
-                    queuedBytes = queued.sumOf { it.bytes.size.toLong() }
-                    queuedKinds = metrics.mapValues { it.value.value.counter }
-                    features.clear(); metrics.clear(); pendingEntries = 0; pendingUpperBytes = 0
+                    sealPending()
                 }
                 queued.first()
             }

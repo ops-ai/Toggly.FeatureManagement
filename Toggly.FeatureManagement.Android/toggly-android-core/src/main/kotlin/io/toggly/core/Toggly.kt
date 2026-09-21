@@ -182,6 +182,13 @@ object Toggly {
         return shared.featureGateFlow(featureKeys, requirement, negate)
     }
 
+    /** Replace identity and its host-minted token together. */
+    suspend fun setIdentity(identity: String?, instanceId: String?): TogglyInitResponse =
+        shared.setIdentity(identity, instanceId)
+
+    /** Rotate or clear the host-minted token, preserving the current identity. */
+    suspend fun setInstanceId(instanceId: String?): TogglyInitResponse = shared.setInstanceId(instanceId)
+
     /**
      * Set user identity for targeting.
      *

@@ -86,6 +86,13 @@ class UseTogglyResult internal constructor(
     /** Await the current best-effort telemetry drain. */
     suspend fun flushTelemetry() = service.flushTelemetry()
 
+    /** Replace identity and its host-minted token together. */
+    suspend fun setIdentity(identity: String?, instanceId: String?): TogglyInitResponse =
+        service.setIdentity(identity, instanceId)
+
+    /** Rotate or clear the host-minted token, preserving the current identity. */
+    suspend fun setInstanceId(instanceId: String?): TogglyInitResponse = service.setInstanceId(instanceId)
+
     /**
      * Set user identity for targeting.
      */

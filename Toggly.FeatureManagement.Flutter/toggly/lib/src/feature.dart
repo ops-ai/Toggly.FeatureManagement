@@ -101,7 +101,7 @@ class FeatureGateBuilder extends StatelessWidget {
     if (featureKeys.isEmpty) {
       return false;
     }
-    final vr = await Toggly.getVariant(featureKeys.first);
+    final vr = await Toggly.getVariant(featureKeys.first, recordCheck: false);
     return vr.enabled && vr.name == variant;
   }
 

@@ -1,4 +1,5 @@
 import XCTest
+import CryptoKit
 @testable import TogglyCore
 
 private final class InitialContextURLProtocol: URLProtocol {
@@ -21,6 +22,27 @@ private final class InitialContextURLProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
+private actor DelayedInvalidCacheStorage: TogglyStorage {
+    var values: [String: String] = [:]
+    let key: String
+    let paused: XCTestExpectation
+    private var didPause = false
+    private var continuation: CheckedContinuation<Void, Never>?
+    init(key: String, paused: XCTestExpectation) { self.key = key; self.paused = paused }
+    func get(_ key: String) async -> String? {
+        let captured = values[key]
+        if key == self.key && !didPause {
+            didPause = true
+            await withCheckedContinuation { continuation = $0; paused.fulfill() }
+        }
+        return captured
+    }
+    func resume() { continuation?.resume(); continuation = nil }
+    func set(_ key: String, value: String) { values[key] = value }
+    func delete(_ key: String) { values.removeValue(forKey: key) }
+    func clear() { values = [:] }
+}
+
 final class InitialEvaluationContextTests: XCTestCase {
     override func setUp() {
         super.setUp()
@@ -32,10 +54,97 @@ final class InitialEvaluationContextTests: XCTestCase {
         URLProtocol.unregisterClass(InitialContextURLProtocol.self)
         super.tearDown()
     }
+    func testMintedDefinitionsSuppressClientTargetingAndPreserveUnrelatedQueries() async throws {
+        let service = TogglyService(config: TogglyConfig(
+            appKey: "app", baseURI: "https://initial-context.invalid/prefix?x=kept&u=stale&g=stale&claim.bad=stale",
+            identity: "alice", refreshInterval: 0, useSignedDefinitions: true, enableLiveUpdates: false,
+            groups: ["beta"], claims: ["plan": "pro"], enableTelemetry: false, instanceId: " mint+a&one "))
+        await service.initialize()
+        let first = InitialContextURLProtocol.requests.last!
+        let items = URLComponents(url: first.url!, resolvingAgainstBaseURL: false)!.queryItems!
+        XCTAssertEqual(first.url!.path, "/prefix/evaluated-signed/app/Production")
+        XCTAssertEqual(items, [URLQueryItem(name: "x", value: "kept"), URLQueryItem(name: "i", value: "mint+a&one")])
+        await service.refresh()
+        XCTAssertEqual(InitialContextURLProtocol.requests.last?.value(forHTTPHeaderField: "If-None-Match"), "same-revision")
+        await service.setInstanceId("mint-two")
+        XCTAssertNil(InitialContextURLProtocol.requests.last?.value(forHTTPHeaderField: "If-None-Match"))
+        await service.setInstanceId(nil)
+        let fallback = URLComponents(url: InitialContextURLProtocol.requests.last!.url!, resolvingAgainstBaseURL: false)!.queryItems!
+        XCTAssertEqual(fallback, [URLQueryItem(name: "x", value: "kept"), URLQueryItem(name: "u", value: "alice"), URLQueryItem(name: "g", value: "beta"), URLQueryItem(name: "claim.plan", value: "pro")])
+        await service.dispose()
+    }
+
+    func testMintedPersistentCacheCannotCrossTokensOrClientMode() async throws {
+        let storage = MemoryStorage()
+        func make(_ token: String?) -> TogglyService {
+            TogglyService(config: TogglyConfig(appKey: "app", baseURI: "https://initial-context.invalid",
+                identity: "alice", featureDefaults: ["targeted": false], refreshInterval: 0,
+                storage: storage, enableLiveUpdates: false, enableTelemetry: false, instanceId: token))
+        }
+        let original = make("mint-one")
+        await original.initialize()
+        await original.dispose()
+        InitialContextURLProtocol.fail = true
+        for (token, expected) in [("mint-one" as String?, true), ("mint-two" as String?, false), (nil, false)] {
+            let next = make(token)
+            let response = await next.initialize()
+            XCTAssertEqual(response.flags["targeted"], expected)
+            await next.dispose()
+        }
+    }
+
+    func testLateInvalidCacheCleanupCannotDeleteNewerATokenCacheAfterABA() async throws {
+        let tokenHash = SHA256.hash(data: Data("a".utf8)).map { String(format: "%02x", $0) }.joined()
+        let context = String(data: try JSONEncoder().encode([["https://initial-context.invalid", "app", "Production"], ["instanceIdHash", tokenHash]]), encoding: .utf8)!
+        let hash = SHA256.hash(data: Data(context.utf8)).map { String(format: "%02x", $0) }.joined()
+        let key = TogglyStorageKeys.featureFlagsCache + "v2:" + hash
+        let paused = expectation(description: "old invalid A cache read suspended")
+        let storage = DelayedInvalidCacheStorage(key: key, paused: paused)
+        let invalid = TogglyFeatureFlagsCache(identity: "alice", flags: "invalid", evaluationContext: context)
+        await storage.set(key, value: String(data: try JSONEncoder().encode(invalid), encoding: .utf8)!)
+        let service = TogglyService(config: TogglyConfig(appKey: "app", baseURI: "https://initial-context.invalid", identity: "alice",
+            featureDefaults: ["targeted": false], refreshInterval: 0, storage: storage,
+            enableLiveUpdates: false, enableTelemetry: false, instanceId: "a"))
+        await service.setNetworkState(.disconnected)
+        let initial = Task { await service.initialize() }
+        await fulfillment(of: [paused], timeout: 2)
+        await service.setInstanceId("b")
+        let valid = TogglyFeatureFlagsCache(identity: "alice", flags: "{\"targeted\":true}", evaluationContext: context)
+        let replacement = String(data: try JSONEncoder().encode(valid), encoding: .utf8)!
+        await storage.set(key, value: replacement)
+        let current = await service.setInstanceId("a")
+        XCTAssertEqual(current.flags["targeted"], true)
+        await storage.resume()
+        await initial.value
+        let retained = await storage.get(key)
+        XCTAssertEqual(retained, replacement)
+        let flags = await service.currentFeatures
+        XCTAssertEqual(flags?["targeted"], true)
+        await service.dispose()
+    }
+
+    func testDisposeDuringDeviceIdentityResolutionCannotRestartLifecycle() async {
+        let paused = expectation(description: "device identity resolution suspended")
+        let storage = DelayedInvalidCacheStorage(key: TogglyStorageKeys.deviceId, paused: paused)
+        await storage.set(TogglyStorageKeys.deviceId, value: "stored-device")
+        let service = TogglyService(config: TogglyConfig(appKey: "app", baseURI: "https://initial-context.invalid",
+            refreshInterval: 60, storage: storage, enableLiveUpdates: false, enableTelemetry: false))
+        await service.setNetworkState(.disconnected)
+        let initialize = Task { await service.initialize() }
+        await fulfillment(of: [paused], timeout: 2)
+        await service.dispose()
+        await storage.resume()
+        await initialize.value
+        let debug = await service.getDebugInfo()
+        let initialized = await service.initialized
+        XCTAssertFalse(initialized)
+        XCTAssertFalse(debug.syncServiceRunning)
+    }
+
     func testFirstRequestEncodesIdentityWithoutInjectingParameters() async throws {
         let service = TogglyService(config: TogglyConfig(
             appKey: "app", baseURI: "https://initial-context.invalid", identity: "user&123+?#é",
-            refreshInterval: 0, enableLiveUpdates: false))
+            refreshInterval: 0, enableLiveUpdates: false, enableTelemetry: false))
         await service.initialize()
         let request = try XCTUnwrap(InitialContextURLProtocol.requests.first)
         let items = try XCTUnwrap(URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems)
@@ -50,7 +159,7 @@ final class InitialEvaluationContextTests: XCTestCase {
         await storage.set(TogglyStorageKeys.deviceId, value: "stale-user")
         let config = TogglyConfig(appKey: "app", baseURI: "https://initial-context.invalid",
             identity: "user&123", refreshInterval: 0, storage: storage, enableLiveUpdates: false,
-            groups: groups, claims: claims)
+            groups: groups, claims: claims, enableTelemetry: false)
         groups.append("mutated")
         claims["plan"] = "mutated"
         let service = TogglyService(config: config)
@@ -70,7 +179,7 @@ final class InitialEvaluationContextTests: XCTestCase {
         claims[""] = "ignored"
         claims["a"] = ""
         let service = TogglyService(config: TogglyConfig(appKey: "app", baseURI: "https://initial-context.invalid",
-            identity: "", refreshInterval: 0, enableLiveUpdates: false, claims: claims))
+            identity: "", refreshInterval: 0, enableLiveUpdates: false, claims: claims, enableTelemetry: false))
         await service.initialize()
         let items = URLComponents(url: InitialContextURLProtocol.requests[0].url!, resolvingAgainstBaseURL: false)!.queryItems!
         XCTAssertEqual(items.filter { $0.name.hasPrefix("claim.") }.map(\.name), (0..<20).map { String(format: "claim.c%02d", $0) })
@@ -84,9 +193,9 @@ final class InitialEvaluationContextTests: XCTestCase {
         for explicitEmpty in [false, true] {
             let config = explicitEmpty
                 ? TogglyConfig(appKey: "app", baseURI: "https://initial-context.invalid", refreshInterval: 0,
-                    storage: storage, enableLiveUpdates: false, groups: [], claims: [:])
+                    storage: storage, enableLiveUpdates: false, groups: [], claims: [:], enableTelemetry: false)
                 : TogglyConfig(appKey: "app", baseURI: "https://initial-context.invalid", refreshInterval: 0,
-                    storage: storage, enableLiveUpdates: false)
+                    storage: storage, enableLiveUpdates: false, enableTelemetry: false)
             let service = TogglyService(config: config)
             await service.initialize()
             let items = URLComponents(url: InitialContextURLProtocol.requests.last!.url!, resolvingAgainstBaseURL: false)!.queryItems!
@@ -100,7 +209,7 @@ final class InitialEvaluationContextTests: XCTestCase {
         func service(_ groups: [String], _ claims: [String: String]) -> TogglyService {
             TogglyService(config: TogglyConfig(appKey: "app", baseURI: "https://initial-context.invalid",
                 identity: "same", featureDefaults: ["targeted": false], refreshInterval: 0,
-                useSignedDefinitions: true, storage: storage, enableLiveUpdates: false, groups: groups, claims: claims))
+                useSignedDefinitions: true, storage: storage, enableLiveUpdates: false, groups: groups, claims: claims, enableTelemetry: false))
         }
         let original = service(["a,b"], ["plan": "pro&x=y"])
         let fetched = await original.initialize()
@@ -132,7 +241,7 @@ final class InitialEvaluationContextTests: XCTestCase {
         for groups in [["beta"], []] {
             let service = TogglyService(config: TogglyConfig(appKey: "app", baseURI: "https://initial-context.invalid",
                 identity: "same", featureDefaults: ["targeted": false], refreshInterval: 0,
-                storage: storage, enableLiveUpdates: false, groups: groups))
+                storage: storage, enableLiveUpdates: false, groups: groups, enableTelemetry: false))
             let response = await service.initialize()
             XCTAssertEqual(response.flags["targeted"], groups.isEmpty)
             if groups.isEmpty {

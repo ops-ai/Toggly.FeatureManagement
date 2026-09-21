@@ -820,5 +820,168 @@
       "metricsBaseUrl": "https://collector.example//base/",
       "expectedUrl": "https://collector.example//base/api/frontend/telemetry"
     }
+  ],
+  "contextTransitionScenarios": [
+    {
+      "name": "anonymous-identity-token-rotation-fallback-logout",
+      "options": {
+        "appKey": "test-app"
+      },
+      "events": [
+        [
+          "incrementCounter",
+          "orders",
+          1
+        ],
+        [
+          "setGauge",
+          "cart",
+          1
+        ],
+        [
+          "setContext",
+          {
+            "identity": " alice "
+          }
+        ],
+        [
+          "incrementCounter",
+          "orders",
+          2
+        ],
+        [
+          "setGauge",
+          "cart",
+          2
+        ],
+        [
+          "setContext",
+          {
+            "identity": "bob"
+          }
+        ],
+        [
+          "incrementCounter",
+          "orders",
+          3
+        ],
+        [
+          "setContext",
+          {
+            "instanceId": " minted-one ",
+            "identity": "bob"
+          }
+        ],
+        [
+          "recordUsage",
+          "Use"
+        ],
+        [
+          "setContext",
+          {
+            "instanceId": "minted-two",
+            "identity": "bob"
+          }
+        ],
+        [
+          "recordView",
+          "View"
+        ],
+        [
+          "setContext",
+          {
+            "instanceId": " ",
+            "identity": "bob"
+          }
+        ],
+        [
+          "incrementCounter",
+          "fallback",
+          1
+        ],
+        [
+          "setContext",
+          {}
+        ],
+        [
+          "recordUsage",
+          "Logout"
+        ]
+      ],
+      "envelopes": [
+        {
+          "k": "test-app",
+          "e": "Production",
+          "m": {
+            "orders": 1,
+            "cart": 1
+          }
+        },
+        {
+          "k": "test-app",
+          "e": "Production",
+          "u": "alice",
+          "m": {
+            "orders": 2,
+            "cart": 2
+          }
+        },
+        {
+          "k": "test-app",
+          "e": "Production",
+          "u": "bob",
+          "m": {
+            "orders": 3
+          }
+        },
+        {
+          "k": "test-app",
+          "e": "Production",
+          "i": "minted-one",
+          "f": {
+            "Use": {
+              "enabled": [
+                0,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "k": "test-app",
+          "e": "Production",
+          "i": "minted-two",
+          "f": {
+            "View": {
+              "enabled": [
+                0,
+                0,
+                1
+              ]
+            }
+          }
+        },
+        {
+          "k": "test-app",
+          "e": "Production",
+          "u": "bob",
+          "m": {
+            "fallback": 1
+          }
+        },
+        {
+          "k": "test-app",
+          "e": "Production",
+          "f": {
+            "Logout": {
+              "enabled": [
+                0,
+                1
+              ]
+            }
+          }
+        }
+      ]
+    }
   ]
 }
