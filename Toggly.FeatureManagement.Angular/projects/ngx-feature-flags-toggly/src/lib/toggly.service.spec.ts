@@ -51,7 +51,7 @@ describe('TogglyService', () => {
     it('should warn about Production environment when appKey set without environment', () => {
       spyOn(console, 'warn');
       TestBed.configureTestingModule({
-        imports: [NgxFeatureFlagsTogglyModule.forRoot({ appKey: 'test-key' })],
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({ enableTelemetry: false, appKey: 'test-key' })],
       });
       TestBed.inject(TogglyService);
       expect(console.warn).toHaveBeenCalledWith(
@@ -62,7 +62,7 @@ describe('TogglyService', () => {
     it('should not warn about Production when environment is specified', () => {
       spyOn(console, 'warn');
       TestBed.configureTestingModule({
-        imports: [NgxFeatureFlagsTogglyModule.forRoot({ appKey: 'key', environment: 'Staging' })],
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({ enableTelemetry: false, appKey: 'key', environment: 'Staging' })],
       });
       TestBed.inject(TogglyService);
       const prodWarns = (console.warn as jasmine.Spy).calls.allArgs().filter(
@@ -142,7 +142,7 @@ describe('TogglyService', () => {
       fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ ApiFlag: true }),
       text: () => Promise.resolve(JSON.stringify({ ApiFlag: true })) } as any);
       TestBed.configureTestingModule({
-        imports: [NgxFeatureFlagsTogglyModule.forRoot({ appKey: 'key', environment: 'Production' })],
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({ enableTelemetry: false, appKey: 'key', environment: 'Production' })],
       });
       const service = TestBed.inject(TogglyService);
       const result = await service.isFeatureOn('ApiFlag');
@@ -155,7 +155,7 @@ describe('TogglyService', () => {
       text: () => Promise.resolve(JSON.stringify({ F1: true })) } as any);
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'key', environment: 'Production', identity: 'user-1',
+          enableTelemetry: false, appKey: 'key', environment: 'Production', identity: 'user-1',
         })],
       });
       const service = TestBed.inject(TogglyService);
@@ -168,7 +168,7 @@ describe('TogglyService', () => {
       text: () => Promise.resolve(JSON.stringify({ F1: true })) } as any);
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          baseURI: 'https://custom.api', appKey: 'key', environment: 'Staging',
+          baseURI: 'https://custom.api', enableTelemetry: false, appKey: 'key', environment: 'Staging',
         })],
       });
       const service = TestBed.inject(TogglyService);
@@ -193,7 +193,7 @@ describe('TogglyService', () => {
       fetchSpy.and.rejectWith(new Error('Network error'));
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'key', environment: 'Production',
+          enableTelemetry: false, appKey: 'key', environment: 'Production',
           featureDefaults: { Fallback: true },
         })],
       });
@@ -205,7 +205,7 @@ describe('TogglyService', () => {
     it('should fail closed when no defaults are available on error', async () => {
       fetchSpy.and.rejectWith(new Error('Network error'));
       TestBed.configureTestingModule({
-        imports: [NgxFeatureFlagsTogglyModule.forRoot({ appKey: 'key', environment: 'Production' })],
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({ enableTelemetry: false, appKey: 'key', environment: 'Production' })],
       });
       const service = TestBed.inject(TogglyService);
       // Empty features fail closed for non-empty gates.
@@ -217,7 +217,7 @@ describe('TogglyService', () => {
       fetchSpy.and.resolveTo({ ok: true, status: 200, statusText: 'OK', json: () => Promise.resolve({ F1: true }),
       text: () => Promise.resolve(JSON.stringify({ F1: true })) } as any);
       TestBed.configureTestingModule({
-        imports: [NgxFeatureFlagsTogglyModule.forRoot({ appKey: 'key', environment: 'Production' })],
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({ enableTelemetry: false, appKey: 'key', environment: 'Production' })],
       });
       const service = TestBed.inject(TogglyService);
       await service.isFeatureOn('F1');
@@ -235,7 +235,7 @@ describe('TogglyService', () => {
       );
 
       TestBed.configureTestingModule({
-        imports: [NgxFeatureFlagsTogglyModule.forRoot({ appKey: 'key', environment: 'Production' })],
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({ enableTelemetry: false, appKey: 'key', environment: 'Production' })],
       });
       const service = TestBed.inject(TogglyService);
 
@@ -256,7 +256,7 @@ describe('TogglyService', () => {
       let refreshed: any = null;
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'key', environment: 'Production',
+          enableTelemetry: false, appKey: 'key', environment: 'Production',
           hooks: [{
             getMetadata: () => ({ name: 'RefHook', version: '1.0.0' }),
             afterRefresh: async (flags) => { refreshed = flags; },
@@ -280,7 +280,7 @@ describe('TogglyService', () => {
 
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'key',
+          enableTelemetry: false, appKey: 'key',
           environment: 'Production',
           featureDefaults: { F1: true },
           onError: (message) => errors.push(message),
@@ -304,7 +304,7 @@ describe('TogglyService', () => {
 
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'key',
+          enableTelemetry: false, appKey: 'key',
           environment: 'Production',
           featureDefaults: { F1: true },
         })],
@@ -336,7 +336,7 @@ describe('TogglyService', () => {
 
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'key',
+          enableTelemetry: false, appKey: 'key',
           environment: 'Production',
         })],
       });
@@ -362,7 +362,7 @@ describe('TogglyService', () => {
 
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'key',
+          enableTelemetry: false, appKey: 'key',
           environment: 'Production',
           enableVariants: true,
         })],
@@ -383,7 +383,7 @@ describe('TogglyService', () => {
 
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'key',
+          enableTelemetry: false, appKey: 'key',
           environment: 'Production',
           enableVariants: true,
         })],
@@ -410,7 +410,7 @@ describe('TogglyService', () => {
 
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'key',
+          enableTelemetry: false, appKey: 'key',
           environment: 'Production',
           persistCache: false,
         })],
@@ -582,7 +582,7 @@ describe('TogglyService', () => {
       } as any);
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'key',
+          enableTelemetry: false, appKey: 'key',
           environment: 'Production',
           enableVariants: true,
         })],
@@ -611,7 +611,7 @@ describe('TogglyService', () => {
       } as any);
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'key',
+          enableTelemetry: false, appKey: 'key',
           environment: 'Production',
           enableVariants: true,
         })],
@@ -683,7 +683,7 @@ describe('TogglyService', () => {
         text: () => Promise.resolve(JSON.stringify({ F1: true })) } as any
       );
       TestBed.configureTestingModule({
-        imports: [NgxFeatureFlagsTogglyModule.forRoot({ appKey: 'key' })],
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({ enableTelemetry: false, appKey: 'key' })],
       });
       const service = TestBed.inject(TogglyService);
       await service.isFeatureOn('F1');
@@ -704,7 +704,7 @@ describe('TogglyService', () => {
 
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'test-key',
+          enableTelemetry: false, appKey: 'test-key',
           environment: 'Production',
           identity: 'user-123',
         })],
@@ -735,7 +735,7 @@ describe('TogglyService', () => {
 
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'test-key',
+          enableTelemetry: false, appKey: 'test-key',
           environment: 'Production',
           identity: 'user-123',
         })],
@@ -760,7 +760,7 @@ describe('TogglyService', () => {
 
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'test-key',
+          enableTelemetry: false, appKey: 'test-key',
           environment: 'Production',
           identity: 'user-123',
         })],
@@ -786,7 +786,7 @@ describe('TogglyService', () => {
 
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'test-key',
+          enableTelemetry: false, appKey: 'test-key',
           environment: 'Production',
           identity: 'user-123',
         })],
@@ -815,7 +815,7 @@ describe('TogglyService', () => {
 
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'key',
+          enableTelemetry: false, appKey: 'key',
           environment: 'Production',
           groups: ['beta'],
           claims: { role: 'admin' },
@@ -890,7 +890,7 @@ describe('TogglyService', () => {
 
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'key',
+          enableTelemetry: false, appKey: 'key',
           environment: 'Production',
         })],
       });
@@ -919,7 +919,7 @@ describe('TogglyService', () => {
 
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'key',
+          enableTelemetry: false, appKey: 'key',
           environment: 'Production',
         })],
       });
@@ -976,7 +976,7 @@ describe('TogglyService', () => {
         { json: () => Promise.resolve({ F1: true }),
         text: () => Promise.resolve(JSON.stringify({ F1: true })) } as any
       );
-      const config: any = { appKey: 'key', environment: 'Test' };
+      const config: any = { enableTelemetry: false, appKey: 'key', environment: 'Test' };
       if (baseURI) config.baseURI = baseURI;
       TestBed.configureTestingModule({
         imports: [NgxFeatureFlagsTogglyModule.forRoot(config)],
@@ -1021,7 +1021,7 @@ describe('TogglyService', () => {
         text: () => Promise.resolve(JSON.stringify({ F1: true })) } as any
       );
       TestBed.configureTestingModule({
-        imports: [NgxFeatureFlagsTogglyModule.forRoot({ appKey: 'key', environment: 'Test' })],
+        imports: [NgxFeatureFlagsTogglyModule.forRoot({ enableTelemetry: false, appKey: 'key', environment: 'Test' })],
       });
       const service = TestBed.inject(TogglyService);
       await service.isFeatureOn('F1');

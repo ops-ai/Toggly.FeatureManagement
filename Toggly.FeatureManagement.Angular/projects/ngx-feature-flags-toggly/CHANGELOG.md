@@ -1,3 +1,13 @@
+## 2.9.0
+
+2026-09-19
+
+### Added
+- Aggregate browser telemetry for effective feature checks and assigned variants, with explicit usage, view, counter, gauge and flush APIs [OPS-1280].
+- Per-service telemetry options and bounded background delivery outside Angular change detection. Telemetry defaults on with an application key; opt-out, keyless and server rendering remain silent. Payloads include optional minted instance or client identity attribution, excluding groups and claims [OPS-1280].
+
+- Host-supplied `instanceId` takes precedence for definitions and telemetry. Identity/token updates isolate queued events, caches, revisions and pending responses; clearing identity clears an omitted token. Client identity acceptance is server-controlled and off by default; HTTP 202 does not prove acceptance [OPS-1313].
+
 ## 2.8.3
 
 2026-09-12

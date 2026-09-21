@@ -1,9 +1,12 @@
 import { Injectable, Inject, NgZone, OnDestroy, PLATFORM_ID } from '@angular/core'
 import { isPlatformBrowser } from '@angular/common'
+import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry'
+import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser'
 import {
   EvaluatedVariantDef,
   ITogglyService,
   VariantResult,
+  TogglyContext,
 } from './models'
 import { TogglyOptions } from './toggly-options'
 import { HookExecutor } from './hooks'
@@ -13,7 +16,6 @@ import type {
   Hook,
   TogglyEntityContext,
   TogglyEvaluationContext,
-  TogglyServiceContextHost,
 } from '@ops-ai/toggly-hooks-types'
 import {
   appendEvaluationContext,
@@ -21,6 +23,7 @@ import {
   isCacheLruEnabled,
   evaluateStoredFeatureKeys,
   normalizeEntityContext,
+  normalizeEvaluationClaims,
   toBooleanDefinitions,
   parseCacheLruIndex,
   registerContext as registerEntityContext,
@@ -29,7 +32,6 @@ import {
   selectCacheLruKeysToEvict,
   serializeCacheLruIndex,
   touchCacheLruKey,
-  setBrowserSdkEvaluationContext,
 } from '@ops-ai/toggly-hooks-types'
 import {
   applyLocalGate,
@@ -102,6 +104,13 @@ function asEvaluatedDefinitions(raw: unknown): EvaluatedDefinitions {
   return {}
 }
 
+interface EvaluationSnapshot {
+  features: EvaluatedDefinitions | null
+  variants: { [key: string]: EvaluatedVariantDef } | null
+  recordCheck?: (featureKey: string, variant: string) => void
+  owner: TogglyService
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -118,6 +127,10 @@ export class TogglyService implements ITogglyService, OnDestroy {
   private _lastError: string | undefined
   private _groups: string[] = []
   private _claims: Record<string, string> = {}
+  private _generation = 0
+  private _destroyed = false
+  private _telemetry?: TelemetryReporter
+  private _detachTelemetry?: () => void
 
   private _ws: WebSocket | null = null
   private _wsConnected = false
@@ -147,7 +160,15 @@ export class TogglyService implements ITogglyService, OnDestroy {
   }
 
   private get _contextCacheKey(): string {
-    return evaluationContextCacheKey(this._getEvaluationContext())
+    if (this._config.instanceId) return `i:${encodeURIComponent(this._config.instanceId)}`
+    const context = this._getEvaluationContext()
+    if (!context.groups && !context.claims && !context.identity?.includes('|')) {
+      return evaluationContextCacheKey(context)
+    }
+    return `v2:${encodeURIComponent(JSON.stringify([
+      context.identity ?? '', [...(context.groups ?? [])].sort(),
+      Object.entries(normalizeEvaluationClaims(context.claims) ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+    ]))}`
   }
 
   private get _flagsCacheKey(): string {
@@ -167,7 +188,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
   }
 
   private get _revisionCacheKey(): string {
-    return getRevisionCacheKey(this._config.appKey ?? '', this._config.environment ?? 'Production')
+    return `${getRevisionCacheKey(this._config.appKey ?? '', this._config.environment ?? 'Production')}:v2:${this._enableVariants ? 'variants' : 'evaluated'}:${this._contextCacheKey}`
   }
 
   private get _definitionsRevision(): string | null {
@@ -177,7 +198,9 @@ export class TogglyService implements ITogglyService, OnDestroy {
     if (!this._canPersist || !this._config.appKey) {
       return null
     }
-    return this._readCachedRevision()
+    // A persisted revision is useful only with its corresponding definition snapshot.
+    return this._readCachedFlags() !== null && (!this._enableVariants || this._readCachedVariants() !== null)
+      ? this._readCachedRevision() : null
   }
 
   private get _enableVariants(): boolean {
@@ -189,7 +212,22 @@ export class TogglyService implements ITogglyService, OnDestroy {
     private readonly _ngZone: NgZone,
     @Inject(PLATFORM_ID) platformId: object,
   ) {
+    this._config = { ...this._config, instanceId: this._config.instanceId?.trim() || undefined }
     this._isBrowser = isPlatformBrowser(platformId)
+    if (this._isBrowser && this._config.appKey && this._config.enableTelemetry !== false) {
+      this._ngZone.runOutsideAngular(() => {
+        this._telemetry = createTelemetryReporter({
+          appKey: this._config.appKey,
+          identity: this._config.identity,
+          instanceId: this._config.instanceId,
+          environment: this._config.environment,
+          metricsBaseUrl: this._config.metricsBaseUrl,
+          telemetryFlushIntervalMs: this._config.telemetryFlushIntervalMs,
+          onDiagnostic: diagnostic => this._reportError(`Toggly telemetry: ${diagnostic}`),
+        })
+        this._detachTelemetry = attachBrowserLifecycle(this._telemetry)
+      })
+    }
 
     if (!this._config.customDefinitionsUrl) {
       if (!this._config.appKey) {
@@ -258,19 +296,51 @@ export class TogglyService implements ITogglyService, OnDestroy {
     }
   }
 
-  async setContext(context: TogglyEvaluationContext): Promise<void> {
-    return setBrowserSdkEvaluationContext(
-      this as unknown as TogglyServiceContextHost<
-        EvaluatedDefinitions,
-        { [key: string]: EvaluatedVariantDef } | null
-      >,
-      context,
-      (this._config.featureDefaults ?? {}) as EvaluatedDefinitions,
-      {
-        notifyFeaturesRefresh: () => this.notifyFeaturesRefresh(),
-        loadFeaturesStrict: () => this._loadFeatures(true, { strict: true }),
-      },
-    )
+  async setContext(context: TogglyContext): Promise<void> {
+    if (this._destroyed) return
+    this._generation++
+    this._loadingFeatures = false
+    this._ngZone.runOutsideAngular(() => this.stopWebSocket())
+    this._webSocketBootstrapped = false
+    if (context.identity !== undefined) {
+      this._config.identity = context.identity || undefined
+      if (context.instanceId === undefined) this._config.instanceId = undefined
+    }
+    if (context.instanceId !== undefined) this._config.instanceId = context.instanceId.trim() || undefined
+    if (context.groups !== undefined) this._groups = [...context.groups]
+    if (context.claims !== undefined) this._claims = { ...context.claims }
+    this._cachedDefinitionsRevision = null
+    this._pendingDefinitionsPin = null
+    this._lastFallbackRefresh = 0
+    this._variants = null
+    const cachedVariants = this._enableVariants ? this._readCachedVariants() : null
+    if (cachedVariants && Object.keys(cachedVariants).length > 0) {
+      this._applyVariantDefs(cachedVariants)
+    } else {
+      this._features = this._readCachedFlags() ?? { ...this._config.featureDefaults }
+    }
+    this._ngZone.runOutsideAngular(() => this._telemetry?.setContext({
+      instanceId: this._config.instanceId, identity: this._config.identity,
+    }))
+    const generation = this._generation
+    this.notifyFeaturesRefresh()
+    if (generation !== this._generation || this._destroyed) return
+    // A failed refresh keeps the new context and defaults, never the previous user's token or flags.
+    await this._loadFeatures(true, { strict: true })
+  }
+
+  private _appendContext(url: URL, variants: boolean): void {
+    url.searchParams.delete('i')
+    if (this._config.instanceId) {
+      const keys: string[] = []
+      url.searchParams.forEach((_value, key) => keys.push(key))
+      for (const key of keys) {
+        if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) url.searchParams.delete(key)
+      }
+      url.searchParams.set('i', this._config.instanceId)
+    } else {
+      appendEvaluationContext(url, this._getEvaluationContext(), variants ? 'variants' : 'evaluated')
+    }
   }
 
   private _readCachedFlags(): EvaluatedDefinitions | null {
@@ -435,7 +505,9 @@ export class TogglyService implements ITogglyService, OnDestroy {
     if (this._refreshDebounceTimer) {
       clearTimeout(this._refreshDebounceTimer)
     }
+    const generation = this._generation
     this._refreshDebounceTimer = setTimeout(() => {
+      if (this._destroyed || generation !== this._generation) return
       this._refreshDebounceTimer = null
       if (forceJwksRefresh) {
         this._cachedDefinitionsRevision = null
@@ -474,7 +546,9 @@ export class TogglyService implements ITogglyService, OnDestroy {
   }
 
   private _refreshFeatures = async (): Promise<void> => {
+    const generation = this._generation
     const flags = await this._loadFeatures(true)
+    if (generation !== this._generation || this._destroyed) return
     if (flags) {
       this._writeCachedFlags(flags)
       if (this._enableVariants && this._variants) {
@@ -487,11 +561,13 @@ export class TogglyService implements ITogglyService, OnDestroy {
     forceRefresh = false,
     options?: { strict?: boolean },
   ) => {
+    if (this._destroyed) return this._features
+    const generation = this._generation
     // Feature are currently being loaded
     if (this._loadingFeatures) {
       await new Promise<void>((resolve) => {
         const checkIfApiCallFinished = () => {
-          if (!this._loadingFeatures) {
+          if (!this._loadingFeatures || generation !== this._generation || this._destroyed) {
             resolve()
           } else {
             setTimeout(checkIfApiCallFinished, 100)
@@ -500,6 +576,8 @@ export class TogglyService implements ITogglyService, OnDestroy {
         checkIfApiCallFinished()
       })
     }
+
+    if (generation !== this._generation || this._destroyed) return this._features
 
     // Features already loaded — apply polling throttle when WS is connected
     if (this._features !== null && !forceRefresh) {
@@ -526,21 +604,17 @@ export class TogglyService implements ITogglyService, OnDestroy {
       if (this._config.customDefinitionsUrl) {
         useVariantResponse = this._enableVariants
         const customUrl = new URL(this._config.customDefinitionsUrl)
-        appendEvaluationContext(
-          customUrl,
-          this._getEvaluationContext(),
-          useVariantResponse ? 'variants' : 'evaluated',
-        )
+        this._appendContext(customUrl, useVariantResponse)
         url = customUrl.toString()
       } else if (this._enableVariants) {
         useVariantResponse = true
         const fetchUrl = new URL(`${base}/evaluated-variants-signed/${appKey}/${env}`)
-        appendEvaluationContext(fetchUrl, this._getEvaluationContext(), 'variants')
+        this._appendContext(fetchUrl, true)
         url = fetchUrl.toString()
       } else {
         useVariantResponse = false
         const fetchUrl = new URL(`${base}/evaluated-signed/${appKey}/${env}`)
-        appendEvaluationContext(fetchUrl, this._getEvaluationContext(), 'evaluated')
+        this._appendContext(fetchUrl, false)
         url = fetchUrl.toString()
       }
 
@@ -560,6 +634,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
           headers: buildDefinitionFetchHeaders(),
         },
       )
+      if (generation !== this._generation || this._destroyed) return this._features
       if (loaded.revision) {
         this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
       }
@@ -588,7 +663,9 @@ export class TogglyService implements ITogglyService, OnDestroy {
         }
       }
     } catch (error) {
+      if (generation !== this._generation || this._destroyed) return this._features
       this._reportError('Error fetching feature flags', error)
+      if (generation !== this._generation || this._destroyed) return this._features
       if (this._enableVariants) {
         const cachedVariants = this._readCachedVariants()
         if (cachedVariants && Object.keys(cachedVariants).length > 0) {
@@ -611,9 +688,10 @@ export class TogglyService implements ITogglyService, OnDestroy {
         'Toggly --- Using cached/default features as features could not be loaded from the Toggly API',
       )
     } finally {
-      this._loadingFeatures = false
+      if (generation === this._generation) this._loadingFeatures = false
     }
 
+    if (generation !== this._generation || this._destroyed) return this._features
     this.notifyFeaturesRefresh()
 
     return this._features
@@ -631,7 +709,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
    * Start the live-update WebSocket once feature state is available (network or cache).
    */
   private _ensureWebSocketBootstrapped(): void {
-    if (this._webSocketBootstrapped || !this._config.appKey) {
+    if (this._destroyed || this._webSocketBootstrapped || !this._config.appKey) {
       return
     }
     if (this._features === null) {
@@ -641,75 +719,62 @@ export class TogglyService implements ITogglyService, OnDestroy {
     this.startWebSocket()
   }
 
+  private _captureEvaluation(): EvaluationSnapshot {
+    return { owner: this, features: this._features, variants: this._variants,
+      recordCheck: this._ngZone.runOutsideAngular(() => this._telemetry?.captureCheck()) }
+  }
+
   private _getEffectiveFlagValue(
     flagKey: string,
     entityContext?: TogglyEntityContext | null,
+    snapshot = this._captureEvaluation(),
   ): boolean {
-    const remote = resolveEvaluatedDefinition(this._features?.[flagKey], entityContext)
-    return applyLocalGate(remote, flagKey, this._localGates, this._localGateIndex)
+    if (snapshot.owner !== this) return false
+    const entry = snapshot.features?.[flagKey]
+    const variant = snapshot.variants?.[flagKey]?.variant || 'enabled'
+    const remote = resolveEvaluatedDefinition(entry, entityContext)
+    const enabled = applyLocalGate(remote, flagKey, this._localGates, this._localGateIndex)
+    this._ngZone.runOutsideAngular(() => snapshot.recordCheck?.(flagKey, enabled ? variant : 'disabled'))
+    return enabled
   }
 
   private _evaluateFeatureGate = async (
-    gate: string[],
-    requirement = 'all',
-    negate = false,
+    gate: string[], requirement = 'all', negate = false,
     entityContext?: TogglyEntityContext | null,
+    snapshot?: EvaluationSnapshot,
   ) => {
-    await this._featuresLoaded()
-
-    return evaluateStoredFeatureKeys(
-      this._features,
-      gate.map(String),
-      requirement === 'any' ? 'any' : 'all',
-      negate,
-      (key) => this._getEffectiveFlagValue(key, entityContext),
-    )
+    if (!snapshot) { await this._featuresLoaded(); snapshot = this._captureEvaluation() }
+    const captured = snapshot
+    return evaluateStoredFeatureKeys(captured.features, gate.map(String),
+      requirement === 'any' ? 'any' : 'all', negate,
+      (key) => this._getEffectiveFlagValue(key, entityContext, captured))
   }
 
   evaluateFeatureGate = async (
-    featureKeys: string[],
-    requirement = 'all',
-    negate = false,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
-    kind?: string,
+    featureKeys: string[], requirement = 'all', negate = false,
+    context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string,
   ) => {
+    await this._featuresLoaded()
+    const snapshot = this._captureEvaluation()
     const entityContext = normalizeEntityContext(context, kind)
     if (featureKeys.length > 0) {
       const dataMap = await this._hookExecutor.executeBeforeEvaluation(featureKeys[0])
-      const result = await this._evaluateFeatureGate(
-        featureKeys,
-        requirement,
-        negate,
-        entityContext,
-      )
+      const result = await this._evaluateFeatureGate(featureKeys, requirement, negate, entityContext, snapshot)
       await this._hookExecutor.executeAfterEvaluation(featureKeys[0], dataMap, result)
       return result
     }
-    return await this._evaluateFeatureGate(featureKeys, requirement, negate, entityContext)
+    return this._evaluateFeatureGate(featureKeys, requirement, negate, entityContext, snapshot)
   }
 
   isFeatureOn = async (
-    featureKey: string,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
-    kind?: string,
-  ) => {
-    const entityContext = normalizeEntityContext(context, kind)
-    const dataMap = await this._hookExecutor.executeBeforeEvaluation(featureKey)
-    const result = await this._evaluateFeatureGate([featureKey], 'all', false, entityContext)
-    await this._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)
-    return result
-  }
+    featureKey: string, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string,
+  ) => this.evaluateFeatureGate([featureKey], 'all', false, context, kind)
 
   registerContext<T>(kind: string, mapper: (entity: T) => TogglyEntityContext): void {
     registerEntityContext(kind, mapper)
   }
 
-  isFeatureOff = async (featureKey: string) => {
-    const dataMap = await this._hookExecutor.executeBeforeEvaluation(featureKey)
-    const result = await this._evaluateFeatureGate([featureKey], 'all', true)
-    await this._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)
-    return result
-  }
+  isFeatureOff = async (featureKey: string) => this.evaluateFeatureGate([featureKey], 'all', true)
 
   /**
    * Returns the assigned variant for a feature, or null if variants are disabled,
@@ -720,15 +785,10 @@ export class TogglyService implements ITogglyService, OnDestroy {
       return null
     }
     await this._featuresLoaded()
-    const variants = this._variants
-    if (!variants) {
-      return null
-    }
-    const entry = variants[featureKey]
-    if (!entry?.variant) {
-      return null
-    }
-    if (!applyLocalGate(entry.enabled === true, featureKey, this._localGates, this._localGateIndex)) {
+    const snapshot = this._captureEvaluation()
+    const entry = snapshot.variants?.[featureKey]
+    const enabled = this._getEffectiveFlagValue(featureKey, undefined, snapshot)
+    if (!enabled || !entry?.variant) {
       return null
     }
     return {
@@ -743,6 +803,31 @@ export class TogglyService implements ITogglyService, OnDestroy {
   getVariantValue = async (featureKey: string): Promise<unknown | null> => {
     const variant = await this.getVariant(featureKey)
     return variant?.configurationValue ?? null
+  }
+
+  /** Record explicit usage without evaluating the feature. */
+  recordUsage(featureKey: string, variant = 'enabled'): void {
+    this._ngZone.runOutsideAngular(() => this._telemetry?.recordUsage(featureKey, variant))
+  }
+
+  /** Record an explicit feature view without evaluating it. */
+  recordView(featureKey: string, variant = 'enabled'): void {
+    this._ngZone.runOutsideAngular(() => this._telemetry?.recordView(featureKey, variant))
+  }
+
+  /** Add a nonnegative integer delta to an application metric. */
+  incrementCounter(metricKey: string, value = 1): void {
+    this._ngZone.runOutsideAngular(() => this._telemetry?.incrementCounter(metricKey, value))
+  }
+
+  /** Record the latest finite nonnegative application metric value. */
+  setGauge(metricKey: string, value: number): void {
+    this._ngZone.runOutsideAngular(() => this._telemetry?.setGauge(metricKey, value))
+  }
+
+  /** Await the currently requested best-effort telemetry flush. */
+  flushTelemetry(): Promise<void> {
+    return this._ngZone.runOutsideAngular(() => this._telemetry?.flush() ?? Promise.resolve())
   }
 
   /**
@@ -800,7 +885,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
   }
 
   private startWebSocket(): void {
-    if (!this._config.appKey) {
+    if (this._destroyed || !this._config.appKey) {
       return
     }
 
@@ -819,7 +904,11 @@ export class TogglyService implements ITogglyService, OnDestroy {
       return
     }
 
+    const generation = this._generation
+    const socket = this._ws
+    const current = () => !this._destroyed && generation === this._generation && this._ws === socket
     this._ws.onopen = () => {
+      if (!current()) return
       this._ngZone.run(() => {
         this._wsConnected = true
         this._wsReconnectAttempt = 0
@@ -828,6 +917,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
     }
 
     this._ws.onmessage = (event: MessageEvent) => {
+      if (!current()) return
       this._ngZone.run(() => {
         const data = event.data
 
@@ -861,6 +951,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
     }
 
     this._ws.onclose = () => {
+      if (!current()) return
       this._ngZone.run(() => {
         this._wsConnected = false
         this._ws = null
@@ -868,12 +959,14 @@ export class TogglyService implements ITogglyService, OnDestroy {
         const delay = getNextReconnectDelayMs(this._wsReconnectAttempt)
         this._wsReconnectAttempt += 1
         this._wsReconnectTimer = setTimeout(() => {
+          if (this._destroyed || generation !== this._generation) return
           this.startWebSocket()
         }, delay)
       })
     }
 
     this._ws.onerror = (error: Event) => {
+      if (!current()) return
       console.warn('Toggly --- WebSocket error', error)
     }
   }
@@ -902,6 +995,15 @@ export class TogglyService implements ITogglyService, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.stopWebSocket()
+    this._destroyed = true
+    this._generation++
+    this._loadingFeatures = false
+    this._ngZone.runOutsideAngular(() => {
+      this._detachTelemetry?.()
+      this._telemetry?.dispose()
+      this._detachTelemetry = undefined
+      this._telemetry = undefined
+      this.stopWebSocket()
+    })
   }
 }

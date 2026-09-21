@@ -82,3 +82,8 @@ test('runs the current Gatsby packed host on Node 24', () => {
     /- name: Install locked Gatsby dependencies\s+if: matrix\.sdk == 'Gatsby'\s+working-directory: \$\{\{ matrix\.path \}\}\s+run: npm ci/,
   );
 });
+
+test('runs the complete packed Angular host matrix in the required test job', () => {
+  const testJob = workflow.slice(workflow.indexOf('\n  test:'), workflow.indexOf('\n  test-docusaurus-host:'));
+  assert.match(testJob, /- name: Verify packed Angular consumers in Chrome\s+if: matrix\.sdk == 'Angular'\s+working-directory: \$\{\{ matrix\.path \}\}\s+env:\s+CHROME_BIN: \/usr\/bin\/google-chrome\s+run: \|\s+test -x "\$CHROME_BIN"\s+npm run test:hosts/);
+});

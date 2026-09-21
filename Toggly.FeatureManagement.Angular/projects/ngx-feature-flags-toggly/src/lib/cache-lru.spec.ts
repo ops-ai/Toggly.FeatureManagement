@@ -50,6 +50,7 @@ describe('maxCacheKeys LRU', () => {
     TestBed.configureTestingModule({
       imports: [
         NgxFeatureFlagsTogglyModule.forRoot({
+          enableTelemetry: false,
           appKey,
           environment,
           ...(maxCacheKeys !== undefined ? { maxCacheKeys } : {}),
@@ -108,6 +109,7 @@ describe('maxCacheKeys LRU', () => {
     TestBed.configureTestingModule({
       imports: [
         NgxFeatureFlagsTogglyModule.forRoot({
+          enableTelemetry: false,
           appKey,
           environment,
           identity: 'user-a',
@@ -125,6 +127,7 @@ describe('maxCacheKeys LRU', () => {
     TestBed.configureTestingModule({
       imports: [
         NgxFeatureFlagsTogglyModule.forRoot({
+          enableTelemetry: false,
           appKey,
           environment,
           maxCacheKeys: 2,
@@ -194,6 +197,7 @@ describe('maxCacheKeys LRU', () => {
     TestBed.configureTestingModule({
       imports: [
         NgxFeatureFlagsTogglyModule.forRoot({
+          enableTelemetry: false,
           appKey,
           environment,
           maxCacheKeys: 2,

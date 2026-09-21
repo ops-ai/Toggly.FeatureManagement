@@ -16,7 +16,7 @@ describe('Edge Cases & Error Handling', () => {
   function createService(config: Partial<TogglyOptions>): TogglyService {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({
-      imports: [NgxFeatureFlagsTogglyModule.forRoot(config as TogglyOptions)],
+      imports: [NgxFeatureFlagsTogglyModule.forRoot({ enableTelemetry: false, ...config } as TogglyOptions)],
     });
     return TestBed.inject(TogglyService);
   }
