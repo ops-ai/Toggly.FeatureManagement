@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Make locale-independent UTF-16 group ordering explicit while preserving existing cache keys.
+
 - Apply definitions updates that arrive while a component's evaluation hook is
   pending, without duplicating checks during initial hydration.
 - Keep browser imports and in-memory evaluation available when storage access is denied.

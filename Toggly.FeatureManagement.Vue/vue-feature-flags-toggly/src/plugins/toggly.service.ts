@@ -646,7 +646,12 @@ export class Toggly implements TogglyService {
     const context = this._getEvaluationContext()
     if (!context.groups && !context.claims && !context.identity?.includes('|')) return evaluationContextCacheKey(context)
     return `v2:${encodeURIComponent(JSON.stringify([
-      context.identity ?? '', [...(context.groups ?? [])].sort(),
+      context.identity ?? '', [...(context.groups ?? [])].sort((a, b) => {
+        // Preserve the existing UTF-16 cache-key order independently of locale.
+        if (a < b) return -1
+        if (a > b) return 1
+        return 0
+      }),
       Object.entries(normalizeEvaluationClaims(context.claims) ?? {}).sort(([a], [b]) => a.localeCompare(b)),
     ]))}`
   }

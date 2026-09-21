@@ -39,6 +39,16 @@ describe('Vue frontend telemetry', () => {
     clients.forEach(service => service.dispose?.()); await flushPromises()
     vi.restoreAllMocks(); vi.unstubAllGlobals()
   })
+  it('preserves canonical UTF-16 group cache bytes across permutations without mutating inputs', () => {
+    const groups = ['ä', '2', 'A', '😀', 'a', '10', 'Z', 'a']
+    const original = [...groups]
+    const first = client({identity: 'alice', groups, enableTelemetry: false})
+    const reversed = client({identity: 'alice', groups: [...groups].reverse(), enableTelemetry: false})
+    const expected = `v2:${encodeURIComponent(JSON.stringify(['alice', ['10', '2', 'A', 'Z', 'a', 'a', 'ä', '😀'], []]))}`
+    expect((first as any)._contextCacheKey()).toBe(expected)
+    expect((reversed as any)._contextCacheKey()).toBe(expected)
+    expect(groups).toEqual(original)
+  })
   it('records effective leaves before negation and retains short circuiting with optional identity', async () => {
     const service = client({identity: 'private-user', groups: ['private-group'], claims: {role: 'private-role'}})
     expect(await service.isFeatureOff('Off')).toBe(true)
