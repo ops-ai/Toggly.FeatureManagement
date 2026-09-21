@@ -1,5 +1,5 @@
 import type { Directive, DirectiveBinding, VNode } from 'vue'
-import { evaluateGate, normalizeFeatureKeys } from '@ops-ai/nuxt-toggly-core'
+import { evaluateGate, normalizeFeatureKeys } from '@ops-ai/nuxt-toggly-core/browser'
 import { getTogglyClient } from '../composables/useToggly'
 
 /**
@@ -136,6 +136,9 @@ function updateVisibility(
 
   // Toggle visibility
   el.style.display = isEnabled ? '' : 'none'
+  void client.evaluateFeatureGate(keys, requirement, negate).then(result => {
+    el.style.display = result ? '' : 'none'
+  })
 }
 
 /**
@@ -183,6 +186,9 @@ function updateShowVisibility(
   const isEnabled = evaluateGate(features, keys, requirement, negate)
 
   el.style.visibility = isEnabled ? 'visible' : 'hidden'
+  void client.evaluateFeatureGate(keys, requirement, negate).then(result => {
+    el.style.visibility = result ? 'visible' : 'hidden'
+  })
 }
 
 /**
@@ -249,4 +255,8 @@ function updateClass(
   } else {
     el.classList.remove(className)
   }
+  void client.evaluateFeatureGate(keys, requirement, negate).then(result => {
+    if (result) el.classList.add(className)
+    else el.classList.remove(className)
+  })
 }

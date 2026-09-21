@@ -1,3 +1,11 @@
+## 1.13.0 — 2026-09-18
+
+### Added
+- Browser adapters can inject an identity-free frontend telemetry owner and expose app-level gauge metrics while trusted server telemetry remains unchanged.
+
+### Changed
+- Feature gates short-circuit and record only the effective keys actually evaluated, after entity and local gates and before gate negation.
+
 ## 1.12.1 — 2026-09-17
 
 ### Fixed

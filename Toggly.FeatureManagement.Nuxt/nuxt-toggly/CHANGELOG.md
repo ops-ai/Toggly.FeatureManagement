@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0 — 2026-09-18
+
+### Added
+- Nuxt browser runtime configuration now forwards compact frontend telemetry settings and disposes its client owner during application teardown.
+
+### Changed
+- Frontend telemetry is enabled by default for configured browser clients; SSR and trusted Nitro server telemetry remain independently owned and unchanged.
+
 ## 1.2.0 — 2026-09-12
 
 ### Added

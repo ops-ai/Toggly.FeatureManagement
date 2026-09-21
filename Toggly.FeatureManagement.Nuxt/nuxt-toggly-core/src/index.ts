@@ -17,6 +17,10 @@ export type {
   TogglyEntityContext,
   EvalContextOverrides,
   EvalContextArg,
+  FrontendTelemetryRuntime,
+  FrontendTelemetryFactory,
+  TrustedTelemetryRuntime,
+  TrustedTelemetryFactory,
 } from './types'
 
 // Constants
@@ -74,7 +78,7 @@ export {
 } from './utils'
 
 // Client
-export { createTogglyClient } from './client'
+export { createTogglyClient } from './trusted-client'
 
 // Entity context helpers, re-exported so wrapper packages share one implementation
 export {

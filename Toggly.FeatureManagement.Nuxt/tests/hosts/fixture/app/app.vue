@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { createToggly } from '@ops-ai/nuxt-toggly-client'
 const toggly = useToggly()
 const { isEnabled } = useFeatureFlag('Enabled')
 const { isEnabled: any } = useFeatureGate(['Enabled', 'Disabled'], 'any')
@@ -19,6 +20,30 @@ async function initialize() {
   await toggly.init({ appKey: 'fixture', identity: 'alice', baseUri: location.origin + '/api/definitions', refreshInterval: 0, enableLiveUpdates: false })
   initialized.value = true
 }
+async function emitTelemetry() {
+  await toggly.isFeatureOn('Enabled')
+  toggly.telemetry.recordUsage('Enabled', 'blue')
+  toggly.telemetry.recordView('Enabled', 'green')
+  toggly.telemetry.incrementCounter('fixture-counter', 2)
+  toggly.telemetry.setGauge('fixture-gauge', 3)
+  await toggly.telemetry.flushTelemetry()
+}
+function exitTelemetry() {
+  toggly.telemetry.incrementCounter('pagehide-counter')
+  window.dispatchEvent(new Event('pagehide'))
+}
+async function flushTelemetry() { await toggly.telemetry.flushTelemetry() }
+async function replaceTelemetryOwner() {
+  const common = { baseUri: location.origin + '/api/definitions', metricsBaseUrl: useRuntimeConfig().public.toggly.metricsBaseUrl, refreshInterval: 0, enableLiveUpdates: false }
+  const oldOwner = createToggly({ ...common, appKey: 'old-app' })
+  await oldOwner.init()
+  oldOwner.telemetry.incrementCounter('old-owner-count')
+  const newOwner = createToggly({ ...common, appKey: 'new-app' })
+  await newOwner.init()
+  oldOwner.telemetry.incrementCounter('stale-owner-count')
+  newOwner.telemetry.incrementCounter('new-owner-count')
+  await newOwner.telemetry.flushTelemetry()
+}
 </script>
 <template>
   <main>
@@ -36,5 +61,9 @@ async function initialize() {
     <button id="init" @click="initialize">initialize</button>
     <button id="identity" @click="identifyBob">bob</button>
     <button id="refresh" @click="refresh">refresh</button>
+    <button id="telemetry" @click="emitTelemetry">telemetry</button>
+    <button id="flush-telemetry" @click="flushTelemetry">flush telemetry</button>
+    <button id="pagehide" @click="exitTelemetry">pagehide</button>
+    <button id="replace-owner" @click="replaceTelemetryOwner">replace owner</button>
   </main>
 </template>

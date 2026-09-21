@@ -1,9 +1,9 @@
-import { ref, computed, watch, onMounted, type Ref, type MaybeRef, toValue } from 'vue'
+import { ref, computed, watch, type Ref, type MaybeRef, toValue } from 'vue'
 import { useToggly } from './useToggly'
-import { evaluateGate, normalizeFeatureKeys } from '@ops-ai/nuxt-toggly-core'
+import { evaluateGate, normalizeFeatureKeys } from '@ops-ai/nuxt-toggly-core/browser'
 import type { UseFeatureGateReturn, FeatureProps } from '../types'
-import type { FeatureRequirement } from '@ops-ai/nuxt-toggly-core'
-import type { TogglyEntityContext } from '@ops-ai/nuxt-toggly-core'
+import type { FeatureRequirement } from '@ops-ai/nuxt-toggly-core/browser'
+import type { TogglyEntityContext } from '@ops-ai/nuxt-toggly-core/browser'
 
 /**
  * Composable for evaluating multiple feature flags as a gate
@@ -83,6 +83,8 @@ export function useFeatureGate(
   watch(
     () => toggly.features.value,
     () => {
+      // Refresh/hydration projection is state synchronization, not a new
+      // consumer evaluation, so it remains telemetry-silent.
       enabled.value = evaluateGate(
         toggly.features.value,
         keys.value,
@@ -92,12 +94,6 @@ export function useFeatureGate(
     },
     { deep: true }
   )
-
-  onMounted(() => {
-    if (toggly.isReady.value) {
-      checkGate()
-    }
-  })
 
   return {
     isEnabled: computed(() => enabled.value),

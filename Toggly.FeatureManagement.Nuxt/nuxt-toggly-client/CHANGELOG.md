@@ -1,3 +1,13 @@
+## 1.3.0 — 2026-09-18
+
+### Added
+- Default-on compact browser telemetry for effective feature checks, plus `telemetry.recordUsage`, `recordView`, `incrementCounter`, `setGauge`, and `flushTelemetry`.
+- Independent `enableTelemetry`, `enableUsageTracking`, `enableMetrics`, `metricsBaseUrl`, and `telemetryFlushIntervalMs` controls.
+
+### Changed
+- Replacing a browser client disposes the previous telemetry owner, and hydration or refresh projection does not generate feature checks.
+- Browser legacy `measure` and `observe` calls are payload-free no-ops with bounded diagnostics. Legacy usage/view keep identity as the second argument and use only the third argument as the variant.
+
 ## 1.2.2 — 2026-09-12
 
 ### Fixed

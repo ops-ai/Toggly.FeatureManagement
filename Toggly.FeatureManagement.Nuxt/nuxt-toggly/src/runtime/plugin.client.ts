@@ -27,6 +27,11 @@ export default defineNuxtPlugin(async (nuxtApp) => {
     showFeatureDuringEvaluation: config.showFeatureDuringEvaluation,
     refreshInterval: config.refreshInterval,
     enableLiveUpdates: config.enableLiveUpdates,
+    enableTelemetry: config.enableTelemetry,
+    enableUsageTracking: config.enableUsageTracking,
+    enableMetrics: config.enableMetrics,
+    metricsBaseUrl: config.metricsBaseUrl,
+    telemetryFlushIntervalMs: config.telemetryFlushIntervalMs,
     persistIdentity: config.persistIdentity,
     persistFeatures: config.persistFeatures,
     hooks: config.hooks,
@@ -71,6 +76,8 @@ export default defineNuxtPlugin(async (nuxtApp) => {
   } else {
     await initialize()
   }
+
+  nuxtApp.hook('app:beforeUnmount', () => toggly.client.destroy())
 
   // Provide helper for useToggly
   return {

@@ -35,6 +35,28 @@ describe('startup context forwarding', () => {
     expect(mocks.server).toHaveBeenCalledTimes(1)
   })
 
+  it('forwards browser telemetry configuration only to the client owner', async () => {
+    Object.assign(mocks.config, {
+      enableTelemetry: false,
+      enableUsageTracking: false,
+      enableMetrics: true,
+      metricsBaseUrl: 'https://collector.example',
+      telemetryFlushIntervalMs: 30000,
+    })
+    await (clientPlugin as any)(app())
+    await (serverPlugin as any)({ hooks: { hook: vi.fn() } })
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({
+      enableTelemetry: false,
+      enableUsageTracking: false,
+      enableMetrics: true,
+      metricsBaseUrl: 'https://collector.example',
+      telemetryFlushIntervalMs: 30000,
+    }))
+    expect(mocks.server).not.toHaveBeenCalledWith(expect.objectContaining({
+      metricsBaseUrl: 'https://collector.example',
+    }))
+  })
+
   it('snapshots caller collections before initialization can yield', async () => {
     const groups = ['beta']
     const claims = { plan: 'pro' }

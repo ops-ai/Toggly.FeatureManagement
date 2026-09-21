@@ -1,4 +1,4 @@
-import { ref, computed, watch, onMounted, type Ref } from 'vue'
+import { ref, computed, watch, type Ref } from 'vue'
 import { useToggly } from './useToggly'
 import type { UseFeatureFlagReturn } from '../types'
 
@@ -58,16 +58,12 @@ export function useFeatureFlag(featureKey: string | Ref<string>): UseFeatureFlag
   watch(
     () => toggly.features.value,
     () => {
+      // Refresh/hydration projection is state synchronization, not a new
+      // consumer evaluation, so it remains telemetry-silent.
       enabled.value = toggly.features.value[key.value] === true
     },
     { deep: true }
   )
-
-  onMounted(() => {
-    if (toggly.isReady.value) {
-      checkFeature()
-    }
-  })
 
   return {
     isEnabled: computed(() => enabled.value),

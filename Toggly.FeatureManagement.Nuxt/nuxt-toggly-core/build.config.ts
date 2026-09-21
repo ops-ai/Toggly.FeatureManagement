@@ -4,6 +4,10 @@ export default defineBuildConfig({
   entries: [
     './src/index',
     {
+      input: './src/browser',
+      name: 'browser',
+    },
+    {
       input: './src/telemetry/grpc-clients',
       name: 'telemetry/grpc',
     },

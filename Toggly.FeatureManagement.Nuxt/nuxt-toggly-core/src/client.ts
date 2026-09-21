@@ -8,6 +8,8 @@ import type {
   EvaluationSeriesData,
   EvalContextArg,
   EvalContextOverrides,
+  FrontendTelemetryRuntime,
+  TrustedTelemetryRuntime,
 } from './types'
 import { HookExecutor } from './hooks'
 import { DEFAULT_CONFIG, API_ENDPOINTS } from './constants'
@@ -47,8 +49,6 @@ import {
 import { buildDefinitionFetchHeaders } from './sdk-identity'
 import { parseRemoteEvaluatedPayload } from './parse-evaluated-payload'
 import { parseEvaluatedResponseBody, readResponseBody } from './signed-response'
-import { TelemetryRuntime } from './telemetry/index.js'
-import { isTelemetryEnvDisabled } from './telemetry/https-client.js'
 
 /**
  * Create a new Toggly client instance
@@ -59,7 +59,9 @@ export function createTogglyClient(
   const hookExecutor = new HookExecutor()
   let refreshIntervalId: ReturnType<typeof setInterval> | null = null
   let destroyed = false
-  let telemetry: TelemetryRuntime | null = null
+  let telemetry: TrustedTelemetryRuntime | null = null
+  let frontendTelemetry: FrontendTelemetryRuntime | null = null
+  let frontendTelemetrySignature: string | null = null
   /** True while a refresh is in flight — concurrent callers skip without counting. */
   let refreshInFlight = false
 
@@ -314,7 +316,9 @@ export function createTogglyClient(
     overrides?: EvalContextArg,
   ): boolean {
     const result = getEffectiveFlag(featureKey, entityContext, overrides)
-    if (telemetry?.usageEnabled) {
+    if (frontendTelemetry?.usageEnabled) {
+      frontendTelemetry.recordCheck(featureKey, result ? 'enabled' : 'disabled')
+    } else if (telemetry?.usageEnabled) {
       const o: EvalContextOverrides =
         typeof overrides === 'string' ? { identity: overrides } : overrides ?? {}
       const identity = o.identity ?? config.identity
@@ -323,34 +327,27 @@ export function createTogglyClient(
     return result
   }
 
-  function evaluateGateEffective(
-    featureKeys: string[],
-    requirement: FeatureRequirement = 'all',
-    negate = false,
-    entityContext?: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null,
-    overrides?: EvalContextArg,
-  ): boolean {
-    if (featureKeys.length === 0) {
-      return !negate
-    }
-
-    // Record once per key (same as node-core / Next), then combine.
-    const checks = featureKeys.map((key) =>
-      evaluateAndRecordCheck(key, entityContext, overrides),
-    )
-
-    let result: boolean
-    if (requirement === 'any') {
-      result = checks.some(Boolean)
-    } else {
-      result = checks.every(Boolean)
-    }
-
-    return negate ? !result : result
-  }
-
   function startTelemetry(): void {
-    if (!config.appKey || isTelemetryEnvDisabled()) {
+    if (config.frontendTelemetryFactory) {
+      const signature = JSON.stringify([
+        config.appKey,
+        config.environment,
+        config.metricsBaseUrl,
+        config.telemetryFlushIntervalMs,
+        config.enableTelemetry,
+        config.enableUsageTracking,
+        config.enableMetrics,
+      ])
+      if (frontendTelemetry && frontendTelemetrySignature === signature) return
+      frontendTelemetry?.dispose()
+      frontendTelemetry = null
+      frontendTelemetrySignature = signature
+      if (!config.appKey || config.enableTelemetry === false ||
+          (config.enableUsageTracking === false && config.enableMetrics === false)) return
+      frontendTelemetry = config.frontendTelemetryFactory(config)
+      return
+    }
+    if (!config.appKey || !config.trustedTelemetryFactory) {
       return
     }
     if (!config.enableUsageTracking && !config.enableMetrics) {
@@ -360,23 +357,8 @@ export function createTogglyClient(
       void telemetry.close()
       telemetry = null
     }
-    telemetry = new TelemetryRuntime({
-      appKey: config.appKey,
-      environment: config.environment ?? DEFAULT_CONFIG.environment,
-      metricsBaseUrl: config.metricsBaseUrl,
-      enableUsageTracking: config.enableUsageTracking,
-      enableMetrics: config.enableMetrics,
-      usageFlushInterval: config.usageFlushInterval,
-      metricsFlushInterval: config.metricsFlushInterval,
-      instanceName: config.instanceName,
-      appVersion: config.appVersion,
-      transport: config.telemetryTransport ?? 'grpc',
-      attachProcessHandlers: config.telemetryAttachProcessHandlers,
-      usageClient: config.usageClient,
-      metricsClient: config.metricsClient,
-      fetchImpl: config.telemetryFetch,
-    })
-    telemetry.start()
+    telemetry = config.trustedTelemetryFactory(config)
+    telemetry?.start()
   }
 
   /**
@@ -531,7 +513,7 @@ export function createTogglyClient(
    * Start the auto-refresh interval
    */
   function startRefreshInterval(): void {
-    if (refreshIntervalId || config.refreshInterval <= 0) {
+    if (destroyed || refreshIntervalId || config.refreshInterval <= 0) {
       return
     }
 
@@ -564,6 +546,7 @@ export function createTogglyClient(
    */
   function startWebSocket(): void {
     if (
+      destroyed ||
       isEdgeRuntime() ||
       !config.appKey ||
       config.enableLiveUpdates === false
@@ -742,8 +725,11 @@ export function createTogglyClient(
 
         state.initialized = true
 
+        if (destroyed) return state.features
+
         // Execute afterRefresh hooks
         await hookExecutor.executeAfterRefresh(state.features)
+        if (destroyed) return state.features
         notifyFeaturesRefresh()
 
         // Start auto-refresh
@@ -850,40 +836,21 @@ export function createTogglyClient(
 
       const entityContext = normalizeEntityContext(context, kind)
 
-      // Execute before hooks for each key
-      const dataMaps: Array<{
-        key: string
-        dataMap: Map<string, EvaluationSeriesData | void>
-      }> = []
-
+      if (featureKeys.length === 0) return !negate
+      let result = requirement !== 'any'
       for (const key of featureKeys) {
         const dataMap = await hookExecutor.executeBeforeEvaluation(
           key,
-          config.featureDefaults?.[key]
+          config.featureDefaults?.[key],
         )
-        dataMaps.push({ key, dataMap })
+        const keyResult = evaluateAndRecordCheck(key, entityContext, overrides)
+        hookExecutor.executeAfterEvaluation(key, dataMap, keyResult).catch(() => {})
+        if (requirement === 'any' ? keyResult : !keyResult) {
+          result = requirement === 'any'
+          break
+        }
       }
-
-      // evaluateGateEffective records usage once per key
-      const result = evaluateGateEffective(
-        featureKeys,
-        requirement,
-        negate,
-        entityContext,
-        overrides,
-      )
-
-      // Execute after hooks for each key (fire-and-forget)
-      for (const { key, dataMap } of dataMaps) {
-        const keyResult = getEffectiveFlag(key, entityContext, overrides)
-        hookExecutor
-          .executeAfterEvaluation(key, dataMap, keyResult)
-          .catch(() => {
-            // Errors already logged
-          })
-      }
-
-      return result
+      return negate ? !result : result
     },
 
     registerContext<T>(
@@ -1011,11 +978,13 @@ export function createTogglyClient(
     },
 
     recordUsage(featureKey: string, identity?: string, variant?: string): void {
-      telemetry?.recordUsage(featureKey, identity ?? config.identity, variant)
+      if (frontendTelemetry?.usageEnabled) frontendTelemetry.recordUsage(featureKey, variant)
+      else telemetry?.recordUsage(featureKey, identity ?? config.identity, variant)
     },
 
     recordView(featureKey: string, identity?: string, variant?: string): void {
-      telemetry?.recordView(featureKey, identity ?? config.identity, variant)
+      if (frontendTelemetry?.usageEnabled) frontendTelemetry.recordView(featureKey, variant)
+      else telemetry?.recordView(featureKey, identity ?? config.identity, variant)
     },
 
     measure(
@@ -1023,7 +992,8 @@ export function createTogglyClient(
       value: number,
       options?: { feature?: string; variant?: string },
     ): void {
-      telemetry?.measure(metricKey, value, options)
+      if (frontendTelemetry) frontendTelemetry.unsupported('measure')
+      else telemetry?.measure(metricKey, value, options)
     },
 
     incrementCounter(
@@ -1031,7 +1001,12 @@ export function createTogglyClient(
       value = 1,
       options?: { feature?: string; variant?: string },
     ): void {
-      telemetry?.incrementCounter(metricKey, value, options)
+      if (frontendTelemetry?.metricsEnabled) frontendTelemetry.incrementCounter(metricKey, value)
+      else telemetry?.incrementCounter(metricKey, value, options)
+    },
+
+    setGauge(metricKey: string, value: number): void {
+      frontendTelemetry?.metricsEnabled && frontendTelemetry.setGauge(metricKey, value)
     },
 
     observe(
@@ -1039,11 +1014,13 @@ export function createTogglyClient(
       value: number,
       options?: { feature?: string; variant?: string },
     ): void {
-      telemetry?.observe(metricKey, value, options)
+      if (frontendTelemetry) frontendTelemetry.unsupported('observe')
+      else telemetry?.observe(metricKey, value, options)
     },
 
     async flushTelemetry(): Promise<void> {
-      await telemetry?.flushAll()
+      if (frontendTelemetry) await frontendTelemetry.flush()
+      else await telemetry?.flushAll()
     },
 
     destroy(): void {
@@ -1055,6 +1032,9 @@ export function createTogglyClient(
         void telemetry.close()
         telemetry = null
       }
+      frontendTelemetry?.dispose()
+      frontendTelemetry = null
+      frontendTelemetrySignature = null
     },
   }
 

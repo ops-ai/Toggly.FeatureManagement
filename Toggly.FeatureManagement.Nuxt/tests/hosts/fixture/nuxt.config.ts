@@ -13,5 +13,6 @@ export default defineNuxtConfig({
     persistIdentity: false,
     refreshInterval: 0,
     enableLiveUpdates: false,
+    metricsBaseUrl: process.env.NUXT_TEST_COLLECTOR,
   },
 })

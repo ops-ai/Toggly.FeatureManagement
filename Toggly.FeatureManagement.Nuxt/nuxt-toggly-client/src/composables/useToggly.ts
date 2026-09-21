@@ -4,9 +4,10 @@ import {
   type TogglyClient,
   type TogglyConfig,
   type FeatureRequirement,
-} from '@ops-ai/nuxt-toggly-core'
+} from '@ops-ai/nuxt-toggly-core/browser'
 import type { TogglyClientConfig, UseTogglyReturn } from '../types'
 import { TOGGLY_INJECTION_KEY } from '../types'
+import { createBrowserTelemetry } from '../frontend-telemetry'
 
 // Global client instance for SSR hydration
 let globalClient: TogglyClient | null = null
@@ -16,6 +17,10 @@ let globalConfig: TogglyClientConfig | null = null
  * Create the Toggly composable for the root component
  */
 export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
+  if (typeof window !== 'undefined' && globalClient) {
+    globalClient.destroy()
+    globalClient = null
+  }
   const isReady = ref(false)
   const isLoading = ref(false)
   const error = ref<Error | null>(null)
@@ -29,6 +34,14 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     persistFeatures: false,
     featuresStorageKey: 'toggly:features',
     ...config,
+    ...(typeof window !== 'undefined'
+      ? {
+          enableTelemetry: config.enableTelemetry ?? true,
+          enableUsageTracking: config.enableUsageTracking ?? true,
+          enableMetrics: config.enableMetrics ?? true,
+          frontendTelemetryFactory: createBrowserTelemetry,
+        }
+      : {}),
   }
 
   if (typeof window !== 'undefined') globalConfig = mergedConfig
@@ -85,6 +98,13 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     error,
     features,
     identity,
+    telemetry: {
+      recordUsage: (featureKey, variant) => client.recordUsage(featureKey, undefined, variant),
+      recordView: (featureKey, variant) => client.recordView(featureKey, undefined, variant),
+      incrementCounter: (metricKey, value) => client.incrementCounter(metricKey, value),
+      setGauge: (metricKey, value) => client.setGauge(metricKey, value),
+      flushTelemetry: () => client.flushTelemetry(),
+    },
 
     async init(newConfig?: TogglyConfig) {
       isLoading.value = true
@@ -175,7 +195,7 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
 
     async isFeatureOn(
       featureKey: string,
-      context?: import('@ops-ai/nuxt-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+      context?: import('@ops-ai/nuxt-toggly-core/browser').TogglyEntityContext | Record<string, unknown> | null,
       kind?: string,
     ) {
       return client.isFeatureOn(featureKey, context, kind)
@@ -183,7 +203,7 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
 
     async isFeatureOff(
       featureKey: string,
-      context?: import('@ops-ai/nuxt-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+      context?: import('@ops-ai/nuxt-toggly-core/browser').TogglyEntityContext | Record<string, unknown> | null,
       kind?: string,
     ) {
       return client.isFeatureOff(featureKey, context, kind)
@@ -193,7 +213,7 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
       featureKeys: string[],
       requirement: FeatureRequirement = 'all',
       negate: boolean = false,
-      context?: import('@ops-ai/nuxt-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+      context?: import('@ops-ai/nuxt-toggly-core/browser').TogglyEntityContext | Record<string, unknown> | null,
       kind?: string,
     ) {
       return client.evaluateFeatureGate(featureKeys, requirement, negate, context, kind)

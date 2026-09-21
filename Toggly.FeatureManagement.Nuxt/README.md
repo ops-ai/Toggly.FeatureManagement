@@ -120,6 +120,13 @@ export default defineNuxtConfig({
     // Auto-refresh interval in ms (default: 180000 - 3 min)
     refreshInterval: 180000,
 
+    // Compact browser telemetry (default: true for configured clients)
+    enableTelemetry: true,
+    enableUsageTracking: true,
+    enableMetrics: true,
+    metricsBaseUrl: 'https://metrics.toggly.io',
+    telemetryFlushIntervalMs: 45000,
+
     // Enable SSR (default: true)
     ssr: true,
 
@@ -309,13 +316,31 @@ export default defineEventHandler(async (event) => {
 })
 ```
 
-### Telemetry (usage + business metrics)
+### Telemetry
 
 When `appKey` is set, `@ops-ai/nuxt-toggly-server` enables feature usage and
 business metrics by default (gRPC on Node/Nitro; HTTPS on Nitro edge via
 `telemetryTransport: 'https'`). Opt out with `enableUsageTracking: false` /
-`enableMetrics: false` or `TOGGLY_DISABLE_TELEMETRY=1`. Browser
-`@ops-ai/nuxt-toggly-client` does not send this telemetry.
+`enableMetrics: false` or `TOGGLY_DISABLE_TELEMETRY=1`.
+
+The browser client separately sends compact identity-free checks and app-level
+metrics to `/api/frontend/telemetry`. Use `enableTelemetry: false` to disable
+both browser categories, or the category flags above to disable one. The
+browser facade exposes explicit interactions without causing feature
+evaluations:
+
+```ts
+const { telemetry } = useToggly()
+telemetry.recordUsage('new-dashboard', 'blue')
+telemetry.recordView('new-dashboard')
+telemetry.incrementCounter('export-clicked')
+telemetry.setGauge('selected-rows', 4)
+await telemetry.flushTelemetry()
+```
+
+Browser telemetry contains only the application key, environment, aggregate
+feature counts, and app-level metric values. It contains no identity metadata.
+SSR hydration and refresh state projection do not create checks.
 
 ## Users and Rollouts
 

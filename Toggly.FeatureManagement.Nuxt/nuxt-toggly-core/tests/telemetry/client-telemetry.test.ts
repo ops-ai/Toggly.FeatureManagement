@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createTogglyClient } from '../../src/client'
+import { createTogglyClient } from '../../src/trusted-client'
 import type { UsageSender, MetricsSender } from '../../src/telemetry/index'
 
 describe('createTogglyClient telemetry', () => {
