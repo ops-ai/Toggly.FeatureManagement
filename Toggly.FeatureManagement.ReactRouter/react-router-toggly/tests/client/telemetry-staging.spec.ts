@@ -43,3 +43,40 @@ test('pre-commit byte reservation and disposal bound large unique names',async()
   await abandoned.api.flushTelemetry();
   expect(bodies.every(body=>!body.f.Discarded)).toBe(true);
 });
+
+
+test('captures attribution across pre-commit and active context transitions with one shared budget', async () => {
+  const owner = createBrowserTelemetry({...config, identity: 'alice'});
+  const captured = owner.captureCheck();
+  owner.api.setGauge('cart', 1);
+  owner.setContext({identity:'bob',instanceId:'token-b'});
+  owner.api.setGauge('cart', 2);
+  captured('Old', true);
+  owner.activate();
+  owner.api.recordUsage('New');
+  const activeCapture = owner.captureCheck();
+  owner.setContext({identity:'carol'});
+  activeCapture('Prior', false);
+  owner.api.recordView('Current');
+  await owner.api.flushTelemetry();
+  expect(bodies).toEqual([
+    {k:'app',e:'Test',u:'alice',m:{cart:1}},
+    {k:'app',e:'Test',i:'token-b',m:{cart:2}},
+    {k:'app',e:'Test',u:'alice',f:{Old:{enabled:[1]}}},
+    {k:'app',e:'Test',i:'token-b',f:{New:{enabled:[0,1]}}},
+    {k:'app',e:'Test',i:'token-b',f:{Prior:{disabled:[1]}}},
+    {k:'app',e:'Test',u:'carol',f:{Current:{enabled:[0,0,1]}}},
+  ]);
+  owner.dispose();
+});
+
+
+test('pre-commit gauge ordering survives returning to a previous attribution', async () => {
+  const owner = createBrowserTelemetry({...config, identity:'alice'});
+  owner.api.setGauge('cart',1);
+  owner.setContext({identity:'bob'}); owner.api.setGauge('cart',2);
+  owner.setContext({identity:'alice'}); owner.api.setGauge('cart',3);
+  owner.activate(); await owner.api.flushTelemetry();
+  expect(bodies.map(body => [body.u, body.m.cart])).toEqual([['alice',1],['bob',2],['alice',3]]);
+  owner.dispose();
+});

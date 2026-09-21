@@ -44,14 +44,15 @@ URLs disable telemetry without changing feature results; use absolute HTTP(S)
 URLs without credentials, query or fragment.
 
 SSR/build, keyless and opted-out providers create no frontend reporter resources.
-Payloads contain only app/environment, feature/variant counts and numeric metrics;
-they exclude identity, claims, groups, entity data and timestamps. Requests omit
+Payloads contain app/environment, optional `i` (host-minted instance token) or `u` (client identity), feature/variant counts and numeric metrics. Claims, groups, entity data and timestamps are excluded. Requests omit
 credentials, use native gzip when available, and have bounded buffers, timeout
 and retries. Page hiding and unmount trigger a bounded best-effort flush; await
-`flushTelemetry()` for deterministic completion before navigation when needed.
+`flushTelemetry()` to wait for the current best-effort attempt before navigation; it does not guarantee server acknowledgement.
+
+Set `config.instanceId` to a token minted by your trusted host. It takes precedence over client identity/groups/claims in browser definition requests and telemetry. Rotate it with `await context.identify(identity, {instanceId})`; `identify(identity)` clears the token and uses client targeting. `reset()` clears identity and token. Groups/claims can be updated through the existing identify context. Failed context refreshes retain the new targeting scope with configured defaults; old results and pending responses cannot cross that boundary. Context changes preserve already queued events under their original attribution.
 
 Each mounted provider is independent. App/environment replacement releases the
-old reporter without relabeling its queue, and ignores loader snapshots explicitly
+old reporter without relabeling its queue (incompatible collector/transport or opt-out replacement discards pending old data), and ignores loader snapshots explicitly
 labeled for another owner. StrictMode effect replay preserves the committed owner;
 real unmount releases it and remount creates a fresh one. Browser telemetry does
 not change trusted server loader/action metrics or their existing APIs.

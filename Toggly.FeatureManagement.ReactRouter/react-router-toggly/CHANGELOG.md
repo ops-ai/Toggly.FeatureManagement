@@ -10,10 +10,11 @@
 ### Fixed
 - Count effective local/entity-gated browser checks once per evaluated leaf, preserving short circuit and negation without duplicate component evaluation.
 - Isolate telemetry and hydrated snapshots when app/environment changes; release browser resources on real unmount while preserving StrictMode replay.
-- Prevent delayed refresh/identity completion from updating a disposed provider.
+- Capture original flag and attribution snapshots before reentrant callbacks; isolate failed/new contexts and late responses.
+- Prevent delayed refresh/identity completion from updating a disposed provider and discard pending telemetry on incompatible transport replacement.
 
 ### Changed
-- Browser payloads omit user identity and targeting data; trusted server telemetry and loader/action behavior remain unchanged.
+- Browser definitions and telemetry support host-minted instance tokens with precedence over client targeting, plus client identity fallback. Trusted server telemetry and loader/action behavior remain unchanged.
 
 ## 1.0.1
 

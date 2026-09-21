@@ -68,6 +68,8 @@ export interface TogglyConfig {
   localGates?: LocalGate[];
   /** Optional SDK error callback for reporting fetch/evaluation failures. */
   onError?: (message: string, error?: unknown) => void;
+  /** Host-minted browser capability; takes precedence over client identity targeting. */
+  instanceId?: string;
   /** Initial browser identity; hydrated server identity takes precedence. */
   identity?: string;
   /** User groups for targeting */
@@ -125,6 +127,8 @@ export interface TogglyConfig {
  * User identity context for feature targeting
  */
 export interface IdentityContext {
+  /** Browser capability. An empty value clears the token; omitted identity updates use client targeting. */
+  instanceId?: string;
   /** Unique user identifier */
   identity?: string;
   /** User groups for targeting */
