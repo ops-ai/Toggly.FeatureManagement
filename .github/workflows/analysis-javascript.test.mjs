@@ -58,6 +58,8 @@ function assertRequiredHost(sdks, job) {
 const packedHostHarnesses = [
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs',
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-check.mjs',
+  'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-cleanup.test.mjs',
+  'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/host-resources.mjs',
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/**',
   'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-host.mjs',
   'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/tests/host/**'

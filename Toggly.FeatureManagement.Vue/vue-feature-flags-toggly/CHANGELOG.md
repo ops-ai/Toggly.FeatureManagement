@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- Apply definitions updates that arrive while a component's evaluation hook is
+  pending, without duplicating checks during initial hydration.
+- Keep browser imports and in-memory evaluation available when storage access is denied.
+
 - Keep evaluated and variant cache bodies separate, invalidate ambiguous legacy
   validators, and remove paired validators when bounded cache entries are evicted.
   Cached 304 results retain the correct flags and assigned variant in either mode.

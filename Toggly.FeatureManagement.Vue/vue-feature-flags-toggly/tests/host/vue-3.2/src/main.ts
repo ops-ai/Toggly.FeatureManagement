@@ -40,6 +40,41 @@ const fixture = {
   get service() {return service},
   get previousService() {return previousService},
   get activeSubscriptions() {return activeSubscriptions},
+  async verifyRefreshOrder() {
+    const results = []
+    for (const phase of ['beforeEvaluation', 'afterEvaluation'] as const) {
+      for (const kind of ['composable', 'Feature', 'FeatureGateBuilder']) {
+        const element = document.createElement('div'); document.body.append(element)
+        let owner!: Toggly
+        let release = () => {}
+        let begin = () => {}
+        let first = true
+        const started = new Promise<void>(resolve => {begin = resolve})
+        const probe = createApp(defineComponent({setup() {
+          owner = inject<Toggly>('$toggly')!
+          owner.addHook({getMetadata: () => ({name: 'pending'}), [phase]: () => {
+            if (first) {first = false; begin(); return new Promise<void>(resolve => {release = resolve})}
+          }})
+          if (kind === 'composable') {const state = useFeatureFlag('On'); return () => h('span', String(state.isEnabled.value))}
+          const Feature = resolveComponent('Feature')
+          return () => kind === 'Feature' ? h(Feature, {featureKey: 'On'}, () => h('span', 'visible'))
+            : h(FeatureGateBuilder, {featureKey: 'On'}, {default: ({enabled}: {enabled: boolean}) => h('span', String(enabled))})
+        }}))
+        probe.use(toggly, {appKey: `${kind}-${phase}`, environment: 'Test', instanceId: 'pending-hook', persistCache: false, enableLiveUpdates: false,
+          metricsBaseUrl: new URLSearchParams(location.search).get('metrics')!, baseURI: `${location.origin}/refresh-order`})
+        try {
+          probe.mount(element); await started
+          await owner._loadFeatures(true)
+          await new Promise(resolve => setTimeout(resolve, 0))
+          const beforeRelease = element.textContent
+          release(); await new Promise(resolve => setTimeout(resolve, 0))
+          results.push({kind, phase, beforeRelease, afterRelease: element.textContent})
+          await owner.flushTelemetry()
+        } finally {release(); probe.unmount(); element.remove()}
+      }
+    }
+    return results
+  },
   async verifyCache() {
     const options = {environment: 'Test', instanceId: 'token-a', metricsBaseUrl: new URLSearchParams(location.search).get('metrics')!, baseURI: `${location.origin}/cache-fixture`, persistCache: true, enableLiveUpdates: false}
     const results = []

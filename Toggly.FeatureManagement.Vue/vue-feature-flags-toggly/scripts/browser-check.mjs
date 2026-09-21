@@ -47,10 +47,15 @@ await new Promise((resolve, reject) => {collector.once('error', reject); collect
   let remoteEnabled = true
   const identities = []
   const cacheRequests = []
+  const refreshRequests = new Map()
   await page.setRequestInterception(true)
   page.on('request', request => {
     const url = new URL(request.url())
-    if (url.pathname.startsWith('/cache-fixture/')) {
+    if (url.pathname.startsWith('/refresh-order/')) {
+      const count = refreshRequests.get(url.pathname) ?? 0
+      refreshRequests.set(url.pathname, count + 1)
+      void request.respond({status: 200, contentType: 'application/json', body: JSON.stringify({defs: {On: count === 0}})})
+    } else if (url.pathname.startsWith('/cache-fixture/')) {
       const variants = url.pathname.includes('evaluated-variants-signed')
       const token = url.searchParams.get('i')
       const revision = `${variants ? 'variants' : 'evaluated'}-${token}`
@@ -124,8 +129,18 @@ await new Promise((resolve, reject) => {collector.once('error', reject); collect
   assert.ok(cacheRequests.some(value => value.variants && value.conditional === 'variants-token-a'))
   assert.ok(cacheRequests.some(value => !value.variants && value.conditional === 'evaluated-token-a'))
   assert.ok(cacheRequests.some(value => value.token === 'token-b' && value.conditional === undefined))
+  telemetry.length = 0
+  const refreshOrder = await evaluate(() => window.fixture.verifyRefreshOrder())
+  assert.equal(refreshOrder.length, 6)
+  for (const result of refreshOrder) {
+    const latest = result.kind === 'Feature' ? '' : 'false'
+    assert.equal(result.beforeRelease, latest)
+    assert.equal(result.afterRelease, latest)
+  }
+  assert.deepEqual(telemetry, refreshOrder.map(({kind, phase}) => ({k: `${kind}-${phase}`, e: 'Test', i: 'pending-hook', f: {On: {enabled: [1], disabled: [1]}}})))
+  assert.ok([...refreshRequests.values()].every(count => count === 2), 'initial load plus actual refresh only')
   assert.deepEqual(errors, [])
-  console.log('Browser passed: plugin/hooks/components, local/context/refresh, real CORS/gzip i/u/checks/metrics/plain keepalive i/pagehide/unmount/remount; response-mode and token ABA 304 cache/public results')
+  console.log('Browser passed: plugin/hooks/components, local/context/refresh, real CORS/gzip i/u/checks/metrics/plain keepalive i/pagehide/unmount/remount; response-mode and token ABA 304 cache/public results; pending-hook refresh DOM and exact checks')
 })
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await verifyBrowser()

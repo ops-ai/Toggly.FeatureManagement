@@ -77,6 +77,7 @@ export function useFeatureGate(
   let active = true
   let request = 0
   let generation = -1
+  let waitingForFeatures = false
   let unsubscribe = () => {}
 
   const refresh = async () => {
@@ -99,6 +100,12 @@ export function useFeatureGate(
         isEnabled.value = !negate
         return
       }
+      // Initial hydration belongs to this evaluation. Once loaded, a later
+      // definitions notification must supersede even a still-pending hook.
+      waitingForFeatures = true
+      await owner._featuresLoaded()
+      if (!active || current !== request || owner !== toggly.value) return
+      waitingForFeatures = false
       const enabled = await owner.evaluateFeatureGate(
         gate,
         requirement,
@@ -108,13 +115,16 @@ export function useFeatureGate(
       )
       if (active && current === request && owner === toggly.value) isEnabled.value = enabled
     } finally {
-      if (active && current === request) isLoading.value = false
+      if (active && current === request) {
+        waitingForFeatures = false
+        isLoading.value = false
+      }
     }
   }
 
   const bindOwner = () => {
     unsubscribe()
-    const onChange = () => { if (!isLoading.value || generation !== toggly.value._ownerGeneration) void refresh() }
+    const onChange = () => { if (!waitingForFeatures || generation !== toggly.value._ownerGeneration) void refresh() }
     const unrefresh = toggly.value.subscribeFeaturesRefresh(onChange)
     const unlocal = toggly.value.subscribeLocalGatesChanged(() => { void refresh() })
     unsubscribe = () => { unrefresh(); unlocal() }

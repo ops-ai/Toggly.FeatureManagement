@@ -52,7 +52,10 @@ export type { EvaluatedVariantDef, VariantResult } from '../variant.types';
 export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 export { isEntityGate, mapEntityContext, normalizeEntityContext, registerContext } from '@ops-ai/toggly-hooks-types';
 
-const canUseStorage = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+const canUseStorage = (() => {
+  try { return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined' }
+  catch { return false }
+})()
 const CACHE_PREFIX = 'toggly:flags:'
 const VARIANT_FLAGS_CACHE_PREFIX = 'toggly:variant-flags:'
 const VARIANTS_CACHE_PREFIX = 'toggly:variants:'

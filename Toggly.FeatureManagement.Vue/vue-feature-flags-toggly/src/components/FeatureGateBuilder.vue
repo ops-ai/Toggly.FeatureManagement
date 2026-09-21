@@ -38,6 +38,7 @@ export default defineComponent({
       active: true,
       evaluationId: 0,
       ownerGeneration: -1,
+      waitingForFeatures: false,
       _unsubLocalGates: null as (() => void) | null,
       _unsubFeaturesRefresh: null as (() => void) | null,
     }
@@ -46,7 +47,7 @@ export default defineComponent({
   mounted() {
     this.evaluateGate()
     this._unsubLocalGates = this.$toggly.subscribeLocalGatesChanged(() => { void this.evaluateGate() })
-    this._unsubFeaturesRefresh = this.$toggly.subscribeFeaturesRefresh(() => { if (!this.isLoading || this.ownerGeneration !== this.$toggly._ownerGeneration) void this.evaluateGate() })
+    this._unsubFeaturesRefresh = this.$toggly.subscribeFeaturesRefresh(() => { if (!this.waitingForFeatures || this.ownerGeneration !== this.$toggly._ownerGeneration) void this.evaluateGate() })
   },
 
   beforeUnmount() {
@@ -93,6 +94,12 @@ export default defineComponent({
         return
       }
 
+      // Ignore our own hydration notification, but never discard an update
+      // arriving after definitions load while an evaluation hook is pending.
+      this.waitingForFeatures = true
+      await this.$toggly._featuresLoaded()
+      if (!this.active || evaluationId !== this.evaluationId) return
+      this.waitingForFeatures = false
       const enabled = await this.$toggly.evaluateFeatureGate(
         gate,
         this.requirement,
