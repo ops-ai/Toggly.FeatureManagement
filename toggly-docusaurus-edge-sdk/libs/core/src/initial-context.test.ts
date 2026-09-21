@@ -22,6 +22,23 @@ describe('initial evaluation context', () => {
     expect(new URL(fetch.mock.calls[1][0]).searchParams.getAll('g')).toEqual(['beta,team a&b']);
   });
 
+  it('puts minted instanceId on definitions and omits client u/g/claims', async () => {
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ enabled: true }) });
+    await createTogglyClient({
+      appKey: 'app',
+      identity: 'alice',
+      groups: ['beta'],
+      claims: { plan: 'pro' },
+      instanceId: 'minted',
+      fetch,
+    }).getFlags();
+    const url = new URL(fetch.mock.calls[0][0]);
+    expect(url.searchParams.get('i')).toBe('minted');
+    expect(url.searchParams.get('u')).toBeNull();
+    expect(url.searchParams.getAll('g')).toEqual([]);
+    expect(url.searchParams.has('claim.plan')).toBe(false);
+  });
+
   it.each([{}, { identity: '', groups: [], claims: {} }])('preserves anonymous startup with %j', async (context) => {
     const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
     await createTogglyClient({ appKey: 'app', fetch, ...context }).getFlags();

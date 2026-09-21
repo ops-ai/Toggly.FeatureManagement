@@ -394,7 +394,8 @@ public func evaluateEvaluatedGate(
     featureKeys: [String],
     requirementAll: Bool = true,
     negate: Bool = false,
-    entityContext: TogglyEntityContext? = nil
+    entityContext: TogglyEntityContext? = nil,
+    onCheck: ((String, Bool) -> Void)? = nil
 ) -> Bool {
     evaluateStoredFeatureKeys(
         features: features,
@@ -402,6 +403,8 @@ public func evaluateEvaluatedGate(
         requirementAll: requirementAll,
         negate: negate
     ) { key in
-        resolveEvaluatedDefinition(features[key], context: entityContext)
+        let value = resolveEvaluatedDefinition(features[key], context: entityContext)
+        onCheck?(key, value)
+        return value
     }
 }
