@@ -3,10 +3,12 @@ import { mkdtemp, rm, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
+import {registerContext,clearRegisteredContexts} from '@ops-ai/toggly-hooks-types'
 import { ElectronTogglyClient } from '../src/main/client.js'
 
 const owned: Array<{ client: ElectronTogglyClient; path: string }> = []
 afterEach(async () => {
+  clearRegisteredContexts()
   for (const { client, path } of owned.splice(0)) {
     client.close()
     await rm(path, { recursive: true, force: true })
@@ -248,4 +250,22 @@ it.each([undefined,' '])('removes inherited tokens at initialization with instan
  expect(client.isFeatureOn('On')).toBe(true)
  await client.flushTelemetry()
  expect(packets).toEqual([{k:'app',e:'Test',u:'alice',f:{On:{enabled:[1]}}}])
+})
+
+
+it.each([
+ {keys:['Off','On'],req:'all',negate:false,clear:true,value:false,counts:{Off:{disabled:[1]}}},
+ {keys:['On','Off'],req:'all',negate:true,clear:false,value:true,counts:{On:{enabled:[1]},Off:{disabled:[1]}}},
+ {keys:['On','Off'],req:'any',negate:false,clear:true,value:true,counts:{On:{enabled:[1]}}},
+ {keys:['Off','On'],req:'any',negate:true,clear:false,value:false,counts:{Off:{disabled:[1]},On:{enabled:[1]}}},
+ {keys:[],req:'all',negate:false,clear:false,value:true,counts:null},
+ {keys:[],req:'any',negate:true,clear:false,value:false,counts:null},
+])('keeps captured selected keys through mapper mutation %j',async scenario=>{
+ const {client,packets}=await create();const keys=[...scenario.keys];const hooks:string[]=[]
+ client.addHook({beforeEvaluation:key=>{hooks.push(key)}})
+ registerContext('MutateKeys',()=>{if(scenario.clear)keys.length=0;else keys.splice(0,keys.length,'Changed');return{kind:'MutateKeys',key:'1',attributes:{}}})
+ expect(client.evaluateFeatureGate(keys,scenario.req,scenario.negate,{},'MutateKeys')).toBe(scenario.value)
+ await client.flushTelemetry()
+ expect(hooks).toEqual(scenario.keys.length?[scenario.keys[0]]:[])
+ expect(packets).toEqual(scenario.counts?[{k:'app',e:'Test',u:'alice',f:scenario.counts}]:[])
 })

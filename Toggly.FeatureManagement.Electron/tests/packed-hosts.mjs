@@ -427,6 +427,7 @@ try {
       /node:zlib|node:http|createTelemetryReporter|metrics\.toggly\.io/,
     )
     await cleanupControls(hostDirectory)
+    await run(process.execPath, [fileURLToPath(new URL('./native-owner-controls.mjs', import.meta.url)), hostDirectory], sdkDirectory, {timeoutMs:90000})
     const reportPath = join(hostDirectory, 'report.json')
     await launchElectron(hostDirectory, reportPath)
     const report = JSON.parse(readFileSync(reportPath, 'utf8'))

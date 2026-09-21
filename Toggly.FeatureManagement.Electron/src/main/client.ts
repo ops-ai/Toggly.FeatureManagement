@@ -450,7 +450,7 @@ export class ElectronTogglyClient {
     const selectedKeys = [...keys]
     const ctx = this.disposed ? null : normalizeEntityContext(entityContext, kind)
     const req = requirement === 'any' ? 'any' : 'all'
-    if (keys.length === 0) {
+    if (selectedKeys.length === 0) {
       return !negate
     }
     // Missing leaves still take part in an effective evaluation and short circuit.
@@ -463,7 +463,7 @@ export class ElectronTogglyClient {
       const allOn = selectedKeys.every(isEnabled)
       gated = negate ? !allOn : allOn
     }
-    void this.runEvaluationHooks(keys[0], () => gated)
+    void this.runEvaluationHooks(selectedKeys[0], () => gated)
     return gated
   }
 
