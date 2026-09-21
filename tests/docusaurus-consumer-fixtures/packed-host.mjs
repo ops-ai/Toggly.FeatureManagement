@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { verifyBrowserRetirement } from './browser-retirement.mjs';
 import {
   bounded,
   closeServer,
@@ -111,9 +112,20 @@ async function serve(directory) {
   );
 }
 
-await withResources(async (defer) => {
+// The supervisor owns both the temporary root and every actual BrowserServer.
+// Its worker may block or be forcibly retired without losing those handles.
+if (!process.env.TOGGLY_DOCUSAURUS_WORKER) {
+  await withResources(async (defer) => {
+    const root = mkdtempSync(join(tmpdir(), 'toggly-docusaurus-packed-host-'));
+    defer(() => rmSync(root, { recursive: true, force: true }));
+    await runOwnedCommand(process.execPath, [fileURLToPath(import.meta.url)], {
+      stdio: ['ignore', 'inherit', 'inherit'],
+      env: { ...process.env, TOGGLY_DOCUSAURUS_WORKER: root },
+    }, 900000);
+  });
+} else await withResources(async (defer) => {
   own = defer;
-  temporary = mkdtempSync(join(tmpdir(), 'toggly-docusaurus-packed-host-'));
+  temporary = process.env.TOGGLY_DOCUSAURUS_WORKER;
   own(() => rmSync(temporary, { recursive: true, force: true }));
   host = join(temporary, 'host');
   console.log('OWNED_DOCUSAURUS_HOST', temporary);
@@ -474,9 +486,13 @@ console.log('PACKED_DOCUSAURUS_PUBLIC_CONSUMERS_PASS');
   const { chromium } = await import(
     pathToFileURL(join(host, 'node_modules/playwright/index.mjs')).href
   );
-  const browserOptions = process.env.CHROME_BIN
-    ? { executablePath: process.env.CHROME_BIN }
-    : { channel: 'chrome' };
+  const browserOptions = {
+    moduleUrl: pathToFileURL(join(host, 'node_modules/playwright/index.mjs')).href,
+    ...(process.env.CHROME_BIN
+      ? { executablePath: process.env.CHROME_BIN }
+      : { channel: 'chrome' }),
+  };
+  await verifyBrowserRetirement(browserOptions.moduleUrl, browserOptions);
   let probePid;
   await assert.rejects(
     withResources(async (defer) => {

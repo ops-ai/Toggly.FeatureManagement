@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 
 export async function bounded(work, label, milliseconds = 5000) {
   let timer;
@@ -22,13 +23,15 @@ export async function withResources(work) {
   const errors = [];
   let result;
   try {
-    result = await work((action) => actions.push(action));
+    result = await work((action, timeout = 10000) =>
+      actions.push({ action, timeout })
+    );
   } catch (error) {
     errors.push(error);
   }
-  for (const action of actions.reverse()) {
+  for (const { action, timeout } of actions.reverse()) {
     try {
-      await bounded(action, 'Owned cleanup', 10000);
+      await bounded(action, 'Owned cleanup', timeout);
     } catch (error) {
       errors.push(error);
     }
@@ -87,11 +90,105 @@ export async function runOwnedCommand(
   milliseconds = 180000
 ) {
   return withResources(async (defer) => {
+    const {
+      workReady = false,
+      startupTimeout = 45000,
+      onBrowser = () => {},
+      ...spawnOptions
+    } = options;
+    const token = randomUUID();
+    const servers = new Map();
     const child = spawn(command, args, {
-      ...options,
+      ...spawnOptions,
+      env: { ...process.env, ...spawnOptions.env, TOGGLY_BROWSER_OWNER: token },
+      stdio: [
+        ...(Array.isArray(spawnOptions.stdio)
+          ? spawnOptions.stdio
+          : Array(3).fill(spawnOptions.stdio ?? 'pipe')),
+        'ipc',
+      ],
       detached: process.platform !== 'win32',
     });
     defer(() => stopOwnedProcess(child));
+    const operations = new Set();
+    let retired = false;
+    const send = (message) => {
+      if (child.connected) child.send({ ...message, token }, () => {});
+    };
+    child.on('message', (message) => {
+      if (message?.token !== token || message.type !== 'toggly-browser') return;
+      const operation = (async () => {
+        try {
+          if (message.action === 'launch') {
+            if (retired || servers.has(message.id))
+              throw new Error('Retired or duplicate browser request');
+            // Only this supervising process launches browsers. No worker-supplied
+            // PID is accepted as ownership evidence or used as a signal target.
+            const moduleUrl = new URL(message.moduleUrl);
+            if (
+              moduleUrl.protocol !== 'file:' ||
+              !moduleUrl.pathname.endsWith('/node_modules/playwright/index.mjs')
+            )
+              throw new Error('Expected owned host Playwright module');
+            const { chromium } = await import(moduleUrl.href);
+            const server = await chromium.launchServer({
+              ...message.options,
+              headless: true,
+              timeout: 45000,
+            });
+            servers.set(message.id, server);
+            onBrowser(server);
+            if (retired) {
+              await stopOwnedProcess(server.process());
+              await server.close();
+              return;
+            }
+            send({
+              id: message.id,
+              endpoint: server.wsEndpoint(),
+              pid: server.process().pid,
+            });
+          } else if (message.action === 'close') {
+            const server = servers.get(message.browserId);
+            if (!server) throw new Error('Unknown owned browser');
+            await withResources(async (cleanup) => {
+              cleanup(() => stopOwnedProcess(server.process()));
+              await bounded(() => server.close(), 'Browser close');
+            });
+            servers.delete(message.browserId);
+            send({ id: message.id, closed: true });
+          }
+        } catch (error) {
+          send({ id: message.id, error: String(error) });
+        }
+      })();
+      operations.add(operation);
+      void operation.finally(() => operations.delete(operation));
+    });
+    defer(async () => {
+      retired = true;
+      await withResources(async (cleanup) => {
+        const registered = new Set();
+        const register = () => {
+          for (const server of servers.values()) {
+            if (!registered.has(server)) {
+              registered.add(server);
+              ownBrowserServer(cleanup, server);
+            }
+          }
+        };
+        register();
+        try {
+          await bounded(
+            () => Promise.allSettled([...operations]),
+            'Pending browser launch',
+            50000
+          );
+        } finally {
+          register();
+        }
+      });
+    }, 60000);
     let output = '',
       errors = '';
     child.stdout?.on('data', (chunk) => {
@@ -100,21 +197,38 @@ export async function runOwnedCommand(
     child.stderr?.on('data', (chunk) => {
       errors += chunk;
     });
-    await bounded(
-      () =>
-        new Promise((resolve, reject) => {
-          child.once('error', reject);
-          child.once('exit', (code) =>
-            code === 0
-              ? resolve()
-              : reject(
-                  new Error(`${command} exited ${code}\n${output}${errors}`)
+    const completed = new Promise((resolve, reject) => {
+      child.once('error', reject);
+      child.once('exit', (code) =>
+        code === 0
+          ? resolve()
+          : reject(new Error(`${command} exited ${code}\n${output}${errors}`))
+      );
+    });
+    // A real browser's cold launch has its own bound; only ready work consumes
+    // the deliberate hang deadline in blocked/abrupt retirement controls.
+    if (workReady) {
+      await bounded(
+        () =>
+          Promise.race([
+            completed.then(() => {
+              throw new Error('Worker exited before ready');
+            }),
+            new Promise((resolve) =>
+              child.on('message', (message) => {
+                if (
+                  message?.token === token &&
+                  message.type === 'toggly-work-ready'
                 )
-          );
-        }),
-      'Owned command',
-      milliseconds
-    );
+                  resolve();
+              })
+            ),
+          ]),
+        'Worker startup',
+        startupTimeout
+      );
+    }
+    await bounded(() => completed, 'Owned command', milliseconds);
     return output;
   });
 }
@@ -145,10 +259,58 @@ export async function launchBrowser(
   options = {},
   onProcess = () => {}
 ) {
+  const { moduleUrl, ...launchOptions } = options;
+  if (process.send && process.env.TOGGLY_BROWSER_OWNER) {
+    if (!moduleUrl)
+      throw new Error('Supervised browser requires its host module URL');
+    const request = async (payload) => {
+      const id = randomUUID();
+      const token = process.env.TOGGLY_BROWSER_OWNER;
+      let receive;
+      try {
+        return await bounded(
+          () =>
+            new Promise((resolve, reject) => {
+              receive = (message) => {
+                if (message?.token !== token || message.id !== id) return;
+                message.error
+                  ? reject(new Error(message.error))
+                  : resolve(message);
+              };
+              process.on('message', receive);
+              process.send(
+                { type: 'toggly-browser', token, id, ...payload },
+                (error) => {
+                  if (error) reject(error);
+                }
+              );
+            }),
+          'Supervisor browser request',
+          50000
+        );
+      } finally {
+        if (receive) process.off('message', receive);
+      }
+    };
+    const owned = await request({
+      action: 'launch',
+      moduleUrl,
+      options: launchOptions,
+    });
+    defer(() => request({ action: 'close', browserId: owned.id }));
+    onProcess({ pid: owned.pid });
+    const browser = await bounded(
+      () => chromium.connect(owned.endpoint, { timeout: 15000 }),
+      'Browser connection',
+      15000
+    );
+    defer(() => bounded(() => browser.close(), 'Browser connection close'));
+    return browser;
+  }
   const server = await chromium.launchServer({
     headless: true,
     timeout: 45000,
-    ...options,
+    ...launchOptions,
   });
   ownBrowserServer(defer, server);
   onProcess(server.process());

@@ -40,6 +40,9 @@ export interface TogglyContextValue extends Pick<
 }
 
 const TogglyContext = createContext<TogglyContextValue | null>(null);
+// Consumer-facing flags remain a mutable copy; render reads share the private
+// snapshot captured by the committed evaluator, without recording during render.
+const RenderFlagsContext = createContext<Flags | null>(null);
 
 declare const __TOGGLY_BUILD_FLAGS__: Flags | undefined;
 declare const __TOGGLY_STATIC_GATING__: boolean | undefined;
@@ -316,7 +319,11 @@ function TargetOwner({
     }),
     [client, publicFlags, isReady, getFlag, evaluateFlag, error]
   );
-  return <TogglyContext.Provider value={value}>{children}</TogglyContext.Provider>;
+  return (
+    <RenderFlagsContext.Provider value={flags}>
+      <TogglyContext.Provider value={value}>{children}</TogglyContext.Provider>
+    </RenderFlagsContext.Provider>
+  );
 }
 
 /**
@@ -343,7 +350,8 @@ export function useFlag(
   flagKey: string,
   defaultValue?: boolean
 ): { enabled: boolean; isReady: boolean } {
-  const { flags, isReady, evaluateFlag } = useToggly();
+  const { isReady, evaluateFlag } = useToggly();
+  const flags = useContext(RenderFlagsContext)!;
   const enabled = flags[flagKey] ?? defaultValue ?? false;
   const evaluated = useRef<{
     flags: Flags;
@@ -457,6 +465,7 @@ export function Feature({
   as: Element = 'div',
 }: FeatureProps): React.JSX.Element {
   const context = useContext(TogglyContext);
+  const renderFlags = useContext(RenderFlagsContext);
   const lastStatic = useRef<{
     evaluate: TogglyContextValue['evaluateFlag'];
     flag: string;
@@ -475,7 +484,7 @@ export function Feature({
     context.evaluateFlag(flag, defaultValue);
   }, [context?.evaluateFlag, context?.isReady, flag, defaultValue]);
   const wrapperStyle = getWrapperStyle(Element);
-  const buildFlags = context?.flags ?? readBuildFlagsSnapshot();
+  const buildFlags = renderFlags ?? readBuildFlagsSnapshot();
 
   // The original owner shares the baked SSG map. A replacement owner uses
   // its own defaults so another application's snapshot cannot cross owners.

@@ -475,3 +475,130 @@ it('keeps live-update connection paths separate from configured targeting querie
     client.dispose();
   }
 });
+
+it.each([false, true])(
+  'keeps runtime/static=%s hook and Feature reads authoritative after public mutation',
+  async (staticGating) => {
+    const c = collector();
+    vi.stubGlobal('__TOGGLY_STATIC_GATING__', staticGating);
+    vi.stubGlobal('__TOGGLY_BUILD_FLAGS__', { on: true });
+    const { Feature } = await import('./index');
+    let context!: TogglyContextValue;
+    const Reader = () => {
+      context = useToggly();
+      const flag = useFlag('on');
+      return (
+        <span data-testid="authoritative">{flag.isReady ? String(flag.enabled) : 'pending'}</span>
+      );
+    };
+    const fetch = vi.fn(
+      async (url: RequestInfo | URL) =>
+        new Response(JSON.stringify({ on: new URL(String(url)).searchParams.get('u') === 'alice' }))
+    );
+    let identity = 'alice';
+    const config = {
+      appKey: 'app',
+      fetch,
+      telemetryFetch: c.telemetryFetch,
+      flagDefaults: { on: false },
+    };
+    const tree = () => (
+      <TogglyProvider config={{ ...config, identity }}>
+        <Reader />
+        <Feature flag="on">Visible authoritative</Feature>
+        <Feature flag="missing" defaultValue negate>
+          Hidden fallback
+        </Feature>
+      </TogglyProvider>
+    );
+    const host = render(tree());
+    await waitFor(() => expect(host.getByTestId('authoritative').textContent).toBe('true'));
+    context.flags.on = false;
+    host.rerender(tree());
+    expect(host.getByTestId('authoritative').textContent).toBe('true');
+    expect(host.getByText('Visible authoritative')).toBeTruthy();
+    expect(host.queryByText('Hidden fallback')).toBeNull();
+    expect(context.evaluateFlag('on')).toBe(true);
+    await context.flushTelemetry();
+    expect(c.bodies).toEqual([
+      {
+        k: 'app',
+        e: 'Production',
+        u: 'alice',
+        f: { on: { enabled: [3] }, missing: { enabled: [1] } },
+      },
+    ]);
+    identity = 'bob';
+    host.rerender(tree());
+    await waitFor(() => expect(host.getByTestId('authoritative').textContent).toBe('false'));
+    expect(host.queryByText('Visible authoritative')).toBeNull();
+    await context.flushTelemetry();
+    expect(c.bodies[1]).toEqual({
+      k: 'app',
+      e: 'Production',
+      u: 'bob',
+      f: { on: { disabled: [2] }, missing: { enabled: [1] } },
+    });
+    expect(c.bodies).toHaveLength(2);
+    if (staticGating) expect(fetch).not.toHaveBeenCalled();
+  }
+);
+
+it('keeps finite Provider diagnostic record/evaluate reentry in one disposable owner', async () => {
+  const c = collector();
+  vi.useFakeTimers();
+  vi.stubGlobal('__TOGGLY_STATIC_GATING__', true);
+  vi.stubGlobal('__TOGGLY_BUILD_FLAGS__', { on: true });
+  const add = vi.spyOn(document, 'addEventListener');
+  const remove = vi.spyOn(document, 'removeEventListener');
+  let context!: TogglyContextValue;
+  let entered = false;
+  const Reader = () => {
+    context = useToggly();
+    return null;
+  };
+  try {
+    const host = render(
+      <TogglyProvider
+        config={{
+          appKey: 'app',
+          instanceId: 'token-a',
+          telemetryFlushIntervalMs: 1,
+          telemetryFetch: c.telemetryFetch,
+          onTelemetryDiagnostic: () => {
+            if (entered) return;
+            entered = true;
+            context.recordUsage('diagnostic');
+            expect(context.evaluateFlag('on')).toBe(true);
+          },
+        }}
+      >
+        <Reader />
+      </TogglyProvider>
+    );
+    expect(entered).toBe(true);
+    context.recordUsage('outer');
+    await context.flushTelemetry();
+    expect(c.bodies).toEqual([
+      {
+        k: 'app',
+        e: 'Production',
+        i: 'token-a',
+        f: { diagnostic: { enabled: [0, 1] }, on: { enabled: [1] }, outer: { enabled: [0, 1] } },
+      },
+    ]);
+    host.unmount();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(add.mock.calls.filter(([event]) => event === 'visibilitychange')).toHaveLength(1);
+    expect(remove.mock.calls.filter(([event]) => event === 'visibilitychange')).toHaveLength(1);
+  } finally {
+    cleanup();
+    await Promise.resolve();
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    add.mockRestore();
+    remove.mockRestore();
+  }
+});

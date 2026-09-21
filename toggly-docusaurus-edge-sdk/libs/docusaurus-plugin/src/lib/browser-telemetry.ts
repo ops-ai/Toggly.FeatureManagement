@@ -1,4 +1,8 @@
-import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
+import {
+  createTelemetryReporter,
+  type TelemetryReporter,
+  type TelemetryDiagnostic,
+} from '@ops-ai/toggly-client-telemetry';
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
 import type { TogglyConfig } from './toggly-client.js';
 
@@ -9,7 +13,10 @@ export function createBrowserTelemetry(config: TogglyConfig) {
   let detach: (() => void) | undefined;
   let disposed = false;
   return {
-    activate(context: Pick<TogglyConfig, 'identity' | 'instanceId'>) {
+    activate(
+      context: Pick<TogglyConfig, 'identity' | 'instanceId'>,
+      ready: (reporter: TelemetryReporter) => void
+    ) {
       if (
         disposed ||
         config.enableTelemetry === false ||
@@ -19,13 +26,27 @@ export function createBrowserTelemetry(config: TogglyConfig) {
       )
         return;
       if (!reporter) {
+        // The factory may diagnose synchronously. Publish its one owner before
+        // invoking host callbacks, which may immediately evaluate or record.
+        let constructing = true;
+        const diagnostics: TelemetryDiagnostic[] = [];
+        const deliver = (diagnostic: TelemetryDiagnostic) => {
+          try {
+            config.onTelemetryDiagnostic?.(diagnostic);
+          } catch {
+            /* diagnostics are isolated */
+          }
+        };
         reporter = createTelemetryReporter({
           appKey: config.appKey,
           environment: config.environment,
           metricsBaseUrl: config.metricsBaseUrl,
           telemetryFlushIntervalMs: config.telemetryFlushIntervalMs,
           fetch: config.telemetryFetch,
-          onDiagnostic: config.onTelemetryDiagnostic,
+          onDiagnostic: (diagnostic) => {
+            if (constructing) diagnostics.push(diagnostic);
+            else deliver(diagnostic);
+          },
           ...context,
         });
         if (disposed) {
@@ -33,7 +54,17 @@ export function createBrowserTelemetry(config: TogglyConfig) {
           return;
         }
         detach = attachBrowserLifecycle(reporter);
-      } else reporter.setContext(context);
+        ready(reporter);
+        constructing = false;
+        for (const diagnostic of diagnostics) {
+          if (disposed) break;
+          deliver(diagnostic);
+        }
+        if (disposed) return;
+      } else {
+        reporter.setContext(context);
+        ready(reporter);
+      }
       return reporter;
     },
     dispose(flush = true) {

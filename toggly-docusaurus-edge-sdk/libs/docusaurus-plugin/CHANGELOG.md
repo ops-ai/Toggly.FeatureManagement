@@ -1,5 +1,7 @@
 ## 0.10.0
 
+- Keep hook and Feature rendering on the authoritative snapshot when callers mutate public flag copies; retain one reporter through diagnostic callback re-entry and dispose all owned resources on unmount.
+
 2026-09-18
 
 ### Added

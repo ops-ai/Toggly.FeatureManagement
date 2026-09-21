@@ -221,8 +221,10 @@ function createClient(
   // Each target client activates once. A retired client cannot reactivate old context.
   const startTelemetry = () => {
     if (disposed || reporter) return;
-    reporter = telemetry.activate(attribution);
-    captureCheck = reporter?.captureCheck();
+    telemetry.activate(attribution, (active) => {
+      reporter = active;
+      captureCheck = active.captureCheck();
+    });
   };
   const evaluateFlag = (key: string, flags: Flags, defaultValue?: boolean): boolean => {
     const enabled = flags[key] ?? defaultValue ?? flagDefaults[key] ?? false;
