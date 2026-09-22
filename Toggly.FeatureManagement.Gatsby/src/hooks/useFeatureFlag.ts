@@ -4,13 +4,11 @@
  * Hook to check if a single feature flag is enabled
  */
 
+import { useMemo } from 'react';
 import { useStore } from '@nanostores/react';
-import {
-  normalizeEntityContext,
-  resolveEvaluatedDefinition,
-  type TogglyEntityContext,
-} from '@ops-ai/toggly-hooks-types';
-import { $flags, $isReady, $error } from '../client/store.js';
+import { useConsumerStore } from '../hooks/useConsumerStore.js';
+import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
+import { createConsumerFlag, $isReady, $error } from '../client/store.js';
 import type { UseFeatureFlagResult } from '../types/index.js';
 
 /**
@@ -34,19 +32,17 @@ import type { UseFeatureFlagResult } from '../types/index.js';
  */
 export function useFeatureFlag(
   flagKey: string,
-  defaultValue: boolean = false,
+  defaultValue = false,
   entity?: TogglyEntityContext | Record<string, unknown> | null,
   kind?: string,
 ): UseFeatureFlagResult {
-  const flags = useStore($flags);
+  const flag = useMemo(
+    () => createConsumerFlag(flagKey, defaultValue, entity, kind),
+    [flagKey, defaultValue, entity, kind],
+  );
+  const isEnabled = useConsumerStore(flag);
   const isReady = useStore($isReady);
   const error = useStore($error);
-
-  const isEnabled = resolveEvaluatedDefinition(
-    flags[flagKey],
-    normalizeEntityContext(entity, kind),
-    defaultValue,
-  );
 
   return { isEnabled, isReady, error };
 }

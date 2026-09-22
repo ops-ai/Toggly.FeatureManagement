@@ -8,11 +8,12 @@ vi.mock('../../client/store.js', async () => {
   return {
     ...actual,
     initTogglyClient: vi.fn().mockResolvedValue(undefined),
+    disposeTogglyClient: vi.fn(),
   };
 });
 
 import { TogglyProvider } from '../../components/TogglyProvider.js';
-import { initTogglyClient } from '../../client/store.js';
+import { disposeTogglyClient, initTogglyClient } from '../../client/store.js';
 
 describe('TogglyProvider Component', () => {
   beforeEach(() => {
@@ -49,10 +50,8 @@ describe('TogglyProvider Component', () => {
   });
 
   it('should only initialize once', async () => {
-    const config = { appKey: 'test-key' };
-
     const { rerender } = render(
-      <TogglyProvider config={config}>
+      <TogglyProvider config={{ appKey: 'test-key' }}>
         <span>Content</span>
       </TogglyProvider>
     );
@@ -62,7 +61,7 @@ describe('TogglyProvider Component', () => {
     });
 
     rerender(
-      <TogglyProvider config={config}>
+      <TogglyProvider config={{ appKey: 'test-key' }}>
         <span>Content Updated</span>
       </TogglyProvider>
     );
@@ -71,8 +70,22 @@ describe('TogglyProvider Component', () => {
     expect(initTogglyClient).toHaveBeenCalledTimes(1);
   });
 
+  it('disposes the matching owner on unmount', async () => {
+    const config = { appKey: 'test-key', environment: 'Staging' };
+    const { unmount } = render(
+      <TogglyProvider config={config}>
+        <span>Content</span>
+      </TogglyProvider>,
+    );
+    await vi.waitFor(() => expect(initTogglyClient).toHaveBeenCalledWith(config));
+
+    unmount();
+
+    await vi.waitFor(() => expect(disposeTogglyClient).toHaveBeenCalledWith(config));
+  });
+
   it('should handle initTogglyClient error', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => { /* Assert the captured initialization failure below. */ });
     vi.mocked(initTogglyClient).mockRejectedValueOnce(new Error('Init failed'));
 
     render(
