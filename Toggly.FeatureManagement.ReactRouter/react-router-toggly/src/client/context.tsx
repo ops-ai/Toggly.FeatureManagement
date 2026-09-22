@@ -126,7 +126,7 @@ function transportId(value?: TogglyConfig['telemetryFetch']): number {
 /**
  * Toggly Provider component
  */
-export function TogglyProvider(props: TogglyProviderProps): ReactElement {
+export function TogglyProvider(props: Readonly<TogglyProviderProps>): ReactElement {
   const config = props.config ?? (props.serverContext ? {appKey: props.serverContext.appKey, environment: props.serverContext.environment} : undefined);
   const committedOwner = useRef<CommittedOwner>();
   const ownerKey = JSON.stringify([transportId(config?.telemetryFetch), config?.appKey ?? '', config?.environment ?? 'Production', config?.enableTelemetry, config?.enableUsageTracking, config?.enableMetrics, config?.metricsBaseUrl, config?.telemetryFlushIntervalMs]);
@@ -144,7 +144,7 @@ function TogglyProviderOwner({
   enableRefresh = false,
   refreshInterval = 60000,
   onFlagsChange,
-}: TogglyProviderProps & { committedOwner: { current?: CommittedOwner } }): ReactElement {
+}: Readonly<TogglyProviderProps & { committedOwner: { current?: CommittedOwner } }>): ReactElement {
   const mergedConfig = useMemo(
     () => (config ? mergeConfig(config) : undefined),
     [config]
@@ -158,7 +158,7 @@ function TogglyProviderOwner({
     identity: serverContext ? serverContext.identity : mergedConfig?.identity,
     instanceId: mergedConfig?.instanceId?.trim() || undefined,
     groups: [...(mergedConfig?.groups ?? [])],
-    claims: { ...(mergedConfig?.claims ?? {}) },
+    claims: { ...mergedConfig?.claims },
   });
   const flagsRef = useRef<FeatureFlags>(serverContext?.flags ?? mergedConfig?.featureDefaults ?? {});
   const generationRef = useRef(0);
@@ -288,7 +288,9 @@ function TogglyProviderOwner({
       try {
         const parsedUrl = new URL(buildDefinitionsUrl(mergedConfig, target));
         if (target.instanceId) {
-          for (const key of [...parsedUrl.searchParams.keys()]) {
+          // Deleting live query entries can skip repeated targeting keys.
+          const capturedKeys = [...parsedUrl.searchParams.keys()];
+          for (const key of capturedKeys) {
             if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) parsedUrl.searchParams.delete(key);
           }
           parsedUrl.searchParams.set('i', target.instanceId);
@@ -401,20 +403,35 @@ function TogglyProviderOwner({
     setIdentity(target.identity);
   }, [mergedConfig?.featureDefaults, telemetry]);
 
+  const isCurrentGeneration = useCallback((generation: number): boolean =>
+    mountedRef.current && generation === generationRef.current, []);
+
+  const completeIdentification = useCallback((generation: number): void => {
+    if (isCurrentGeneration(generation)) setIsReady(true);
+  }, [isCurrentGeneration]);
+
+  // Check ownership before selecting each hook without adding Promise boundaries.
+  const currentIdentifyHooks = useCallback(function* (generation: number, reverse = false): Generator<TogglyHook> {
+    let index = reverse ? hooks.length - 1 : 0;
+    while (reverse ? index >= 0 : index < hooks.length) {
+      if (!isCurrentGeneration(generation)) return;
+      yield hooks[index];
+      index += reverse ? -1 : 1;
+    }
+  }, [hooks, isCurrentGeneration]);
+
   // Hook order remains unchanged; every asynchronous boundary checks ownership.
   const identify = useCallback(
     async (newIdentity: string, context?: IdentityContext): Promise<void> => {
       if (!mountedRef.current) return;
       const generation = ++generationRef.current;
       logger.debug('Identifying user');
-      for (const hook of hooks) {
-        if (!mountedRef.current || generation !== generationRef.current) return;
-        if (hook.beforeIdentify) {
-          try { await hook.beforeIdentify(newIdentity); }
-          catch (error) { logger.error(`Error in hook "${hook.getMetadata().name}.beforeIdentify":`, error); }
-        }
+      for (const hook of currentIdentifyHooks(generation)) {
+        if (!hook.beforeIdentify) continue;
+        try { await hook.beforeIdentify(newIdentity); }
+        catch (error) { logger.error(`Error in hook "${hook.getMetadata().name}.beforeIdentify":`, error); }
       }
-      if (!mountedRef.current || generation !== generationRef.current) return;
+      if (!isCurrentGeneration(generation)) return;
       const target = {
         identity: newIdentity,
         instanceId: context?.instanceId?.trim() || undefined,
@@ -424,17 +441,14 @@ function TogglyProviderOwner({
       installContext(target);
       const revision = ++updateRevisionRef.current;
       await updateFlags(await fetchFlags(target), generation, revision);
-      for (let i = hooks.length - 1; i >= 0; i--) {
-        if (!mountedRef.current || generation !== generationRef.current) return;
-        const hook = hooks[i];
-        if (hook.afterIdentify) {
-          try { await hook.afterIdentify(newIdentity, undefined); }
-          catch (error) { logger.error(`Error in hook "${hook.getMetadata().name}.afterIdentify":`, error); }
-        }
+      for (const hook of currentIdentifyHooks(generation, true)) {
+        if (!hook.afterIdentify) continue;
+        try { await hook.afterIdentify(newIdentity, undefined); }
+        catch (error) { logger.error(`Error in hook "${hook.getMetadata().name}.afterIdentify":`, error); }
       }
-      if (mountedRef.current && generation === generationRef.current) setIsReady(true);
+      completeIdentification(generation);
     },
-    [hooks, fetchFlags, updateFlags, installContext, logger]
+    [hooks, fetchFlags, updateFlags, installContext, logger, isCurrentGeneration, completeIdentification, currentIdentifyHooks]
   );
 
   const reset = useCallback(async (): Promise<void> => {

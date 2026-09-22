@@ -14,7 +14,7 @@ type Entry = {partition: number; context: Attribution; key: string; variant?: st
 
 /** Render may be abandoned: keep its bounded aggregate inert until commit. */
 export function createBrowserTelemetry(config: TogglyConfig) {
-  const enabled = typeof window !== 'undefined' && typeof document !== 'undefined' &&
+  const enabled = typeof globalThis.window !== 'undefined' && typeof document !== 'undefined' &&
     !!config.appKey?.trim() && config.enableTelemetry !== false;
   const usage = enabled && config.enableUsageTracking !== false;
   const metrics = enabled && config.enableMetrics !== false;
@@ -52,33 +52,39 @@ export function createBrowserTelemetry(config: TogglyConfig) {
     }
     target.setContext(context);
   }
-  function event(entry: Entry) {
-    if (disposed || (entry.kind === 'feature' ? !usage : !metrics)) return;
-    if (typeof entry.key !== 'string' || !entry.key.trim() || (entry.kind === 'feature' &&
+  function isValidEntry(entry: Entry): boolean {
+    return !(typeof entry.key !== 'string' || !entry.key.trim() || (entry.kind === 'feature' &&
       (typeof entry.variant !== 'string' || !entry.variant.length || entry.variant.length > 64 || /[^A-Za-z0-9_-]/.test(entry.variant))) ||
-      entry.values.some(value => !Number.isFinite(value) || value < 0 || value > 1000000 || (entry.kind !== 'gauge' && !Number.isInteger(value)))) {diagnostic(); return;}
-    if (active) {replay(entry); return;}
-    const id = JSON.stringify([entry.partition, entry.kind === 'feature' ? 'f' : 'm', entry.key, entry.variant]);
-    const previous = staged.get(id);
-    if (previous && previous.kind !== entry.kind) {diagnostic(); return;}
-    if (previous && entry.kind !== 'gauge') entry.values = entry.values.map((value, index) => value + previous.values[index]);
+      entry.values.some(value => !Number.isFinite(value) || value < 0 || value > 1000000 || (entry.kind !== 'gauge' && !Number.isInteger(value))));
+  }
+  function fitsAdmissionBudget(entries: Entry[], entry: Entry): boolean {
     // Reserve eventual counter chunks and feature replay operations. Both admission
     // work and activation stay bounded even when render repeats before commit.
     let operations = 0;
     let bytes = 0;
     let variants = 0;
-    const entries = [...staged.entries()].filter(([key]) => key !== id).map(([, value]) => value);
-    entries.push(entry);
     for (const value of entries) {
       if (value.kind === 'feature' && value.key === entry.key && value.partition === entry.partition) variants++;
       const count = value.kind === 'feature' ? value.values.reduce((a,b)=>a+b,0) : Math.max(1, Math.ceil(value.values[0] / 1000000));
       operations += count;
       const serialized = JSON.stringify({k: config.appKey, e: config.environment ?? 'Production', ...value});
       const size = new TextEncoder().encode(serialized).byteLength;
-      if (size > 49152) {diagnostic(); return;}
+      if (size > 49152) return false;
       bytes += size * count;
     }
-    if (entries.length > 2000 || operations > 2000 || bytes > 262144 || variants > 16) {diagnostic(); return;}
+    return entries.length <= 2000 && operations <= 2000 && bytes <= 262144 && variants <= 16;
+  }
+  function event(entry: Entry) {
+    if (disposed || (entry.kind === 'feature' ? !usage : !metrics)) return;
+    if (!isValidEntry(entry)) {diagnostic(); return;}
+    if (active) {replay(entry); return;}
+    const id = JSON.stringify([entry.partition, entry.kind === 'feature' ? 'f' : 'm', entry.key, entry.variant]);
+    const previous = staged.get(id);
+    if (previous && previous.kind !== entry.kind) {diagnostic(); return;}
+    if (previous && entry.kind !== 'gauge') entry.values = entry.values.map((value, index) => value + previous.values[index]);
+    const entries = [...staged.entries()].filter(([key]) => key !== id).map(([, value]) => value);
+    entries.push(entry);
+    if (!fitsAdmissionBudget(entries, entry)) {diagnostic(); return;}
     staged.set(id, entry);
   }
   function feature(key: string, variant: string, index: number, attribution = context, capturedPartition = partition) {

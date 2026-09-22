@@ -180,3 +180,46 @@ test('keeps nested entity rules immutable while an entity mapper mutates the pub
   expect(bodies).toEqual([{k:'identity-app',e:'Test',u:'alice',f:{On:{enabled:[1]}}}]);
   view.unmount();
 });
+
+test('removes every repeated targeting query key from a captured key list', async () => {
+  const view = render(<TogglyProvider config={{...config, instanceId:'minted', baseUrl:'https://definitions.test/base?u=a&u=b&userId=c&userId=d&g=e&g=f&claim.plan=g&claim.plan=h&keep=one&keep=two'}}><Capture/></TogglyProvider>);
+  await waitFor(()=>expect(current.isReady).toBe(true));
+  const url = new URL((fetch as jest.Mock).mock.calls[0][0]);
+  for (const key of ['u','userId','g','claim.plan']) expect(url.searchParams.getAll(key)).toEqual([]);
+  expect(url.searchParams.getAll('i')).toEqual(['minted']);
+  expect(url.searchParams.getAll('keep')).toHaveLength(2);
+  view.unmount();
+});
+
+test('preserves forward before hooks, reverse after hooks and isolated hook failures', async () => {
+  const errors = jest.spyOn(console, 'error').mockImplementation(()=>{});
+  const order:string[] = [];
+  const view = render(<TogglyProvider config={config} serverContext={snapshot}><Capture/></TogglyProvider>);
+  act(()=>{
+    current.addHook({getMetadata:()=>({name:'first'}),beforeIdentify:async identity=>{order.push('before:first:'+identity);throw Error('first before');},afterIdentify:async identity=>{order.push('after:first:'+identity);}});
+    current.addHook({getMetadata:()=>({name:'second'}),beforeIdentify:async identity=>{order.push('before:second:'+identity);},afterIdentify:async identity=>{order.push('after:second:'+identity);throw Error('second after');}});
+  });
+  try {
+    await act(async()=>{await current.identify('bob');});
+    expect(order).toEqual(['before:first:bob','before:second:bob','after:second:bob','after:first:bob']);
+    expect(errors).toHaveBeenCalledTimes(2);
+    expect(current.identity).toBe('bob');expect(current.flags.On).toBe(false);
+    current.recordUsage('Accepted');await current.flushTelemetry();
+    expect(bodies).toEqual([{k:'identity-app',e:'Test',u:'bob',f:{Accepted:{enabled:[0,1]}}}]);
+  } finally {view.unmount();errors.mockRestore();}
+});
+
+test.each(['before','after'])('preserves identify ownership when a %s hook reenters identify', async phase => {
+  const order:string[] = [];let successor:Promise<void>|undefined;
+  const view = render(<TogglyProvider config={config} serverContext={snapshot}><Capture/></TogglyProvider>);
+  act(()=>{
+    current.addHook({getMetadata:()=>({name:'first'}),beforeIdentify:identity=>{order.push('before:first:'+identity);if(phase==='before'&&identity==='bob')successor=current.identify('carol');},afterIdentify:identity=>{order.push('after:first:'+identity);}});
+    current.addHook({getMetadata:()=>({name:'second'}),beforeIdentify:identity=>{order.push('before:second:'+identity);},afterIdentify:identity=>{order.push('after:second:'+identity);if(phase==='after'&&identity==='bob')successor=current.identify('carol');}});
+  });
+  await act(async()=>{await current.identify('bob');await successor;});
+  expect(current.identity).toBe('carol');expect(current.flags.On).toBe(false);
+  expect(order).not.toContain('after:first:bob');
+  if(phase==='before')expect(order).not.toContain('before:second:bob');
+  expect(order.filter(value=>value.endsWith(':carol'))).toEqual(['before:first:carol','before:second:carol','after:second:carol','after:first:carol']);
+  view.unmount();
+});
