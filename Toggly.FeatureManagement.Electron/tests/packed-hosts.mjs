@@ -290,40 +290,11 @@ function launchElectron(hostDirectory, reportPath, timeoutMs = 30000, ownershipR
     TOGGLY_PACKED_REPORT: reportPath,
     TOGGLY_PACKED_PID: pidPath,
   }
-  const [command, args] =
-    process.platform === 'darwin'
-      ? [
-          '/usr/bin/open',
-          [
-            '-W',
-            '-n',
-            '-g',
-            '--stderr',
-            stderrPath,
-            '--env',
-            'ELECTRON_DISABLE_SECURITY_WARNINGS=true',
-            '--env',
-            `TOGGLY_PACKED_REPORT=${reportPath}`,
-            '--env',
-            `TOGGLY_PACKED_PID=${pidPath}`,
-            dirname(dirname(dirname(executable))),
-            '--args',
-            hostDirectory,
-            '--headless',
-            '--disable-gpu',
-            '--disable-software-rasterizer',
-          ],
-        ]
-      : [
-          executable,
-          [
-            hostDirectory,
-            '--headless',
-            '--disable-gpu',
-            '--disable-software-rasterizer',
-            ...(process.platform === 'linux' ? ['--no-sandbox'] : []),
-          ],
-        ]
+  // Match the installed Electron cli.js: the durable supervisor retains the
+  // actual executable from admission through retirement, without LaunchServices.
+  const command = executable
+  const args = [hostDirectory, '--headless', '--disable-gpu', '--disable-software-rasterizer',
+    ...(process.platform === 'linux' ? ['--no-sandbox'] : [])]
 
   const application = process.platform === 'darwin' ? dirname(dirname(dirname(executable))) : executable
   return launchOwnedElectron(command, args, ownershipRoot, application, environment, timeoutMs).then(() => {

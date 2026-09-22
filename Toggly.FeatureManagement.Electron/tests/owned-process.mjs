@@ -1,7 +1,8 @@
 import { spawn, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { realpathSync, mkdtempSync, rmSync } from 'node:fs'
+import { realpathSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 const exec = promisify(execFile)
@@ -88,54 +89,77 @@ async function bounded(promise, ms, label) {
   finally { clearTimeout(timer) }
 }
 
-async function nativeGuardian(root, application, timeoutMs) {
+async function nativeCommand(command, args, root, application, env, timeoutMs) {
   const directory = mkdtempSync(join(tmpdir(), 'toggly-electron-native-owner-'))
-  let child, completion
+  const token = `TOGGLY_OWNER_${randomUUID()} `
+  let child, completion, failure, result, output = '', errors = ''
+  const cleanup = []
+  const interrupt = () => { failure ??= new Error('Owned command interrupted'); child?.stdin.end() }
   try {
     const executable = join(directory, 'owner')
     await run('/usr/bin/xcrun', ['swiftc', fileURLToPath(new URL('./native-electron-owner.swift', import.meta.url)), '-o', executable], directory, { timeoutMs: 60000 })
-    child = spawn(executable, [root, application, String((timeoutMs + 30000) / 1000)], { detached: true, stdio: ['pipe', 'pipe', 'pipe'] })
+    writeFileSync(join(directory, 'launch.json'), JSON.stringify({ command, args, token }), { mode: 0o600 })
+    child = spawn(executable, [root, application, String((timeoutMs + 30000) / 1000)], { env, detached: true, stdio: ['pipe', 'pipe', 'pipe'] })
     child.stdin.on('error', () => { /* Completion/exit status remains authoritative. */ })
-    let output = '', errors = '', readyResolve
+    let readyResolve, exitResolve, buffered = ''
     const ready = new Promise(resolve => { readyResolve = resolve })
-    child.stdout.on('data', chunk => { output += chunk; if (output.includes('READY\n')) readyResolve() })
-    child.stderr.on('data', chunk => { errors += chunk })
+    const exited = new Promise(resolve => { exitResolve = resolve })
+    child.stdout.on('data', chunk => {
+      output += chunk; buffered += chunk
+      let newline
+      while ((newline = buffered.indexOf('\n')) >= 0) {
+        const line = buffered.slice(0, newline); buffered = buffered.slice(newline + 1)
+        if (!line.startsWith(token)) continue
+        const event = JSON.parse(line.slice(token.length))
+        if (event.ready) readyResolve()
+        if (event.exit || event.launchError) exitResolve(event)
+      }
+      if (output.length + errors.length > 8_000_000) { failure ??= new Error('Owned command output exceeded8MB'); child.stdin.end() }
+    })
+    child.stderr.on('data', chunk => {
+      errors += chunk
+      if (output.length + errors.length > 8_000_000) { failure ??= new Error('Owned command output exceeded8MB'); child.stdin.end() }
+    })
     completion = new Promise(resolve => {
       child.once('error', error => resolve({ error }))
       child.once('close', (code, signal) => resolve({ code, signal }))
     })
-    await bounded(Promise.race([ready, completion.then(result => { throw new Error(`Native guardian exited before ready: ${JSON.stringify(result)} ${errors}`) })]), 10000, 'Native guardian startup exceeded deadline')
-    return async () => {
-      let primary
-      const cleanup = []
+    await bounded(Promise.race([ready, completion.then(value => { throw new Error(`Native supervisor exited before ready: ${JSON.stringify(value)} ${errors}`) })]), 10000, 'Native supervisor startup exceeded deadline')
+    process.once('SIGINT', interrupt); process.once('SIGTERM', interrupt)
+    // The supervisor admits the command on its serial event loop. EOF before
+    // admission forbids launch; afterward it retires its actual retained child.
+    child.stdin.write('GO\n')
+    const outcome = await bounded(Promise.race([exited, completion.then(value => { throw new Error(`Native supervisor exited before command result: ${JSON.stringify(value)} ${errors}`) })]), timeoutMs, `${command} exceeded ${timeoutMs}ms`)
+    if (outcome.launchError) throw new Error(`${command}: ${outcome.launchError}`)
+    if (outcome.exit.code !== 0) throw new Error(`${command} exited ${outcome.exit.code ?? outcome.exit.signal}\n${output}\n${errors}`)
+    result = { stdout: output, stderr: errors, status: outcome.exit.code }
+  } catch (error) { failure = failure ?? error }
+  finally {
+    process.removeListener('SIGINT', interrupt); process.removeListener('SIGTERM', interrupt)
+    // Retirement is independent of Node's late ps inventory and remains active
+    // if this parent exits abruptly: its liveness pipe reaches EOF natively.
+    if (child) {
       try {
         child.stdin.end()
-        const result = await bounded(completion, 12000, 'Native guardian cleanup exceeded deadline')
-        if (result.error || result.code !== 0) throw new Error(`Native guardian failed: ${JSON.stringify(result)} ${errors}`)
-      } catch (error) { primary = error }
+        const value = await bounded(completion, 12000, 'Native supervisor cleanup exceeded deadline')
+        if (value.error || value.code !== 0) throw new Error(`Native supervisor failed: ${JSON.stringify(value)} ${errors}`)
+      } catch (error) { cleanup.push(error) }
       try { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL') } catch (error) { cleanup.push(error) }
-      try { await bounded(completion, 5000, 'Native guardian process survived cleanup') } catch (error) { cleanup.push(error) }
-      try { rmSync(directory, { recursive: true, force: true }) } catch (error) { cleanup.push(error) }
-      if (cleanup.length) throw new AggregateError([...(primary ? [primary] : []), ...cleanup], 'Native guardian cleanup failed')
-      if (primary) throw primary
+      try { await bounded(completion, 5000, 'Native supervisor process survived cleanup') } catch (error) { cleanup.push(error) }
     }
-  } catch (primary) {
-    const cleanup = []
-    try { if (child && child.exitCode === null && child.signalCode === null) child.kill('SIGKILL') } catch (error) { cleanup.push(error) }
-    try { if (completion) await bounded(completion, 5000, 'Native guardian startup cleanup exceeded deadline') } catch (error) { cleanup.push(error) }
     try { rmSync(directory, { recursive: true, force: true }) } catch (error) { cleanup.push(error) }
-    throw cleanup.length ? new AggregateError([primary, ...cleanup], 'Native guardian startup and cleanup failed') : primary
   }
+  if (cleanup.length) throw new AggregateError([...(failure ? [failure] : []), ...cleanup], 'Electron execution and native cleanup failed')
+  if (failure) throw failure
+  return result
 }
 
 export async function launchOwnedElectron(command, args, root, application, env, timeoutMs = 30000) {
   let failure, result
-  const retireNative = process.platform === 'darwin' ? await nativeGuardian(root, application, timeoutMs) : null
-  try { result = await run(command, args, root, { env, timeoutMs }) }
+  try { result = process.platform === 'darwin'
+    ? await nativeCommand(command, args, root, application, env, timeoutMs)
+    : await run(command, args, root, { env, timeoutMs }) }
   catch (error) { failure = error }
-  // The retained native owner is independent of a later ps/discovery failure.
-  try { await retireNative?.() }
-  catch (error) { failure = failure ? new AggregateError([failure, error], 'Electron execution and native cleanup failed') : error }
   try { await stopOwnedElectron(root, application) }
   catch (error) { failure = failure ? new AggregateError([failure, error], 'Electron execution and cleanup failed') : error }
   if (failure) throw failure
