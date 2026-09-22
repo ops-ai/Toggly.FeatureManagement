@@ -24,7 +24,13 @@ func finish(_ status: Int32) -> Never {
     var result = status
     if ownDirectory.lastPathComponent.hasPrefix("toggly-electron-native-owner-") {
         do { try FileManager.default.removeItem(at: ownDirectory) }
-        catch { fputs("Native guardian directory cleanup failed\n", stderr); if result == 0 { result = 3 } }
+        catch {
+            // The preparation owner may already remove this exact directory on
+            // parent EOF. Both owners make retirement idempotent.
+            if (error as NSError).code != NSFileNoSuchFileError {
+                fputs("Native guardian directory cleanup failed\n", stderr); if result == 0 { result = 3 }
+            }
+        }
     }
     exit(result)
 }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import cp from 'node:child_process'
 import { syncBuiltinESMExports, createRequire } from 'node:module'
 import { promisify } from 'node:util'
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync, copyFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createConnection } from 'node:net'
@@ -94,6 +94,43 @@ for (const mode of ['observation', 'parent0', 'parent7']) {
   if (cleanup.length) throw new AggregateError([...(primary?[primary]:[]),...cleanup], 'Native control and cleanup failed')
   if (primary) throw primary
 }
+// The preparation owner must already be alive when the real compiler starts.
+// Observe its actual spawn event, then exit the requesting parent immediately.
+for (const code of [0, 7]) {
+  const root = mkdtempSync(join(tmpdir(), 'toggly-electron-compile-control-'))
+  const marker = join(root, 'compiler.json'), parent = join(root, 'parent.mjs')
+  writeFileSync(parent, `import cp from 'node:child_process';import {syncBuiltinESMExports} from 'node:module';import {writeFileSync} from 'node:fs';const original=cp.spawn;cp.spawn=(command,args,options)=>{const child=original(command,args,options);if(args?.[0]?.endsWith('/native-preparation-owner.mjs')){let buffer='';child.stdout.on('data',chunk=>{buffer+=chunk;let n;while((n=buffer.indexOf('\\n'))>=0){const line=buffer.slice(0,n);buffer=buffer.slice(n+1);if(!line.startsWith(args[1]))continue;const event=JSON.parse(line.slice(args[1].length));if(event.compiler){writeFileSync(${JSON.stringify(marker)},JSON.stringify({...event.compiler,preparer:child.pid}));process.exit(${code})}}})}return child};syncBuiltinESMExports();const {launchOwnedElectron}=await import(${JSON.stringify(helperURL)});await launchOwnedElectron(process.execPath,['-e','process.exit(0)'],${JSON.stringify(root)},${JSON.stringify(application)},process.env,3000);`)
+  try {
+    if (code) await assert.rejects(run(process.execPath, [parent], root, {timeoutMs:15000}), /exited 7/)
+    else await run(process.execPath, [parent], root, {timeoutMs:15000})
+    const record = JSON.parse(readFileSync(marker, 'utf8'))
+    await pause(5000)
+    assert.equal(alive(record.pid), false, 'Actual compiler must retire after parent EOF')
+    assert.equal(alive(record.preparer), false, 'Preparation owner must retire after parent EOF')
+    assert.equal(existsSync(record.directory), false, 'Compiled directory must not survive parent exit')
+    assert.deepEqual(await observedProcesses(root), [])
+    console.log(`Actual compiler-admission parent${code} cleanup passed: compiler ${record.pid}, preparation owner ${record.preparer}, directory ${record.directory}`)
+  } finally { rmSync(root, {recursive:true,force:true}) }
+}
+// A real compiler error must preserve failure and retire the same resources.
+const compilerFailureRoot = mkdtempSync(join(tmpdir(), 'toggly-electron-compiler-failure-'))
+try {
+  copyFileSync(new URL('./native-preparation-owner.mjs', import.meta.url), join(compilerFailureRoot, 'native-preparation-owner.mjs'))
+  writeFileSync(join(compilerFailureRoot, 'native-electron-owner.swift'), 'this is deliberately invalid Swift')
+  const child = cp.spawn(process.execPath, [join(compilerFailureRoot, 'native-preparation-owner.mjs'), 'COMPILER_CONTROL ', '10000'], {stdio:['pipe','pipe','pipe']})
+  let output = ''
+  child.stdout.on('data', chunk => { output += chunk })
+  child.stderr.resume(); child.stdin.on('error', () => {})
+  const exited = new Promise((resolve, reject) => { child.once('error', reject); child.once('close', resolve) })
+  child.stdin.write('PREPARE\n')
+  assert.equal(await exited, 1)
+  const events = output.trim().split('\n').map(line => JSON.parse(line.slice('COMPILER_CONTROL '.length)))
+  const record = events.find(event => event.compiler).compiler
+  assert.ok(events.some(event => /Compiler exited/.test(event.preparationError)))
+  assert.equal(alive(record.pid), false)
+  assert.equal(existsSync(record.directory), false)
+  console.log(`Actual compiler failure cleanup passed: compiler ${record.pid}, directory ${record.directory}`)
+} finally { rmSync(compilerFailureRoot, {recursive:true,force:true}) }
 // Reproduce the previously uncovered interval on both successful and failing
 // parent exits. The independent review's original probe also remains unchanged.
 for (const phase of ['before-admission', 'delayed-startup']) {

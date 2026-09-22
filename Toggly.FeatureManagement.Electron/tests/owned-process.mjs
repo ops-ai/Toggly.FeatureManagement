@@ -1,7 +1,6 @@
 import { spawn, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { realpathSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -90,14 +89,35 @@ async function bounded(promise, ms, label) {
 }
 
 async function nativeCommand(command, args, root, application, env, timeoutMs) {
-  const directory = mkdtempSync(join(tmpdir(), 'toggly-electron-native-owner-'))
+  let directory, preparer, preparationCompletion
   const token = `TOGGLY_OWNER_${randomUUID()} `
   let child, completion, failure, result, output = '', errors = ''
   const cleanup = []
   const interrupt = () => { failure ??= new Error('Owned command interrupted'); child?.stdin.end() }
   try {
+    preparer = spawn(process.execPath, [fileURLToPath(new URL('./native-preparation-owner.mjs', import.meta.url)), token, String(timeoutMs + 100000)], {detached:true, stdio:['pipe','pipe','pipe']})
+    preparer.stdin.on('error', () => {})
+    let preparedResolve, preparedReject, preparationBuffer = '', preparationErrors = ''
+    const prepared = new Promise((resolve, reject) => { preparedResolve = resolve; preparedReject = reject })
+    preparer.stdout.on('data', chunk => {
+      preparationBuffer += chunk
+      let newline
+      while ((newline = preparationBuffer.indexOf('\n')) >= 0) {
+        const line = preparationBuffer.slice(0, newline); preparationBuffer = preparationBuffer.slice(newline + 1)
+        if (!line.startsWith(token)) continue
+        const event = JSON.parse(line.slice(token.length))
+        if (event.prepared) preparedResolve(event.prepared)
+        if (event.preparationError) preparedReject(new Error(event.preparationError))
+      }
+    })
+    preparer.stderr.on('data', chunk => { preparationErrors += chunk })
+    preparationCompletion = new Promise(resolve => {
+      preparer.once('error', error => resolve({error}))
+      preparer.once('close', (code, signal) => resolve({code, signal}))
+    })
+    preparer.stdin.write('PREPARE\n')
+    directory = await bounded(Promise.race([prepared, preparationCompletion.then(value => { throw new Error(`Preparation owner exited before ready: ${JSON.stringify(value)} ${preparationErrors}`) })]), 65000, 'Preparation startup exceeded deadline')
     const executable = join(directory, 'owner')
-    await run('/usr/bin/xcrun', ['swiftc', fileURLToPath(new URL('./native-electron-owner.swift', import.meta.url)), '-o', executable], directory, { timeoutMs: 60000 })
     writeFileSync(join(directory, 'launch.json'), JSON.stringify({ command, args, token }), { mode: 0o600 })
     child = spawn(executable, [root, application, String((timeoutMs + 30000) / 1000)], { env, detached: true, stdio: ['pipe', 'pipe', 'pipe'] })
     child.stdin.on('error', () => { /* Completion/exit status remains authoritative. */ })
@@ -147,7 +167,14 @@ async function nativeCommand(command, args, root, application, env, timeoutMs) {
       try { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL') } catch (error) { cleanup.push(error) }
       try { await bounded(completion, 5000, 'Native supervisor process survived cleanup') } catch (error) { cleanup.push(error) }
     }
-    try { rmSync(directory, { recursive: true, force: true }) } catch (error) { cleanup.push(error) }
+    if (preparer) {
+      try {
+        preparer.stdin.end()
+        const value = await bounded(preparationCompletion, 12000, 'Preparation owner cleanup exceeded deadline')
+        if (value.error || value.code !== 0) throw new Error(`Preparation owner failed: ${JSON.stringify(value)}`)
+      } catch (error) { cleanup.push(error) }
+    }
+    try { if (directory) rmSync(directory, { recursive: true, force: true }) } catch (error) { cleanup.push(error) }
   }
   if (cleanup.length) throw new AggregateError([...(failure ? [failure] : []), ...cleanup], 'Electron execution and native cleanup failed')
   if (failure) throw failure
