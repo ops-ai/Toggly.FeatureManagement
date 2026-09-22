@@ -2,6 +2,7 @@ import { createTogglyLoader, createFeatureGatedAction } from '@ops-ai/react-rout
 
 const options = {
   appKey: 'host-test-key',
+  baseUrl: 'http://127.0.0.1:9',
   environment: 'Development',
   featureDefaults: {
     Visible: true,

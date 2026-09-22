@@ -135,6 +135,7 @@ jobs:
         working-directory: ${{ env.SDK_ROOT }}/${{ env.PKG }}
         env:
           HOST: ${{ matrix.host }}
+          CHROME_BIN: /usr/bin/google-chrome
         run: npm run test:hosts
 
   sonar:

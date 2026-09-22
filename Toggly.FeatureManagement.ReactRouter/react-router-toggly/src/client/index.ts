@@ -87,3 +87,5 @@ export {
   getWindowTogglyData,
 } from './router';
 export type { RouterTogglyProviderProps, LoaderDataWithToggly } from './router';
+
+export type { FrontendTelemetry } from './telemetry';

@@ -1,5 +1,24 @@
 # Changelog
 
+
+## [1.1.0] - 2026-09-18
+
+### Added
+- Default browser telemetry with independent collector URL, configurable flush interval and explicit opt-out.
+- Public usage, view, app-level counter, latest-value gauge and awaitable flush methods on the provider context.
+
+### Fixed
+- Synchronize changed provider groups/claims before passive refresh consumers without replacing the telemetry owner or overriding explicit identity context on equivalent props.
+- Snapshot only selected definitions and applicable local gates for each check while preserving immutable callback capture and short-circuit counts.
+- Preserve immutable selected definitions through entity/local callbacks and keep only the newest overlapping refresh and asynchronous hook completion.
+- Count effective local/entity-gated browser checks once per evaluated leaf, preserving short circuit and negation without duplicate component evaluation.
+- Isolate telemetry and hydrated snapshots when app/environment changes; release browser resources on real unmount while preserving StrictMode replay.
+- Capture original flag and attribution snapshots before reentrant callbacks; isolate failed/new contexts and late responses.
+- Prevent delayed refresh/identity completion from updating a disposed provider and discard pending telemetry on incompatible transport replacement.
+
+### Changed
+- Browser definitions and telemetry support host-minted instance tokens with precedence over client targeting, plus client identity fallback. Trusted server telemetry and loader/action behavior remain unchanged.
+
 ## 1.0.1
 
 2026-09-17

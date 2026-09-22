@@ -4,6 +4,7 @@
 
 import type { ReactNode, ReactElement } from 'react';
 import { useFeature, useFeatureGate } from '../hooks';
+import { useTogglyContext } from '../context';
 import type { FeatureRequirement, TogglyEntityContext } from '../../core';
 
 /**
@@ -72,17 +73,16 @@ export function Feature({
   const keys = featureKeys ?? (featureKey ? [featureKey] : []);
 
   // Use single feature hook for single key, gate hook for multiple
-  const singleEnabled = useFeature(keys[0] ?? '', defaultValue, context, contextKind);
-  const gateEnabled = useFeatureGate(keys, requirement, false, context, contextKind);
+  const {isEnabled, evaluateGate} = useTogglyContext();
 
   // Calculate final enabled state
   let enabled: boolean;
   if (keys.length === 0) {
     enabled = defaultValue;
   } else if (keys.length === 1) {
-    enabled = singleEnabled;
+    enabled = isEnabled(keys[0], defaultValue, context, contextKind);
   } else {
-    enabled = gateEnabled;
+    enabled = evaluateGate(keys, requirement, false, context, contextKind);
   }
 
   // Apply negation

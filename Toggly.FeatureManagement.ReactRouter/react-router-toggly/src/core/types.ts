@@ -30,6 +30,10 @@ export type EvaluationMode = 'local' | 'remote';
  * Configuration options for Toggly
  */
 export interface TogglyConfig {
+  /** Enable compact browser telemetry (default: true with an app key). */
+  enableTelemetry?: boolean;
+  /** Browser telemetry interval, 30000–60000 ms (default: 45000). */
+  telemetryFlushIntervalMs?: number;
   /** Toggly application key */
   appKey?: string;
   /** Environment name (e.g., 'Production', 'Staging') */
@@ -64,6 +68,8 @@ export interface TogglyConfig {
   localGates?: LocalGate[];
   /** Optional SDK error callback for reporting fetch/evaluation failures. */
   onError?: (message: string, error?: unknown) => void;
+  /** Host-minted browser capability; takes precedence over client identity targeting. */
+  instanceId?: string;
   /** Initial browser identity; hydrated server identity takes precedence. */
   identity?: string;
   /** User groups for targeting */
@@ -121,6 +127,8 @@ export interface TogglyConfig {
  * User identity context for feature targeting
  */
 export interface IdentityContext {
+  /** Browser capability. An empty value clears the token; omitted identity updates use client targeting. */
+  instanceId?: string;
   /** Unique user identifier */
   identity?: string;
   /** User groups for targeting */
