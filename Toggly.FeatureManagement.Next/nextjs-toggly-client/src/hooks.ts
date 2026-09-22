@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import type { FeatureRequirement } from '@ops-ai/nextjs-toggly-core'
+import type { FeatureRequirement, VariantResult } from '@ops-ai/nextjs-toggly-core'
 import type { TogglyEntityContext } from '@ops-ai/nextjs-toggly-core'
 import { useToggly } from './context'
-import type { UseFeatureFlagReturn } from './types'
+import type { UseFeatureFlagReturn, UseVariantReturn } from './types'
 
 export interface UseFeatureFlagOptions {
   context?: TogglyEntityContext | Record<string, unknown> | null
@@ -322,5 +322,84 @@ export function useIdentity(): {
       isUpdating,
     }),
     [identity, setIdentity, setContext, isUpdating]
+  )
+}
+
+/**
+ * Hook for the current named-variant assignment for a feature.
+ *
+ * Requires `enableVariants: true` in the `<TogglyProvider>` config. When
+ * variants are disabled, unassigned, or the effective flag is off, `variant`
+ * and `variantValue` resolve to `null`.
+ *
+ * Not to be confused with the `<FeatureVariant>` component, which renders
+ * on/off UI slots and has no relation to named variant assignment.
+ *
+ * @example
+ * ```tsx
+ * 'use client'
+ * import { useVariant } from '@ops-ai/nextjs-toggly-client'
+ *
+ * export function Checkout() {
+ *   const { variant, isLoading } = useVariant('checkout-flow')
+ *
+ *   if (isLoading) return <LoadingSpinner />
+ *
+ *   if (variant?.name === 'treatment') return <NewCheckout />
+ *   return <ClassicCheckout />
+ * }
+ * ```
+ */
+export function useVariant(featureKey: string): UseVariantReturn {
+  const { features, isReady, isLoading: contextLoading, getVariant, refresh: contextRefresh } = useToggly()
+  const request = useRef(0)
+  const active = useRef(true)
+  useEffect(() => { active.current = true; return () => {active.current = false; request.current++} }, [])
+  const [checked, setChecked] = useState(false)
+  const [variant, setVariant] = useState<VariantResult | null>(() => (isReady ? getVariant(featureKey) : null))
+
+  useEffect(() => {
+    setChecked(false)
+  }, [featureKey])
+
+  const checkVariant = useCallback(() => {
+    const current = ++request.current
+    if (!isReady) {
+      setVariant(null)
+      return
+    }
+
+    try {
+      const result = getVariant(featureKey)
+      if (!active.current || current !== request.current) return
+      setVariant(result)
+      setChecked(true)
+    } catch {
+      if (!active.current || current !== request.current) return
+      setVariant(null)
+      setChecked(true)
+    }
+  }, [featureKey, isReady, getVariant, features])
+
+  // Re-evaluate whenever readiness or the underlying features/variants snapshot changes
+  useEffect(() => {
+    checkVariant()
+    return () => { request.current++ }
+  }, [checkVariant])
+
+  const refresh = useCallback(async () => {
+    await contextRefresh()
+  }, [contextRefresh])
+
+  const isLoading = contextLoading || (isReady && !checked)
+
+  return useMemo(
+    () => ({
+      variant,
+      variantValue: variant?.configurationValue ?? null,
+      isLoading,
+      refresh,
+    }),
+    [variant, isLoading, refresh]
   )
 }

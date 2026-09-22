@@ -15,6 +15,7 @@ import {
   toBooleanDefinitions,
   type TogglyConfig,
   type FeatureRequirement,
+  type VariantResult,
 } from '@ops-ai/nextjs-toggly-core/browser'
 import type {
   TogglyContextValue,
@@ -274,6 +275,16 @@ function TogglyProviderOwner({
     [client]
   )
 
+  const getVariant = useCallback(
+    (featureKey: string): VariantResult | null => client.getVariant(featureKey),
+    [client]
+  )
+
+  const getVariantValue = useCallback(
+    (featureKey: string): unknown | null => client.getVariantValue(featureKey),
+    [client]
+  )
+
   // Auto-initialize on mount
   useEffect(() => {
     if (autoInit && !isReady && !isLoading) {
@@ -325,6 +336,8 @@ function TogglyProviderOwner({
       isFeatureOn,
       isFeatureOff,
       evaluateFeatureGate,
+      getVariant,
+      getVariantValue,
     }),
     [
       client,
@@ -340,6 +353,8 @@ function TogglyProviderOwner({
       isFeatureOn,
       isFeatureOff,
       evaluateFeatureGate,
+      getVariant,
+      getVariantValue,
     ]
   )
 

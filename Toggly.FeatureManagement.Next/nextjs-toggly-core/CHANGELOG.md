@@ -1,3 +1,17 @@
+## 1.13.0
+
+2026-09-22
+
+### Added
+
+- Add `enableVariants` config plus `getVariant()`/`getVariantValue()` client
+  methods, matching the Vue and JS SDK contract. When enabled, the client
+  fetches `/evaluated-variants-signed` instead of `/evaluated-signed`,
+  persists the variant assignment across cached/304 refreshes, applies local
+  gates on top of the remote enabled bit, and forwards the assigned variant
+  name to browser telemetry. `nextjs-toggly-server` and `nextjs-toggly-edge`
+  are unchanged and remain on the definitions-signed + local-evaluation rail.
+
 ## 1.12.0
 
 2026-09-18

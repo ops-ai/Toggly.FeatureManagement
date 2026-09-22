@@ -1,4 +1,5 @@
-import type { FeatureDefinitions, FeatureDefinitionsResponse } from './types'
+import { asVariantDefsRecord, unwrapDefsPayload } from '@ops-ai/toggly-signed-defs'
+import type { EvaluatedVariantDef, FeatureDefinitions, FeatureDefinitionsResponse } from './types'
 
 function isBooleanFeatureMap(data: object): data is FeatureDefinitions {
   return Object.values(data).every((value) => typeof value === 'boolean')
@@ -91,4 +92,39 @@ export function parseRemoteEvaluatedPayload(
   throw new Error(
     '[Toggly] Unsupported evaluated-signed response: expected defs, features, or a boolean map',
   )
+}
+
+/**
+ * Parse an evaluated-variants-signed HTTP body into a variant-defs map.
+ * Handles the `{ defs }` envelope (unverified) and already-unwrapped verified
+ * payloads alike. Throws when the body is an error envelope so callers cannot
+ * treat empty/bogus payloads as a successful variants fetch.
+ *
+ * The error-envelope check is inlined (mirrors {@link parseRemoteEvaluatedPayload})
+ * rather than relying solely on the installed `@ops-ai/toggly-signed-defs`
+ * version wiring it into `unwrapDefsPayload`.
+ */
+export function parseRemoteEvaluatedVariantsPayload(
+  parsed: unknown,
+): Record<string, EvaluatedVariantDef> {
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    const data = parsed as { defs?: unknown; error?: unknown }
+    const hasDefs = 'defs' in data && data.defs != null && typeof data.defs === 'object'
+    if ('error' in data && data.error != null && !hasDefs) {
+      const message = typeof data.error === 'string' ? data.error : 'error envelope'
+      throw new Error(`[Toggly] Evaluated-variants-signed response error envelope: ${message}`)
+    }
+  }
+  return asVariantDefsRecord<EvaluatedVariantDef>(unwrapDefsPayload(parsed))
+}
+
+/** Reduce variant defs to the boolean map used for `state.features`. */
+export function variantDefsToFlags(
+  defs: Record<string, EvaluatedVariantDef>,
+): FeatureDefinitions {
+  const out: FeatureDefinitions = {}
+  for (const key of Object.keys(defs)) {
+    out[key] = defs[key]?.enabled === true
+  }
+  return out
 }

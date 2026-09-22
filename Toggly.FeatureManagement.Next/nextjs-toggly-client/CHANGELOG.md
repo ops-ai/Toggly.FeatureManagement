@@ -1,3 +1,15 @@
+## 1.6.0
+
+2026-09-22
+
+### Added
+
+- Add a `useVariant()` hook and `getVariant()`/`getVariantValue()` on the
+  Toggly context, exposing the new `@ops-ai/nextjs-toggly-core` named-variant
+  API for the browser client. Requires `enableVariants: true` in the
+  `<TogglyProvider>` config. Not related to the existing `<FeatureVariant>`
+  on/off UI-slot component.
+
 ## 1.5.0
 
 2026-09-18

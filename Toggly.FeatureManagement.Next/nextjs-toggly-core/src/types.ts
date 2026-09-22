@@ -39,6 +39,23 @@ export interface BrowserTogglyClient extends TogglyClient {
   readonly telemetry: FrontendTelemetry
 }
 
+/**
+ * Assigned variant for a feature (aligned with the JS/Vue SDKs).
+ */
+export interface VariantResult {
+  name: string
+  configurationValue?: unknown
+}
+
+/**
+ * Raw evaluated entry from `/evaluated-variants-signed` `defs`.
+ */
+export interface EvaluatedVariantDef {
+  enabled: boolean
+  variant?: string
+  configurationValue?: unknown
+}
+
 export interface TogglyConfig {
   /** Browser compact telemetry defaults on with an app key. */
   enableTelemetry?: boolean
@@ -67,6 +84,12 @@ export interface TogglyConfig {
    * 'local': definitions-signed + `@ops-ai/toggly-eval` at read time.
    */
   evaluationMode?: EvaluationMode
+  /**
+   * Use `/evaluated-variants-signed` and expose {@link TogglyClient.getVariant} /
+   * {@link TogglyClient.getVariantValue}. Remote rail only (matches the JS/Vue
+   * SDKs) — no effect combined with `evaluationMode: 'local'`.
+   */
+  enableVariants?: boolean
   /** Default feature flag values when API is unavailable */
   featureDefaults?: Record<string, boolean>
   /** Show content while evaluating features (default: false) */
@@ -265,6 +288,11 @@ export interface TogglyState {
    * Empty when `evaluationMode` is `'remote'`.
    */
   definitions: Map<string, FeatureDefinitionModel>
+  /**
+   * Raw variant assignments from `/evaluated-variants-signed`.
+   * Null unless `enableVariants` is set on the remote rail.
+   */
+  variants: Record<string, EvaluatedVariantDef> | null
   /** Last error (if any) */
   error: Error | null
   /** Last refresh timestamp */
@@ -352,6 +380,16 @@ export interface TogglyClient {
    * (e.g. durable cache) and refresh the evaluated boolean snapshot.
    */
   hydrateDefinitions(defs: FeatureDefinitionModel[]): FeatureDefinitions
+
+  /**
+   * Current variant assignment for a feature (requires `enableVariants` and
+   * loaded remote data). Returns null when variants are disabled, the feature
+   * has no assignment, or the effective flag (after local gates) is off.
+   */
+  getVariant(featureKey: string): VariantResult | null
+
+  /** Configuration payload for the assigned variant, if any. */
+  getVariantValue(featureKey: string): unknown | null
 
   /** Add a hook */
   addHook(hook: Hook): void
