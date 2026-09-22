@@ -628,6 +628,7 @@ public actor TogglyService {
             $0.name != "i" && $0.name != "u" && $0.name != "g" && !$0.name.hasPrefix("claim.")
         }
         if let instanceId {
+            items.removeAll { $0.name == "userId" }
             items.append(URLQueryItem(name: "i", value: instanceId))
         } else {
             if let identity { items.append(URLQueryItem(name: "u", value: identity)) }

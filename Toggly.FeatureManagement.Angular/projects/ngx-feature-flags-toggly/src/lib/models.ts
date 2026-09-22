@@ -15,11 +15,24 @@ export interface EvaluatedVariantDef {
   configurationValue?: unknown
 }
 
+/** Partial targeting update. Blank instanceId clears a token; changing identity clears an omitted token. */
+export interface TogglyContext extends TogglyEvaluationContext {
+  instanceId?: string
+}
+
 export interface ITogglyOptions {
   baseURI?: string
   appKey?: string
+  /** Enable aggregate frontend telemetry when an app key is configured. Default: true. */
+  enableTelemetry?: boolean
+  /** Independent metrics base URL. Default: https://metrics.toggly.io. */
+  metricsBaseUrl?: string
+  /** Base flush interval from 30000 through 60000 ms, jittered by +/-20%. Default: 45000. */
+  telemetryFlushIntervalMs?: number
   environment?: string
   identity?: string
+  /** Opaque instance capability supplied by your trusted backend. */
+  instanceId?: string
   groups?: string[]
   claims?: Record<string, string>
   featureDefaults?: { [key: string]: boolean }
@@ -71,12 +84,17 @@ export interface ITogglyService {
   isFeatureOff: (featureKey: string) => Promise<boolean>
   getVariant: (featureKey: string) => Promise<VariantResult | null>
   getVariantValue: (featureKey: string) => Promise<unknown | null>
+  recordUsage: (featureKey: string, variant?: string) => void
+  recordView: (featureKey: string, variant?: string) => void
+  incrementCounter: (metricKey: string, value?: number) => void
+  setGauge: (metricKey: string, value: number) => void
+  flushTelemetry: () => Promise<void>
   addHook: (hook: Hook) => void
   removeHook: (name: string) => boolean
   setLocalGates: (gates: LocalGate[]) => void
   notifyLocalGatesChanged: () => void
   subscribeLocalGatesChanged: (listener: () => void) => () => void
   subscribeFeaturesRefresh: (listener: () => void) => () => void
-  setContext: (context: TogglyEvaluationContext) => Promise<void>
+  setContext: (context: TogglyContext) => Promise<void>
   registerContext: <T>(kind: string, mapper: (entity: T) => TogglyEntityContext) => void
 }

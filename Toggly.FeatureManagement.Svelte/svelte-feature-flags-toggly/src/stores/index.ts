@@ -1,1 +1,18 @@
-export * from './toggly.store'
+export {
+  togglyServiceStore,
+  togglyFlagsStore,
+  togglyVariantsStore,
+  togglyLocalGatesRevision,
+  getTogglyService,
+  createFeatureStore,
+  createVariantStore,
+  createVariantValueStore,
+  isFeatureOn,
+  isFeatureOff,
+  evaluateFeatureGate,
+  recordUsage,
+  recordView,
+  incrementCounter,
+  setGauge,
+  flushTelemetry,
+} from './toggly.store'

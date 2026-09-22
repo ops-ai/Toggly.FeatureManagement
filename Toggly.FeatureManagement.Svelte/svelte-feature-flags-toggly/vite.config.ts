@@ -58,6 +58,8 @@ export default defineConfig({
         'svelte',
         'svelte/store',
         '@ops-ai/toggly-hooks-types',
+        '@ops-ai/toggly-client-telemetry',
+        '@ops-ai/toggly-client-telemetry/browser',
         '@ops-ai/toggly-local-gates',
         '@ops-ai/toggly-signed-defs',
       ],

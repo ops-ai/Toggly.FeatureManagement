@@ -109,7 +109,7 @@ describe('zoneless OnPush variant rendering', () => {
       imports: [
         ZonelessVariantHostComponent,
         NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'zoneless-variant',
+          enableTelemetry: false, appKey: 'zoneless-variant',
           environment: 'Production',
           enableVariants: true,
           persistCache: false,
