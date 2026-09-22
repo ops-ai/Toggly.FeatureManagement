@@ -1,4 +1,4 @@
-import { ref, computed, watch, onMounted, type Ref } from 'vue'
+import { getCurrentScope, onScopeDispose, ref, computed, watch, type Ref } from 'vue'
 import { useToggly } from './useToggly'
 import type { UseFeatureFlagReturn } from '../types'
 
@@ -22,12 +22,17 @@ export function useFeatureFlag(featureKey: string | Ref<string>): UseFeatureFlag
   const toggly = useToggly()
   const isLoading = ref(true)
   const enabled = ref(false)
+  let active = true
+  let request = 0
+  if (getCurrentScope()) onScopeDispose(() => {active = false; request++})
 
   const key = computed(() =>
     typeof featureKey === 'string' ? featureKey : featureKey.value
   )
 
   const checkFeature = async () => {
+    if (!active) return
+    const current = ++request
     if (!toggly.isReady.value || !toggly.client.state.initialized) {
       // Use local feature state from features ref
       enabled.value = toggly.features.value[key.value] === true
@@ -37,37 +42,21 @@ export function useFeatureFlag(featureKey: string | Ref<string>): UseFeatureFlag
 
     isLoading.value = true
     try {
-      enabled.value = await toggly.isFeatureOn(key.value)
+      const result = await toggly.isFeatureOn(key.value)
+      if (active && current === request) enabled.value = result
     } catch {
-      enabled.value = false
+      if (active && current === request) enabled.value = false
     } finally {
-      isLoading.value = false
+      if (active && current === request) isLoading.value = false
     }
   }
 
-  // Check feature when ready or key changes
+  // Vue batches readiness and definitions publication into one effective UI check.
   watch(
-    [() => toggly.isReady.value, key],
-    async () => {
-      await checkFeature()
-    },
-    { immediate: true }
+    [() => toggly.isReady.value, key, () => toggly.features.value],
+    () => { void checkFeature() },
+    { immediate: true, deep: true }
   )
-
-  // Also check when features change
-  watch(
-    () => toggly.features.value,
-    () => {
-      enabled.value = toggly.features.value[key.value] === true
-    },
-    { deep: true }
-  )
-
-  onMounted(() => {
-    if (toggly.isReady.value) {
-      checkFeature()
-    }
-  })
 
   return {
     isEnabled: computed(() => enabled.value),

@@ -1,3 +1,4 @@
+import {withResources,closeServer,stopChild,launchBrowser,readHttp,clearBrowserHeaders} from './owned-resources.mjs'
 import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import { spawn } from 'node:child_process'
@@ -5,6 +6,7 @@ import { spawn } from 'node:child_process'
 // A second, configured production host exercises the real app:mounted hook.
 // Definitions and browser traffic stay on loopback; no production credentials.
 export async function verifyAutomaticStartup(work, chromium) {
+ return withResources(async own=>{
   const requests = []
   const definitions = createServer((req, res) => {
     requests.push(req.url)
@@ -15,9 +17,11 @@ export async function verifyAutomaticStartup(work, chromium) {
     const identity = new URL(req.url, 'http://localhost').searchParams.get('u')
     res.end(JSON.stringify({ Enabled: identity !== 'bob', Disabled: false, Targeted: identity === 'alice', Automatic: true }))
   })
+  own(()=>closeServer(definitions))
   await new Promise(resolve => definitions.listen(0, '127.0.0.1', resolve))
   const baseUri = `http://127.0.0.1:${definitions.address().port}`
   const portProbe = createServer()
+  own(()=>closeServer(portProbe))
   await new Promise(resolve => portProbe.listen(0, '127.0.0.1', resolve))
   const port = portProbe.address().port
   await new Promise(resolve => portProbe.close(resolve))
@@ -28,17 +32,18 @@ export async function verifyAutomaticStartup(work, chromium) {
       NUXT_PUBLIC_TOGGLY_APP_KEY: 'local-fixture', NUXT_PUBLIC_TOGGLY_BASE_URI: baseUri,
     },
   })
+  own(()=>stopChild(host))
   let browser
   const url = `http://127.0.0.1:${port}`
-  try {
+  {
     let response
     for (let i = 0; i < 100; i++) {
       if (host.exitCode !== null || host.signalCode !== null) throw new Error('configured host exited before startup')
-      try { response = await fetch(url); if (response.ok) break } catch {}
+      try { response = await readHttp(url,{},1000); if (response.ok) break } catch {}
       await new Promise(resolve => setTimeout(resolve, 100))
     }
     assert(response?.ok, 'configured production host starts')
-    browser = await chromium.launch({ headless: true })
+    browser = await launchBrowser(chromium,own)
     const page = await browser.newPage({ extraHTTPHeaders: { 'x-toggly-identity': 'alice' } })
     const errors = []
     const outbound = []
@@ -58,6 +63,7 @@ export async function verifyAutomaticStartup(work, chromium) {
       await route.continue()
     })
     await page.goto(url, { waitUntil: 'domcontentloaded' })
+    await clearBrowserHeaders(page)
     await startup
     await page.waitForFunction(() => document.querySelector('#mounted')?.textContent === 'true')
     assert.equal(await page.locator('#target').textContent(), 'true', 'server snapshot survives hydration while startup is pending')
@@ -78,12 +84,6 @@ export async function verifyAutomaticStartup(work, chromium) {
     assert.deepEqual(errors, [])
     assert.deepEqual(outbound, [], 'no browser production request attempts')
     console.log('PASS configured automatic startup: held hydration, one identity request, remote update, identity, refresh, no production browser traffic')
-  } finally {
-    await browser?.close()
-    const stopped = host.exitCode !== null || host.signalCode !== null
-      ? Promise.resolve() : new Promise(resolve => host.once('exit', resolve))
-    host.kill('SIGTERM')
-    await stopped
-    await new Promise(resolve => definitions.close(resolve))
   }
+ })
 }

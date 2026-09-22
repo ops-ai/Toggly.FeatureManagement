@@ -27,6 +27,46 @@ export type EvalContextOverrides = {
 /** Last arg to isFeatureOn / Off / evaluateFeatureGate: string identity or full overrides. */
 export type EvalContextArg = string | EvalContextOverrides
 
+/** Browser-only compact telemetry runtime injected by the client adapter. */
+export interface FrontendTelemetryRuntime {
+  readonly usageEnabled: boolean
+  readonly metricsEnabled: boolean
+  recordCheck(featureKey: string, variant: string): void
+  recordUsage(featureKey: string, variant?: string): void
+  recordView(featureKey: string, variant?: string): void
+  incrementCounter(metricKey: string, value?: number): void
+  setGauge(metricKey: string, value: number): void
+  flush(options?: { keepalive?: boolean }): Promise<void>
+  dispose(options?: { flush?: boolean }): void
+  setContext?(config: Readonly<TogglyConfig>): void
+  captureCheck?(): (featureKey: string, variant: string) => void
+  unsupported(method: 'measure' | 'observe'): void
+}
+
+export type FrontendTelemetryFactory = (
+  config: Readonly<TogglyConfig>,
+) => FrontendTelemetryRuntime | null
+
+/** Trusted server telemetry runtime seam. @internal */
+export interface TrustedTelemetryRuntime {
+  readonly usageEnabled: boolean
+  start(): void
+  close(): Promise<void>
+  recordDefinitionCacheHit(): void
+  recordDefinitionCacheMiss(): void
+  recordCheck(featureKey: string, enabled: boolean, identity?: string): void
+  recordUsage(featureKey: string, identity?: string, variant?: string): void
+  recordView(featureKey: string, identity?: string, variant?: string): void
+  measure(metricKey: string, value: number, options?: { feature?: string; variant?: string }): void
+  incrementCounter(metricKey: string, value?: number, options?: { feature?: string; variant?: string }): void
+  observe(metricKey: string, value: number, options?: { feature?: string; variant?: string }): void
+  flushAll(): Promise<void>
+}
+
+export type TrustedTelemetryFactory = (
+  config: Readonly<TogglyConfig>,
+) => TrustedTelemetryRuntime | null
+
 export interface TogglyConfig {
   /** Your Toggly application key */
   appKey?: string
@@ -39,6 +79,11 @@ export interface TogglyConfig {
    * `'local'` fetches definitions-signed and evaluates with `@ops-ai/toggly-eval`.
    */
   evaluationMode?: EvaluationMode
+  /** Host-provided frontend identity token; takes precedence over client identity. */
+  instanceId?: string
+  /** Persist only matching browser definition/revision snapshots (default false). */
+  persistFeatures?: boolean
+  featuresStorageKey?: string
   /** User identity for targeting and rollouts */
   identity?: string
   /** User groups for targeting */
@@ -84,6 +129,10 @@ export interface TogglyConfig {
    * Separate from `baseUri`, which is for definitions/JWKS.
    */
   metricsBaseUrl?: string
+  /** Enable compact browser telemetry (default: true in the browser adapter). */
+  enableTelemetry?: boolean
+  /** Compact browser telemetry flush interval in milliseconds (default: 45000). */
+  telemetryFlushIntervalMs?: number
   /**
    * Enable feature usage tracking (Usage.SendStats / api/usage/stats).
    * Defaults to false in core; server package enables when appKey is set.
@@ -124,6 +173,10 @@ export interface TogglyConfig {
   metricsClient?: import('./telemetry/index.js').MetricsSender | null
   /** Optional fetch override for HTTPS telemetry (edge/tests). */
   telemetryFetch?: typeof fetch
+  /** Browser adapter factory. Server packages must not set this. @internal */
+  frontendTelemetryFactory?: FrontendTelemetryFactory
+  /** Main/server entry factory. Browser packages must not set this. @internal */
+  trustedTelemetryFactory?: TrustedTelemetryFactory
 }
 
 /**
@@ -302,6 +355,8 @@ export interface TogglyClient {
 
   /** Set user identity */
   setIdentity(identity: string): Promise<void>
+  /** Replace browser targeting; an empty token clears minted attribution. */
+  setContext(context: { instanceId?: string; identity?: string; groups?: string[]; claims?: Record<string, string> }): Promise<void>
 
   /** Raw definitions map (local mode) */
   getDefinitions(): Map<string, FeatureDefinitionModel>
@@ -350,6 +405,9 @@ export interface TogglyClient {
     options?: { feature?: string; variant?: string },
   ): void
 
+  /** Set an app-level compact gauge metric in browser clients. */
+  setGauge(metricKey: string, value: number): void
+
   /** Record a point-in-time observation (gauge). */
   observe(
     metricKey: string,
@@ -361,5 +419,5 @@ export interface TogglyClient {
   flushTelemetry(): Promise<void>
 
   /** Destroy the client and cleanup (best-effort telemetry flush). */
-  destroy(): void
+  destroy(options?: {flush?: boolean}): void
 }

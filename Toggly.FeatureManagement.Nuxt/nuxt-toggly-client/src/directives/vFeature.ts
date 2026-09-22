@@ -1,6 +1,6 @@
 import type { Directive, DirectiveBinding, VNode } from 'vue'
-import { evaluateGate, normalizeFeatureKeys } from '@ops-ai/nuxt-toggly-core'
-import { getTogglyClient } from '../composables/useToggly'
+import { evaluateGate, normalizeFeatureKeys } from '@ops-ai/nuxt-toggly-core/browser'
+import { getTogglyClient, watchTogglyClient } from '../composables/useToggly'
 
 /**
  * Directive binding value type
@@ -18,6 +18,43 @@ type TogglyDirectiveElement = HTMLElement & {
   __togglyFeatureUnsubscribe?: () => void
   __togglyFeatureShowUnsubscribe?: () => void
   __togglyFeatureClassUnsubscribe?: () => void
+}
+
+type Binding = DirectiveBinding<string | string[] | FeatureDirectiveValue>
+type Pending = {binding: Binding; request: number; active: boolean}
+const pendingDisplay = new WeakMap<HTMLElement, Pending>()
+const pendingVisibility = new WeakMap<HTMLElement, Pending>()
+const pendingClass = new WeakMap<HTMLElement, Pending>()
+function begin(map: WeakMap<HTMLElement, Pending>, el: HTMLElement, binding: Binding) {
+  const state = map.get(el) ?? {binding, request: 0, active: true}
+  state.binding = binding; state.request++; map.set(el, state)
+  const request = state.request
+  return () => state.active && state.request === request
+}
+function cancel(map: WeakMap<HTMLElement, Pending>, el: HTMLElement) {
+  const state = map.get(el)
+  if (state) {state.active = false; state.request++}
+}
+
+// A mounted directive follows replacements as well as refreshes on its owner.
+function followCurrentClient(
+  el: TogglyDirectiveElement,
+  key: '__togglyFeatureUnsubscribe' | '__togglyFeatureShowUnsubscribe' | '__togglyFeatureClassUnsubscribe',
+  update: (initial: boolean) => void,
+): void {
+  let active = true
+  let unsubscribe: (() => void) | undefined
+  const bind = (client: ReturnType<typeof getTogglyClient>, initial: boolean) => {
+    if (!active) return
+    unsubscribe?.()
+    unsubscribe = client?.subscribeFeaturesRefresh(() => {if (active) update(false)})
+    update(initial)
+  }
+  const stop = watchTogglyClient(client => bind(client, false))
+  // Evaluation hooks may synchronously replace the owner or unmount this node.
+  // Both stop handles must be installed before invoking that first evaluation.
+  el[key] = () => {active = false; stop(); unsubscribe?.(); unsubscribe = undefined}
+  bind(getTogglyClient(), true)
 }
 
 /**
@@ -59,12 +96,7 @@ type TogglyDirectiveElement = HTMLElement & {
  */
 export const vFeature: Directive<HTMLElement, string | string[] | FeatureDirectiveValue> = {
   mounted(el, binding) {
-    updateVisibility(el, binding)
-    const client = getTogglyClient()
-    if (client?.subscribeFeaturesRefresh) {
-      ;(el as TogglyDirectiveElement).__togglyFeatureUnsubscribe =
-        client.subscribeFeaturesRefresh(() => updateVisibility(el, binding))
-    }
+    followCurrentClient(el, '__togglyFeatureUnsubscribe', initial => updateVisibility(el, pendingDisplay.get(el)?.binding ?? binding, initial))
   },
 
   updated(el, binding) {
@@ -72,6 +104,7 @@ export const vFeature: Directive<HTMLElement, string | string[] | FeatureDirecti
   },
 
   beforeUnmount(el) {
+    cancel(pendingDisplay, el)
     ;(el as TogglyDirectiveElement).__togglyFeatureUnsubscribe?.()
   },
 }
@@ -111,8 +144,10 @@ function parseBinding(
  */
 function updateVisibility(
   el: HTMLElement,
-  binding: DirectiveBinding<string | string[] | FeatureDirectiveValue>
+  binding: DirectiveBinding<string | string[] | FeatureDirectiveValue>,
+  warnIfMissing = true,
 ): void {
+  const current = begin(pendingDisplay, el, binding)
   const { keys, requirement, negate } = parseBinding(binding)
 
   if (keys.length === 0) {
@@ -124,7 +159,7 @@ function updateVisibility(
   const client = getTogglyClient()
 
   if (!client) {
-    console.warn('[Toggly] v-feature directive: Client not initialized')
+    if (warnIfMissing) console.warn('[Toggly] v-feature directive: Client not initialized')
     // Hide element if client not available
     el.style.display = 'none'
     return
@@ -136,6 +171,10 @@ function updateVisibility(
 
   // Toggle visibility
   el.style.display = isEnabled ? '' : 'none'
+  void client.evaluateFeatureGate(keys, requirement, negate).then(result => {
+    if (!current() || getTogglyClient() !== client) return
+    el.style.display = result ? '' : 'none'
+  }).catch(() => {})
 }
 
 /**
@@ -144,12 +183,7 @@ function updateVisibility(
  */
 export const vFeatureShow: Directive<HTMLElement, string | string[] | FeatureDirectiveValue> = {
   mounted(el, binding) {
-    updateShowVisibility(el, binding)
-    const client = getTogglyClient()
-    if (client?.subscribeFeaturesRefresh) {
-      ;(el as TogglyDirectiveElement).__togglyFeatureShowUnsubscribe =
-        client.subscribeFeaturesRefresh(() => updateShowVisibility(el, binding))
-    }
+    followCurrentClient(el, '__togglyFeatureShowUnsubscribe', () => updateShowVisibility(el, pendingVisibility.get(el)?.binding ?? binding))
   },
 
   updated(el, binding) {
@@ -157,6 +191,7 @@ export const vFeatureShow: Directive<HTMLElement, string | string[] | FeatureDir
   },
 
   beforeUnmount(el) {
+    cancel(pendingVisibility, el)
     ;(el as TogglyDirectiveElement).__togglyFeatureShowUnsubscribe?.()
   },
 }
@@ -165,6 +200,7 @@ function updateShowVisibility(
   el: HTMLElement,
   binding: DirectiveBinding<string | string[] | FeatureDirectiveValue>
 ): void {
+  const current = begin(pendingVisibility, el, binding)
   const { keys, requirement, negate } = parseBinding(binding)
 
   if (keys.length === 0) {
@@ -183,6 +219,10 @@ function updateShowVisibility(
   const isEnabled = evaluateGate(features, keys, requirement, negate)
 
   el.style.visibility = isEnabled ? 'visible' : 'hidden'
+  void client.evaluateFeatureGate(keys, requirement, negate).then(result => {
+    if (!current() || getTogglyClient() !== client) return
+    el.style.visibility = result ? 'visible' : 'hidden'
+  }).catch(() => {})
 }
 
 /**
@@ -201,12 +241,7 @@ function updateShowVisibility(
  */
 export const vFeatureClass: Directive<HTMLElement, string | string[] | FeatureDirectiveValue> = {
   mounted(el, binding) {
-    updateClass(el, binding)
-    const client = getTogglyClient()
-    if (client?.subscribeFeaturesRefresh) {
-      ;(el as TogglyDirectiveElement).__togglyFeatureClassUnsubscribe =
-        client.subscribeFeaturesRefresh(() => updateClass(el, binding))
-    }
+    followCurrentClient(el, '__togglyFeatureClassUnsubscribe', () => updateClass(el, pendingClass.get(el)?.binding ?? binding))
   },
 
   updated(el, binding) {
@@ -214,6 +249,7 @@ export const vFeatureClass: Directive<HTMLElement, string | string[] | FeatureDi
   },
 
   beforeUnmount(el) {
+    cancel(pendingClass, el)
     ;(el as TogglyDirectiveElement).__togglyFeatureClassUnsubscribe?.()
   },
 }
@@ -222,6 +258,7 @@ function updateClass(
   el: HTMLElement,
   binding: DirectiveBinding<string | string[] | FeatureDirectiveValue>
 ): void {
+  const current = begin(pendingClass, el, binding)
   const className = binding.arg
   if (!className) {
     console.warn('[Toggly] v-feature-class requires an argument (class name)')
@@ -249,4 +286,9 @@ function updateClass(
   } else {
     el.classList.remove(className)
   }
+  void client.evaluateFeatureGate(keys, requirement, negate).then(result => {
+    if (!current() || getTogglyClient() !== client) return
+    if (result) el.classList.add(className)
+    else el.classList.remove(className)
+  }).catch(() => {})
 }

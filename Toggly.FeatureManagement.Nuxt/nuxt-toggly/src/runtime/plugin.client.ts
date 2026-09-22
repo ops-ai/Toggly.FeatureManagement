@@ -20,6 +20,7 @@ export default defineNuxtPlugin(async (nuxtApp) => {
     environment: config.environment,
     baseUri: config.baseUri,
     identity: snapshot?.identity ?? config.identity,
+    instanceId: config.instanceId,
     // Seed targeting before initialization so the first evaluation uses it.
     groups: config.groups ? [...config.groups] : config.groups,
     claims: config.claims ? { ...config.claims } : config.claims,
@@ -27,13 +28,18 @@ export default defineNuxtPlugin(async (nuxtApp) => {
     showFeatureDuringEvaluation: config.showFeatureDuringEvaluation,
     refreshInterval: config.refreshInterval,
     enableLiveUpdates: config.enableLiveUpdates,
+    enableTelemetry: config.enableTelemetry,
+    enableUsageTracking: config.enableUsageTracking,
+    enableMetrics: config.enableMetrics,
+    metricsBaseUrl: config.metricsBaseUrl,
+    telemetryFlushIntervalMs: config.telemetryFlushIntervalMs,
     persistIdentity: config.persistIdentity,
     persistFeatures: config.persistFeatures,
     hooks: config.hooks,
     onError: moduleOnError,
   })
 
-  if (snapshot) {
+  if (snapshot && !config.instanceId?.trim()) {
     // Hydration is current state, never fallback defaults for another identity.
     toggly.client.hydrateEvaluatedFeatures(snapshot.features)
     toggly.isReady.value = true
@@ -71,6 +77,8 @@ export default defineNuxtPlugin(async (nuxtApp) => {
   } else {
     await initialize()
   }
+
+  nuxtApp.hook('app:beforeUnmount', () => toggly.client.destroy())
 
   // Provide helper for useToggly
   return {

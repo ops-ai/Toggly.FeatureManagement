@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
-import { createTogglyClient } from '../../src/client'
+import { createTogglyClient } from '../../src/trusted-client'
 import type { FeatureDefinitionModel } from '@ops-ai/toggly-eval'
 
 class MockWebSocket extends EventEmitter {

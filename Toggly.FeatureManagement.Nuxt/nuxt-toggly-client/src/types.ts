@@ -1,5 +1,13 @@
-import type { TogglyConfig, TogglyClient, FeatureRequirement } from '@ops-ai/nuxt-toggly-core'
+import type { TogglyConfig, TogglyClient, FeatureRequirement } from '@ops-ai/nuxt-toggly-core/browser'
 import type { ComputedRef, Ref, InjectionKey } from 'vue'
+
+export interface BrowserTelemetry {
+  recordUsage(featureKey: string, variant?: string): void
+  recordView(featureKey: string, variant?: string): void
+  incrementCounter(metricKey: string, value?: number): void
+  setGauge(metricKey: string, value: number): void
+  flushTelemetry(): Promise<void>
+}
 
 /**
  * Client-side Toggly configuration
@@ -31,22 +39,25 @@ export interface UseTogglyReturn {
   features: Ref<Record<string, boolean>>
   /** Current user identity */
   identity: Ref<string | undefined>
+  /** Compact frontend telemetry API with owner-level attribution. */
+  telemetry: BrowserTelemetry
   /** Initialize the client */
   init: (config?: TogglyConfig) => Promise<void>
   /** Refresh feature definitions */
   refresh: () => Promise<void>
   /** Set user identity */
   setIdentity: (identity: string) => Promise<void>
+  setContext: TogglyClient['setContext']
   /** Check if a feature is enabled */
   isFeatureOn: (
     featureKey: string,
-    context?: import('@ops-ai/nuxt-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+    context?: import('@ops-ai/nuxt-toggly-core/browser').TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
   ) => Promise<boolean>
   /** Check if a feature is disabled */
   isFeatureOff: (
     featureKey: string,
-    context?: import('@ops-ai/nuxt-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+    context?: import('@ops-ai/nuxt-toggly-core/browser').TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
   ) => Promise<boolean>
   /** Evaluate a feature gate */
@@ -54,7 +65,7 @@ export interface UseTogglyReturn {
     featureKeys: string[],
     requirement?: FeatureRequirement,
     negate?: boolean,
-    context?: import('@ops-ai/nuxt-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+    context?: import('@ops-ai/nuxt-toggly-core/browser').TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
   ) => Promise<boolean>
 }
@@ -100,7 +111,7 @@ export interface FeatureProps {
   /** Negate the result */
   negate?: boolean
   /** Entity instance or canonical entity context for entity-gated flags */
-  context?: import('@ops-ai/nuxt-toggly-core').TogglyEntityContext | Record<string, unknown> | null
+  context?: import('@ops-ai/nuxt-toggly-core/browser').TogglyEntityContext | Record<string, unknown> | null
   /** Context kind for registerContext mapper lookup when `context` is a domain object */
   contextKind?: string
 }

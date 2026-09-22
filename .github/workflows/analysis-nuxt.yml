@@ -129,7 +129,7 @@ jobs:
             lock-mode: locked
             node-version: '24'
           - nuxt-version: 4.5.2
-            lock-mode: fresh
+            lock-mode: locked
             node-version: '24'
 
     steps:

@@ -1,7 +1,7 @@
 import { defineComponent, type PropType } from 'vue'
 import { useFeatureProps } from '../composables/useFeatureGate'
-import type { FeatureRequirement } from '@ops-ai/nuxt-toggly-core'
-import type { TogglyEntityContext } from '@ops-ai/nuxt-toggly-core'
+import type { FeatureRequirement } from '@ops-ai/nuxt-toggly-core/browser'
+import type { TogglyEntityContext } from '@ops-ai/nuxt-toggly-core/browser'
 
 /**
  * Feature component for conditional rendering based on feature flags

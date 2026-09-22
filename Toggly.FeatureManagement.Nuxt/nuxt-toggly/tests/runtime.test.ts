@@ -35,6 +35,40 @@ describe('startup context forwarding', () => {
     expect(mocks.server).toHaveBeenCalledTimes(1)
   })
 
+  it('forwards browser telemetry configuration only to the client owner', async () => {
+    Object.assign(mocks.config, {
+      enableTelemetry: false,
+      enableUsageTracking: false,
+      enableMetrics: true,
+      metricsBaseUrl: 'https://collector.example',
+      telemetryFlushIntervalMs: 30000,
+    })
+    await (clientPlugin as any)(app())
+    await (serverPlugin as any)({ hooks: { hook: vi.fn() } })
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({
+      enableTelemetry: false,
+      enableUsageTracking: false,
+      enableMetrics: true,
+      metricsBaseUrl: 'https://collector.example',
+      telemetryFlushIntervalMs: 30000,
+    }))
+    expect(mocks.server).not.toHaveBeenCalledWith(expect.objectContaining({
+      metricsBaseUrl: 'https://collector.example',
+    }))
+  })
+
+  it('forwards minted context and withholds an unrelated SSR identity snapshot', async () => {
+    mocks.config.instanceId = 'minted'
+    const hydrate = vi.fn()
+    mocks.create.mockImplementation(() => ({init:mocks.init,features:{value:{}},client:{hydrateEvaluatedFeatures:hydrate},isReady:{value:false}}))
+    const nuxt = {...app(),payload:{toggly:{features:{Foreign:true},identity:'ssr-user'}}}
+    await (clientPlugin as any)(nuxt)
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({instanceId:'minted'}))
+    expect(hydrate).not.toHaveBeenCalled()
+    await nuxt.hook.mock.calls.find(([name])=>name==='app:mounted')![1]()
+    expect(mocks.init).toHaveBeenCalledTimes(1)
+  })
+
   it('snapshots caller collections before initialization can yield', async () => {
     const groups = ['beta']
     const claims = { plan: 'pro' }

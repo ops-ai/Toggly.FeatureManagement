@@ -1,26 +1,33 @@
-import { ref, inject, provide, type App, readonly } from 'vue'
+import { ref, shallowRef, watch, inject, provide, type App, readonly } from 'vue'
 import {
   createTogglyClient,
   type TogglyClient,
   type TogglyConfig,
   type FeatureRequirement,
-} from '@ops-ai/nuxt-toggly-core'
+} from '@ops-ai/nuxt-toggly-core/browser'
 import type { TogglyClientConfig, UseTogglyReturn } from '../types'
 import { TOGGLY_INJECTION_KEY } from '../types'
+import { createBrowserTelemetry } from '../frontend-telemetry'
 
 // Global client instance for SSR hydration
-let globalClient: TogglyClient | null = null
+const globalClient = shallowRef<TogglyClient | null>(null)
 let globalConfig: TogglyClientConfig | null = null
 
 /**
  * Create the Toggly composable for the root component
  */
 export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
+  if (typeof window !== 'undefined' && globalClient.value) {
+    globalClient.value.destroy({flush: false})
+    globalClient.value = null
+  }
   const isReady = ref(false)
   const isLoading = ref(false)
   const error = ref<Error | null>(null)
   const features = ref<Record<string, boolean>>({ ...config.featureDefaults })
   const identity = ref<string | undefined>(config.identity)
+  let retired = false
+  const current = () => !retired && (typeof window === 'undefined' || globalClient.value === client)
 
   // Merge config with defaults
   const mergedConfig: TogglyClientConfig = {
@@ -29,54 +36,69 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     persistFeatures: false,
     featuresStorageKey: 'toggly:features',
     ...config,
+    ...(typeof window !== 'undefined'
+      ? {
+          enableTelemetry: config.enableTelemetry ?? true,
+          enableUsageTracking: config.enableUsageTracking ?? true,
+          enableMetrics: config.enableMetrics ?? true,
+          frontendTelemetryFactory: createBrowserTelemetry,
+        }
+      : {}),
   }
 
   if (typeof window !== 'undefined') globalConfig = mergedConfig
 
-  // Load persisted identity if available
-  if (
-    mergedConfig.persistIdentity &&
-    typeof localStorage !== 'undefined' &&
-    !identity.value
-  ) {
-    const persistedIdentity = localStorage.getItem(
-      mergedConfig.identityStorageKey!
-    )
-    if (persistedIdentity) {
-      identity.value = persistedIdentity
-      mergedConfig.identity = persistedIdentity
+  // Storage is optional, including browsers that throw from its getter.
+  try {
+    if (mergedConfig.persistIdentity && typeof localStorage !== 'undefined' && !identity.value) {
+      const persistedIdentity = localStorage.getItem(mergedConfig.identityStorageKey!)
+      if (persistedIdentity) {identity.value = persistedIdentity; mergedConfig.identity = persistedIdentity}
     }
-  }
-
-  // Load persisted features if available
-  if (
-    mergedConfig.persistFeatures &&
-    typeof localStorage !== 'undefined'
-  ) {
-    const persistedFeatures = localStorage.getItem(
-      mergedConfig.featuresStorageKey!
-    )
-    if (persistedFeatures) {
-      try {
-        const parsed = JSON.parse(persistedFeatures)
-        features.value = parsed
-        mergedConfig.featureDefaults = {
-          ...parsed,
-          ...mergedConfig.featureDefaults,
-        }
-      } catch {
-        // Invalid JSON, ignore
-      }
-    }
-  }
+  } catch { /* Continue with the configured in-memory identity. */ }
 
   // Create client
   const client = createTogglyClient(mergedConfig)
-  if (typeof window !== 'undefined') globalClient = client
-  client.subscribeFeaturesRefresh?.(() => {
-    features.value = client.state.features as Record<string, boolean>
+  features.value = client.state.features as Record<string, boolean>
+  function persistIdentity() {
+    if (mergedConfig.persistIdentity) try {
+      if (typeof localStorage === 'undefined') return
+      localStorage.setItem(mergedConfig.identityStorageKey!, client.identity ?? '')
+    } catch { /* Optional persistence must not prevent context changes. */ }
+  }
+  // Admission changes loading, not the accepted feature projection. Publishing
+  // a reset snapshot here would turn a loading-only render into a UI check.
+  function projectLoading() {
+    if (!current()) return
+    isLoading.value = client.state.loading
     error.value = client.state.error
-  })
+  }
+  // Read accepted core state, never the result captured by an older invocation.
+  // A skipped refresh does not supersede the initialization still in flight.
+  function project() {
+    if (!current()) return
+    features.value = client.state.features as Record<string, boolean>
+    isReady.value = client.state.initialized
+    isLoading.value = client.state.loading
+    error.value = client.state.error
+    identity.value = client.identity
+  }
+  function projectSettlement() {
+    // A no-op or retired invocation cannot publish another operation's pending
+    // reset snapshot. Its accepted notification or settlement will publish it.
+    if (client.state.loading) projectLoading()
+    else project()
+  }
+  const unsubscribe = client.subscribeFeaturesRefresh?.(project)
+  const destroy = client.destroy.bind(client)
+  client.destroy = options => {
+    if (retired) return
+    retired = true
+    isLoading.value = false
+    isReady.value = false
+    unsubscribe?.()
+    if (globalClient.value === client) globalClient.value = null
+    destroy(options)
+  }
 
   const toggly: UseTogglyReturn = {
     client,
@@ -85,97 +107,59 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     error,
     features,
     identity,
+    telemetry: {
+      recordUsage: (featureKey, variant) => client.recordUsage(featureKey, undefined, variant),
+      recordView: (featureKey, variant) => client.recordView(featureKey, undefined, variant),
+      incrementCounter: (metricKey, value) => client.incrementCounter(metricKey, value),
+      setGauge: (metricKey, value) => client.setGauge(metricKey, value),
+      flushTelemetry: () => client.flushTelemetry(),
+    },
 
     async init(newConfig?: TogglyConfig) {
-      isLoading.value = true
-      error.value = null
-
       try {
-        const defs = await client.init(newConfig)
-        features.value = defs as Record<string, boolean>
-        isReady.value = true
-
-        // Check if client encountered an error (it catches internally)
-        if (client.state.error) {
-          error.value = client.state.error
-        }
-
-        // Persist features if enabled (only if no error)
-        if (
-          !client.state.error &&
-          mergedConfig.persistFeatures &&
-          typeof localStorage !== 'undefined'
-        ) {
-          localStorage.setItem(
-            mergedConfig.featuresStorageKey!,
-            JSON.stringify(defs)
-          )
-        }
-
-        // Update identity ref
-        identity.value = client.identity
-      } catch (e) {
-        error.value = e as Error
-        // Still mark as ready since we use defaults
-        isReady.value = true
+        const pending = client.init(newConfig)
+        projectLoading()
+        await pending
+      } catch {
+        // Core owns initialization defaults and errors. Disposal cannot make it ready.
       } finally {
-        isLoading.value = false
+        projectSettlement()
+        if (current()) persistIdentity()
       }
     },
 
     async refresh() {
-      isLoading.value = true
-      error.value = client.state.error
-
       try {
-        const defs = await client.refresh()
-        features.value = defs as Record<string, boolean>
-        error.value = client.state.error
-
-        // Persist features if enabled
-        if (
-          !client.state.error &&
-          mergedConfig.persistFeatures &&
-          typeof localStorage !== 'undefined'
-        ) {
-          localStorage.setItem(
-            mergedConfig.featuresStorageKey!,
-            JSON.stringify(defs)
-          )
-        }
+        const pending = client.refresh()
+        projectLoading()
+        await pending
       } catch (e) {
-        features.value = client.state.features as Record<string, boolean>
-        error.value = e as Error
-        throw e
+        if (current()) throw e
       } finally {
-        isLoading.value = false
+        projectSettlement()
       }
     },
 
     async setIdentity(newIdentity: string) {
-      try {
-        await client.setIdentity(newIdentity)
-        identity.value = client.identity
-        features.value = client.state.features as Record<string, boolean>
-        error.value = client.state.error
+      return toggly.setContext({identity: newIdentity})
+    },
 
-        if (
-          mergedConfig.persistIdentity &&
-          typeof localStorage !== 'undefined'
-        ) {
-          localStorage.setItem(mergedConfig.identityStorageKey!, newIdentity)
-        }
+    async setContext(update) {
+      try {
+        const pending = client.setContext(update)
+        projectLoading()
+        await pending
       } catch (e) {
-        identity.value = client.identity
-        features.value = client.state.features as Record<string, boolean>
-        error.value = e as Error
-        throw e
+        if (current()) throw e
+      } finally {
+        projectSettlement()
+        if (current()) persistIdentity()
       }
     },
 
     async isFeatureOn(
       featureKey: string,
-      context?: import('@ops-ai/nuxt-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+      context?: import('@ops-ai/nuxt-toggly-core/browser').TogglyEntityContext | Record<string, unknown> | null,
       kind?: string,
     ) {
       return client.isFeatureOn(featureKey, context, kind)
@@ -183,7 +167,7 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
 
     async isFeatureOff(
       featureKey: string,
-      context?: import('@ops-ai/nuxt-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+      context?: import('@ops-ai/nuxt-toggly-core/browser').TogglyEntityContext | Record<string, unknown> | null,
       kind?: string,
     ) {
       return client.isFeatureOff(featureKey, context, kind)
@@ -193,13 +177,14 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
       featureKeys: string[],
       requirement: FeatureRequirement = 'all',
       negate: boolean = false,
-      context?: import('@ops-ai/nuxt-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
+      context?: import('@ops-ai/nuxt-toggly-core/browser').TogglyEntityContext | Record<string, unknown> | null,
       kind?: string,
     ) {
       return client.evaluateFeatureGate(featureKeys, requirement, negate, context, kind)
     },
   }
 
+  if (typeof window !== 'undefined') globalClient.value = client
   return toggly
 }
 
@@ -231,7 +216,12 @@ export function provideToggly(toggly: UseTogglyReturn): void {
  * Get the global Toggly client (for use outside of Vue components)
  */
 export function getTogglyClient(): TogglyClient | null {
-  return globalClient
+  return globalClient.value
+}
+
+// Internal directive ownership subscription; not exported by the package entry.
+export function watchTogglyClient(listener: (client: TogglyClient | null) => void): () => void {
+  return watch(globalClient, listener, {flush: 'sync'})
 }
 
 /**
@@ -255,9 +245,9 @@ export function createTogglyPlugin(config: TogglyClientConfig) {
  * Reset global state (for testing)
  */
 export function resetToggly(): void {
-  if (globalClient) {
-    globalClient.destroy()
-    globalClient = null
+  if (globalClient.value) {
+    globalClient.value.destroy()
+    globalClient.value = null
   }
   globalConfig = null
 }

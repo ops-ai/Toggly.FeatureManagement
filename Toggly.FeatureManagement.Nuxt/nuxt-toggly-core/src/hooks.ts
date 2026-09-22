@@ -162,13 +162,14 @@ export class HookExecutor {
   /**
    * Execute afterRefresh hooks
    */
-  async executeAfterRefresh(flags: FeatureDefinitions): Promise<void> {
+  async executeAfterRefresh(flags: FeatureDefinitions, isCurrent: () => boolean = () => true): Promise<void> {
     const booleanFlags: Record<string, boolean> = {}
     for (const [key, value] of Object.entries(flags)) {
       booleanFlags[key] = resolveEvaluatedDefinition(value)
     }
 
     for (const hook of this.hooks) {
+      if (!isCurrent()) return
       if (hook.afterRefresh) {
         try {
           await hook.afterRefresh(booleanFlags)

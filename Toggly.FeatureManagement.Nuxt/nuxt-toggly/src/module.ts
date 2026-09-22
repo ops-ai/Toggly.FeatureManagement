@@ -34,6 +34,10 @@ export default defineNuxtModule<ModuleOptions>({
     environment: 'Production',
     refreshInterval: 180000,
     showFeatureDuringEvaluation: false,
+    enableTelemetry: true,
+    enableUsageTracking: true,
+    enableMetrics: true,
+    telemetryFlushIntervalMs: 45000,
   },
 
   setup(options, nuxt) {
@@ -180,3 +184,6 @@ export type { ModuleOptions, RuntimeConfig } from './module/types'
 export * from '@ops-ai/nuxt-toggly-core'
 export * from '@ops-ai/nuxt-toggly-client'
 export * from '@ops-ai/nuxt-toggly-server'
+// Resolve the client/server wildcard collision in favor of the trusted public
+// core factory that this aggregate package has always exposed.
+export { createTogglyClient } from '@ops-ai/nuxt-toggly-core'

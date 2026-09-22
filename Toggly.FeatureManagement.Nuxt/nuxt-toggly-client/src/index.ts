@@ -8,14 +8,14 @@ export type {
   FeatureDefinitions,
   Hook,
   HookMetadata,
-} from '@ops-ai/nuxt-toggly-core'
+} from '@ops-ai/nuxt-toggly-core/browser'
 
 export {
   createTogglyClient,
   HookExecutor,
   evaluateGate,
   normalizeFeatureKeys,
-} from '@ops-ai/nuxt-toggly-core'
+} from '@ops-ai/nuxt-toggly-core/browser'
 
 // Client types
 export type {
@@ -24,6 +24,7 @@ export type {
   UseFeatureFlagReturn,
   UseFeatureGateReturn,
   FeatureProps,
+  BrowserTelemetry,
 } from './types'
 
 export { TOGGLY_INJECTION_KEY } from './types'

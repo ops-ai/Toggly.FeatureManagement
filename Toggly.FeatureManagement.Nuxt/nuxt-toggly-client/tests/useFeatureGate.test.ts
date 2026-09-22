@@ -280,7 +280,7 @@ describe('useFeatureGate', () => {
     await new Promise((resolve) => setTimeout(resolve, 10))
     expect(isEnabled.value).toBe(true)
 
-    toggly.features.value = { 'feature-a': false }
+    toggly.client.hydrateEvaluatedFeatures({ 'feature-a': false })
     await new Promise((resolve) => setTimeout(resolve, 10))
 
     expect(isEnabled.value).toBe(false)
