@@ -126,7 +126,7 @@ function transportId(value?: TogglyConfig['telemetryFetch']): number {
 
 // Browser targeting changes must commit before descendant passive refreshes.
 // Server imports and renders retain the inert passive-effect path.
-const useCommittedContextEffect = typeof globalThis.window === 'undefined' ? useEffect : useLayoutEffect;
+const useCommittedContextEffect = globalThis.window === undefined ? useEffect : useLayoutEffect;
 
 /**
  * Toggly Provider component

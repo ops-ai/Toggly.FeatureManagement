@@ -14,7 +14,7 @@ type Entry = {partition: number; context: Attribution; key: string; variant?: st
 
 /** Render may be abandoned: keep its bounded aggregate inert until commit. */
 export function createBrowserTelemetry(config: TogglyConfig) {
-  const enabled = typeof globalThis.window !== 'undefined' && typeof document !== 'undefined' &&
+  const enabled = globalThis.window !== undefined && typeof document !== 'undefined' &&
     !!config.appKey?.trim() && config.enableTelemetry !== false;
   const usage = enabled && config.enableUsageTracking !== false;
   const metrics = enabled && config.enableMetrics !== false;
