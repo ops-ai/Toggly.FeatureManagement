@@ -4,10 +4,16 @@
   import Feature from '@ops-ai/toggly-sveltekit/Feature.svelte';
   export let snapshot: TogglySnapshot;
   export let baseURI: string;
+  export let frontendKey: string;
+  export let telemetryEnabled: boolean;
+  let telemetryStatus = 'idle';
   let local = true;
   let failures = 0;
   const toggly = createToggly(snapshot, {
-    appKey: 'frontend-fixture',
+    appKey: frontendKey,
+    environment: 'Fixture',
+    enableTelemetry: telemetryEnabled,
+    metricsBaseUrl: baseURI + '/metrics',
     baseURI,
     refreshInterval: 200,
     timeout: 2000,
@@ -48,3 +54,20 @@
     toggly.notifyLocalGatesChanged();
   }}>Local prerequisite</button
 >
+
+<button
+  on:click={() => {
+    toggly.recordUsage('checkout', 'variant-a');
+    toggly.recordView('checkout', 'variant-a');
+    toggly.incrementCounter('orders', 2);
+    toggly.setGauge('cart', 3.5);
+    telemetryStatus = 'queued';
+  }}>Record telemetry</button
+>
+<button
+  on:click={async () => {
+    await toggly.flushTelemetry();
+    telemetryStatus = 'flushed';
+  }}>Flush telemetry</button
+>
+<output data-testid="telemetry-status">{telemetryStatus}</output>

@@ -8,7 +8,7 @@
     "start": "node build"
   },
   "dependencies": {
-    "@ops-ai/toggly-sveltekit": "^0.1.0"
+    "@ops-ai/toggly-sveltekit": "^0.2.0"
   },
   "devDependencies": {
     "@sveltejs/adapter-node": "5.5.7",
