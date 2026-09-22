@@ -1,5 +1,3 @@
-## [1.16.0] - 2026-09-21
-
 ## [1.17.0] - 2026-09-22
 
 ### Added
@@ -8,6 +6,7 @@
   of trusted server usage. Omitted overrides inherit the existing shared
   settings; `enableTelemetry` remains the browser master opt-out.
 
+## [1.16.0] - 2026-09-21
 
 ### Added
 - Shared browser telemetry across React, Vue, Svelte and native Astro client components, enabled by default with an app key and configurable collector/interval/opt-out.
