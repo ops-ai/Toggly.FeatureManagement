@@ -1,5 +1,14 @@
 ## [1.16.0] - 2026-09-21
 
+## [1.17.0] - 2026-09-22
+
+### Added
+- Integration-only `browserEnableUsageTracking` and `browserEnableMetrics`
+  options let applications enable or disable browser categories independently
+  of trusted server usage. Omitted overrides inherit the existing shared
+  settings; `enableTelemetry` remains the browser master opt-out.
+
+
 ### Added
 - Shared browser telemetry across React, Vue, Svelte and native Astro client components, enabled by default with an app key and configurable collector/interval/opt-out.
 - Explicit usage, view, counter, latest-value gauge and awaitable flush methods; synchronous browser client disposal with bounded final flushing.

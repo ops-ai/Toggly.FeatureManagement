@@ -12,7 +12,12 @@ import type { TogglyConfig, PageFeatureMapping } from '../types/index.js';
 import { createTogglyServerClient } from '../server/toggly-server.js';
 import { REQUEST_SCOPED_CLOSE_TIMEOUT_MS } from '../telemetry/runtime.js';
 
-export interface TogglyIntegrationOptions extends TogglyConfig {}
+export interface TogglyIntegrationOptions extends TogglyConfig {
+  /** Browser usage/check/view policy; omitted inherits enableUsageTracking. */
+  browserEnableUsageTracking?: boolean;
+  /** Browser business metrics policy; omitted inherits enableMetrics. */
+  browserEnableMetrics?: boolean;
+}
 
 /**
  * Toggly Astro Integration
@@ -20,6 +25,7 @@ export interface TogglyIntegrationOptions extends TogglyConfig {}
 export default function togglyIntegration(
   options: TogglyIntegrationOptions = {}
 ): AstroIntegration {
+  const { browserEnableUsageTracking, browserEnableMetrics, ...sharedOptions } = options;
   const config: TogglyConfig = {
     baseURI: 'https://definitions.toggly.io',
     environment: 'Production',
@@ -29,7 +35,7 @@ export default function togglyIntegration(
     connectTimeout: 5 * 1000,
     allFeaturesEnabledDuringBuild: false,
     enableVariants: false,
-    ...options,
+    ...sharedOptions,
   };
 
   let pageFeatureMapping: PageFeatureMapping = {};
@@ -48,7 +54,12 @@ export default function togglyIntegration(
 
         // Inject client setup script
         // For client-side, we never want allFeaturesEnabledDuringBuild since that's only for SSG
-        const clientConfig = { ...config, allFeaturesEnabledDuringBuild: false };
+        const clientConfig: TogglyConfig = {
+          ...config,
+          allFeaturesEnabledDuringBuild: false,
+          enableUsageTracking: browserEnableUsageTracking ?? config.enableUsageTracking,
+          enableMetrics: browserEnableMetrics ?? config.enableMetrics,
+        };
         injectScript(
           'page',
           `

@@ -29,7 +29,9 @@ await mkdir(root, { recursive: true });
 await cp(new URL('./packed-host/', import.meta.url), root, { recursive: true });
 console.log(JSON.stringify({ root, node: process.version, versions: selected }));
 const npm = process.env.npm_execpath;
-const environment = { ...process.env, TOGGLY_DISABLE_TELEMETRY: '1', ASTRO_TELEMETRY_DISABLED: '1' };
+const environment = { ...process.env, ASTRO_TELEMETRY_DISABLED: '1' };
+// Runtime policy must stand on its own, independently of caller process state.
+delete environment.TOGGLY_DISABLE_TELEMETRY;
 async function run(args, cwd = root, extraEnv = {}) {
   await bounded(() => new Promise((resolve, reject) => {
     const child = spawn(process.execPath, args, { cwd, env: { ...environment, ...extraEnv }, stdio: 'inherit', detached: true });
@@ -103,13 +105,14 @@ async function signed(defs) {
   const signature = Buffer.from(await webcrypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, keys.privateKey, digest)).toString('base64');
   return { defs, signature, timestamp, kid: publicKey.kid };
 }
+const unexpectedMetrics = [];
 const telemetry = []; const telemetryHeaders = []; let telemetryPreflights = 0;
 const metrics = createServer((request, response) => {
   response.setHeader('Access-Control-Allow-Origin', request.headers.origin ?? '*');
   response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Content-Encoding');
   if (request.method === 'OPTIONS') {telemetryPreflights++; response.writeHead(204); response.end(); return;}
-  if (request.method !== 'POST' || request.url !== '/base/api/frontend/telemetry') {response.writeHead(404); response.end(); return;}
+  if (request.method !== 'POST' || request.url !== '/base/api/frontend/telemetry') {unexpectedMetrics.push({method:request.method,url:request.url});response.writeHead(404); response.end(); return;}
   const chunks = []; request.on('data', chunk => chunks.push(chunk)); request.on('end', () => {
     const bytes = Buffer.concat(chunks); telemetryHeaders.push(request.headers);
     telemetry.push(JSON.parse((request.headers['content-encoding'] === 'gzip' ? gunzipSync(bytes) : bytes).toString()));
@@ -190,6 +193,13 @@ async function waitForHost(url) {
   assert.match(html, /id="server-negate"/);
   const mapping = JSON.parse(await readFile(path.join(root, 'dist/toggly-page-features.json')));
   assert.equal(mapping['/gated'], 'Visible');
+  const serializedConfig = JSON.parse(await readFile(path.join(root, 'dist/toggly-config.json')));
+  assert.equal(serializedConfig.enableUsageTracking, false);
+  assert.equal(serializedConfig.enableMetrics, false);
+  assert.equal('browserEnableUsageTracking' in serializedConfig, false);
+  assert.equal('browserEnableMetrics' in serializedConfig, false);
+  assert.deepEqual(telemetry, [], 'SSG never posts frontend telemetry');
+  assert.deepEqual(unexpectedMetrics, [], 'SSG trusted telemetry stays disabled');
   await run([astro, 'build'], root, { HOST_OUTPUT: 'server' });
   const port = Number(process.env.HOST_PORT ?? 43879);
   host = spawn(process.execPath, ['dist/server/entry.mjs'], { cwd: root, env: { ...environment, HOST: '127.0.0.1', PORT: String(port) }, stdio: 'inherit', detached: true });
@@ -206,6 +216,8 @@ async function waitForHost(url) {
     assert.equal(body.includes('id="context-denied"'), role !== 'admin');
   }));
   assert.equal(contexts.length, 4);
+  assert.deepEqual(telemetry, [], 'SSR never posts frontend telemetry');
+  assert.deepEqual(unexpectedMetrics, [], 'SSR trusted telemetry stays disabled');
   const require = createRequire(path.join(root, 'package.json'));
   const { chromium, expect } = require('@playwright/test');
   const browserServer = await chromium.launchServer({ headless: true, ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}) });
@@ -231,6 +243,11 @@ async function waitForHost(url) {
     }
   }
   await assertIslands(true);
+  assert.deepEqual(await evaluate(() => ({
+    usage: window.__TOGGLY_CONFIG__.enableUsageTracking,
+    metrics: window.__TOGGLY_CONFIG__.enableMetrics,
+    leaked: 'browserEnableUsageTracking' in window.__TOGGLY_CONFIG__ || 'browserEnableMetrics' in window.__TOGGLY_CONFIG__,
+  })), {usage:true, metrics:true, leaked:false});
   await evaluate(() => window.telemetry.flushTelemetry());
   assert.equal(telemetry.reduce((count, body) => count + (body.f?.Visible?.enabled?.[0] ?? 0), 0), 9, 'one effective check per initial island consumer including FeatureClient');
   assert.ok(telemetry.every(body => Object.values(body.f ?? {}).every(variants => Object.values(variants).every(counts => counts.length === 1))), 'hydration does not imply usage or views');
@@ -374,6 +391,17 @@ async function waitForHost(url) {
     }
     console.log('PASS inherited URL token initial/blank/rotation/clear', enableVariants?'variants':'boolean');
   }
+  telemetry.length = 0;
+  await evaluate(async () => {
+    const sdk = window.telemetry;
+    await sdk.initTogglyClient({...window.__TOGGLY_CONFIG__, enableTelemetry:false});
+    if (!sdk.$flag('Visible').get()) throw Error('Opt-out changed evaluation');
+    sdk.recordUsage('Visible'); sdk.recordView('Visible'); sdk.incrementCounter('orders'); sdk.setGauge('cart',3);
+    await sdk.flushTelemetry();
+    sdk.destroyTogglyClient();
+  });
+  assert.deepEqual(telemetry, [], 'master opt-out silences enabled browser categories');
+  assert.deepEqual(unexpectedMetrics, [], 'server usage remains disabled throughout host');
   await page.close();
   await stopHost();
   // Astro 7's current React/Vue Vite plugins have an upstream mixed-dev bug:
@@ -406,6 +434,7 @@ async function waitForHost(url) {
     await page.close();
     await stopHost();
   }
+  assert.deepEqual(unexpectedMetrics, [], 'dev server usage remains disabled');
   assert.equal(jwksPreflights, 0, 'public JWKS must not require CORS preflight');
   console.log(`PASS ${evidence.mode} Astro ${selected.astro}: packed exports/types, SSG, SSR, middleware, page manifest/gates, React/Vue/Svelte hydration, local gates, signed remote refresh/rejection, request context isolation, minted i/u queues, memory-only ABA/304/mode isolation, reentrant attribution, pending-hook nine-consumer refresh and dev hooks`);
 }
