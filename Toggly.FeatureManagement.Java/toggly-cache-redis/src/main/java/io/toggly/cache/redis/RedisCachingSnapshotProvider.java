@@ -7,6 +7,7 @@ import io.toggly.core.model.MetricDefinition;
 import io.toggly.core.snapshot.FeatureSnapshot;
 import io.toggly.core.snapshot.HttpSnapshotProvider;
 import io.toggly.core.snapshot.SnapshotProvider;
+import io.toggly.core.snapshot.VariantSnapshot;
 import io.toggly.core.telemetry.DefinitionCacheRecorder;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
@@ -196,6 +197,29 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     public void setDefinitionCacheRecorder(DefinitionCacheRecorder recorder) {
         this.definitionCacheRecorder = recorder;
         delegate.setDefinitionCacheRecorder(recorder);
+    }
+
+    // ========== Evaluated variants (dual-rail; additive to definitions) ==========
+    //
+    // Variants are not distributed through this Redis layer: the delegate
+    // (typically HttpSnapshotProvider) already keeps its own last-known-good
+    // variant snapshot with ETag-based freshness. Forwarding directly here
+    // keeps getVariant/getVariantValue working through caching wrappers
+    // instead of silently falling back to the SnapshotProvider default no-ops.
+
+    @Override
+    public VariantSnapshot getVariantSnapshot() {
+        return delegate.getVariantSnapshot();
+    }
+
+    @Override
+    public CompletableFuture<VariantSnapshot> getVariantSnapshotAsync() {
+        return delegate.getVariantSnapshotAsync();
+    }
+
+    @Override
+    public VariantSnapshot refreshVariants() {
+        return delegate.refreshVariants();
     }
 
     @Override

@@ -809,7 +809,7 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     private EvaluatedVariantDef parseVariantEntry(String json) {
         boolean enabled = extractBooleanValue(json, "enabled", false);
         String variant = extractStringValue(json, "variant");
-        Object configurationValue = extractScalarValue(json, "configurationValue");
+        Object configurationValue = extractJsonValue(json, "configurationValue");
         return new EvaluatedVariantDef(enabled, variant, configurationValue);
     }
 
@@ -823,38 +823,188 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     }
 
     /**
-     * Extracts a scalar (string/number/boolean/null) JSON value for a key.
-     * Mirrors {@link #parseParameters(String, Map)}'s scalar handling — nested
-     * objects/arrays are not supported by this zero-dependency parser.
+     * Extracts a JSON value of any shape (string/number/boolean/null/object/array)
+     * for a top-level key. Used for {@code configurationValue}, whose shape is
+     * defined by the feature's variant configuration on the server and may be a
+     * scalar, a JSON object, or a JSON array.
+     *
+     * @return the parsed value ({@link String}, {@link Long}, {@link Double},
+     *     {@link Boolean}, {@link Map}, {@link List}, or {@code null})
      */
-    private Object extractScalarValue(String json, String key) {
-        Pattern pattern = Pattern.compile(
-                "\"" + key + "\"\\s*:\\s*(\"[^\"]*\"|-?[\\d.]+|true|false|null)",
-                Pattern.DOTALL);
-        Matcher matcher = pattern.matcher(json);
-        if (!matcher.find()) {
+    private Object extractJsonValue(String json, String key) {
+        String search = "\"" + key + "\"";
+        int idx = json.indexOf(search);
+        if (idx < 0) {
             return null;
         }
-        String value = matcher.group(1);
-        if (value.startsWith("\"") && value.endsWith("\"")) {
-            return value.substring(1, value.length() - 1);
+        idx = idx + search.length();
+        while (idx < json.length() && Character.isWhitespace(json.charAt(idx))) idx++;
+        if (idx >= json.length() || json.charAt(idx) != ':') {
+            return null;
         }
-        if ("true".equals(value)) {
+        idx++;
+        int[] pos = {idx};
+        return parseJsonValue(json, pos);
+    }
+
+    /**
+     * Minimal recursive-descent JSON value parser (no external deps), used to
+     * decode {@code configurationValue} payloads that may nest objects/arrays.
+     */
+    private Object parseJsonValue(String json, int[] pos) {
+        skipJsonWhitespace(json, pos);
+        if (pos[0] >= json.length()) {
+            return null;
+        }
+        char c = json.charAt(pos[0]);
+        if (c == '{') {
+            return parseJsonObject(json, pos);
+        }
+        if (c == '[') {
+            return parseJsonArray(json, pos);
+        }
+        if (c == '"') {
+            return parseJsonString(json, pos);
+        }
+        if (json.startsWith("true", pos[0])) {
+            pos[0] += 4;
             return Boolean.TRUE;
         }
-        if ("false".equals(value)) {
+        if (json.startsWith("false", pos[0])) {
+            pos[0] += 5;
             return Boolean.FALSE;
         }
-        if ("null".equals(value)) {
+        if (json.startsWith("null", pos[0])) {
+            pos[0] += 4;
+            return null;
+        }
+        return parseJsonNumber(json, pos);
+    }
+
+    private Map<String, Object> parseJsonObject(String json, int[] pos) {
+        Map<String, Object> map = new HashMap<>();
+        pos[0]++; // consume '{'
+        skipJsonWhitespace(json, pos);
+        if (pos[0] < json.length() && json.charAt(pos[0]) == '}') {
+            pos[0]++;
+            return map;
+        }
+        while (pos[0] < json.length()) {
+            skipJsonWhitespace(json, pos);
+            if (pos[0] >= json.length() || json.charAt(pos[0]) != '"') {
+                break;
+            }
+            String key = parseJsonString(json, pos);
+            skipJsonWhitespace(json, pos);
+            if (pos[0] < json.length() && json.charAt(pos[0]) == ':') {
+                pos[0]++;
+            }
+            Object value = parseJsonValue(json, pos);
+            map.put(key, value);
+            skipJsonWhitespace(json, pos);
+            if (pos[0] < json.length() && json.charAt(pos[0]) == ',') {
+                pos[0]++;
+                continue;
+            }
+            if (pos[0] < json.length() && json.charAt(pos[0]) == '}') {
+                pos[0]++;
+            }
+            break;
+        }
+        return map;
+    }
+
+    private List<Object> parseJsonArray(String json, int[] pos) {
+        List<Object> list = new ArrayList<>();
+        pos[0]++; // consume '['
+        skipJsonWhitespace(json, pos);
+        if (pos[0] < json.length() && json.charAt(pos[0]) == ']') {
+            pos[0]++;
+            return list;
+        }
+        while (pos[0] < json.length()) {
+            list.add(parseJsonValue(json, pos));
+            skipJsonWhitespace(json, pos);
+            if (pos[0] < json.length() && json.charAt(pos[0]) == ',') {
+                pos[0]++;
+                continue;
+            }
+            if (pos[0] < json.length() && json.charAt(pos[0]) == ']') {
+                pos[0]++;
+            }
+            break;
+        }
+        return list;
+    }
+
+    private String parseJsonString(String json, int[] pos) {
+        // Assumes json.charAt(pos[0]) == '"'.
+        pos[0]++; // consume opening quote
+        StringBuilder sb = new StringBuilder();
+        while (pos[0] < json.length()) {
+            char c = json.charAt(pos[0]);
+            if (c == '"') {
+                pos[0]++;
+                break;
+            }
+            if (c == '\\' && pos[0] + 1 < json.length()) {
+                char next = json.charAt(pos[0] + 1);
+                switch (next) {
+                    case '"': sb.append('"'); break;
+                    case '\\': sb.append('\\'); break;
+                    case '/': sb.append('/'); break;
+                    case 'n': sb.append('\n'); break;
+                    case 'r': sb.append('\r'); break;
+                    case 't': sb.append('\t'); break;
+                    case 'b': sb.append('\b'); break;
+                    case 'f': sb.append('\f'); break;
+                    case 'u':
+                        if (pos[0] + 5 < json.length()) {
+                            String hex = json.substring(pos[0] + 2, pos[0] + 6);
+                            try {
+                                sb.append((char) Integer.parseInt(hex, 16));
+                            } catch (NumberFormatException ignored) {
+                                // Malformed escape — skip rather than throw.
+                            }
+                            pos[0] += 4;
+                        }
+                        break;
+                    default:
+                        sb.append(next);
+                }
+                pos[0] += 2;
+            } else {
+                sb.append(c);
+                pos[0]++;
+            }
+        }
+        return sb.toString();
+    }
+
+    private Object parseJsonNumber(String json, int[] pos) {
+        int start = pos[0];
+        while (pos[0] < json.length() && "-+.eE0123456789".indexOf(json.charAt(pos[0])) >= 0) {
+            pos[0]++;
+        }
+        String numStr = json.substring(start, pos[0]);
+        if (numStr.isEmpty()) {
+            // Unrecognized token — advance one char to avoid an infinite loop.
+            pos[0]++;
             return null;
         }
         try {
-            if (value.contains(".")) {
-                return Double.parseDouble(value);
+            if (numStr.indexOf('.') >= 0 || numStr.indexOf('e') >= 0 || numStr.indexOf('E') >= 0) {
+                return Double.parseDouble(numStr);
             }
-            return Long.parseLong(value);
+            return Long.parseLong(numStr);
         } catch (NumberFormatException e) {
-            return value;
+            return numStr;
+        }
+    }
+
+    private void skipJsonWhitespace(String json, int[] pos) {
+        while (pos[0] < json.length() && Character.isWhitespace(json.charAt(pos[0]))) {
+            pos[0]++;
         }
     }
 

@@ -21,7 +21,9 @@ import java.security.interfaces.ECPrivateKey;
 import java.security.interfaces.ECPublicKey;
 import java.security.spec.ECGenParameterSpec;
 import java.util.Base64;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -193,6 +195,83 @@ class HttpSnapshotProviderVariantsTest {
         // Indirect check: request succeeded against the mock server path prefix,
         // and the URL builder appends ?userId=... only when identity is set.
         assertThat(provider.getVariantSnapshot().getVariant("feature-a")).isNotNull();
+
+        provider.close();
+    }
+
+    @Test
+    void parsesObjectConfigurationValue() {
+        variantsBody.set(
+                "{\"defs\":{\"feature-a\":{\"enabled\":true,\"variant\":\"B\","
+                        + "\"configurationValue\":{\"color\":\"red\",\"limit\":5,"
+                        + "\"nested\":{\"flag\":true}}}}}");
+
+        HttpSnapshotProvider provider = new HttpSnapshotProvider(
+                baseConfig().enableVariants(true).build());
+
+        provider.refresh();
+
+        EvaluatedVariantDef entry = provider.getVariantSnapshot().getVariant("feature-a");
+        assertThat(entry).isNotNull();
+        Object configValue = entry.getConfigurationValue();
+        assertThat(configValue).isInstanceOf(Map.class);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> map = (Map<String, Object>) configValue;
+        assertThat(map.get("color")).isEqualTo("red");
+        assertThat(map.get("limit")).isEqualTo(5L);
+        assertThat(map.get("nested")).isInstanceOf(Map.class);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> nested = (Map<String, Object>) map.get("nested");
+        assertThat(nested.get("flag")).isEqualTo(Boolean.TRUE);
+
+        provider.close();
+    }
+
+    @Test
+    void parsesArrayConfigurationValue() {
+        variantsBody.set(
+                "{\"defs\":{\"feature-a\":{\"enabled\":true,\"variant\":\"B\","
+                        + "\"configurationValue\":[1,2,\"three\",{\"k\":\"v\"}]}}}");
+
+        HttpSnapshotProvider provider = new HttpSnapshotProvider(
+                baseConfig().enableVariants(true).build());
+
+        provider.refresh();
+
+        EvaluatedVariantDef entry = provider.getVariantSnapshot().getVariant("feature-a");
+        assertThat(entry).isNotNull();
+        Object configValue = entry.getConfigurationValue();
+        assertThat(configValue).isInstanceOf(List.class);
+
+        @SuppressWarnings("unchecked")
+        List<Object> list = (List<Object>) configValue;
+        assertThat(list).hasSize(4);
+        assertThat(list.get(0)).isEqualTo(1L);
+        assertThat(list.get(1)).isEqualTo(2L);
+        assertThat(list.get(2)).isEqualTo("three");
+        assertThat(list.get(3)).isInstanceOf(Map.class);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> nestedObj = (Map<String, Object>) list.get(3);
+        assertThat(nestedObj.get("k")).isEqualTo("v");
+
+        provider.close();
+    }
+
+    @Test
+    void parsesScalarConfigurationValueUnchanged() {
+        variantsBody.set(
+                "{\"defs\":{\"feature-a\":{\"enabled\":true,\"variant\":\"B\","
+                        + "\"configurationValue\":42}}}");
+
+        HttpSnapshotProvider provider = new HttpSnapshotProvider(
+                baseConfig().enableVariants(true).build());
+
+        provider.refresh();
+
+        EvaluatedVariantDef entry = provider.getVariantSnapshot().getVariant("feature-a");
+        assertThat(entry).isNotNull();
+        assertThat(entry.getConfigurationValue()).isEqualTo(42L);
 
         provider.close();
     }

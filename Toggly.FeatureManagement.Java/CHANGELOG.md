@@ -27,12 +27,13 @@
 - Signed-variants verification reuses the existing ES256/JWKS pipeline, gated by
   the same `useSignedDefinitions` flag Java already exposes for definitions
   (Java has one signature toggle rather than JS's separate `verifySignatures`).
-
-### Notes
 - `toggly-cache-caffeine` / `toggly-cache-redis` / `toggly-cache-redis-jedis8`
-  do not yet forward the new variant methods to their delegate (same
-  pre-existing gap as JWKS load/save caching); wrapped clients see an empty
-  variant snapshot until a follow-up wires that through.
+  now forward `getVariantSnapshot()` / `getVariantSnapshotAsync()` /
+  `refreshVariants()` to their delegate, so `getVariant`/`getVariantValue` work
+  correctly through caching wrappers instead of always seeing an empty variant
+  snapshot.
+- `HttpSnapshotProvider` now parses structured (object/array) `configurationValue`
+  payloads for evaluated variants, not only scalars.
 
 ## 1.6.2
 
