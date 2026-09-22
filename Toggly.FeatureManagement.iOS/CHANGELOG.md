@@ -2,6 +2,13 @@
 
 All notable changes to the Toggly iOS SDK are documented in this file.
 
+## 1.5.2
+
+2026-09-21
+
+### Fixed
+- Install all four Swift products directly from the Git repository root using an exact `ios-sdk-v` release reference. The nested package and existing platform requirements remain supported.
+
 ## 1.5.1
 
 2026-09-21

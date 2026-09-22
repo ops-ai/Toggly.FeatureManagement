@@ -6,6 +6,8 @@ on:
       - develop
     paths:
       - 'Toggly.FeatureManagement.iOS/**'
+      - 'Package.swift'
+      - '.github/scripts/verify-swift-distribution*'
       - '.github/workflows/sdk-ios-release.yml'
       - '.github/workflows/analysis-ios.yml'
       - '.github/actions/resolve-release-version/**'
@@ -169,11 +171,13 @@ jobs:
 
             ```swift
             dependencies: [
-                .package(url: "https://github.com/ops-ai/Toggly.FeatureManagement.git", from: "${{ needs.validate.outputs.version }}")
+                .package(url: "https://github.com/ops-ai/Toggly.FeatureManagement.git", revision: "ios-sdk-v${{ needs.validate.outputs.version }}")
             ]
             ```
 
-            Or in Xcode: File → Add Package Dependencies → Enter the repository URL.
+            Or in Xcode: File → Add Package Dependencies → Enter the repository URL → Choose Commit and enter the full commit SHA referenced by `ios-sdk-v${{ needs.validate.outputs.version }}`.
+
+            Tags retain the `ios-sdk-v` prefix; use an exact revision reference rather than a semantic-version `from:` requirement.
 
             ### Packages
 
