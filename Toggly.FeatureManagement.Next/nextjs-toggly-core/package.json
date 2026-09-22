@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/nextjs-toggly-core",
-  "version": "1.11.1",
+  "version": "1.12.0",
   "description": "Core feature flag functionality for Next.js",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -8,6 +8,16 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "browser": {
+        "import": {
+          "types": "./dist/browser.d.ts",
+          "default": "./dist/browser.js"
+        },
+        "require": {
+          "types": "./dist/browser.d.cts",
+          "default": "./dist/browser.cjs"
+        }
+      },
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
@@ -25,6 +35,16 @@
       "require": {
         "types": "./dist/telemetry/grpc.d.cts",
         "default": "./dist/telemetry/grpc.cjs"
+      }
+    },
+    "./browser": {
+      "import": {
+        "types": "./dist/browser.d.ts",
+        "default": "./dist/browser.js"
+      },
+      "require": {
+        "types": "./dist/browser.d.cts",
+        "default": "./dist/browser.cjs"
       }
     }
   },
@@ -68,7 +88,8 @@
     "@ops-ai/toggly-eval": "^2.0.3",
     "@ops-ai/toggly-hooks-types": "^1.4.3",
     "@ops-ai/toggly-local-gates": "^1.0.1",
-    "@ops-ai/toggly-signed-defs": "^1.2.3"
+    "@ops-ai/toggly-signed-defs": "^1.2.3",
+    "@ops-ai/toggly-client-telemetry": "^1.1.0"
   },
   "optionalDependencies": {
     "@grpc/grpc-js": "^1.12.6",

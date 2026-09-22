@@ -45,6 +45,8 @@ describe('createToggly', () => {
 
     await createToggly({
       appKey: 'test-key',
+      enableTelemetry: false,
+      enableLiveUpdates: false,
       environment: 'Production',
     });
 
@@ -73,9 +75,10 @@ describe('createToggly', () => {
 
     await createToggly({
       appKey: 'test-key',
+      enableTelemetry: false,
+      enableLiveUpdates: false,
       environment: 'Production',
       enableVariants: true,
-      enableLiveUpdates: false,
     });
 
     const variants = get(togglyVariantsStore);
@@ -92,6 +95,8 @@ describe('createToggly', () => {
 
     await createToggly({
       appKey: 'test-key',
+      enableTelemetry: false,
+      enableLiveUpdates: false,
       environment: 'Production',
     });
 
@@ -111,6 +116,8 @@ describe('createToggly', () => {
 
     await createToggly({
       appKey: 'test-key',
+      enableTelemetry: false,
+      enableLiveUpdates: false,
       environment: 'Production',
       featureFlagsRefreshInterval: 5000,
     });
@@ -154,6 +161,8 @@ describe('createToggly', () => {
 
     await createToggly({
       appKey: 'test-key',
+      enableTelemetry: false,
+      enableLiveUpdates: false,
       environment: 'Production',
       featureFlagsRefreshInterval: 5000,
     });
@@ -177,6 +186,8 @@ describe('createToggly', () => {
 
     await createToggly({
       appKey: 'test-key',
+      enableTelemetry: false,
+      enableLiveUpdates: false,
       environment: 'Production',
     });
 
@@ -193,6 +204,8 @@ describe('createToggly', () => {
 
     await createToggly({
       appKey: 'test-key',
+      enableTelemetry: false,
+      enableLiveUpdates: false,
       environment: 'Production',
     });
 
@@ -213,6 +226,8 @@ describe('createToggly', () => {
 
     await createToggly({
       appKey: 'test-key',
+      enableTelemetry: false,
+      enableLiveUpdates: false,
       environment: 'Production',
     });
 
