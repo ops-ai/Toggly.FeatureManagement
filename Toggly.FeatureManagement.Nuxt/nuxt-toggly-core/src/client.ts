@@ -152,8 +152,9 @@ export function createTogglyClient(
     hasSnapshot = true
     snapshots.save({features:{...state.features}, definitions:[...state.definitions.values()], revision:cachedDefinitionsRevision})
   }
-  function transitionContext() {
+  function transitionContext(loading = false) {
     generation++
+    state.loading = loading
     refreshInFlight = false
     stopWebSocket(); stopRefreshInterval()
     if (activeScope !== snapshots.scope()) {activeScope = snapshots.scope(); restoreSnapshot()}
@@ -1053,7 +1054,7 @@ export function createTogglyClient(
         if (update.instanceId !== undefined) config.instanceId = update.instanceId.trim() || undefined
         if (update.groups !== undefined) config.groups = update.groups
         if (update.claims !== undefined) config.claims = update.claims
-        transitionContext()
+        transitionContext(true)
         installed = generation
         if (localDefinitions?.size) {applyLocalDefinitions(localDefinitions); cachedDefinitionsRevision = null; saveSnapshot(); notifyFeaturesRefresh()}
         if (hooks) await hookExecutor.executeAfterIdentify(update.identity!, hooks)

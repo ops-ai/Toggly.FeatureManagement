@@ -66,6 +66,13 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     } catch { /* Optional persistence must not prevent context changes. */ }
   }
   if (typeof window !== 'undefined') globalClient = client
+  // Admission changes loading, not the accepted feature projection. Publishing
+  // a reset snapshot here would turn a loading-only render into a UI check.
+  function projectLoading() {
+    if (!current()) return
+    isLoading.value = client.state.loading
+    error.value = client.state.error
+  }
   // Read accepted core state, never the result captured by an older invocation.
   // A skipped refresh does not supersede the initialization still in flight.
   function project() {
@@ -75,6 +82,12 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     isLoading.value = client.state.loading
     error.value = client.state.error
     identity.value = client.identity
+  }
+  function projectSettlement() {
+    // A no-op or retired invocation cannot publish another operation's pending
+    // reset snapshot. Its accepted notification or settlement will publish it.
+    if (client.state.loading) projectLoading()
+    else project()
   }
   const unsubscribe = client.subscribeFeaturesRefresh?.(project)
   const destroy = client.destroy.bind(client)
@@ -105,12 +118,12 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     async init(newConfig?: TogglyConfig) {
       try {
         const pending = client.init(newConfig)
-        project()
+        projectLoading()
         await pending
       } catch {
         // Core owns initialization defaults and errors. Disposal cannot make it ready.
       } finally {
-        project()
+        projectSettlement()
         if (current()) persistIdentity()
       }
     },
@@ -118,12 +131,12 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     async refresh() {
       try {
         const pending = client.refresh()
-        project()
+        projectLoading()
         await pending
       } catch (e) {
         if (current()) throw e
       } finally {
-        project()
+        projectSettlement()
       }
     },
 
@@ -134,12 +147,12 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     async setContext(update) {
       try {
         const pending = client.setContext(update)
-        project()
+        projectLoading()
         await pending
       } catch (e) {
         if (current()) throw e
       } finally {
-        project()
+        projectSettlement()
         if (current()) persistIdentity()
       }
     },

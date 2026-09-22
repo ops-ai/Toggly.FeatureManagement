@@ -1,5 +1,6 @@
 import {afterEach,beforeEach,expect,it,vi} from 'vitest'
-import {defineComponent,h} from 'vue'
+import {defineComponent,h,withDirectives} from 'vue'
+import {vFeatureShow} from '../src/directives/vFeature'
 import {mount,flushPromises} from '@vue/test-utils'
 import {gunzipSync} from 'node:zlib'
 import {createToggly,resetToggly} from '../src/composables/useToggly'
@@ -109,4 +110,23 @@ it('keeps newer network work loading when an older identify hook completes',asyn
  let releaseFetch!:(value:Response)=>void;vi.mocked(fetch).mockImplementationOnce(()=>new Promise<Response>(resolve=>{releaseFetch=resolve}))
  const current=t.refresh();await flushPromises();releaseHook();await old;expect(t.isLoading.value).toBe(true)
  releaseFetch(new Response(JSON.stringify({On:false})));await current;expect(t.isLoading.value).toBe(false);expect(t.features.value.On).toBe(false);expect(t.identity.value).toBe('bob')
+})
+it('clears retired loading when the public identity setter supersedes initialization',async()=>{
+ let release!:(value:Response)=>void
+ vi.mocked(fetch).mockImplementationOnce(()=>new Promise<Response>(r=>{release=r}))
+ const t=owner();const pending=t.init();await flushPromises();t.client.identity='bob'
+ expect(t.isLoading.value).toBe(false);expect(t.isReady.value).toBe(false);expect(t.identity.value).toBe('bob')
+ release(new Response(JSON.stringify({On:true})));await pending;expect(t.isLoading.value).toBe(false);expect(t.features.value).toEqual({})
+})
+
+it('does not turn loading-only initialization of a hydrated facade into a directive check',async()=>{
+ const t=owner({appKey:'',featureDefaults:{On:true}});t.client.hydrateEvaluatedFeatures({On:true});t.isReady.value=true
+ const wrapper=mount(defineComponent({setup:()=>()=>h('main',[h('p',String(t.features.value.On)),withDirectives(h('div','visible'),[[vFeatureShow,'On']])])}))
+ let release!:(value:Response)=>void
+ try {
+  await flushPromises();vi.mocked(fetch).mockImplementationOnce(()=>new Promise<Response>(resolve=>{release=resolve}))
+  const pending=t.init({appKey:'fixture'});await flushPromises();await t.refresh();await flushPromises();await t.telemetry.flushTelemetry();expect(packets).toEqual([])
+  release(new Response(JSON.stringify({On:true})));await pending;await flushPromises();await t.telemetry.flushTelemetry()
+  expect(packets).toEqual([{k:'fixture',e:'Production',u:'alice',f:{On:{enabled:[2]}}}])
+ }finally{wrapper.unmount()}
 })
