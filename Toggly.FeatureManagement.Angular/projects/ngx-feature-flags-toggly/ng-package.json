@@ -2,6 +2,7 @@
   "$schema": "../../node_modules/ng-packagr/ng-package.schema.json",
   "dest": "../../dist/ngx-feature-flags-toggly",
   "allowedNonPeerDependencies": [
+    "@ops-ai/toggly-client-telemetry",
     "@ops-ai/toggly-local-gates",
     "@ops-ai/toggly-signed-defs"
   ],

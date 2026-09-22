@@ -1,3 +1,40 @@
+## 1.12.0
+
+2026-09-18
+
+### Fixed
+
+- Discard inherited instance tokens from configured frontend URLs after token
+  clearing or identity changes, while preserving unrelated query values.
+
+- Preserve frontend definition endpoint paths and remove existing targeting query
+  values when a minted instance token is active, including local evaluation.
+
+- Preserve the existing empty-gate result for browser and trusted clients without
+  recording feature checks, and retain locale-independent group cache ordering.
+- Restore persisted mixed boolean and entity-gate definitions with their matching
+  revision after owner replacement, including offline and 304 refreshes.
+- Advertise the package version consistently in definitions and socket metadata.
+
+### Added
+
+- Forward host-provided instance tokens with identity fallback and isolated, bounded
+  definition/revision caches. Capture browser checks before reentrant callbacks;
+  preserve original attribution across context changes and lifecycle flushes.
+- Failed browser context refreshes retain the new context and matching cache or
+  defaults instead of restoring retired identity/definitions. Trusted server/edge
+  behavior and legacy usage/view identity/variant arguments are unchanged.
+
+- Add a compact browser telemetry companion with explicit usage/view/counter/gauge
+  APIs, bounded aggregation, separate collector configuration and lifecycle flushing.
+- Select a browser entry without trusted telemetry transports while preserving the
+  default Node and Edge behavior. Browser checks now count effective short-circuited
+  leaves once; hydration and refresh snapshots remain silent.
+- Preserve legacy identity/variant arguments and category opt-outs. Browser legacy
+  attributed counters become app-level; unsupported measures and observations emit
+  no data and report bounded diagnostics.
+- Isolate reinitialization and late async completions from disposed browser owners.
+
 ## 1.11.1
 
 2026-09-17

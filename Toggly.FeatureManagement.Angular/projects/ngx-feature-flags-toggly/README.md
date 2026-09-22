@@ -51,6 +51,67 @@ import { NgxFeatureFlagsTogglyModule } from '@ops-ai/ngx-feature-flags-toggly';
 export class AppModule {}
 ```
 
+## Browser telemetry
+
+Telemetry is enabled by default when an application key is configured. Each
+`TogglyService` owns its own bounded, in-memory reporter; server rendering and
+keyless configurations do not start telemetry. Set `enableTelemetry: false` in
+`provideToggly(...)` or `NgxFeatureFlagsTogglyModule.forRoot(...)` to opt out.
+
+```typescript
+provideToggly({
+  appKey: 'your-app-key',
+  environment: 'Production',
+  enableTelemetry: true,
+  metricsBaseUrl: 'https://metrics.toggly.io',
+  telemetryFlushIntervalMs: 45000,
+});
+
+// Inject TogglyService in your application.
+service.recordUsage('checkout');
+service.recordView('checkout', 'control');
+service.incrementCounter('orders', 1);
+service.setGauge('cart-value', 29.95);
+await service.flushTelemetry();
+```
+
+Automatic checks reflect each evaluated leaf after entity and device-local gates,
+before aggregate negation. Short-circuited leaves are not counted. Assigned
+variants are retained when enabled; other outcomes use `enabled` or `disabled`.
+Variant value lookups count once. UI recomputation counts a new evaluation;
+internal refresh and cache hydration do not. Usage and view events are explicit
+and never evaluate a feature.
+
+Payloads contain application key, environment, aggregate feature counts and
+application metrics, plus optional host-provided `instanceId` as `i`, or current
+client `identity` as `u`. A nonblank `i` takes precedence. Groups, claims and entity
+context are excluded. The server application setting for accepting client-generated
+`u` is **off by default**; HTTP 202 does not prove identity acceptance.
+
+Supply a token minted by your trusted backend through `provideToggly({ instanceId })`
+or `setContext({ instanceId })`. The browser SDK never mints tokens or uses Backend
+keys. Definitions with `i` suppress `u`, `userId`, `g` and `claim.*`, including values
+in a custom definitions URL. Without `i`, existing client targeting remains supported.
+`setContext` accepts partial updates: omitted fields retain their values, except an
+explicit identity change clears an omitted token. Pass `instanceId: ''` to clear a
+token while retaining client identity; pass `identity: ''` to clear identity and token.
+A failed context refresh retains the new context and its defaults or scoped cache,
+never the previous user's flags or token. Queued events and retries retain their
+original attribution; all contexts share one bounded queue.
+Metrics use an independent HTTP(S) endpoint with no credentials, query or fragment;
+the SDK appends `/api/frontend/telemetry` to its base path. Invalid endpoints disable
+telemetry; invalid intervals fall back to 45 seconds. Supported intervals are
+30–60 seconds with scheduling jitter.
+
+Timers, lifecycle listeners and delivery run outside Angular change detection.
+Hidden/pagehide and service destruction attempt a best-effort flush; destruction
+remains synchronous and detaches listeners. Delivery uses bounded batches, a
+five-second timeout and at most two retries for HTTP 429/503. Events are not
+persisted, and delivery is not guaranteed. Feature availability does not depend on
+telemetry delivery. Counter deltas must be nonnegative integers and gauges finite
+nonnegative numbers, at most 1,000,000 per call. Variant names accept 1–64 ASCII
+letters, digits, underscores and hyphens.
+
 ## Usage
 
 ### Structural Directive
@@ -168,6 +229,7 @@ export class MyComponent {
 | `appKey` | string | Your Toggly application key |
 | `environment` | string | Environment name (default: 'Production') |
 | `identity` | string | User identity for personalized flags |
+| `instanceId` | string | Opaque token supplied by your trusted backend; takes precedence over client targeting |
 | `featureDefaults` | object | Default values when offline |
 | `showFeatureDuringEvaluation` | boolean | Show content during flag evaluation |
 | `baseURI` | string | Custom API base URL |

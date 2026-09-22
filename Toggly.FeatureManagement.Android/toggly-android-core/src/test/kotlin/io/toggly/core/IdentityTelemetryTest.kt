@@ -275,6 +275,59 @@ class IdentityTelemetryTest {
         }
     }
 
+    @Test fun inheritedUserIdsAreSuppressedAcrossTokenRotationAndPreservedOnClear() = runBlocking {
+        MockWebServer().use { server ->
+            repeat(3) { server.enqueue(MockResponse().setHeader("ETag", "revision").setBody("{\"flag\":true}")) }
+            val service = TogglyService(inheritedUserIdOptions(server, "mint-one"))
+            try {
+                assertEquals(true, service.init().flags["flag"])
+                assertInheritedUserIdRequest(server, "mint-one")
+                assertEquals(true, service.setInstanceId("mint+two&three").flags["flag"])
+                assertInheritedUserIdRequest(server, "mint+two&three")
+                assertEquals(true, service.setInstanceId(null).flags["flag"])
+                assertInheritedUserIdRequest(server, null)
+                assertEquals(3, server.requestCount)
+            } finally { service.dispose() }
+        }
+    }
+
+    @Test fun omittedAndBlankTokensPreserveInheritedLegacyUserIds() = runBlocking {
+        MockWebServer().use { server ->
+            for (token in listOf(null, " ")) {
+                server.enqueue(MockResponse().setBody("{\"flag\":true}"))
+                val service = TogglyService(inheritedUserIdOptions(server, token))
+                try {
+                    assertEquals(true, service.init().flags["flag"])
+                    assertInheritedUserIdRequest(server, null)
+                } finally { service.dispose() }
+            }
+            assertEquals(2, server.requestCount)
+        }
+    }
+
+    private fun inheritedUserIdOptions(server: MockWebServer, token: String?) = options(server).copy(
+        enableTelemetry = false, instanceId = token, groups = listOf("beta"), claims = mapOf("plan" to "pro"),
+        baseUri = server.url("/prefix/nested?userId=private-one&user%49d=private%2Btwo%26three&userId=&u=stale&g=one&g=two&claim.plan=private&claim%2Erole=private&i=retired&keep=one&keep=two&keep=&keep=plus%2Bspace%20and%26").toString())
+
+    private fun assertInheritedUserIdRequest(server: MockWebServer, token: String?) {
+        val request = server.takeRequest(2, TimeUnit.SECONDS)!!
+        val url = request.requestUrl!!
+        assertEquals("/prefix/nested/evaluated-signed/test-app/Production", url.encodedPath)
+        assertEquals(listOf("one", "two", "", "plus+space and&"), url.queryParameterValues("keep"))
+        assertNull(request.getHeader("If-None-Match"))
+        if (token != null) {
+            assertEquals(setOf("keep", "i"), url.queryParameterNames)
+            assertEquals(listOf(token), url.queryParameterValues("i"))
+        } else {
+            assertEquals(setOf("userId", "u", "g", "claim.plan", "claim.role", "keep"), url.queryParameterNames)
+            assertEquals(listOf("private-one", "private+two&three", ""), url.queryParameterValues("userId"))
+            assertEquals(listOf("stale", "alice"), url.queryParameterValues("u"))
+            assertEquals(listOf("one", "two", "beta"), url.queryParameterValues("g"))
+            assertEquals(listOf("private", "pro"), url.queryParameterValues("claim.plan"))
+            assertEquals(listOf("private"), url.queryParameterValues("claim.role"))
+        }
+    }
+
     @Test fun mintedTokenRemovesTargetingAlreadyPresentInBaseUrl() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody("{}"))

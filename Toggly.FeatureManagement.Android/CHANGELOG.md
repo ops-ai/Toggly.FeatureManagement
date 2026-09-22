@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.1
+
+2026-09-21
+
+### Fixed
+- Remove inherited `userId` and percent-encoded targeting parameter names from definitions requests while a minted `instanceId` is active. Preserve unrelated duplicate query values and existing requests without a token.
+
 ## 1.7.0
 
 2026-09-19

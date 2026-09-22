@@ -46,6 +46,56 @@ await createToggly({
 })
 ```
 
+Keyed browser clients report bounded frontend telemetry by default. Telemetry
+contains the application key, environment, feature/variant counts, and app-level
+metrics. A host-provided `instanceId` is sent as `i`; otherwise `identity` is sent
+as client-asserted `u` when configured. The application's server setting for
+accepting client-generated metrics identities is off by default; a successful
+HTTP response does not establish that the server accepted `u`. Claims, groups,
+entity context, and timestamps are excluded. Disable it with `enableTelemetry: false`, or configure
+an independent endpoint and flush interval:
+
+```typescript
+await createToggly({
+  appKey: 'your-app-key',
+  environment: 'Production',
+  enableTelemetry: true,
+  metricsBaseUrl: 'https://metrics.toggly.io',
+  telemetryFlushIntervalMs: 45_000,
+})
+```
+
+Explicit telemetry APIs do not evaluate feature flags:
+
+```typescript
+import {
+  recordUsage,
+  recordView,
+  incrementCounter,
+  setGauge,
+  flushTelemetry,
+} from '@ops-ai/svelte-feature-flags-toggly'
+
+recordUsage('checkout-v2')
+recordView('checkout-v2', 'compact')
+incrementCounter('completed-orders')
+setGauge('active-carts', 12)
+await flushTelemetry()
+```
+
+The trusted backend mints `instanceId` and supplies it to the host. Never put a
+Backend key in browser code. Configure `instanceId` in `createToggly`, or update
+the owning service with `await getTogglyService().setContext({ instanceId })`.
+Definitions requests with a token omit client identity, groups, and claims.
+Queued telemetry keeps the attribution captured when each event was admitted.
+
+`setContext` preserves omitted fields. An empty `instanceId` clears the token;
+clear both `instanceId` and `identity` to remove telemetry attribution. Explicit
+context refresh failures still reject their Promise, but retain the new
+context's matching cached definitions or configured defaults; they no longer
+restore the previous user's flags or token. Persisted definitions and revisions
+are separated by targeting context and boolean/variant response mode.
+
 ### Using the Feature Component
 
 Now you can start using the Feature component anywhere in your application:
@@ -183,6 +233,7 @@ interface TogglyOptions {
   appKey?: string                      // Your Toggly app key
   environment?: string                  // Environment name (default: 'Production')
   identity?: string                     // User identity for targeting
+  instanceId?: string                   // Host-minted capability; takes precedence over identity
   featureDefaults?: { [key: string]: boolean }  // Default feature values
   showFeatureDuringEvaluation?: boolean // Show feature while evaluating (default: false)
   featureFlagsRefreshInterval?: number // Cache refresh interval in ms (default: 180000)

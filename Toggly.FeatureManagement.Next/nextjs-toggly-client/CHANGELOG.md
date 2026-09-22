@@ -1,3 +1,30 @@
+## 1.5.0
+
+2026-09-18
+
+### Fixed
+
+- Use current identity persistence settings when initializing an existing provider
+  after its persistence option or storage key changes.
+
+### Added
+
+- Forward host-provided instance tokens with identity fallback and isolated, bounded
+  definition/revision caches. Capture browser checks before reentrant callbacks;
+  preserve original attribution across context changes and lifecycle flushes.
+- Failed browser context refreshes retain the new context and matching cache or
+  defaults instead of restoring retired identity/definitions. Trusted server/edge
+  behavior and legacy usage/view identity/variant arguments are unchanged.
+
+- Expose the typed compact browser telemetry companion through provider context.
+  Configuration forwards opt-out, collector URL and flush interval options.
+- Count effective hook/component checks, including cached and local/entity-gated
+  values, without duplicate evaluations from result renders or implicit views.
+- Replace provider ownership when app/environment changes, retain StrictMode
+  replay, and flush/release resources on real unmount.
+- Validate packed production hosts on Next.js14,15,16 with real CORS/gzip telemetry,
+  lifecycle flushing, SSR silence and trusted transport exclusion.
+
 ## 1.4.1
 
 2026-09-04
