@@ -9,6 +9,7 @@
 - Ignore unrelated SSR/legacy snapshots for minted contexts and tolerate unavailable browser storage.
 
 ### Changed
+- Rebind mounted feature directives when the browser client is replaced, and release retired or unmounted subscriptions.
 - Project readiness, flags and errors from accepted core state so skipped refreshes preserve initialization; direct disposal synchronously retires the facade.
 - Replacing a browser client cancels and discards its retired telemetry owner; final disposal can flush.
 - Mounted composables and components recompute effective local/entity gates and count actual checks after refreshed definitions, while cold hydration remains silent.

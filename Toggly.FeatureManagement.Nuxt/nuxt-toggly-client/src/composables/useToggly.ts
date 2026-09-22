@@ -1,4 +1,4 @@
-import { ref, inject, provide, type App, readonly } from 'vue'
+import { ref, shallowRef, watch, inject, provide, type App, readonly } from 'vue'
 import {
   createTogglyClient,
   type TogglyClient,
@@ -10,16 +10,16 @@ import { TOGGLY_INJECTION_KEY } from '../types'
 import { createBrowserTelemetry } from '../frontend-telemetry'
 
 // Global client instance for SSR hydration
-let globalClient: TogglyClient | null = null
+const globalClient = shallowRef<TogglyClient | null>(null)
 let globalConfig: TogglyClientConfig | null = null
 
 /**
  * Create the Toggly composable for the root component
  */
 export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
-  if (typeof window !== 'undefined' && globalClient) {
-    globalClient.destroy({flush: false})
-    globalClient = null
+  if (typeof window !== 'undefined' && globalClient.value) {
+    globalClient.value.destroy({flush: false})
+    globalClient.value = null
   }
   const isReady = ref(false)
   const isLoading = ref(false)
@@ -27,7 +27,7 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
   const features = ref<Record<string, boolean>>({ ...config.featureDefaults })
   const identity = ref<string | undefined>(config.identity)
   let retired = false
-  const current = () => !retired && (typeof window === 'undefined' || globalClient === client)
+  const current = () => !retired && (typeof window === 'undefined' || globalClient.value === client)
 
   // Merge config with defaults
   const mergedConfig: TogglyClientConfig = {
@@ -65,7 +65,6 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
       localStorage.setItem(mergedConfig.identityStorageKey!, client.identity ?? '')
     } catch { /* Optional persistence must not prevent context changes. */ }
   }
-  if (typeof window !== 'undefined') globalClient = client
   // Admission changes loading, not the accepted feature projection. Publishing
   // a reset snapshot here would turn a loading-only render into a UI check.
   function projectLoading() {
@@ -97,6 +96,7 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     isLoading.value = false
     isReady.value = false
     unsubscribe?.()
+    if (globalClient.value === client) globalClient.value = null
     destroy(options)
   }
 
@@ -184,6 +184,7 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     },
   }
 
+  if (typeof window !== 'undefined') globalClient.value = client
   return toggly
 }
 
@@ -215,7 +216,12 @@ export function provideToggly(toggly: UseTogglyReturn): void {
  * Get the global Toggly client (for use outside of Vue components)
  */
 export function getTogglyClient(): TogglyClient | null {
-  return globalClient
+  return globalClient.value
+}
+
+// Internal directive ownership subscription; not exported by the package entry.
+export function watchTogglyClient(listener: (client: TogglyClient | null) => void): () => void {
+  return watch(globalClient, listener, {flush: 'sync'})
 }
 
 /**
@@ -239,9 +245,9 @@ export function createTogglyPlugin(config: TogglyClientConfig) {
  * Reset global state (for testing)
  */
 export function resetToggly(): void {
-  if (globalClient) {
-    globalClient.destroy()
-    globalClient = null
+  if (globalClient.value) {
+    globalClient.value.destroy()
+    globalClient.value = null
   }
   globalConfig = null
 }

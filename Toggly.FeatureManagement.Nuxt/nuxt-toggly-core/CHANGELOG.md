@@ -8,6 +8,8 @@
 - Ignore unrelated SSR/legacy snapshots for minted contexts and tolerate unavailable browser storage.
 
 ### Changed
+- Treat identical browser token/group/claim updates as no-ops so evaluation hooks do not recursively notify mounted consumers.
+- Keep trusted context updates coherent: re-evaluate local snapshots without network requests, refresh remote results for changed groups or claims, and release listeners on disposal.
 - Keep browser loading scoped to admitted operations through refresh hooks and discard inherited URL tokens when the current context has no instance token.
 - Fence superseded refresh hooks and listeners, copy selected local gate callbacks, and preserve trusted eager gate hook/check ordering.
 - Build browser definitions paths independently of base queries and scrub existing targeting parameters for minted requests.

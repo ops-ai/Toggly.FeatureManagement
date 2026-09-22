@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { createApp, defineComponent, h, nextTick } from 'vue'
-import { createToggly, useFeatureGate as useClientGate, TOGGLY_INJECTION_KEY } from '@ops-ai/nuxt-toggly-client'
+import { createApp, defineComponent, h, nextTick, withDirectives } from 'vue'
+import { createToggly, useFeatureGate as useClientGate, TOGGLY_INJECTION_KEY, getTogglyClient, vFeature, vFeatureShow, vFeatureClass } from '@ops-ai/nuxt-toggly-client'
 const toggly = useToggly()
+const owningApp = useNuxtApp().vueApp
+const metricsBaseUrl = useRuntimeConfig().public.toggly.metricsBaseUrl
 const evaluationTrace: unknown[] = []
 let evaluationPhase = 'mount'
 if (import.meta.client && new URLSearchParams(location.search).has('evaluationDiagnostic')) {
@@ -57,7 +59,7 @@ function exitTelemetry() {
 }
 async function flushTelemetry() { await toggly.telemetry.flushTelemetry() }
 async function replaceTelemetryOwner() {
-  const common = { baseUri: location.origin + '/api/definitions', metricsBaseUrl: useRuntimeConfig().public.toggly.metricsBaseUrl, refreshInterval: 0, enableLiveUpdates: false }
+  const common = { baseUri: location.origin + '/api/definitions', metricsBaseUrl, refreshInterval: 0, enableLiveUpdates: false }
   const oldOwner = createToggly({ ...common, appKey: 'old-app' })
   await oldOwner.init()
   oldOwner.telemetry.incrementCounter('old-owner-count')
@@ -68,6 +70,43 @@ async function replaceTelemetryOwner() {
   await newOwner.telemetry.flushTelemetry()
 }
 onMounted(() => {
+  ;(window as any).finishMountedUi = async () => {
+    const client = getTogglyClient()
+    owningApp.unmount()
+    client?.destroy({flush:false})
+    await nextTick()
+  }
+  ;(window as any).verifyDirectiveReplacement = async () => {
+    const common = {identity:'alice',persistIdentity:false,baseUri:location.origin+'/api/definitions',metricsBaseUrl,refreshInterval:0,enableLiveUpdates:false}
+    const oldOwner = createToggly({...common,appKey:'directive-old'})
+    await oldOwner.init()
+    const element = document.createElement('div');document.body.appendChild(element)
+    const app = createApp(defineComponent({setup:()=>()=>h('div',[
+      withDirectives(h('span',{id:'owned-display'}),[[vFeature,'Enabled']]),
+      withDirectives(h('span',{id:'owned-show'}),[[vFeatureShow,'Enabled']]),
+      withDirectives(h('span',{id:'owned-class'}),[[vFeatureClass,'Enabled','enabled']]),
+    ])}))
+    const settle = async()=>{await nextTick();await new Promise(resolve=>setTimeout(resolve,0))}
+    const snapshot = ()=>[
+      (element.querySelector('#owned-display') as HTMLElement).style.display !== 'none',
+      (element.querySelector('#owned-show') as HTMLElement).style.visibility === 'visible',
+      element.querySelector('#owned-class')!.classList.contains('enabled'),
+    ]
+    let replacement:ReturnType<typeof createToggly>|undefined
+    let mounted = false
+    try {
+      app.mount(element);mounted=true;await settle()
+      const states=[snapshot()];await oldOwner.telemetry.flushTelemetry()
+      let allowed=false
+      replacement=createToggly({...common,appKey:'directive-new',localGates:[{id:'owner-veto',flagKeys:['Enabled'],isEnabled:()=>allowed}]})
+      await replacement.init();await settle();states.push(snapshot());await replacement.telemetry.flushTelemetry()
+      await oldOwner.refresh();oldOwner.client.destroy();await settle();states.push(snapshot())
+      allowed=true;await replacement.refresh();await settle();states.push(snapshot());await replacement.telemetry.flushTelemetry()
+      app.unmount();mounted=false
+      await replacement.refresh();await settle();await replacement.telemetry.flushTelemetry()
+      return {states,unmounted:element.childElementCount===0}
+    } finally {if(mounted)app.unmount();element.remove();replacement?.client.destroy();oldOwner.client.destroy()}
+  }
   ;(window as any).evaluationDiagnostic = async (phase: string) => {
     evaluationPhase = phase
     const start = evaluationTrace.length
@@ -90,7 +129,7 @@ onMounted(() => {
   }
   ;(window as any).verifyFacadeOwnership = async (dispose: boolean) => {
     const owner=createToggly({appKey:'ownership-fixture',identity:'alice',persistIdentity:false,
-      baseUri:location.origin+'/api/definitions',metricsBaseUrl:useRuntimeConfig().public.toggly.metricsBaseUrl,refreshInterval:0,enableLiveUpdates:false})
+      baseUri:location.origin+'/api/definitions',metricsBaseUrl,refreshInterval:0,enableLiveUpdates:false})
     const element=document.createElement('div');document.body.appendChild(element)
     const app=createApp(defineComponent({setup(){const gate=useClientGate(['Enabled']);return()=>h('span',String(gate.isEnabled.value))}}))
     app.provide(TOGGLY_INJECTION_KEY,owner);app.mount(element)
@@ -114,7 +153,7 @@ onMounted(() => {
   }
   ;(window as any).verifyInheritedToken = async (evaluationMode: 'local'|'remote') => {
     const owner=createToggly({appKey:'inherited-'+evaluationMode,evaluationMode,instanceId:' ',identity:'alice',persistIdentity:false,
-      baseUri:location.origin+'/minted-definitions?i=retired&%69=older&keep=a&keep=b',metricsBaseUrl:useRuntimeConfig().public.toggly.metricsBaseUrl,refreshInterval:0,enableLiveUpdates:false})
+      baseUri:location.origin+'/minted-definitions?i=retired&%69=older&keep=a&keep=b',metricsBaseUrl,refreshInterval:0,enableLiveUpdates:false})
     const results:boolean[]=[]
     const check=async()=>{results.push(await owner.isFeatureOn(evaluationMode==='local'?'Raw':'Flag'));await owner.telemetry.flushTelemetry()}
     try {
@@ -125,7 +164,7 @@ onMounted(() => {
   }
   ;(window as any).verifyMinted = async () => {
     const options = {appKey:'minted-fixture',instanceId:'token-a',identity:'legacy',groups:['private'],claims:{plan:'secret'},persistFeatures:true,
-      baseUri:location.origin+'/minted-definitions',metricsBaseUrl:useRuntimeConfig().public.toggly.metricsBaseUrl,refreshInterval:0,enableLiveUpdates:false}
+      baseUri:location.origin+'/minted-definitions',metricsBaseUrl,refreshInterval:0,enableLiveUpdates:false}
     const owner=createToggly(options)
     await owner.init()
     const results=[await owner.isFeatureOn('Flag')]

@@ -281,6 +281,19 @@ await withResources(async ownHost => {
   assert(!telemetryRequests.some(request => request.payload?.k === 'old-app'), 'replacement discards retired owner events')
   assert(telemetryRequests.some(request => request.payload?.k === 'new-app' && request.payload?.m?.['new-owner-count'] === 1))
   assert(!JSON.stringify(telemetryRequests).includes('stale-owner-count'))
+  // The original page has completed its UI assertions. Retire its real Vue owner
+  // before independent programmatic scenarios; mounted directives are evaluations.
+  await bounded(()=>page.evaluate(()=>window.finishMountedUi()),'original Vue app teardown',10000)
+  assert.equal(await page.locator('#directive').count(),0)
+  const directiveStart=telemetryRequests.length
+  assert.deepEqual(await bounded(()=>page.evaluate(()=>window.verifyDirectiveReplacement()),'mounted directive owner replacement',30000),
+    {states:[[true,true,true],[false,false,false],[false,false,false],[true,true,true]],unmounted:true})
+  assert.deepEqual(telemetryRequests.slice(directiveStart).filter(request=>request.payload?.k?.startsWith('directive-')).map(request=>request.payload),[
+    {k:'directive-old',e:'Production',u:'alice',f:{Enabled:{enabled:[3]}}},
+    {k:'directive-new',e:'Production',u:'alice',f:{Enabled:{disabled:[3]}}},
+    {k:'directive-new',e:'Production',u:'alice',f:{Enabled:{enabled:[3]}}},
+  ],'all three mounted directives follow replacement and refresh; retirement and unmount add no checks')
+  console.log('PASS all three actual Vue directives: owner replacement, effective local veto, refresh and unmount with exact checks')
   const mintedRequests=[]
   page.on('request',request=>{
     const target=new URL(request.url())

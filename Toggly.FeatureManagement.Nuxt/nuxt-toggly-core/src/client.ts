@@ -752,6 +752,35 @@ export function createTogglyClient(
     }
   }
 
+  type ContextUpdate = Parameters<TogglyClient['setContext']>[0]
+
+  function hasTargetingChanges(update: ContextUpdate): boolean {
+    const groupKey = (groups?: string[]) => JSON.stringify([...(groups ?? [])].sort((a, b) => a < b ? -1 : a > b ? 1 : 0))
+    const groupsChanged = update.groups !== undefined && groupKey(update.groups) !== groupKey(config.groups)
+    const claimsChanged = update.claims !== undefined && (
+      Object.keys(update.claims).length !== Object.keys(config.claims ?? {}).length ||
+      Object.entries(update.claims).some(([key, value]) => config.claims?.[key] !== value)
+    )
+    return groupsChanged || claimsChanged
+  }
+
+  function isUnchangedBrowserContext(update: ContextUpdate, targetingChanged: boolean): boolean {
+    // Explicit identity retains its existing hooks and token-clearing semantics.
+    // Identical token/group/claim updates cannot recursively notify evaluation hooks.
+    if (update.identity !== undefined || targetingChanged) return false
+    return update.instanceId === undefined || (update.instanceId.trim() || undefined) === (config.instanceId?.trim() || undefined)
+  }
+
+  function applyTrustedContext(update: ContextUpdate, targetingChanged: boolean): 'identify' | 'refresh' | undefined {
+    if (update.groups !== undefined) config.groups = update.groups
+    if (update.claims !== undefined) config.claims = update.claims
+    if (update.identity !== undefined && update.identity !== config.identity) return 'identify'
+    if (!state.initialized || !targetingChanged) return
+    if (!isLocalEvaluation()) return 'refresh'
+    applyLocalDefinitions(state.definitions)
+    notifyFeaturesRefresh()
+  }
+
   const client: TogglyClient = {
     get state() {
       return { ...state }
@@ -1036,10 +1065,12 @@ export function createTogglyClient(
 
     async setContext(update): Promise<void> {
       if (destroyed) return
+      const targetingChanged = hasTargetingChanges(update)
+      if (frontend && isUnchangedBrowserContext(update, targetingChanged)) return
       if (!frontend) {
-        if (update.groups !== undefined) config.groups = update.groups
-        if (update.claims !== undefined) config.claims = update.claims
-        if (update.identity !== undefined) await client.setIdentity(update.identity)
+        const action = applyTrustedContext(update, targetingChanged)
+        if (action === 'identify') await client.setIdentity(update.identity!)
+        else if (action === 'refresh') await client.refresh()
         return
       }
       const expected = ++generation
@@ -1194,6 +1225,8 @@ export function createTogglyClient(
       stopWebSocket()
       stopRefreshInterval()
       hookExecutor.clearHooks()
+      featuresRefreshListeners.clear()
+      localGatesListeners.clear()
       if (telemetry) {
         void telemetry.close()
         telemetry = null
