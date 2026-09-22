@@ -57,6 +57,9 @@ function assertRequiredHost(sdks, job) {
 }
 const packedHostHarnesses = [
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs',
+  'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-check.mjs',
+  'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-cleanup.test.mjs',
+  'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/host-resources.mjs',
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/**',
   'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-host.mjs',
   'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-browser-host.mjs',
@@ -153,6 +156,13 @@ test('runs the current Gatsby packed host on Node 24', () => {
   assert.match(install, /if: matrix\.sdk == 'Gatsby' \|\|/);
   assert.match(install, /working-directory: \$\{\{ matrix\.path \}\}\s+run: npm ci/);
   assert.doesNotMatch(install, /continue-on-error|npm ci \|\|/);
+});
+
+test('runs Vue packed browser telemetry checks with an explicit Chrome executable', () => {
+  const hostJob = workflow.match(/\n  test-current-browser-hosts:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0];
+  assert.ok(hostJob);
+  assert.match(hostJob, /CHROME_BIN: \/usr\/bin\/google-chrome/);
+  assert.match(hostJob, /run: npm run test:host/);
 });
 
 test('runs the complete packed Angular host matrix in the required test job', () => {
