@@ -168,6 +168,14 @@ export interface TogglyConfig {
   verifySignatures?: boolean;
 
   /**
+   * Use `/evaluated-variants-signed` and expose {@link TogglyService.getVariant} /
+   * {@link TogglyService.getVariantValue}. Matches `@ops-ai/feature-flags-toggly`
+   * when `enableVariants` is true.
+   * @default false
+   */
+  enableVariants?: boolean;
+
+  /**
    * Reject signed envelopes older than this many seconds when verifySignatures is enabled.
    * Omit / null / <=0 = disabled (back-compat).
    */

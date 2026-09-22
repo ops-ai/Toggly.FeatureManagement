@@ -34,6 +34,8 @@ import type {
   FeatureStateChangeHandler,
   TogglyEventListener,
   TogglyEventType,
+  EvaluatedVariantDef,
+  VariantResult,
 } from '../models';
 import { HookExecutor } from './HookExecutor';
 import { EventEmitter } from './EventEmitter';
@@ -56,6 +58,7 @@ import {
   verifySignedDefinitions as verifySignedEnvelope,
   type JwkSet,
 } from '../crypto/signedDefsVerify';
+import { asVariantDefsRecord } from '@ops-ai/toggly-signed-defs';
 
 /**
  * Storage keys used by Toggly
@@ -97,8 +100,17 @@ async function mutateCache(storage: TogglyStorage, key: string, value: string | 
   }
 }
 
-type CachedBody = TogglyFeatureFlagsCache & { writeId?: string };
+type CachedBody = TogglyFeatureFlagsCache & { writeId?: string; variants?: string };
 type CachedRevision = { context: string; revision: string; writeId?: string };
+
+/** Project raw evaluated-variants defs onto the boolean flags shape used for gate evaluation. */
+function variantDefsToFlags(defs: Record<string, EvaluatedVariantDef>): FeatureFlags {
+  const out: FeatureFlags = {};
+  for (const key of Object.keys(defs)) {
+    out[key] = defs[key]?.enabled === true;
+  }
+  return out;
+}
 
 /**
  * Fallback polling interval when WebSocket is connected (20 minutes)
@@ -198,6 +210,8 @@ export class TogglyService {
   private eventEmitter: EventEmitter;
 
   private features: FeatureFlags | null = null;
+  /** Raw evaluated-variants defs when {@link TogglyConfig.enableVariants} is set; null otherwise. */
+  private variants: Record<string, EvaluatedVariantDef> | null = null;
   private featuresLoading = false;
   /** Serializes LRU index read-modify-write to avoid lost updates. */
   private lruMutationChain: Promise<void> = Promise.resolve();
@@ -302,6 +316,20 @@ export class TogglyService {
     return valid ? flags as FeatureFlags : undefined;
   }
 
+  /** Decode the paired variant-defs body written alongside a variants-mode flags cache entry. */
+  private decodeCachedVariants(body: CachedBody | null, context: string): Record<string, EvaluatedVariantDef> | null {
+    if (!body || body.identity !== context || typeof body.variants !== 'string') return null;
+    try {
+      const parsed = JSON.parse(body.variants) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+      const valid = Object.values(parsed).every(value =>
+        !!value && typeof value === 'object' && typeof (value as EvaluatedVariantDef).enabled === 'boolean');
+      return valid ? parsed as Record<string, EvaluatedVariantDef> : null;
+    } catch {
+      return null;
+    }
+  }
+
   private async loadCachedDefinitionsRevision(): Promise<void> {
     if (this.cachedDefinitionsRevision) return;
     const context = this.getContextCacheKey();
@@ -319,6 +347,7 @@ export class TogglyService {
       const body = raw ? JSON.parse(raw) as CachedBody : null;
       if (!current() || !flags || !record.writeId || record.writeId !== body?.writeId) return;
       this.features = flags;
+      if (this.config.enableVariants) this.variants = this.decodeCachedVariants(body, context);
       this.cachedDefinitionsRevision = record.revision;
     } catch (error) {
       if (current()) this.reportError('Error reading definitions revision cache', error);
@@ -643,7 +672,7 @@ export class TogglyService {
 
       const bodyText = await this.readResponseBody(response);
       if (!current()) return this.retiredResponse();
-      let flags: FeatureFlags;
+      let parsedDefs: unknown;
 
       if (this.config.verifySignatures) {
         const { envelope, defsRaw } = parseSignedEnvelope(bodyText);
@@ -655,22 +684,33 @@ export class TogglyService {
           controller.signal,
           current
         );
-        flags = parseDefinitionsFromRaw(defsRaw) as FeatureFlags;
+        parsedDefs = parseDefinitionsFromRaw(defsRaw);
       } else {
         const data = JSON.parse(bodyText) as {
-          defs?: FeatureFlags;
-          data?: FeatureFlags;
-        } & FeatureFlags;
-        flags = (data?.defs ?? data?.data ?? data) as FeatureFlags;
+          defs?: unknown;
+          data?: unknown;
+        };
+        parsedDefs = data?.defs ?? data?.data ?? data;
       }
 
       if (!current()) return this.retiredResponse();
+
+      let flags: FeatureFlags;
+      let variants: Record<string, EvaluatedVariantDef> | null = null;
+      if (this.config.enableVariants) {
+        variants = asVariantDefsRecord<EvaluatedVariantDef>(parsedDefs);
+        flags = variantDefsToFlags(variants);
+      } else {
+        flags = parsedDefs as FeatureFlags;
+      }
+
       // Track changes
       const previousFlags = this.features;
       this.features = flags;
+      this.variants = variants;
 
       // Cache the flags
-      await this.cacheFeatureFlags(flags);
+      await this.cacheFeatureFlags(flags, variants);
       if (!current()) return this.retiredResponse();
       if (responseRevision) await this.cacheDefinitionsRevision(responseRevision);
       else {
@@ -743,14 +783,15 @@ export class TogglyService {
    */
   private buildApiUrl(): string {
     const url = new URL(this.config.baseURI);
-    url.pathname = `${url.pathname.replace(/\/+$/, '')}/evaluated-signed/${this.config.appKey}/${this.config.environment}`;
+    const path = this.config.enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed';
+    url.pathname = `${url.pathname.replace(/\/+$/, '')}/${path}/${this.config.appKey}/${this.config.environment}`;
     url.searchParams.delete('i');
     if (this.instanceId) {
       for (const key of [...url.searchParams.keys()]) {
         if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) url.searchParams.delete(key);
       }
       url.searchParams.set('i', this.instanceId);
-    } else appendEvaluationContext(url, this.getEvaluationContext(), 'evaluated');
+    } else appendEvaluationContext(url, this.getEvaluationContext(), this.config.enableVariants ? 'variants' : 'evaluated');
     return url.toString();
   }
 
@@ -912,6 +953,8 @@ export class TogglyService {
       if (!current()) return this.config.featureDefaults ?? {};
       if (flags) {
         await this.touchCacheKey(cacheKey);
+        if (!current()) return this.config.featureDefaults ?? {};
+        if (this.config.enableVariants) this.variants = this.decodeCachedVariants(body, context);
         return current() ? flags : this.config.featureDefaults ?? {};
       }
     } catch (error) {
@@ -921,12 +964,17 @@ export class TogglyService {
   }
 
   /** Cache a body under the context captured before asynchronous storage. */
-  private async cacheFeatureFlags(flags: FeatureFlags): Promise<void> {
+  private async cacheFeatureFlags(flags: FeatureFlags, variants?: Record<string, EvaluatedVariantDef> | null): Promise<void> {
     const context = this.getContextCacheKey();
     const generation = this.generation;
     const operation = this.refreshOperation;
     const current = () => !this.disposed && generation === this.generation && operation === this.refreshOperation;
-    const encoded = JSON.stringify({identity: context, flags: JSON.stringify(flags), writeId: generateUUID()});
+    const encoded = JSON.stringify({
+      identity: context,
+      flags: JSON.stringify(flags),
+      variants: variants ? JSON.stringify(variants) : undefined,
+      writeId: generateUUID(),
+    });
     try {
       const cacheKey = await this.buildFeatureFlagsCacheKey(context);
       if (!current()) return;
@@ -1003,6 +1051,7 @@ export class TogglyService {
   async clearCache(): Promise<void> {
     if (this.disposed) return;
     this.features = null;
+    this.variants = null;
     this.cachedDefinitionsRevision = null;
 
     try {
@@ -1066,6 +1115,7 @@ export class TogglyService {
     if (update.groups !== undefined) this.groups = update.groups;
     if (update.claims !== undefined) this.claims = update.claims;
     this.features = null;
+    this.variants = null;
     this.cachedDefinitionsRevision = null;
     this.pendingDefinitionsPin = null;
     this.telemetry.setContext({ instanceId: this.instanceId, identity: this.identity ?? undefined });
@@ -1110,12 +1160,17 @@ export class TogglyService {
     const flags: FeatureFlags = JSON.parse(JSON.stringify(Object.fromEntries(
       featureKeys.filter(key => Object.prototype.hasOwnProperty.call(source, key)).map(key => [key, source[key]])
     )));
+    const variantSource = this.config.enableVariants ? this.variants ?? {} : {};
+    const variants: Record<string, EvaluatedVariantDef> = JSON.parse(JSON.stringify(Object.fromEntries(
+      featureKeys.filter(key => Object.prototype.hasOwnProperty.call(variantSource, key)).map(key => [key, variantSource[key]])
+    )));
     const gates = this.localGates.map(gate => ({ ...gate, flagKeys: [...gate.flagKeys] }));
     const index = buildFlagGateIndex(gates);
     return (featureKey: string, entityContext?: TogglyEntityContext | null): boolean => {
       const remote = resolveEvaluatedDefinition(flags[featureKey], entityContext);
       const enabled = applyLocalGate(remote, featureKey, gates, index);
-      record(featureKey, enabled ? 'enabled' : 'disabled');
+      const variantName = variants[featureKey]?.variant || 'enabled';
+      record(featureKey, enabled ? variantName : 'disabled');
       return enabled;
     };
   }
@@ -1209,6 +1264,25 @@ export class TogglyService {
     kind?: string,
   ): Promise<boolean> {
     return this.evaluateFeatureGate([featureKey], 'all', true, entity, kind);
+  }
+
+  /**
+   * Current variant assignment for a feature (requires {@link TogglyConfig.enableVariants}
+   * and loaded data). Records a telemetry check the same way `isFeatureOn` does.
+   */
+  getVariant(featureKey: string): VariantResult | null {
+    if (!this.config.enableVariants || !this.variants) return null;
+    const entry = this.variants[featureKey];
+    const resolve = this.captureEvaluation([featureKey]);
+    const enabled = resolve(featureKey);
+    return enabled && entry?.variant ? { name: entry.variant, configurationValue: entry.configurationValue } : null;
+  }
+
+  /**
+   * Configuration payload for the assigned variant, if any.
+   */
+  getVariantValue(featureKey: string): unknown | null {
+    return this.getVariant(featureKey)?.configurationValue ?? null;
   }
 
   /**
@@ -1514,6 +1588,7 @@ export class TogglyService {
     this.stateChangeHandlers.clear();
     this.hookExecutor.clearHooks();
     this.features = null;
+    this.variants = null;
     this.isInitialized = false;
   }
 }

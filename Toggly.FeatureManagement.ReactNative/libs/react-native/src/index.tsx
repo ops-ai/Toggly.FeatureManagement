@@ -13,6 +13,7 @@ export type {
 } from './hooks/useFeatureFlag';
 export { useToggly } from './hooks/useToggly';
 export type { UseTogglyResult } from './hooks/useToggly';
+export { useVariant } from './hooks/useVariant';
 
 // Context
 export { TogglyContext, useTogglyContext, useTogglyService } from './contexts/TogglyContext';
@@ -39,6 +40,8 @@ export type {
   HookMetadata,
   EvaluationSeriesData,
   IdentitySeriesData,
+  VariantResult,
+  EvaluatedVariantDef,
 } from '@ops-ai/react-native-toggly-core';
 
 // Re-export core service for advanced usage

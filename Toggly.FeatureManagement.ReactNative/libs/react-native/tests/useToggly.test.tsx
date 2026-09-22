@@ -11,6 +11,8 @@ const createMockService = (overrides = {}) => ({
   isFeatureOn: jest.fn().mockResolvedValue(true),
   isFeatureOff: jest.fn().mockResolvedValue(false),
   evaluateFeatureGate: jest.fn().mockResolvedValue(true),
+  getVariant: jest.fn().mockReturnValue(null),
+  getVariantValue: jest.fn().mockReturnValue(null),
   on: jest.fn().mockReturnValue(() => {}),
   addStateChangeHandler: jest.fn().mockReturnValue(() => {}),
   setIdentity: jest.fn().mockResolvedValue(undefined),
@@ -225,6 +227,41 @@ describe('useToggly', () => {
     });
 
     expect(mockService.setIdentity).toHaveBeenCalledWith(null);
+  });
+
+  it('provides getVariant function that delegates to the service', () => {
+    const variant = { name: 'treatment', configurationValue: { color: 'blue' } };
+    mockService.getVariant.mockReturnValue(variant);
+
+    let result: any;
+    const TestComponent = () => {
+      result = useToggly();
+      return null;
+    };
+
+    render(<TestComponent />, {
+      wrapper: createWrapper(contextValue),
+    });
+
+    expect(result.getVariant('feature1')).toEqual(variant);
+    expect(mockService.getVariant).toHaveBeenCalledWith('feature1');
+  });
+
+  it('provides getVariantValue function that delegates to the service', () => {
+    mockService.getVariantValue.mockReturnValue({ color: 'blue' });
+
+    let result: any;
+    const TestComponent = () => {
+      result = useToggly();
+      return null;
+    };
+
+    render(<TestComponent />, {
+      wrapper: createWrapper(contextValue),
+    });
+
+    expect(result.getVariantValue('feature1')).toEqual({ color: 'blue' });
+    expect(mockService.getVariantValue).toHaveBeenCalledWith('feature1');
   });
 
   it('provides getDebugInfo function', () => {
