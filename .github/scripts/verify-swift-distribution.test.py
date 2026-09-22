@@ -146,6 +146,30 @@ class DistributionTests(unittest.TestCase):
     def test_successful_parent_reaps_owned_descendant(self):
         self.completed_parent(0)
 
+    def test_post_kill_liveness_eperm_is_treated_as_gone(self):
+        """macOS runners may return EPERM instead of ESRCH after SIGKILL."""
+        with tempfile.TemporaryDirectory(prefix='toggly-swift-eperm-') as directory:
+            root = Path(directory)
+            marker = root / 'child.pid'
+            code = 'import subprocess,sys,pathlib;p=subprocess.Popen([sys.executable,"-c","import time;time.sleep(60)"],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL);pathlib.Path(sys.argv[1]).write_text(str(p.pid));print("completed-parent-output");sys.exit(0)'
+            original_killpg = os.killpg
+            killed = {'sigkill': False}
+
+            def killpg(pid, kind):
+                if kind == signal.SIGKILL:
+                    killed['sigkill'] = True
+                    return original_killpg(pid, kind)
+                if kind == 0 and killed['sigkill']:
+                    raise PermissionError('[Errno 1] Operation not permitted')
+                return original_killpg(pid, kind)
+
+            with mock.patch.object(distribution.os, 'killpg', side_effect=killpg):
+                output = distribution.run([sys.executable, '-c', code, str(marker)], root)
+            self.assertIn('completed-parent-output', output)
+            self.assertTrue(killed['sigkill'], 'SIGKILL must still be attempted')
+            self.assertTrue(marker.exists(), 'actual descendant must start')
+            self.assert_owned_pid_absent(int(marker.read_text()))
+
     def test_failed_parent_reaps_owned_descendant_and_retains_exit(self):
         self.completed_parent(7)
 

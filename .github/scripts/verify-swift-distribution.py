@@ -43,6 +43,10 @@ def retire_process_group(process):
             os.killpg(process.pid, 0)
         except ProcessLookupError:
             return
+        except PermissionError:
+            # After SIGKILL, some macOS runners report EPERM for an empty or
+            # reparented session instead of ESRCH. The group is no longer ours.
+            return
         if time.monotonic() >= deadline:
             raise RuntimeError('Owned command process group did not exit')
         time.sleep(0.02)
