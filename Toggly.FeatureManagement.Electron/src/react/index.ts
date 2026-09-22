@@ -7,3 +7,13 @@ export {
   type UseFeatureFlagResult,
   type UseFeatureGateOptions,
 } from './useFeatureFlag.js'
+
+export {
+  recordUsage,
+  recordView,
+  incrementCounter,
+  setGauge,
+  flushTelemetry,
+} from '../renderer/index.js'
+
+export type { TogglyTelemetry } from '../types.js'

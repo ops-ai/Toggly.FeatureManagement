@@ -1,13 +1,24 @@
-import type { Hook } from '@ops-ai/toggly-hooks-types'
-import type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
+import type { TelemetryOptions } from '@ops-ai/toggly-client-telemetry'
+import type {
+  Hook,
+  EvaluatedDefinitions,
+  TogglyEntityContext,
+} from '@ops-ai/toggly-hooks-types'
 
 export type FeatureRequirement = 'all' | 'any'
 
 export interface TogglyElectronConfig {
+  enableTelemetry?: boolean
+  metricsBaseUrl?: string
+  telemetryFlushIntervalMs?: number
+  telemetryFetch?: TelemetryOptions['fetch']
+  onTelemetryDiagnostic?: TelemetryOptions['onDiagnostic']
   appKey?: string
   environment?: string
   baseURI?: string
   flagDefaults?: Record<string, boolean>
+  /** Host-minted attribution token; blank clears it. */
+  instanceId?: string
   identity?: string
   groups?: string[]
   claims?: Record<string, string>
@@ -26,6 +37,8 @@ export interface TogglyElectronConfig {
 }
 
 export interface SetContextInput {
+  /** Host-minted attribution token; blank clears it. */
+  instanceId?: string
   identity?: string
   groups?: string[]
   claims?: Record<string, string>
@@ -35,9 +48,21 @@ export type FeatureFlagsSnapshot = Record<string, boolean>
 
 export type EvaluatedFlags = EvaluatedDefinitions
 
-export type EntityContextInput = TogglyEntityContext | Record<string, unknown> | null | undefined
+export type EntityContextInput =
+  | TogglyEntityContext
+  | Record<string, unknown>
+  | null
+  | undefined
 
-export interface TogglyBridge {
+export interface TogglyTelemetry {
+  recordUsage(featureKey: string, variant?: string): void
+  recordView(featureKey: string, variant?: string): void
+  incrementCounter(metricKey: string, value?: number): void
+  setGauge(metricKey: string, value: number): void
+  flushTelemetry(): Promise<void>
+}
+
+export interface TogglyBridge extends TogglyTelemetry {
   isFeatureOn(
     key: string,
     entityContext?: EntityContextInput,
@@ -58,6 +83,8 @@ export interface TogglyBridge {
   getFlags(): Promise<FeatureFlagsSnapshot>
   setContext(context: SetContextInput): Promise<FeatureFlagsSnapshot>
   clearContext(): Promise<FeatureFlagsSnapshot>
+  /** @internal Reactive invalidation, without evaluation or hydration checks. */
+  onEvaluationsChanged(callback: () => void): () => void
   onFlagsUpdated(callback: (flags: FeatureFlagsSnapshot) => void): () => void
 }
 

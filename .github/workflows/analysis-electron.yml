@@ -57,6 +57,10 @@ jobs:
         # browser path instead of using a single-process test-only fallback.
         run: xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npm run test:coverage
 
+      - name: Run packed Electron floor and current hosts
+        working-directory: Toggly.FeatureManagement.Electron
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npm run test:hosts
+
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
         if: always()

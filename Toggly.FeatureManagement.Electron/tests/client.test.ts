@@ -49,7 +49,8 @@ function mockResponse(
     status,
     statusText: status === 200 ? 'OK' : 'Error',
     headers: {
-      get: (name: string) => headers[name] ?? headers[name.toLowerCase()] ?? null,
+      get: (name: string) =>
+        headers[name] ?? headers[name.toLowerCase()] ?? null,
     },
     text: async () => text,
     json: async () => (typeof body === 'string' ? JSON.parse(body) : body),
@@ -81,10 +82,11 @@ describe('ElectronTogglyClient', () => {
   })
 
   it('keeps defaults when optional config keys are undefined', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
-      mockResponse(200, { defs: { A: true } }),
-    )
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(mockResponse(200, { defs: { A: true } }))
     await initToggly({
+      enableTelemetry: false,
       appKey: 'app-defaults',
       userDataPath,
       fetch: fetchImpl,
@@ -111,15 +113,18 @@ describe('ElectronTogglyClient', () => {
   })
 
   it('fetches evaluated-signed and caches flags', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
-      mockResponse(
-        200,
-        { defs: { FeatureA: true, FeatureB: false } },
-        { 'X-Definitions-Revision': 'rev-1' },
-      ),
-    )
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        mockResponse(
+          200,
+          { defs: { FeatureA: true, FeatureB: false } },
+          { 'X-Definitions-Revision': 'rev-1' },
+        ),
+      )
 
     const flags = await initToggly({
+      enableTelemetry: false,
       appKey: 'app-1',
       userDataPath,
       fetch: fetchImpl,
@@ -133,10 +138,13 @@ describe('ElectronTogglyClient', () => {
   })
 
   it('falls back to disk cache when network fails', async () => {
-    const fetchOk = vi.fn().mockResolvedValue(
-      mockResponse(200, { defs: { Cached: true } }, { ETag: '"etag-1"' }),
-    )
+    const fetchOk = vi
+      .fn()
+      .mockResolvedValue(
+        mockResponse(200, { defs: { Cached: true } }, { ETag: '"etag-1"' }),
+      )
     await initToggly({
+      enableTelemetry: false,
       appKey: 'app-cache',
       userDataPath,
       fetch: fetchOk,
@@ -147,6 +155,7 @@ describe('ElectronTogglyClient', () => {
 
     const fetchFail = vi.fn().mockRejectedValue(new Error('network down'))
     const flags = await initToggly({
+      enableTelemetry: false,
       appKey: 'app-cache',
       userDataPath,
       fetch: fetchFail,
@@ -160,6 +169,7 @@ describe('ElectronTogglyClient', () => {
   it('falls back to flagDefaults when network fails and cache empty', async () => {
     const fetchFail = vi.fn().mockRejectedValue(new Error('offline'))
     const flags = await initToggly({
+      enableTelemetry: false,
       appKey: 'app-offline',
       userDataPath,
       fetch: fetchFail,
@@ -173,13 +183,18 @@ describe('ElectronTogglyClient', () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(
-        mockResponse(200, { defs: { X: true } }, { 'X-Definitions-Revision': 'r1' }),
+        mockResponse(
+          200,
+          { defs: { X: true } },
+          { 'X-Definitions-Revision': 'r1' },
+        ),
       )
       .mockResolvedValueOnce(
         mockResponse(304, '', { 'X-Definitions-Revision': 'r1' }),
       )
 
     await initToggly({
+      enableTelemetry: false,
       appKey: 'app-304',
       userDataPath,
       fetch: fetchImpl,
@@ -191,10 +206,11 @@ describe('ElectronTogglyClient', () => {
   })
 
   it('setContext and clearContext refresh flags', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
-      mockResponse(200, { defs: { Flag: true } }),
-    )
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(mockResponse(200, { defs: { Flag: true } }))
     await initToggly({
+      enableTelemetry: false,
       appKey: 'app-ctx',
       userDataPath,
       fetch: fetchImpl,
@@ -213,10 +229,11 @@ describe('ElectronTogglyClient', () => {
 
   it('addHook runs after refresh', async () => {
     const afterRefresh = vi.fn()
-    const fetchImpl = vi.fn().mockResolvedValue(
-      mockResponse(200, { defs: { H: true } }),
-    )
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(mockResponse(200, { defs: { H: true } }))
     await initToggly({
+      enableTelemetry: false,
       appKey: 'app-hooks',
       userDataPath,
       fetch: fetchImpl,
@@ -238,10 +255,11 @@ describe('ElectronTogglyClient', () => {
   })
 
   it('starts websocket when live updates enabled', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
-      mockResponse(200, { defs: { W: true } }),
-    )
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(mockResponse(200, { defs: { W: true } }))
     await initToggly({
+      enableTelemetry: false,
       appKey: 'app-ws',
       userDataPath,
       fetch: fetchImpl,
@@ -257,9 +275,7 @@ describe('ElectronTogglyClient', () => {
     ws.handlers.message?.(
       JSON.stringify({ type: 'flags-updated', etag: 'newer' }),
     )
-    ws.handlers.message?.(
-      JSON.stringify({ type: 'signing-key-updated' }),
-    )
+    ws.handlers.message?.(JSON.stringify({ type: 'signing-key-updated' }))
     ws.handlers.error?.(new Error('ws err'))
     ws.handlers.close?.()
   })
@@ -279,7 +295,9 @@ describe('ElectronTogglyClient', () => {
   })
 
   it('throws setContext when not initialized', async () => {
-    await expect(setContext({ identity: 'x' })).rejects.toThrow(/not initialized/)
+    await expect(setContext({ identity: 'x' })).rejects.toThrow(
+      /not initialized/,
+    )
     await expect(clearContext()).rejects.toThrow(/not initialized/)
   })
 
@@ -295,6 +313,7 @@ describe('ElectronTogglyClient', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const fetchFail = vi.fn().mockRejectedValue(new Error('boom'))
     await initToggly({
+      enableTelemetry: false,
       appKey: 'app-err',
       userDataPath,
       fetch: fetchFail,
@@ -336,6 +355,7 @@ describe('ElectronTogglyClient', () => {
       }),
     )
     await initToggly({
+      enableTelemetry: false,
       appKey: 'app-entity',
       userDataPath,
       fetch: fetchImpl,
@@ -355,6 +375,7 @@ describe('ElectronTogglyClient', () => {
     const onError = vi.fn()
     const fetchImpl = vi.fn().mockResolvedValue(mockResponse(500, 'fail'))
     await initToggly({
+      enableTelemetry: false,
       appKey: 'app-500',
       userDataPath,
       fetch: fetchImpl,
@@ -403,10 +424,17 @@ describe('ElectronTogglyClient', () => {
   })
 
   it('sync message with unchanged skips refresh', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
-      mockResponse(200, { defs: { W: true } }, { 'X-Definitions-Revision': 'r0' }),
-    )
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        mockResponse(
+          200,
+          { defs: { W: true } },
+          { 'X-Definitions-Revision': 'r0' },
+        ),
+      )
     await initToggly({
+      enableTelemetry: false,
       appKey: 'app-ws-sync',
       userDataPath,
       fetch: fetchImpl,
@@ -423,16 +451,31 @@ describe('ElectronTogglyClient', () => {
   })
 
   it('uses User-Agent style headers in main process', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(
-      mockResponse(200, { defs: { H: true } }),
-    )
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(mockResponse(200, { defs: { H: true } }))
     await initToggly({
+      enableTelemetry: false,
       appKey: 'app-headers',
       userDataPath,
       fetch: fetchImpl,
       enableLiveUpdates: false,
     })
-    const headers = fetchImpl.mock.calls[0][1]?.headers as Record<string, string>
+    const headers = fetchImpl.mock.calls[0][1]?.headers as Record<
+      string,
+      string
+    >
     expect(headers['User-Agent'] || headers['X-Toggly-Sdk']).toBeTruthy()
   })
+  it('ignores retired websocket callbacks after context replacement', async () => {
+    await initToggly({ userDataPath, appKey:'app', identity:'alice', fetch:vi.fn().mockResolvedValue(mockResponse(200,{defs:{On:true}})), enableTelemetry:false })
+    const client=getToggly()!; const old=wsInstances.at(-1)!
+    await client.setContext({identity:'bob'})
+    const current=wsInstances.at(-1)!
+    old.handlers.open?.();old.handlers.message?.(JSON.stringify({type:'sync',etag:'retired'}));old.handlers.close?.()
+    expect((client as any).ws).toBe(current)
+    expect((client as any).cachedDefinitionsRevision).not.toBe('retired')
+    expect((client as any).wsReconnectTimer).toBeNull()
+  })
+
 })

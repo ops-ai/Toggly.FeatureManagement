@@ -1,10 +1,10 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   initToggly,
   registerTogglyIpc,
-  closeToggly,
+  attachTogglyLifecycle,
 } from '../dist/main/index.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -22,6 +22,7 @@ async function createWindow() {
   })
 
   registerTogglyIpc(ipcMain, () => BrowserWindow.getAllWindows())
+  attachTogglyLifecycle(app, powerMonitor)
 
   const win = new BrowserWindow({
     width: 800,
@@ -41,7 +42,6 @@ async function createWindow() {
 app.whenReady().then(createWindow)
 
 app.on('window-all-closed', () => {
-  closeToggly()
   if (process.platform !== 'darwin') {
     app.quit()
   }

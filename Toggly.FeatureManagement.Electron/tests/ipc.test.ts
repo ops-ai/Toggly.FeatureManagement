@@ -48,6 +48,37 @@ describe('registerTogglyIpc', () => {
     await rm(userDataPath, { recursive: true, force: true })
   })
 
+  it('preserves context traversal, primitive and resource bounds at the IPC boundary', async () => {
+    const { getToggly } = await import('../src/main/client.js')
+    const evaluate = vi.spyOn(getToggly()!, 'isFeatureOn').mockReturnValue(true)
+    const unregister = registerTogglyIpc(ipcMain)
+    const nested = (depth: number): object => {
+      let value: object = {}
+      for (let i = 0; i < depth; i++) value = { x: value }
+      return value
+    }
+    const cyclic: Record<string, unknown> = {}
+    cyclic.self = cyclic
+    const cases: Array<[unknown, boolean]> = [
+      [{ x: [null, undefined, true, false, 1, 'text'] }, true],
+      [{ x: Infinity }, false], [{ x: NaN }, false], [{ x: 1n }, false],
+      [{ x: () => true }, false], [{ x: Symbol('bad') }, false],
+      [[], false], [cyclic, false], [nested(8), true], [nested(9), false],
+      [{ x: 'a'.repeat(5460) }, true], [{ x: 'a'.repeat(5461) }, false],
+      [{ x: Array.from({ length: 20 }, () => Array(98).fill(null)) }, true],
+      [{ x: Array.from({ length: 20 }, () => Array(99).fill(null)) }, false],
+    ]
+    try {
+      for (const [context, valid] of cases) {
+        evaluate.mockClear()
+        const event = { returnValue: undefined as unknown }
+        syncHandlers.get(IPC_CHANNELS.isFeatureOn)!(event, 'Feature', context)
+        expect(event.returnValue).toBe(valid)
+        expect(evaluate).toHaveBeenCalledTimes(valid ? 1 : 0)
+      }
+    } finally { evaluate.mockRestore(); unregister() }
+  })
+
   it('throws when toggly is not initialized', () => {
     closeToggly()
     expect(() => registerTogglyIpc(ipcMain)).toThrow(/not initialized/)

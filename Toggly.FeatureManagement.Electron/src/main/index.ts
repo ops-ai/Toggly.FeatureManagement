@@ -2,6 +2,11 @@ export {
   ElectronTogglyClient,
   initToggly,
   getToggly,
+  recordUsage,
+  recordView,
+  incrementCounter,
+  setGauge,
+  flushTelemetry,
   isFeatureOn,
   isFeatureOff,
   evaluateFeatureGate,
@@ -15,6 +20,7 @@ export { registerTogglyIpc } from './ipc.js'
 export { DiskFeatureCache, buildCacheFilePath } from './cache.js'
 export type { DiskCacheEntry } from './cache.js'
 export type {
+  TogglyTelemetry,
   TogglyElectronConfig,
   SetContextInput,
   FeatureFlagsSnapshot,
@@ -24,3 +30,5 @@ export type {
 } from '../types.js'
 export { IPC_CHANNELS, IPC_PREFIX } from '../ipc-channels.js'
 export { SDK_ID, SDK_VERSION } from '../sdk-identity.js'
+
+export { attachTogglyLifecycle, type LifecycleEvents } from './lifecycle.js'

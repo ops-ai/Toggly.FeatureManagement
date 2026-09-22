@@ -48,7 +48,13 @@ export function evaluateFeatureGate(
   if (!bridge) {
     return negate ?? false
   }
-  return bridge.evaluateFeatureGate(keys, requirement, negate, entityContext, kind)
+  return bridge.evaluateFeatureGate(
+    keys,
+    requirement,
+    negate,
+    entityContext,
+    kind,
+  )
 }
 
 export function getFlags(): Promise<FeatureFlagsSnapshot> {
@@ -63,7 +69,9 @@ export function getFlags(): Promise<FeatureFlagsSnapshot> {
   return bridge.getFlags()
 }
 
-export function setContext(context: SetContextInput): Promise<FeatureFlagsSnapshot> {
+export function setContext(
+  context: SetContextInput,
+): Promise<FeatureFlagsSnapshot> {
   const bridge = tryBridge()
   if (!bridge) {
     return Promise.reject(
@@ -97,4 +105,32 @@ export function onFlagsUpdated(
   return bridge.onFlagsUpdated(callback)
 }
 
-export type { TogglyBridge, FeatureFlagsSnapshot, FeatureRequirement, SetContextInput }
+export type {
+  TogglyBridge,
+  FeatureFlagsSnapshot,
+  FeatureRequirement,
+  SetContextInput,
+} from '../types.js'
+
+export function recordUsage(key: string, variant = 'enabled'): void {
+  tryBridge()?.recordUsage(key, variant)
+}
+export function recordView(key: string, variant = 'enabled'): void {
+  tryBridge()?.recordView(key, variant)
+}
+export function incrementCounter(key: string, value = 1): void {
+  tryBridge()?.incrementCounter(key, value)
+}
+export function setGauge(key: string, value: number): void {
+  tryBridge()?.setGauge(key, value)
+}
+export function flushTelemetry(): Promise<void> {
+  return tryBridge()?.flushTelemetry() ?? Promise.resolve()
+}
+
+/** @internal Subscription used by committed React consumers. */
+export function onEvaluationsChanged(callback: () => void): () => void {
+  return tryBridge()?.onEvaluationsChanged(callback) ?? (() => undefined)
+}
+
+export type { TogglyTelemetry } from '../types.js'

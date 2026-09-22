@@ -35,11 +35,12 @@ Chromium multiprocess execution.
 ### 1. Main process
 
 ```js
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron'
 import { createRequire } from 'node:module'
 import {
   initToggly,
   registerTogglyIpc,
+  attachTogglyLifecycle,
   isFeatureOn,
 } from '@ops-ai/electron-feature-flags-toggly/main'
 
@@ -59,6 +60,7 @@ await initToggly({
 })
 
 registerTogglyIpc(ipcMain, () => BrowserWindow.getAllWindows())
+attachTogglyLifecycle(app, powerMonitor)
 
 // Trusted process can gate menus / windows directly:
 if (isFeatureOn('BetaMenu')) {
@@ -127,6 +129,70 @@ export function App() {
 }
 ```
 
+Hooks use `defaultValue` until their first committed evaluation and expose `isReady`.
+Abandoned renders and StrictMode effect replay do not send duplicate checks.
+Changed definitions, local gates or evaluation inputs recompute; unchanged
+snapshot notifications do not. `refresh()` explicitly evaluates again.
+
+## Usage and business metrics
+
+Telemetry defaults on when the main client has an application key. Configure
+`enableTelemetry: false` to opt out, `metricsBaseUrl` for an independent base
+URL (an explicit path is preserved), or `telemetryFlushIntervalMs` (30000–60000;
+default 45000, with 20% scheduling jitter). Invalid intervals fall back to 45000;
+invalid URLs disable reporting without breaking flag evaluation. Main-only
+`telemetryFetch` and `onTelemetryDiagnostic` support independent transport and
+bounded payload-free diagnostics.
+
+The main client owns one reporter shared by its windows. Renderer/preload/React
+never create a transport. Checks record the effective leaf after entity/local
+gates and before aggregate negation, preserving short circuiting. Cached direct
+reads count; definitions loading and snapshot reads alone do not. Usage/view
+remain explicit, including in React components:
+
+```ts
+import {recordUsage, recordView, incrementCounter, setGauge, flushTelemetry}
+  from '@ops-ai/electron-feature-flags-toggly/renderer'
+recordUsage('Checkout')             // variant defaults to "enabled"
+recordView('Cart', 'blue')
+incrementCounter('orders', 2)
+setGauge('cartItems', 3)
+await flushTelemetry()
+```
+
+These methods are also available on the main client, `/main`, `/react` and
+`window.toggly`. Variants are 1–64 ASCII letters/digits/underscore/hyphen.
+Counters use nonnegative integer deltas; gauges use finite nonnegative values,
+up to 1000000 per call. Metrics are app-level bare names. Payloads contain only
+application/environment, aggregate checks/usage/views and business metrics.
+A nonblank host-minted `instanceId` is sent as `i`; otherwise the existing
+identity (including the generated anonymous UUID) is sent as `u`, never both.
+Claims, groups and entity data are excluded. Do not mint tokens with Backend
+keys in the client. The server must explicitly accept client identity. Ordinary native requests
+use Node gzip and omit credentials and Origin. No browser lifecycle or network
+library is included in renderer code.
+
+New telemetry IPC handlers accept only the exact top-level frame of a live
+window returned by `getWindows`; they reject unlisted windows, subframes,
+extra arguments, invalid types/variants/numeric bounds and keys over 1024 UTF-16
+code units. Renderers cannot set telemetry configuration or destination.
+Provide the window list shown above to enable these methods. Legacy flag and
+context IPC authorization behavior with an omitted list remains unchanged;
+those payloads are now bounded/validated (gates up to 2000 keys, contexts up to
+2000 values/eight levels and a conservative 16KiB string budget).
+
+Attach `attachTogglyLifecycle(app, powerMonitor)` once after each initialization.
+It flushes on window blur, all windows closing and native suspend. On normal
+app quit it closes the owner first, initiates one plain final envelope with no
+retry, then lets quit continue within five seconds. `closeToggly()` and
+`client.close()` remain synchronous best-effort cleanup; use awaitable
+`flushTelemetry()` when deterministic completion is needed before shutdown.
+Closing one window does not dispose another's owner. Reinitialization closes
+the previous owner, discards its pending telemetry and removes its IPC/lifecycle listeners; register the new
+owner's IPC and lifecycle again. The registration functions return detach
+callbacks. Forced process termination cannot guarantee delivery. Telemetry is
+never written to the feature disk cache.
+
 ## API overview
 
 | Surface | Entry |
@@ -143,7 +209,8 @@ export function App() {
 - `getToggly()` / `closeToggly()`
 - `isFeatureOn` / `isFeatureOff` / `evaluateFeatureGate`
 - `setContext` / `clearContext` / `addHook`
-- `registerTogglyIpc(ipcMain, getWindows)`
+- `registerTogglyIpc(ipcMain, getWindows)` / `attachTogglyLifecycle(app, powerMonitor?)`
+- `recordUsage` / `recordView` / `incrementCounter` / `setGauge` / `flushTelemetry`
 
 ### Renderer (`window.toggly`)
 
@@ -152,15 +219,26 @@ export function App() {
 - `getFlags()` / `setContext` / `clearContext`
 - `onFlagsUpdated(callback)` → unsubscribe
 
+Accepted events retain the identity and application context captured at evaluation,
+even when hooks change context. Context updates share one 2000-entry/256KiB
+queue budget. `setContext({ instanceId })` updates the existing owner through
+the validated bridge. A blank token clears it; changing `identity` clears an
+omitted token, while group-only updates retain it. Token-based definitions
+requests omit identity, groups and claims, including inherited base-URL values.
+
 ## Configuration
 
 | Option | Default | Notes |
 |--------|---------|--------|
+| `enableTelemetry` | `true` with app key | Shared main-process reporter |
+| `metricsBaseUrl` | `https://metrics.toggly.io` | Independent metrics base URL |
+| `telemetryFlushIntervalMs` | `45000` | 30000–60000ms, jittered |
 | `appKey` | — | Frontend App Key |
 | `environment` | `Production` | |
 | `baseURI` | `https://definitions.toggly.io` | |
 | `userDataPath` | **required** | `app.getPath('userData')` |
 | `flagDefaults` | `{}` | Offline / no-key fallback |
+| `instanceId` | `undefined` | Optional host-minted token; preferred over identity |
 | `identity` / `groups` / `claims` | | Targeting context |
 | `verifySignatures` | `false` | ES256 via JWKS |
 | `enableLiveUpdates` | `true` when `appKey` set | WebSocket in main |

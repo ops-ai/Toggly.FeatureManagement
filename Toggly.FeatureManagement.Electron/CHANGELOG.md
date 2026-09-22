@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.0] - 2026-09-18
+
+### Added
+
+- Default-on compact telemetry with an application key, independent endpoint/interval/opt-out options and main-process ownership across windows.
+- Explicit usage, view, counter, gauge and awaitable flush APIs in main, preload, renderer and React, with validated telemetry IPC and native gzip transport.
+- Optional host-minted `instanceId` through the validated main/preload/renderer context path; telemetry uses the captured token or existing identity, never both.
+- `attachTogglyLifecycle` for background flushing and bounded final quit; synchronous close remains available.
+
+### Fixed
+
+- Capture immutable definitions, gates and attribution before reentrant hooks; retire stale refresh/WebSocket work and keep terminal disposal authoritative.
+- Keep validated disk bodies and revisions paired, snapshot writes atomically, and avoid recreating evicted bodies on a live 304.
+- Build definitions paths independently of base queries and remove inherited tokens and token-suppressed targeting.
+
+- Record effective cached/entity/local gate checks once and preserve gate short circuiting and negation.
+- Avoid duplicate React checks during StrictMode replay and unchanged refreshes; hooks expose readiness and use their default until committed evaluation.
+- Retire IPC/lifecycle listeners on reinitialization and prevent delayed initialization from restoring disposed resources.
+
 ## [1.0.2] - 2026-09-12
 
 ### Added

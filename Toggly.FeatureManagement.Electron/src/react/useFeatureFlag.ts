@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import {
   evaluateFeatureGate,
   isFeatureOn,
-  onFlagsUpdated,
+  onEvaluationsChanged,
 } from '../renderer/index.js'
 import type { EntityContextInput, FeatureRequirement } from '../types.js'
 
@@ -15,6 +15,7 @@ export interface UseFeatureFlagOptions {
 
 export interface UseFeatureFlagResult {
   isEnabled: boolean
+  isReady: boolean
   refresh: () => void
 }
 
@@ -65,28 +66,39 @@ export function useFeatureGate(
     } catch {
       return defaultValue
     }
-  }, [stableKeys, keysKey, requirement, negate, defaultValue, context, contextKind])
+  }, [
+    stableKeys,
+    keysKey,
+    requirement,
+    negate,
+    defaultValue,
+    context,
+    contextKind,
+  ])
 
-  const [isEnabled, setIsEnabled] = useState<boolean>(() => {
-    try {
-      return evaluate()
-    } catch {
-      return defaultValue
-    }
+  const [state, setState] = useState({
+    evaluate,
+    isEnabled: defaultValue,
+    isReady: false,
   })
-
+  const lastEvaluation = useRef<typeof evaluate>()
   const refresh = useCallback(() => {
-    setIsEnabled(evaluate())
+    lastEvaluation.current = evaluate
+    setState({ evaluate, isEnabled: evaluate(), isReady: true })
   }, [evaluate])
 
   useEffect(() => {
-    refresh()
-    return onFlagsUpdated(() => {
-      refresh()
-    })
-  }, [refresh])
+    // An abandoned render never sends IPC. StrictMode replay reuses the
+    // committed result; explicit refresh and changed inputs evaluate again.
+    if (lastEvaluation.current !== evaluate) refresh()
+    return onEvaluationsChanged(refresh)
+  }, [evaluate, refresh])
 
-  return { isEnabled, refresh }
+  return {
+    isEnabled: state.evaluate === evaluate ? state.isEnabled : defaultValue,
+    isReady: state.evaluate === evaluate && state.isReady,
+    refresh,
+  }
 }
 
 /** Sync helper for non-hook callers. */
