@@ -1,6 +1,8 @@
 # Android SDK release
 
-The version in root `build.gradle.kts` applies to all five Maven modules. Keep `SdkIdentity.SDK_VERSION`, installation examples, and the customer changelog aligned. The current candidate is 1.7.0; publishing is a separate delivery step.
+The version in root `build.gradle.kts` applies to all five Maven modules. Keep `SdkIdentity.SDK_VERSION`, installation examples, and the customer changelog aligned. Publishing is a separate delivery step via **Android SDK - Release** on `develop`.
+
+Each module calls `publishToMavenCentral(CENTRAL_PORTAL, automaticRelease = true)` so Central Portal deployments are released in the same CI job (parity with Java `autoPublish`). If a run only uploaded without releasing, finish it under [Central Portal → Deployments](https://central.sonatype.com/publishing/deployments) → **Publish**, or drop it and re-run after a version bump.
 
 Use JDK 17 or the hosted JDK 21 matrix with the configured Android SDK:
 

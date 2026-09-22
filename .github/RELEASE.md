@@ -147,7 +147,7 @@ skipped. Do not bump unrelated siblings just to satisfy a lockstep check.
 | `sdk-go-release.yml` | `toggly-go/VERSION` | git tag (`toggly-go/v*`) |
 | `sdk-go-mongodb-v2-release.yml` | `toggly-go-mongodb-v2/VERSION` | git tag (`toggly-go-mongodb-v2/v*`) |
 | `sdk-php-release.yml` | `composer.json` | Packagist |
-| `sdk-android-release.yml` | `build.gradle.kts` | Maven Central (git tag skip) |
+| `sdk-android-release.yml` | `build.gradle.kts` | Maven Central |
 | `sdk-java-release.yml` | `pom.xml` | Maven Central |
 | `cli-build-release.yml` | `Toggly.CLI/VERSION` | git tag (`cli-v*`) |
 
@@ -159,12 +159,17 @@ Secrets (repo-level, shared): `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`
 Use a Central Portal **user token** (not account password) for
 `MAVEN_CENTRAL_USERNAME` / `MAVEN_CENTRAL_PASSWORD`.
 
-- **Android:** Gradle + vanniktech → `publishAllPublicationsToMavenCentralRepository`.
-  Skip detection, the git tag, and GitHub notes all use the **root**
-  `allprojects { version }` in `Toggly.FeatureManagement.Android/build.gradle.kts`.
-  Keep every module on that version (`SdkIdentity.SDK_VERSION`, README snippets,
-  `CHANGELOG.md`). Do not set a per-module `version` — the 1.3.0 tag published
-  core as 1.4.0 and wrappers as 1.3.0, so notes advertised a missing coordinate.
+- **Android:** Gradle + vanniktech → `publishAndReleaseToMavenCentral` with
+  `publishToMavenCentral(CENTRAL_PORTAL, automaticRelease = true)` on every
+  module (same intent as Java `autoPublish=true`). Without `automaticRelease`,
+  uploads sit in [Central Portal Deployments](https://central.sonatype.com/publishing/deployments)
+  and never reach repo1. Skip detection uses Maven Central
+  (`io.toggly:toggly-android-core`), not git tags alone. The git tag and GitHub
+  notes still use the **root** `allprojects { version }` in
+  `Toggly.FeatureManagement.Android/build.gradle.kts`. Keep every module on that
+  version (`SdkIdentity.SDK_VERSION`, README snippets, `CHANGELOG.md`). Do not
+  set a per-module `version` — the 1.3.0 tag published core as 1.4.0 and wrappers
+  as 1.3.0, so notes advertised a missing coordinate.
 - **Java:** `mvn -B -Prelease clean deploy` with
   `central-publishing-maven-plugin` (`server-id: central`) and `maven-gpg-plugin`.
   The release workflow writes `~/.m2/settings.xml` with the Portal user token
