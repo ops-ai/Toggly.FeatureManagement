@@ -87,6 +87,9 @@ await withResources(async (own) => {
       ),
     ),
   );
+  // Browser revisions must match this genuine installed host graph, not an npx cache.
+  if (!process.env.CHROMIUM_PATH)
+    await run([join(work, 'node_modules/playwright/cli.js'), 'install', '--with-deps', 'chromium']);
   const previous = process.cwd();
   own(() => process.chdir(previous));
   process.chdir(host);

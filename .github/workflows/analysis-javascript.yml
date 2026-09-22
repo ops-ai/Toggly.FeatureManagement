@@ -814,5 +814,3 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: node tests/install-host.mjs
-      - run: npx --prefix tests/host playwright install --with-deps chromium
-      - run: cd tests/host && node verify.mjs
