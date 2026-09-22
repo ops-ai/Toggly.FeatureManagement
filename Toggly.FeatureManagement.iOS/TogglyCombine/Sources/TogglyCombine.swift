@@ -5,4 +5,4 @@ import Combine
 import TogglyCore
 
 /// Toggly SDK version for Combine package
-public let togglyCombineVersion = "1.5.0"
+public let togglyCombineVersion = "1.5.1"
