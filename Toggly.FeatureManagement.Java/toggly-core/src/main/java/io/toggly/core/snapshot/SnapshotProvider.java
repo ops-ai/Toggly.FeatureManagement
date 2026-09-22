@@ -93,4 +93,42 @@ public interface SnapshotProvider {
     default void setDefinitionCacheRecorder(io.toggly.core.telemetry.DefinitionCacheRecorder recorder) {
         // Default no-op
     }
+
+    // ========== Evaluated variants (dual-rail; additive to definitions) ==========
+    //
+    // Definitions/definitions-signed remain the source of truth for isEnabled.
+    // These methods are populated only when TogglyConfig#isEnableVariants() is
+    // true; they exist purely to serve getVariant/getVariantValue and never
+    // replace the definitions pipeline above. Default no-ops preserve source
+    // compatibility for existing implementations (e.g. custom/test providers);
+    // only HttpSnapshotProvider currently implements them for real.
+
+    /**
+     * Gets the current evaluated-variants snapshot synchronously.
+     *
+     * @return the current variant snapshot, empty when variants are disabled
+     *     or not yet fetched, never null
+     */
+    default VariantSnapshot getVariantSnapshot() {
+        return VariantSnapshot.empty();
+    }
+
+    /**
+     * Gets the current evaluated-variants snapshot asynchronously.
+     *
+     * @return a future that completes with the variant snapshot
+     */
+    default CompletableFuture<VariantSnapshot> getVariantSnapshotAsync() {
+        return CompletableFuture.completedFuture(getVariantSnapshot());
+    }
+
+    /**
+     * Refreshes the evaluated-variants snapshot from the source. No-op when
+     * variants are disabled.
+     *
+     * @return the refreshed variant snapshot
+     */
+    default VariantSnapshot refreshVariants() {
+        return VariantSnapshot.empty();
+    }
 }

@@ -1,5 +1,6 @@
 package io.toggly.core.snapshot;
 
+import io.toggly.core.model.EvaluatedVariantDef;
 import io.toggly.core.model.FeatureDefinition;
 import io.toggly.core.model.MetricDefinition;
 
@@ -13,6 +14,8 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class InMemorySnapshotProvider implements SnapshotProvider {
 
     private final AtomicReference<FeatureSnapshot> snapshot;
+    private final AtomicReference<VariantSnapshot> variantSnapshot =
+            new AtomicReference<>(VariantSnapshot.empty());
 
     /**
      * Creates an empty provider.
@@ -58,7 +61,28 @@ public final class InMemorySnapshotProvider implements SnapshotProvider {
     @Override
     public void clear() {
         snapshot.set(FeatureSnapshot.empty());
+        variantSnapshot.set(VariantSnapshot.empty());
         clearJwks();
+    }
+
+    @Override
+    public VariantSnapshot getVariantSnapshot() {
+        return variantSnapshot.get();
+    }
+
+    @Override
+    public VariantSnapshot refreshVariants() {
+        return variantSnapshot.get();
+    }
+
+    /**
+     * Sets the evaluated variant entries directly, for tests exercising
+     * {@code enableVariants} without an HTTP server.
+     *
+     * @param defs map of feature key to evaluated variant definition
+     */
+    public void setVariants(Map<String, EvaluatedVariantDef> defs) {
+        variantSnapshot.set(new VariantSnapshot(defs, Instant.now(), null));
     }
 
     /**

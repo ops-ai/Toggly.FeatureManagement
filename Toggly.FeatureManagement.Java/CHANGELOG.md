@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.7.0
+
+2026-09-22
+
+### Added
+- `TogglyConfig.enableVariants` (default `false`). When enabled, `HttpSnapshotProvider`
+  additionally fetches `evaluated-variants-signed/{appKey}/{environment}` on every
+  refresh cycle (manual `refresh()`, scheduled poll, WebSocket notify) — dual-rail,
+  matching the Python SDK: `definitions`/`definitions-signed` remain the source of
+  truth for `isEnabled`; variants are a separate, additive cache that never
+  replaces the definitions pipeline.
+- `TogglyClient.getVariant(featureKey)` / `getVariantAsync(featureKey)` /
+  `getVariantValue(featureKey)` — a new public variant-assignment API returning
+  `VariantResult` (`name` + `configurationValue`), non-null only when
+  `enableVariants` is true, the evaluated entry is `enabled == true`, and a
+  non-empty variant name is present. Mirrored on the `Toggly` static facade.
+  Distinct from the `variant` label already used by `recordUsage`/`recordView`
+  telemetry, which is not an assignment API.
+- `EvaluatedVariantDef` / `VariantResult` models and `VariantSnapshot` (new
+  `io.toggly.core.snapshot` type, separate from `FeatureSnapshot`).
+- `SnapshotProvider.getVariantSnapshot()` / `getVariantSnapshotAsync()` /
+  `refreshVariants()` default methods (no-op unless overridden); implemented in
+  `HttpSnapshotProvider` and `InMemorySnapshotProvider` (test helper
+  `setVariants(...)`).
+- Signed-variants verification reuses the existing ES256/JWKS pipeline, gated by
+  the same `useSignedDefinitions` flag Java already exposes for definitions
+  (Java has one signature toggle rather than JS's separate `verifySignatures`).
+
+### Notes
+- `toggly-cache-caffeine` / `toggly-cache-redis` / `toggly-cache-redis-jedis8`
+  do not yet forward the new variant methods to their delegate (same
+  pre-existing gap as JWKS load/save caching); wrapped clients see an empty
+  variant snapshot until a follow-up wires that through.
+
 ## 1.6.2
 
 2026-09-17

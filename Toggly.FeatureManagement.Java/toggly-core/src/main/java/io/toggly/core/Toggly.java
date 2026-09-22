@@ -6,6 +6,7 @@ import io.toggly.core.context.EntityContextRegistry;
 import io.toggly.core.context.EvaluationContext;
 import io.toggly.core.context.TogglyEntityContext;
 import io.toggly.core.exception.TogglyException;
+import io.toggly.core.model.VariantResult;
 
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -104,6 +105,26 @@ public final class Toggly {
      */
     public static boolean isEnabled(String featureKey, EvaluationContext context) {
         return client().isEnabled(featureKey, context);
+    }
+
+    /**
+     * Gets the server-evaluated variant assigned for a feature.
+     *
+     * @param featureKey the feature key
+     * @return the assigned variant, or null if unavailable
+     */
+    public static VariantResult getVariant(String featureKey) {
+        return client().getVariant(featureKey);
+    }
+
+    /**
+     * Gets the configuration value of the assigned variant for a feature.
+     *
+     * @param featureKey the feature key
+     * @return the variant's configuration value, or null if no variant is assigned
+     */
+    public static Object getVariantValue(String featureKey) {
+        return client().getVariantValue(featureKey);
     }
 
     /**

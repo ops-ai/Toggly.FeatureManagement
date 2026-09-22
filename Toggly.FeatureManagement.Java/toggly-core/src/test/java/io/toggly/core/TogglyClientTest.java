@@ -2,9 +2,10 @@ package io.toggly.core;
 
 import io.toggly.core.config.TogglyConfig;
 import io.toggly.core.context.EvaluationContext;
+import io.toggly.core.model.EvaluatedVariantDef;
 import io.toggly.core.model.FeatureDefinition;
 import io.toggly.core.model.FeatureFilter;
-import io.toggly.core.snapshot.FeatureSnapshot;
+import io.toggly.core.model.VariantResult;
 import io.toggly.core.snapshot.InMemorySnapshotProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -195,6 +196,143 @@ class TogglyClientTest {
 
         assertNotNull(client.getFeatureDefinition("feature-a"));
         assertNull(client.getFeatureDefinition("unknown"));
+    }
+
+    // ========== Feature Variants (dual-rail) ==========
+
+    @Test
+    void shouldReturnNullVariantWhenEnableVariantsIsFalse() {
+        // Client under test has enableVariants=false (default) from setUp().
+        snapshotProvider.setVariants(Map.of(
+                "feature-a", new EvaluatedVariantDef(true, "B", "config-value")));
+
+        assertNull(client.getVariant("feature-a"));
+        assertNull(client.getVariantValue("feature-a"));
+    }
+
+    @Test
+    void shouldReturnAssignedVariantWhenEnabled() {
+        TogglyConfig config = TogglyConfig.builder()
+                .appKey("test-app-key")
+                .environment("Test")
+                .enableVariants(true)
+                .enableUsageTracking(false)
+                .enableMetrics(false)
+                .build();
+        InMemorySnapshotProvider provider = new InMemorySnapshotProvider();
+        provider.setVariants(Map.of(
+                "feature-a", new EvaluatedVariantDef(true, "B", "config-value")));
+        TogglyClient variantClient = new TogglyClient(config, provider);
+
+        VariantResult variant = variantClient.getVariant("feature-a");
+        assertNotNull(variant);
+        assertEquals("B", variant.getName());
+        assertEquals("config-value", variant.getConfigurationValue());
+        assertEquals("config-value", variantClient.getVariantValue("feature-a"));
+
+        variantClient.close();
+    }
+
+    @Test
+    void shouldReturnNullVariantWhenEntryDisabled() {
+        TogglyConfig config = TogglyConfig.builder()
+                .appKey("test-app-key")
+                .environment("Test")
+                .enableVariants(true)
+                .enableUsageTracking(false)
+                .enableMetrics(false)
+                .build();
+        InMemorySnapshotProvider provider = new InMemorySnapshotProvider();
+        provider.setVariants(Map.of(
+                "feature-a", new EvaluatedVariantDef(false, "B", "config-value")));
+        TogglyClient variantClient = new TogglyClient(config, provider);
+
+        assertNull(variantClient.getVariant("feature-a"));
+        assertNull(variantClient.getVariantValue("feature-a"));
+
+        variantClient.close();
+    }
+
+    @Test
+    void shouldReturnNullVariantWhenNoVariantAssigned() {
+        TogglyConfig config = TogglyConfig.builder()
+                .appKey("test-app-key")
+                .environment("Test")
+                .enableVariants(true)
+                .enableUsageTracking(false)
+                .enableMetrics(false)
+                .build();
+        InMemorySnapshotProvider provider = new InMemorySnapshotProvider();
+        provider.setVariants(Map.of(
+                "feature-a", new EvaluatedVariantDef(true, null, null)));
+        TogglyClient variantClient = new TogglyClient(config, provider);
+
+        assertNull(variantClient.getVariant("feature-a"));
+
+        variantClient.close();
+    }
+
+    @Test
+    void shouldReturnNullVariantForMissingEntry() {
+        TogglyConfig config = TogglyConfig.builder()
+                .appKey("test-app-key")
+                .environment("Test")
+                .enableVariants(true)
+                .enableUsageTracking(false)
+                .enableMetrics(false)
+                .build();
+        InMemorySnapshotProvider provider = new InMemorySnapshotProvider();
+        TogglyClient variantClient = new TogglyClient(config, provider);
+
+        assertNull(variantClient.getVariant("unknown-feature"));
+
+        variantClient.close();
+    }
+
+    @Test
+    void shouldStillEvaluateIsEnabledFromDefinitionsWhenVariantsEnabled() {
+        // Dual-rail: definitions/isEnabled must not be replaced by the variants rail.
+        TogglyConfig config = TogglyConfig.builder()
+                .appKey("test-app-key")
+                .environment("Test")
+                .enableVariants(true)
+                .defaultFeatureState(false)
+                .enableUsageTracking(false)
+                .enableMetrics(false)
+                .build();
+        InMemorySnapshotProvider provider = new InMemorySnapshotProvider();
+        Map<String, FeatureDefinition> features = new HashMap<>();
+        features.put("feature-a", createAlwaysOnFeature("feature-a"));
+        provider.setFeatures(features);
+        // No variant entry at all — isEnabled must still come from definitions.
+        TogglyClient variantClient = new TogglyClient(config, provider);
+
+        assertTrue(variantClient.isEnabled("feature-a"));
+        assertNull(variantClient.getVariant("feature-a"));
+
+        variantClient.close();
+    }
+
+    @Test
+    void shouldResolveVariantAsynchronously() throws Exception {
+        TogglyConfig config = TogglyConfig.builder()
+                .appKey("test-app-key")
+                .environment("Test")
+                .enableVariants(true)
+                .enableUsageTracking(false)
+                .enableMetrics(false)
+                .build();
+        InMemorySnapshotProvider provider = new InMemorySnapshotProvider();
+        provider.setVariants(Map.of(
+                "feature-a", new EvaluatedVariantDef(true, "B", 42L)));
+        TogglyClient variantClient = new TogglyClient(config, provider);
+
+        VariantResult variant = variantClient.getVariantAsync("feature-a").get();
+        assertNotNull(variant);
+        assertEquals("B", variant.getName());
+        assertEquals(42L, variant.getConfigurationValue());
+
+        variantClient.close();
     }
 
     private FeatureDefinition createAlwaysOnFeature(String key) {
