@@ -7,6 +7,11 @@ telemetry resources.
 
 ## Browser telemetry
 
+As of **0.5.1**, automatic checks retain the context of the flags actually
+selected for evaluation, including when an entity mapper changes identity or a
+refresh completes after a context change. Disposing the owner prevents a captured
+check from sending while preserving the feature result.
+
 Introduced in **0.5.0** using `@ops-ai/toggly-client-telemetry@^1.1.0`.
 Frontend telemetry is enabled by
 default in browsers when `appKey` is set. It is disabled for portable

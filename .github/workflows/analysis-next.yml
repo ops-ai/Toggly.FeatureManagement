@@ -92,6 +92,13 @@ jobs:
         working-directory: ${{ env.SDK_ROOT }}
         run: pnpm test
 
+      - name: Verify packed browser hosts
+        if: matrix.node-version == '22.x'
+        working-directory: ${{ env.SDK_ROOT }}
+        env:
+          CHROME_BIN: /usr/bin/google-chrome
+        run: pnpm test:hosts
+
   lint:
     name: Lint
     needs: [build-shared-js-deps]
@@ -284,12 +291,12 @@ jobs:
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Next.js"
             -Dsonar.sources=${{ env.SDK_ROOT }}
-            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.config.js,**/*.config.ts
+            -Dsonar.exclusions=Toggly.FeatureManagement.Next/scripts/**,Toggly.FeatureManagement.Next/tests/browser-host/**,**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.config.js,**/*.config.ts
             -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.config.js,**/*.config.ts
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=${{ env.SDK_ROOT }}
-            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/tests/fixtures/**
+            -Dsonar.test.inclusions=Toggly.FeatureManagement.Next/scripts/**,Toggly.FeatureManagement.Next/tests/browser-host/**,**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/tests/fixtures/**
         continue-on-error: true
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -309,12 +316,12 @@ jobs:
             -Dsonar.projectKey=toggly-sdks-next
             -Dsonar.projectName="Toggly SDKs - Next.js"
             -Dsonar.sources=${{ env.SDK_ROOT }}
-            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.config.js,**/*.config.ts
+            -Dsonar.exclusions=Toggly.FeatureManagement.Next/scripts/**,Toggly.FeatureManagement.Next/tests/browser-host/**,**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.config.js,**/*.config.ts
             -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.config.js,**/*.config.ts
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=${{ env.SDK_ROOT }}
-            -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/tests/fixtures/**
+            -Dsonar.test.inclusions=Toggly.FeatureManagement.Next/scripts/**,Toggly.FeatureManagement.Next/tests/browser-host/**,**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/tests/fixtures/**
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
 

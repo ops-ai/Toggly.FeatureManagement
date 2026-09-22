@@ -8,6 +8,7 @@ describe('Smoke test', () => {
     if (!appKey) throw new Error('TOGGLY_SMOKE_APP_KEY_FRONTEND is not configured — set this env var to run smoke tests');
     const service = new Toggly({
       appKey: appKey!,
+      enableTelemetry: false,
       environment: 'Production',
       baseURI: 'https://definitions.toggly.io',
       featureFlagsRefreshInterval: 0,

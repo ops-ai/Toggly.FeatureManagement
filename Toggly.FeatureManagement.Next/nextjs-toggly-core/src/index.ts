@@ -81,6 +81,8 @@ export { fromHttpRequest } from '@ops-ai/toggly-eval'
 
 // Types
 export type {
+  FrontendTelemetry,
+  BrowserTogglyClient,
   TogglyConfig,
   TogglyClient,
   TogglyState,
