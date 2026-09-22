@@ -18,7 +18,7 @@ describe('Entity context evaluation', () => {
 
   beforeEach(async () => {
     clearRegisteredContexts();
-    service = new TogglyService({
+    service = new TogglyService({ enableTelemetry: false,
       storage: new MemoryStorage(),
       featureDefaults: {
         PlainOn: true,

@@ -4,7 +4,7 @@
 
 import { computed, getCurrentInstance, onMounted, ref, type Ref } from 'vue';
 import { useStore } from '@nanostores/vue';
-import { $flag, $gate, $isReady, $variants, $flags, $localGatesRevision } from '../../client/store.js';
+import { $flag, $gate, $isReady, $variant, $flags, $localGatesRevision } from '../../client/store.js';
 import type { VariantResult } from '../../types/index.js';
 
 /** @internal Preserve the SSR loading snapshot until the island mounts. */
@@ -53,15 +53,11 @@ export function useFeatureGate(
   const flags = useStore($flags);
   const localGatesRevision = useStore($localGatesRevision);
   const isReady = useTogglyReady();
-  const keysKey = flagKeys.join('\0');
-
-  const gateAtom = computed(() => $gate(flagKeys, requirement, negate));
 
   const enabled = computed(() => {
     void flags.value;
     void localGatesRevision.value;
-    void keysKey;
-    return gateAtom.value.get();
+    return $gate(flagKeys, requirement, negate).get();
   });
 
   return { enabled, isReady };
@@ -71,15 +67,5 @@ export function useFeatureGate(
  * Composable for the current variant assignment of a feature (requires enableVariants in config).
  */
 export function useVariant(featureKey: string): Readonly<Ref<VariantResult | null>> {
-  const variants = useStore($variants);
-  return computed(() => {
-    const entry = variants.value[featureKey];
-    if (!entry?.variant) {
-      return null;
-    }
-    return {
-      name: entry.variant,
-      configurationValue: entry.configurationValue,
-    };
-  });
+  return useStore($variant(featureKey));
 }

@@ -31,6 +31,9 @@ export interface TogglyContentRoot {
 }
 
 export interface TogglyPluginOptions {
+  enableTelemetry?: boolean;
+  metricsBaseUrl?: string;
+  telemetryFlushIntervalMs?: number;
   /** Base URI for the Toggly API (default: 'https://definitions.toggly.io') */
   baseURI?: string;
   /** Application key from Toggly */
@@ -45,6 +48,8 @@ export interface TogglyPluginOptions {
   isDebug?: boolean;
   /** Connection timeout in milliseconds (default: 5000) */
   connectTimeout?: number;
+  /** Opaque identity token supplied by the host backend for browser targeting. */
+  instanceId?: string;
   /** User identity for targeting (optional) */
   identity?: string;
   /** Public build-time group defaults for browser targeting, not authenticated user data. */
@@ -115,12 +120,16 @@ export default function togglyPlugin(
     isDebug = false,
     connectTimeout = 5 * 1000,
     identity,
+    instanceId,
     renderAllDuringBuild = true, // Default to true for better DX
     contentRoots,
     staticGating = false,
     verifySignatures = false,
     allowedKeyIds,
     maxSignatureAgeSeconds,
+    enableTelemetry,
+    metricsBaseUrl,
+    telemetryFlushIntervalMs,
   } = options;
 
   // Snapshot public browser defaults before Docusaurus runs asynchronous hooks.
@@ -149,6 +158,7 @@ export default function togglyPlugin(
           isDebug,
           connectTimeout,
           identity,
+          instanceId,
           groups,
           claims,
           renderAllDuringBuild,
@@ -156,6 +166,9 @@ export default function togglyPlugin(
           verifySignatures,
           allowedKeyIds,
           maxSignatureAgeSeconds,
+          enableTelemetry,
+          metricsBaseUrl,
+          telemetryFlushIntervalMs,
         },
       };
     },

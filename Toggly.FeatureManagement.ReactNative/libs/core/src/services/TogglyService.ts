@@ -1,3 +1,4 @@
+import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
 import type { CacheLruIndex, Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
 import {
   appendEvaluationContext,
@@ -66,6 +67,38 @@ const STORAGE_KEYS = {
   JWKS: '@toggly:jwks',
   CACHE_LRU: '@toggly:cache-lru',
 } as const;
+
+// Only in-flight cache mutations are retained. Later writes may finish without
+// waiting for a retired storage operation; that operation repairs the latest value
+// if its eventual completion overwrites it. Owners sharing storage share this fence.
+const pendingCacheMutations = new WeakMap<TogglyStorage, Map<string, {
+  desired: { value: string | null }; pending: number;
+}>>();
+
+async function mutateCache(storage: TogglyStorage, key: string, value: string | null): Promise<void> {
+  let mutations = pendingCacheMutations.get(storage);
+  if (!mutations) { mutations = new Map(); pendingCacheMutations.set(storage, mutations); }
+  const desired = { value };
+  let state = mutations.get(key);
+  if (!state) { state = { desired, pending: 0 }; mutations.set(key, state); }
+  state.desired = desired;
+  state.pending++;
+  let applied = desired;
+  const write = async () => applied.value === null ? storage.delete(key) : storage.set(key, applied.value);
+  try {
+    try { await write(); }
+    finally {
+      // Repair even when a storage provider mutates and then rejects its promise.
+      while (applied !== state.desired) { applied = state.desired; await write(); }
+    }
+  } finally {
+    state.pending--;
+    if (state.pending === 0) mutations.delete(key);
+  }
+}
+
+type CachedBody = TogglyFeatureFlagsCache & { writeId?: string };
+type CachedRevision = { context: string; revision: string; writeId?: string };
 
 /**
  * Fallback polling interval when WebSocket is connected (20 minutes)
@@ -169,6 +202,10 @@ export class TogglyService {
   /** Serializes LRU index read-modify-write to avoid lost updates. */
   private lruMutationChain: Promise<void> = Promise.resolve();
   private identity: string | null = null;
+  private instanceId: string | undefined;
+  private generation = 0;
+  private contextIntent = 0;
+  private refreshOperation = 0;
   private groups: string[] = [];
   private claims: Record<string, string> = {};
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -180,6 +217,9 @@ export class TogglyService {
   private isInitialized = false;
   private initialization: Promise<TogglyInitResponse> | null = null;
   private disposed = false;
+  private readonly telemetry: TelemetryReporter;
+  private activeRequest?: AbortController;
+  private requestTimer?: ReturnType<typeof setTimeout>;
   private networkState: NetworkState | null = null;
   private appState: AppStateType = 'active';
   private stateChangeHandlers: Set<FeatureStateChangeHandler> = new Set();
@@ -225,16 +265,17 @@ export class TogglyService {
     return this.features ? { ...this.features } : null;
   }
 
-  private reportError(message: string, error?: unknown): void {
+  private reportError(message: string, error: unknown, isCurrent: () => boolean = () => !this.disposed): void {
+    if (!isCurrent()) return;
     this.lastError = error instanceof Error ? error.message : message;
-    this.config.onError?.(
-      error instanceof Error ? error : new Error(message)
-    );
-    this.eventEmitter.emit('error', { error: this.lastError });
+    try {
+      void Promise.resolve(this.config.onError?.(error instanceof Error ? error : new Error(message))).catch(() => {});
+    } catch { /* Observers cannot interrupt recovery or owner cleanup. */ }
+    if (isCurrent()) this.eventEmitter.emit('error', { error: this.lastError }, isCurrent);
   }
 
-  private emitEffectiveFlagsChanged(flags: FeatureFlags = this.features ?? {}): void {
-    this.eventEmitter.emit('effectiveFlagsChanged', flags);
+  private emitEffectiveFlagsChanged(flags: FeatureFlags = this.features ?? {}, isCurrent: () => boolean = () => !this.disposed): void {
+    if (isCurrent()) this.eventEmitter.emit('effectiveFlagsChanged', flags, isCurrent);
   }
 
   private getDefinitionsRevision(): string | null {
@@ -244,52 +285,82 @@ export class TogglyService {
     return null;
   }
 
+  private decodeCachedFlags(raw: string | null, context: string): FeatureFlags | undefined {
+    if (!raw) return undefined;
+    const record = JSON.parse(raw) as CachedBody;
+    if (record.identity !== context || typeof record.flags !== 'string') return undefined;
+    const flags = JSON.parse(record.flags) as unknown;
+    if (!flags || typeof flags !== 'object' || Array.isArray(flags)) return undefined;
+    const valid = Object.values(flags).every(value => {
+      if (typeof value === 'boolean') return true;
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+      const gate = value as {requirement?: unknown; rules?: unknown};
+      return (gate.requirement === 'all' || gate.requirement === 'any') && Array.isArray(gate.rules) && gate.rules.every(rule =>
+        rule && typeof rule === 'object' && typeof rule.property === 'string' && typeof rule.op === 'string' && typeof rule.value === 'string' &&
+        (rule.type === undefined || ['datetime','number','boolean','string','string[]'].includes(rule.type)));
+    });
+    return valid ? flags as FeatureFlags : undefined;
+  }
+
   private async loadCachedDefinitionsRevision(): Promise<void> {
-    if (this.cachedDefinitionsRevision) {
-      return;
-    }
+    if (this.cachedDefinitionsRevision) return;
+    const context = this.getContextCacheKey();
+    const generation = this.generation;
+    const current = () => !this.disposed && generation === this.generation;
     try {
       const stored = await this.storage.get(STORAGE_KEYS.ETAG);
-      // Older releases stored a bare revision without its evaluation context.
-      if (stored?.startsWith('{')) {
-        const record = JSON.parse(stored) as { context: string; revision: string };
-        const cached = await this.storage.get(await this.buildFeatureFlagsCacheKey());
-        if (typeof record.revision === 'string' && record.context === this.getContextCacheKey() && cached &&
-            JSON.parse(cached).identity === record.context) {
-          this.cachedDefinitionsRevision = record.revision;
-        }
-      }
+      if (!current() || !stored?.startsWith('{')) return;
+      const record = JSON.parse(stored) as CachedRevision;
+      if (record.context !== context || typeof record.revision !== 'string') return;
+      const key = await this.buildFeatureFlagsCacheKey(context);
+      if (!current()) return;
+      const raw = await this.storage.get(key);
+      const flags = this.decodeCachedFlags(raw, context);
+      const body = raw ? JSON.parse(raw) as CachedBody : null;
+      if (!current() || !flags || !record.writeId || record.writeId !== body?.writeId) return;
+      this.features = flags;
+      this.cachedDefinitionsRevision = record.revision;
     } catch (error) {
-      this.reportError('Error reading definitions revision cache', error);
+      if (current()) this.reportError('Error reading definitions revision cache', error);
     }
   }
 
   private async cacheDefinitionsRevision(revision: string | null | undefined): Promise<void> {
-    if (!revision) {
-      return;
-    }
+    if (this.disposed || !revision) return;
     const normalized = revision.replace(/^"+|"+$/g, '');
+    const context = this.getContextCacheKey();
+    const generation = this.generation;
+    const operation = this.refreshOperation;
+    const current = () => !this.disposed && generation === this.generation && operation === this.refreshOperation;
+    const flags = JSON.stringify(this.features);
     this.cachedDefinitionsRevision = normalized;
     try {
-      await this.storage.set(STORAGE_KEYS.ETAG, JSON.stringify({
-        context: this.getContextCacheKey(), revision: normalized,
-      }));
+      const key = await this.buildFeatureFlagsCacheKey(context);
+      if (!current()) return;
+      const raw = await this.storage.get(key);
+      const body = this.decodeCachedFlags(raw, context);
+      const writeId = raw ? (JSON.parse(raw) as CachedBody).writeId : undefined;
+      if (!current() || !body || !writeId || JSON.stringify(body) !== flags) return;
+      await mutateCache(this.storage, STORAGE_KEYS.ETAG, JSON.stringify({context, revision: normalized, writeId}));
     } catch (error) {
-      this.reportError('Error writing definitions revision cache', error);
+      if (current()) this.reportError('Error writing definitions revision cache', error);
     }
   }
 
   private scheduleDebouncedRefresh(forceRevisionReset = false): void {
+    if (this.disposed) return;
     if (this._refreshDebounceTimer) {
       clearTimeout(this._refreshDebounceTimer);
     }
     this._refreshDebounceTimer = setTimeout(() => {
       this._refreshDebounceTimer = null;
       const run = async () => {
+        if (this.disposed) return;
         if (forceRevisionReset) {
           this.cachedDefinitionsRevision = null;
           // Await deletes so refresh cannot rehydrate retired signing keys.
-          await this.storage.delete(STORAGE_KEYS.ETAG);
+          await mutateCache(this.storage, STORAGE_KEYS.ETAG, null);
+          if (this.disposed) return;
           await this.storage.delete(STORAGE_KEYS.JWKS);
         }
         await this.refresh();
@@ -330,8 +401,17 @@ export class TogglyService {
 
   constructor(config: TogglyConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
-    // Snapshot startup targeting before native subscriptions or asynchronous storage.
+    // Install targeting before reporter construction can call a host diagnostic.
     this.identity = config.identity || null;
+    this.instanceId = config.instanceId?.trim() || undefined;
+    this.telemetry = createTelemetryReporter({
+      appKey: config.appKey, environment: config.environment,
+      identity: this.identity ?? undefined, instanceId: this.instanceId,
+      enableTelemetry: config.enableTelemetry, metricsBaseUrl: config.metricsBaseUrl,
+      telemetryFlushIntervalMs: config.telemetryFlushIntervalMs,
+      onDiagnostic: config.onTelemetryDiagnostic,
+    });
+    // Snapshot startup targeting before native subscriptions or asynchronous storage.
     this.groups = [...(config.groups ?? [])];
     this.claims = { ...(config.claims ?? {}) };
     this.storage = config.storage ?? new MemoryStorage();
@@ -350,6 +430,7 @@ export class TogglyService {
     // Setup network info listener
     if (config.networkInfo) {
       this.networkUnsubscribe = config.networkInfo.subscribe((state) => {
+        if (this.disposed) return;
         const wasOffline = this.networkState?.isConnected === false;
         this.networkState = state;
         this.eventEmitter.emit('networkChanged', state);
@@ -362,14 +443,16 @@ export class TogglyService {
 
       // Get initial network state
       config.networkInfo.getState().then((state) => {
-        this.networkState = state;
-      });
+        if (!this.disposed) this.networkState = state;
+      }).catch(() => { /* Connectivity lookup cannot revive or fail an owner. */ });
     }
 
     // Setup app state listener
     if (config.appState) {
       this.appState = config.appState.getCurrentState();
       this.appStateUnsubscribe = config.appState.subscribe((state) => {
+        if (this.disposed) return;
+        if (state === 'background' || state === 'inactive') void this.flushTelemetry();
         const wasBackground = this.appState === 'background';
         this.appState = state;
         this.eventEmitter.emit('appStateChanged', state);
@@ -387,39 +470,48 @@ export class TogglyService {
    * @returns Promise resolving to the initialization response
    */
   async init(): Promise<TogglyInitResponse> {
+    if (this.disposed) return this.retiredResponse();
     if (this.initialization) return this.initialization;
-    this.initialization = this.initialize();
+    const pending = this.initialize();
+    this.initialization = pending;
     try {
-      return await this.initialization;
+      return await pending;
     } finally {
-      this.initialization = null;
+      if (this.initialization === pending) this.initialization = null;
     }
   }
 
   private async initialize(): Promise<TogglyInitResponse> {
-    // Handle identity
-    if (this.config.identity) {
-      this.identity = this.config.identity;
-    } else {
+    const expected = this.generation;
+    const current = () => !this.disposed && expected === this.generation;
+    // A setter may already own identity before asynchronous initialization.
+    if (!this.identity) {
       // Try to get stored device ID
       let storedId = await this.storage.get(STORAGE_KEYS.DEVICE_ID);
+      if (!current()) return this.retiredResponse();
       if (!storedId) {
         storedId = generateUUID();
         await this.storage.set(STORAGE_KEYS.DEVICE_ID, storedId);
       }
+      if (!current()) return this.retiredResponse();
       this.identity = storedId;
     }
 
+    this.telemetry.setContext({ instanceId: this.instanceId, identity: this.identity ?? undefined });
+    if (!current()) return this.retiredResponse();
+
     // Load cached definitions revision for conditional HTTP requests
     await this.loadCachedDefinitionsRevision();
+    if (!current()) return this.retiredResponse();
 
     // Perform initial refresh
     const response = await this.performRefresh();
 
-    if (this.disposed) return response;
+    if (!current()) return response;
     this.isInitialized = true;
     this.startRefreshTimer();
-    this.eventEmitter.emit('initialized', response);
+    this.eventEmitter.emit('initialized', response, current);
+    if (!current()) return this.retiredResponse();
 
     // Start WebSocket live updates after successful initialization
     if (this.config.enableLiveUpdates) {
@@ -454,7 +546,13 @@ export class TogglyService {
 
     // Skip refresh if offline
     if (this.networkState?.isConnected === false) {
+      const generation = this.generation;
+      const operation = this.refreshOperation;
       const cachedFlags = await this.getCachedFeatureFlags();
+      const current = () => !this.disposed && generation === this.generation && operation === this.refreshOperation;
+      if (!current()) return this.retiredResponse();
+      this.features = cachedFlags;
+      this.emitEffectiveFlagsChanged(cachedFlags, current);
       return {
         status: 'cached' as TogglyLoadStatus,
         flags: cachedFlags,
@@ -488,6 +586,10 @@ export class TogglyService {
       };
     }
 
+    const generation = this.generation;
+    const operation = ++this.refreshOperation;
+    const current = () => !this.disposed && generation === this.generation && operation === this.refreshOperation;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     this.featuresLoading = true;
 
     try {
@@ -500,7 +602,8 @@ export class TogglyService {
       );
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(
+      this.activeRequest = controller;
+      timeoutId = this.requestTimer = setTimeout(
         () => controller.abort(),
         this.config.requestTimeout
       );
@@ -511,20 +614,23 @@ export class TogglyService {
         signal: controller.signal,
       });
 
-      clearTimeout(timeoutId);
+      if (!current()) return this.retiredResponse();
 
       const responseRevision = extractDefinitionsRevision(response);
 
       if (response.status === 304) {
+        if (!revision) throw new Error('Unexpected 304 without a matching verified body');
         // Not modified, use cached
         this.lastChecked = new Date();
         const cachedFlags = await this.getCachedFeatureFlags();
+        if (!current()) return this.retiredResponse();
         // A conditional hit can refresh the validator for this cached context.
         if (revision) {
           await this.cacheDefinitionsRevision(responseRevision);
         }
+        if (!current()) return this.retiredResponse();
         this.features = cachedFlags;
-        this.emitEffectiveFlagsChanged(cachedFlags);
+        this.emitEffectiveFlagsChanged(cachedFlags, current);
         return {
           status: 'cached' as TogglyLoadStatus,
           flags: cachedFlags,
@@ -536,6 +642,7 @@ export class TogglyService {
       }
 
       const bodyText = await this.readResponseBody(response);
+      if (!current()) return this.retiredResponse();
       let flags: FeatureFlags;
 
       if (this.config.verifySignatures) {
@@ -544,7 +651,9 @@ export class TogglyService {
           defsRaw,
           envelope.signature,
           envelope.timestamp,
-          envelope.kid
+          envelope.kid,
+          controller.signal,
+          current
         );
         flags = parseDefinitionsFromRaw(defsRaw) as FeatureFlags;
       } else {
@@ -555,28 +664,45 @@ export class TogglyService {
         flags = (data?.defs ?? data?.data ?? data) as FeatureFlags;
       }
 
+      if (!current()) return this.retiredResponse();
       // Track changes
       const previousFlags = this.features;
       this.features = flags;
 
       // Cache the flags
       await this.cacheFeatureFlags(flags);
-      await this.cacheDefinitionsRevision(responseRevision);
+      if (!current()) return this.retiredResponse();
+      if (responseRevision) await this.cacheDefinitionsRevision(responseRevision);
+      else {
+        this.cachedDefinitionsRevision = null;
+        const key = await this.buildFeatureFlagsCacheKey();
+        if (!current()) return this.retiredResponse();
+        await this.removePairedRevision(key);
+      }
+      if (!current()) return this.retiredResponse();
 
       this.lastChecked = new Date();
       this.lastSynced = new Date();
       this.lastError = null;
 
+      // Transport admission finishes before callback-capable hooks, allowing a newer refresh.
+      clearTimeout(timeoutId);
+      this.requestTimer = undefined;
+      this.activeRequest = undefined;
+      this.featuresLoading = false;
       // Execute afterRefresh hooks
-      await this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags));
+      await this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags), current);
+      if (!current()) return this.retiredResponse();
 
       // Emit refreshed event
-      this.eventEmitter.emit('refreshed', flags);
-      this.emitEffectiveFlagsChanged(flags);
+      this.eventEmitter.emit('refreshed', flags, current);
+      if (!current()) return this.retiredResponse();
+      this.emitEffectiveFlagsChanged(flags, current);
+      if (!current()) return this.retiredResponse();
 
       // Notify state change handlers
       if (previousFlags) {
-        this.notifyFeatureChanges(previousFlags, flags);
+        this.notifyFeatureChanges(previousFlags, flags, current);
       }
 
       return {
@@ -584,13 +710,16 @@ export class TogglyService {
         flags,
       };
     } catch (error) {
+      if (!current()) return this.retiredResponse();
       const hadLastKnownGood = this.features !== null;
-      this.reportError('Error fetching feature flags', error);
+      this.reportError('Error fetching feature flags', error, current);
+      if (!current()) return this.retiredResponse();
 
       // Fall back to cache or defaults
       const cachedFlags = await this.getCachedFeatureFlags();
+      if (!current()) return this.retiredResponse();
       this.features = cachedFlags;
-      this.emitEffectiveFlagsChanged(cachedFlags);
+      this.emitEffectiveFlagsChanged(cachedFlags, current);
 
       return {
         status: hadLastKnownGood
@@ -600,7 +729,12 @@ export class TogglyService {
         error: this.lastError ?? undefined,
       };
     } finally {
-      this.featuresLoading = false;
+      clearTimeout(timeoutId);
+      if (operation === this.refreshOperation) {
+        this.requestTimer = undefined;
+        this.activeRequest = undefined;
+        this.featuresLoading = false;
+      }
     }
   }
 
@@ -608,10 +742,15 @@ export class TogglyService {
    * Build the API URL for fetching feature flags.
    */
   private buildApiUrl(): string {
-    const url = new URL(
-      `${this.config.baseURI}/evaluated-signed/${this.config.appKey}/${this.config.environment}`,
-    );
-    appendEvaluationContext(url, this.getEvaluationContext(), 'evaluated');
+    const url = new URL(this.config.baseURI);
+    url.pathname = `${url.pathname.replace(/\/+$/, '')}/evaluated-signed/${this.config.appKey}/${this.config.environment}`;
+    url.searchParams.delete('i');
+    if (this.instanceId) {
+      for (const key of [...url.searchParams.keys()]) {
+        if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) url.searchParams.delete(key);
+      }
+      url.searchParams.set('i', this.instanceId);
+    } else appendEvaluationContext(url, this.getEvaluationContext(), 'evaluated');
     return url.toString();
   }
 
@@ -639,8 +778,8 @@ export class TogglyService {
     return JSON.stringify([url.origin, url.pathname, entries]);
   }
 
-  private async buildFeatureFlagsCacheKey(): Promise<string> {
-    const hashedContext = await sha256(this.getContextCacheKey());
+  private async buildFeatureFlagsCacheKey(context = this.getContextCacheKey()): Promise<string> {
+    const hashedContext = await sha256(context);
     return STORAGE_KEYS.FEATURE_FLAGS_CACHE + hashedContext;
   }
 
@@ -666,6 +805,7 @@ export class TogglyService {
   }
 
   private async saveLruIndex(index: CacheLruIndex): Promise<void> {
+    if (this.disposed) return;
     try {
       await this.storage.set(STORAGE_KEYS.CACHE_LRU, serializeCacheLruIndex(index));
     } catch (error) {
@@ -687,6 +827,15 @@ export class TogglyService {
     });
   }
 
+  private async removePairedRevision(cacheKey: string): Promise<void> {
+    const stored = await this.storage.get(STORAGE_KEYS.ETAG);
+    if (this.disposed || !stored?.startsWith('{')) return;
+    const record = JSON.parse(stored) as {context?: string};
+    if (typeof record.context !== 'string') return;
+    const revisionKey = await this.buildFeatureFlagsCacheKey(record.context);
+    if (!this.disposed && revisionKey === cacheKey) await mutateCache(this.storage, STORAGE_KEYS.ETAG, null);
+  }
+
   private async enforceMaxCacheKeys(protectKeys: string[]): Promise<void> {
     const maxKeys = this.config.maxCacheKeys;
     if (!isCacheLruEnabled(maxKeys)) {
@@ -695,6 +844,7 @@ export class TogglyService {
     await this.runSerializedLruMutation(async () => {
       try {
         let index = await this.loadLruIndex();
+        if (this.disposed) return;
         const toEvict = selectCacheLruKeysToEvict(index, maxKeys as number, { protectKeys }).filter(
           (key) => this.isTrackedCacheKey(key),
         );
@@ -702,8 +852,11 @@ export class TogglyService {
           return;
         }
         for (const key of toEvict) {
+          if (this.disposed) return;
           try {
-            await this.storage.delete(key);
+            await this.removePairedRevision(key);
+            if (this.disposed) return;
+            await mutateCache(this.storage, key, null);
           } catch {
             /* ignore per-key removal failures */
           }
@@ -734,7 +887,7 @@ export class TogglyService {
    * Wait for features to finish loading.
    */
   private async waitForFeaturesLoaded(): Promise<void> {
-    while (this.featuresLoading) {
+    while (this.featuresLoading && !this.disposed) {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
   }
@@ -743,58 +896,70 @@ export class TogglyService {
    * Get cached feature flags.
    */
   private async getCachedFeatureFlags(): Promise<FeatureFlags> {
-    if (this.features) {
-      return this.features;
-    }
-
+    if (this.features) return this.features;
+    const context = this.getContextCacheKey();
+    const generation = this.generation;
+    const current = () => !this.disposed && generation === this.generation;
     try {
-      const cacheKey = await this.buildFeatureFlagsCacheKey();
-      const cached = await this.storage.get(cacheKey);
-
-      if (cached) {
-        const cacheData: TogglyFeatureFlagsCache = JSON.parse(cached);
-        if (cacheData.identity === this.getContextCacheKey()) {
-          await this.touchCacheKey(cacheKey);
-          return JSON.parse(cacheData.flags);
-        }
+      const cacheKey = await this.buildFeatureFlagsCacheKey(context);
+      if (!current()) return this.config.featureDefaults ?? {};
+      const raw = await this.storage.get(cacheKey);
+      const flags = this.decodeCachedFlags(raw, context);
+      const storedRevision = await this.storage.get(STORAGE_KEYS.ETAG);
+      const revision = storedRevision?.startsWith('{') ? JSON.parse(storedRevision) as CachedRevision : null;
+      const body = raw ? JSON.parse(raw) as CachedBody : null;
+      if (revision?.context === context && revision.writeId && revision.writeId !== body?.writeId) return this.config.featureDefaults ?? {};
+      if (!current()) return this.config.featureDefaults ?? {};
+      if (flags) {
+        await this.touchCacheKey(cacheKey);
+        return current() ? flags : this.config.featureDefaults ?? {};
       }
     } catch (error) {
-      this.reportError('Error reading cached feature flags', error);
+      if (current()) this.reportError('Error reading cached feature flags', error);
     }
-
     return this.config.featureDefaults ?? {};
   }
 
-  /**
-   * Cache feature flags to storage.
-   */
+  /** Cache a body under the context captured before asynchronous storage. */
   private async cacheFeatureFlags(flags: FeatureFlags): Promise<void> {
+    const context = this.getContextCacheKey();
+    const generation = this.generation;
+    const operation = this.refreshOperation;
+    const current = () => !this.disposed && generation === this.generation && operation === this.refreshOperation;
+    const encoded = JSON.stringify({identity: context, flags: JSON.stringify(flags), writeId: generateUUID()});
     try {
-      const cacheKey = await this.buildFeatureFlagsCacheKey();
-      const cacheData: TogglyFeatureFlagsCache = {
-        identity: this.getContextCacheKey(),
-        flags: JSON.stringify(flags),
-      };
-      await this.storage.set(cacheKey, JSON.stringify(cacheData));
+      const cacheKey = await this.buildFeatureFlagsCacheKey(context);
+      if (!current()) return;
+      await mutateCache(this.storage, cacheKey, encoded);
+      if (!current()) return;
       await this.touchCacheKey(cacheKey);
+      if (!current()) return;
       await this.enforceMaxCacheKeys([cacheKey]);
     } catch (error) {
-      this.reportError('Error writing feature flags cache', error);
+      if (current()) this.reportError('Error writing feature flags cache', error);
     }
   }
 
-  private async getJwks(): Promise<JwkSet> {
+  private async getJwks(signal: AbortSignal, isCurrent: () => boolean): Promise<JwkSet> {
     const cached = await this.storage.get(STORAGE_KEYS.JWKS);
+    if (!isCurrent()) throw new Error('Toggly request is retired');
     if (cached) {
       return JSON.parse(cached) as JwkSet;
     }
 
-    const response = await fetch(`${this.config.baseURI}/.well-known/jwks`);
+    const url = new URL(this.config.baseURI);
+    url.pathname = `${url.pathname.replace(/\/+$/, '')}/.well-known/jwks`;
+    for (const key of [...url.searchParams.keys()]) {
+      if (key === 'i' || key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) url.searchParams.delete(key);
+    }
+    const response = await fetch(url.toString(), { signal });
+    if (!isCurrent()) throw new Error('Toggly request is retired');
     if (!response.ok) {
       throw new Error(`Failed to fetch JWKs: ${response.status}`);
     }
 
     const jwks = (await response.json()) as JwkSet;
+    if (!isCurrent()) throw new Error('Toggly request is retired');
     await this.storage.set(STORAGE_KEYS.JWKS, JSON.stringify(jwks));
     return jwks;
   }
@@ -811,7 +976,9 @@ export class TogglyService {
     defsRaw: string,
     signature: string | undefined,
     timestamp: number | undefined,
-    keyId: string | undefined
+    keyId: string | undefined,
+    signal: AbortSignal,
+    isCurrent: () => boolean
   ): Promise<void> {
     if (!signature || timestamp === undefined || !keyId) {
       throw new Error('Signed definitions missing signature metadata');
@@ -820,7 +987,7 @@ export class TogglyService {
       throw new Error('Signed definitions key is not trusted');
     }
 
-    const jwks = await this.getJwks();
+    const jwks = await this.getJwks(signal, isCurrent);
     await verifySignedEnvelope(
       defsRaw,
       { signature, timestamp, kid: keyId },
@@ -834,13 +1001,17 @@ export class TogglyService {
    * Clear cached feature flags.
    */
   async clearCache(): Promise<void> {
+    if (this.disposed) return;
     this.features = null;
     this.cachedDefinitionsRevision = null;
 
     try {
       const cacheKey = await this.buildFeatureFlagsCacheKey();
-      await this.storage.delete(cacheKey);
-      await this.storage.delete(STORAGE_KEYS.ETAG);
+      if (this.disposed) return;
+      await mutateCache(this.storage, cacheKey, null);
+      if (this.disposed) return;
+      await mutateCache(this.storage, STORAGE_KEYS.ETAG, null);
+      if (this.disposed) return;
       await this.storage.delete(STORAGE_KEYS.JWKS);
       await this.removeCacheKeysFromLruIndex([cacheKey]);
     } catch (error) {
@@ -853,60 +1024,68 @@ export class TogglyService {
    * @param identity New identity string
    */
   async setIdentity(identity: string | null): Promise<TogglyInitResponse> {
-    const previousIdentity = this.identity;
-
-    // Execute beforeIdentify hooks
-    const dataMap = await this.hookExecutor.executeBeforeIdentify(
-      identity ?? ''
-    );
-
-    if (identity) {
-      this.identity = identity;
-    } else {
-      // Fall back to device ID
-      let deviceId = await this.storage.get(STORAGE_KEYS.DEVICE_ID);
-      if (!deviceId) {
-        deviceId = generateUUID();
-        await this.storage.set(STORAGE_KEYS.DEVICE_ID, deviceId);
-      }
-      this.identity = deviceId;
-    }
-
-    // Clear cache if identity changed
-    if (previousIdentity !== this.identity) {
-      await this.clearCache();
-    }
-
-    // Execute afterIdentify hooks
-    await this.hookExecutor.executeAfterIdentify(this.identity, dataMap);
-
-    // Emit event
-    this.eventEmitter.emit('identityChanged', {
-      previousIdentity,
-      newIdentity: this.identity,
-    });
-
-    return this.refresh();
+    return this.setContext({ identity: identity ?? '' });
   }
 
-  /**
-   * Set evaluation context (identity, groups, claims) and refresh flags.
-   */
-  async setContext(context: TogglyEvaluationContext): Promise<TogglyInitResponse> {
-    if (context.identity !== undefined) {
-      const identityResponse = await this.setIdentity(context.identity ?? null);
-      if (context.groups === undefined && context.claims === undefined) {
-        return identityResponse;
+  /** Replace supplied targeting fields; an identity-only change clears the token. */
+  async setContext(context: TogglyEvaluationContext & { instanceId?: string }): Promise<TogglyInitResponse> {
+    if (this.disposed) return this.retiredResponse();
+    const intent = ++this.contextIntent;
+    const currentIntent = () => !this.disposed && intent === this.contextIntent;
+    const update = { ...context, groups: context.groups && [...context.groups], claims: context.claims && { ...context.claims } };
+    const previousIdentity = this.identity;
+    let nextIdentity = this.identity;
+    const dataMap = update.identity !== undefined
+      ? await this.hookExecutor.executeBeforeIdentify(update.identity ?? '', currentIntent)
+      : undefined;
+    if (!currentIntent()) return this.retiredResponse();
+    if (update.identity !== undefined) {
+      nextIdentity = update.identity || await this.storage.get(STORAGE_KEYS.DEVICE_ID);
+      if (!currentIntent()) return this.retiredResponse();
+      if (!nextIdentity) {
+        nextIdentity = generateUUID();
+        await this.storage.set(STORAGE_KEYS.DEVICE_ID, nextIdentity);
+        if (!currentIntent()) return this.retiredResponse();
       }
     }
-    if (context.groups !== undefined) {
-      this.groups = [...context.groups];
+    this.generation++;
+    this.refreshOperation++;
+    const expected = this.generation;
+    const current = () => currentIntent() && expected === this.generation;
+    this.activeRequest?.abort();
+    if (this.requestTimer) clearTimeout(this.requestTimer);
+    this.activeRequest = undefined;
+    this.requestTimer = undefined;
+    this.featuresLoading = false;
+    this.initialization = null;
+    this.stopRefreshTimer();
+    this.stopWebSocket();
+    this.identity = nextIdentity;
+    if (update.identity !== undefined && update.instanceId === undefined) this.instanceId = undefined;
+    if (update.instanceId !== undefined) this.instanceId = update.instanceId.trim() || undefined;
+    if (update.groups !== undefined) this.groups = update.groups;
+    if (update.claims !== undefined) this.claims = update.claims;
+    this.features = null;
+    this.cachedDefinitionsRevision = null;
+    this.pendingDefinitionsPin = null;
+    this.telemetry.setContext({ instanceId: this.instanceId, identity: this.identity ?? undefined });
+    if (!current()) return this.retiredResponse();
+    this.emitEffectiveFlagsChanged(this.config.featureDefaults ?? {}, current);
+    if (!current()) return this.retiredResponse();
+    // Preserve the existing context-transition retirement of cached signing keys.
+    try { await this.storage.delete(STORAGE_KEYS.JWKS); }
+    catch (error) { if (current()) this.reportError('Error clearing signing keys', error); }
+    if (!current()) return this.retiredResponse();
+    await this.loadCachedDefinitionsRevision();
+    if (!current()) return this.retiredResponse();
+    if (dataMap) {
+      await this.hookExecutor.executeAfterIdentify(this.identity!, dataMap, current);
+      if (!current()) return this.retiredResponse();
+      this.eventEmitter.emit('identityChanged', { previousIdentity, newIdentity: this.identity }, current);
     }
-    if (context.claims !== undefined) {
-      this.claims = { ...context.claims };
-    }
-    await this.clearCache();
-    return this.refresh();
+    if (!current()) return this.retiredResponse();
+    try { return await (this.isInitialized ? this.performRefresh() : this.init()); }
+    finally { if (current() && this.isInitialized) { this.startRefreshTimer(); this.startWebSocket(); } }
   }
 
   /**
@@ -925,13 +1104,20 @@ export class TogglyService {
     this.emitEffectiveFlagsChanged();
   }
 
-  private getEffectiveFlag(
-    featureKey: string,
-    entityContext?: TogglyEntityContext | null,
-  ): boolean {
-    const flags = this.features ?? this.config.featureDefaults ?? {};
-    const remote = resolveEvaluatedDefinition(flags[featureKey], entityContext);
-    return applyLocalGate(remote, featureKey, this.localGates, this.localGateIndex);
+  private captureEvaluation(featureKeys: string[]) {
+    const record = this.telemetry.captureCheck();
+    const source = this.features ?? this.config.featureDefaults ?? {};
+    const flags: FeatureFlags = JSON.parse(JSON.stringify(Object.fromEntries(
+      featureKeys.filter(key => Object.prototype.hasOwnProperty.call(source, key)).map(key => [key, source[key]])
+    )));
+    const gates = this.localGates.map(gate => ({ ...gate, flagKeys: [...gate.flagKeys] }));
+    const index = buildFlagGateIndex(gates);
+    return (featureKey: string, entityContext?: TogglyEntityContext | null): boolean => {
+      const remote = resolveEvaluatedDefinition(flags[featureKey], entityContext);
+      const enabled = applyLocalGate(remote, featureKey, gates, index);
+      record(featureKey, enabled ? 'enabled' : 'disabled');
+      return enabled;
+    };
   }
 
   registerContext<T>(kind: string, mapper: (entity: T) => TogglyEntityContext): void {
@@ -954,6 +1140,9 @@ export class TogglyService {
       return true;
     }
 
+    featureKeys = [...featureKeys];
+    const captured = this.captureEvaluation(featureKeys);
+
     // Execute hooks for first feature key
     const dataMap = await this.hookExecutor.executeBeforeEvaluation(
       featureKeys[0]
@@ -965,6 +1154,7 @@ export class TogglyService {
       requirement,
       negate,
       entityContext,
+      captured,
     );
 
     await this.hookExecutor.executeAfterEvaluation(
@@ -984,24 +1174,19 @@ export class TogglyService {
     requirement: FeatureRequirement,
     negate: boolean,
     entityContext?: TogglyEntityContext | null,
+    resolve = this.captureEvaluation(featureKeys),
   ): boolean {
-    const flags = this.features ?? this.config.featureDefaults ?? {};
-
-    if (featureKeys.length > 0 && Object.keys(flags).length === 0) {
-      return negate;
-    }
-
     if (featureKeys.length === 1) {
-      const isEnabled = this.getEffectiveFlag(featureKeys[0], entityContext);
+      const isEnabled = resolve(featureKeys[0], entityContext);
       return negate ? !isEnabled : isEnabled;
     }
 
     let isEnabled: boolean;
 
     if (requirement === 'any') {
-      isEnabled = featureKeys.some((key) => this.getEffectiveFlag(key, entityContext));
+      isEnabled = featureKeys.some((key) => resolve(key, entityContext));
     } else {
-      isEnabled = featureKeys.every((key) => this.getEffectiveFlag(key, entityContext));
+      isEnabled = featureKeys.every((key) => resolve(key, entityContext));
     }
 
     return negate ? !isEnabled : isEnabled;
@@ -1030,6 +1215,7 @@ export class TogglyService {
    * Ensure features are loaded before evaluation.
    */
   private async ensureFeaturesLoaded(): Promise<void> {
+    if (this.disposed) return;
     if (this.features !== null) {
       return;
     }
@@ -1040,7 +1226,9 @@ export class TogglyService {
     }
 
     // Load from cache or defaults
-    this.features = await this.getCachedFeatureFlags();
+    const generation = this.generation;
+    const flags = await this.getCachedFeatureFlags();
+    if (!this.disposed && generation === this.generation) this.features = flags;
   }
 
   /**
@@ -1048,7 +1236,7 @@ export class TogglyService {
    * Uses the global WebSocket provided by the React Native runtime.
    */
   private startWebSocket(): void {
-    if (!this.config.appKey || !this.config.enableLiveUpdates) {
+    if (this.disposed || !this.config.appKey || !this.config.enableLiveUpdates) {
       return;
     }
 
@@ -1064,12 +1252,14 @@ export class TogglyService {
       const ws = new WebSocket(url);
 
       ws.onopen = () => {
+        if (this.disposed || this._ws !== ws) return;
         this._wsConnected = true;
         this._wsReconnectAttempt = 0;
         this._lastFallbackRefresh = Date.now();
       };
 
       ws.onmessage = (event: MessageEvent) => {
+        if (this.disposed || this._ws !== ws) return;
         const data = typeof event.data === 'string' ? event.data : '';
 
         if (data === 'update' || data === 'flags-updated') {
@@ -1099,12 +1289,14 @@ export class TogglyService {
       };
 
       ws.onclose = () => {
+        if (this.disposed || this._ws !== ws) return;
         this._wsConnected = false;
         this._ws = null;
         this.scheduleWsReconnect();
       };
 
       ws.onerror = (err: Event) => {
+        if (this.disposed || this._ws !== ws) return;
         console.error('[Toggly] WebSocket error:', err);
       };
 
@@ -1119,6 +1311,7 @@ export class TogglyService {
    * Schedule a WebSocket reconnection attempt after a delay.
    */
   private scheduleWsReconnect(): void {
+    if (this.disposed) return;
     if (this._wsReconnectTimer) {
       clearTimeout(this._wsReconnectTimer);
     }
@@ -1160,6 +1353,7 @@ export class TogglyService {
    */
   private startRefreshTimer(): void {
     this.stopRefreshTimer();
+    if (this.disposed) return;
 
     if (this.config.appKey && this.config.refreshInterval > 0) {
       this.refreshTimer = setInterval(() => {
@@ -1234,7 +1428,8 @@ export class TogglyService {
    */
   private notifyFeatureChanges(
     previousFlags: FeatureFlags,
-    newFlags: FeatureFlags
+    newFlags: FeatureFlags,
+    isCurrent: () => boolean = () => true
   ): void {
     const allKeys = new Set([
       ...Object.keys(previousFlags),
@@ -1242,6 +1437,7 @@ export class TogglyService {
     ]);
 
     for (const key of allKeys) {
+      if (!isCurrent()) return;
       const previousValue = resolveEvaluatedDefinition(previousFlags[key]);
       const newValue = resolveEvaluatedDefinition(newFlags[key]);
 
@@ -1250,9 +1446,10 @@ export class TogglyService {
           featureKey: key,
           previousValue,
           newValue,
-        });
+        }, isCurrent);
 
         this.stateChangeHandlers.forEach((handler) => {
+          if (!isCurrent()) return;
           try {
             handler(key, previousValue, newValue);
           } catch (error) {
@@ -1285,11 +1482,30 @@ export class TogglyService {
     };
   }
 
-  /**
-   * Dispose the service and clean up resources.
-   */
-  dispose(): void {
+  /** Record an explicit feature usage; this does not evaluate the feature. */
+  recordUsage(featureKey: string, variant = 'enabled'): void { this.telemetry.recordUsage(featureKey, variant); }
+  recordView(featureKey: string, variant = 'enabled'): void { this.telemetry.recordView(featureKey, variant); }
+  incrementCounter(metricKey: string, value = 1): void { this.telemetry.incrementCounter(metricKey, value); }
+  setGauge(metricKey: string, value: number): void { this.telemetry.setGauge(metricKey, value); }
+  flushTelemetry(): Promise<void> { return this.telemetry.flush(); }
+
+  private retiredResponse(): TogglyInitResponse {
+    return { status: 'cached' as TogglyLoadStatus, flags: this.config.featureDefaults };
+  }
+
+  /** Retire the owner synchronously and attempt one bounded final telemetry envelope. */
+  dispose(options?: { flush?: boolean }): void {
+    if (this.disposed) {
+      if (options?.flush === false) this.telemetry.dispose(options);
+      return;
+    }
     this.disposed = true;
+    this.generation++;
+    this.refreshOperation++;
+    this.contextIntent++;
+    this.telemetry.dispose(options);
+    this.activeRequest?.abort();
+    if (this.requestTimer) clearTimeout(this.requestTimer);
     this.stopWebSocket();
     this.stopRefreshTimer();
     this.networkUnsubscribe?.();

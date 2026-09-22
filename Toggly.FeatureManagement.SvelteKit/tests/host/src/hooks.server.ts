@@ -20,8 +20,9 @@ export const handle = createTogglyHandle({
     groups: ['staff'],
     claims: { role: 'admin', privateClaim: 'server-secret' },
   }),
-  clientContext: (_event, context) => ({
+  clientContext: (event, context) => ({
     identity: context.identity,
+    instanceId: event.url.searchParams.get('instance') ?? undefined,
     groups: context.groups,
     claims: { role: context.claims!.role },
   }),

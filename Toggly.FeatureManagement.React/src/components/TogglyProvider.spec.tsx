@@ -129,7 +129,7 @@ describe('createTogglyProvider', () => {
     });
 
     const TogglyProvider = await createTogglyProvider({
-      appKey: 'test-key',
+      enableTelemetry: false, appKey: 'test-key',
       environment: 'Production',
     });
 

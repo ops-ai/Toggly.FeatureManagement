@@ -5,57 +5,65 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
 import { once } from 'node:events';
 import { WebSocketServer } from 'ws';
+import { chromium } from '@playwright/test';
+import { run, cleanupAll, closeBrowser, stopChild } from './host-resources.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const temporary = await mkdtemp(join(tmpdir(), 'toggly-sveltekit-host-'));
 const host = join(temporary, 'host');
-const run = (command, args, cwd, env = {}) =>
-  new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd,
-      env: { ...process.env, ...env },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    let output = '';
-    child.stdout.on('data', (chunk) => {
-      output += chunk;
-      process.stdout.write(chunk);
-    });
-    child.stderr.on('data', (chunk) => {
-      output += chunk;
-      process.stderr.write(chunk);
-    });
-    child.on('error', reject);
-    child.on('close', (code) =>
-      code === 0 ? resolve(output) : reject(new Error(`${command} exited ${code}`)),
-    );
-  });
 let app;
 let server;
 let sockets;
+let browser;
+let failure;
+console.log('Owned packed host root:', temporary);
 const pending = [];
 try {
+  await run(process.execPath, [join(root, 'scripts/host-resource-controls.mjs')], root, {}, 90000);
   await run('npm', ['run', 'build'], root);
   await run(process.execPath, [join(root, 'tests/offline-process.mjs')], root);
   await run('npm', ['pack', '--pack-destination', temporary], root);
   await cp(join(root, 'tests/host'), host, { recursive: true });
-  // Optional candidate artifacts are temporary install inputs only, never written into a manifest/lock.
-  const shared = JSON.parse(process.env.TOGGLY_SHARED_ARTIFACTS ?? '[]');
-  if (!Array.isArray(shared) || shared.some((value) => typeof value !== 'string'))
-    throw new Error('TOGGLY_SHARED_ARTIFACTS must be a JSON string array');
+  const archive = join(
+    temporary,
+    `ops-ai-toggly-sveltekit-${JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version}.tgz`,
+  );
+  await run('npm', ['install', '--package-lock-only', '--ignore-scripts', archive], host);
+  await run('npm', ['ci', '--no-audit', '--no-fund'], host);
   await run(
     'npm',
     [
-      'install',
-      '--no-save',
-      '--package-lock=false',
-      join(temporary, 'ops-ai-toggly-sveltekit-0.1.0.tgz'),
-      ...shared,
+      'ls',
+      '@ops-ai/toggly-client-telemetry',
+      '@sveltejs/kit',
+      'svelte',
+      '@sveltejs/adapter-node',
+      '--json',
     ],
     host,
   );
+  const lock = JSON.parse(await readFile(join(host, 'package-lock.json'), 'utf8'));
+  console.log(
+    'Packed provenance',
+    JSON.stringify({
+      archiveSha256: createHash('sha256')
+        .update(await readFile(archive))
+        .digest('hex'),
+      lockSha256: createHash('sha256')
+        .update(await readFile(join(host, 'package-lock.json')))
+        .digest('hex'),
+      node: process.version,
+      playwright: JSON.parse(
+        await readFile(join(root, 'node_modules/@playwright/test/package.json'), 'utf8'),
+      ).version,
+    }),
+  );
+  const reporter = lock.packages['node_modules/@ops-ai/toggly-client-telemetry'];
+  if (reporter?.version !== '1.1.0' || !reporter.resolved.startsWith('https://registry.npmjs.org/'))
+    throw new Error('Reporter must come from the public registry');
   await run('npm', ['run', 'check'], host);
   const built = await run('npm', ['run', 'build'], host);
   if (built.includes('externalized for browser compatibility'))
@@ -76,18 +84,16 @@ try {
     }
   }
   await inspect(join(host, '.svelte-kit/output/client'));
-  const boundary = spawn(
+  await run(
     process.execPath,
     [
       '--conditions=browser',
       '--input-type=module',
       '-e',
-      "await import('@ops-ai/toggly-sveltekit/server')",
+      "try { await import('@ops-ai/toggly-sveltekit/server'); process.exitCode = 1; } catch(error) { if (error.code !== 'ERR_PACKAGE_PATH_NOT_EXPORTED') throw error; }",
     ],
-    { cwd: host, stdio: 'ignore' },
+    host,
   );
-  if ((await once(boundary, 'close'))[0] === 0)
-    throw new Error('Server export resolved under browser conditions');
   let pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, [
     'sign',
     'verify',
@@ -119,12 +125,15 @@ try {
     shape: null,
     offline: false,
     delayUser: '',
+    delayBrowserUser: '',
     requests: [],
     connections: 0,
     closes: 0,
     jwks: 0,
     pending: 0,
     completed: 0,
+    telemetry: [],
+    telemetryPreflights: [],
   };
   server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
@@ -132,7 +141,23 @@ try {
     res.setHeader('Access-Control-Allow-Headers', '*');
     res.setHeader('Access-Control-Expose-Headers', 'ETag');
     if (req.method === 'OPTIONS') {
+      if (url.pathname === '/metrics/api/frontend/telemetry')
+        state.telemetryPreflights.push(req.headers);
+      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
       res.end();
+      return;
+    }
+    if (url.pathname === '/metrics/api/frontend/telemetry') {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const raw = Buffer.concat(chunks);
+      const plain = req.headers['content-encoding'] === 'gzip' ? gunzipSync(raw) : raw;
+      state.telemetry.push({
+        body: JSON.parse(plain.toString()),
+        headers: req.headers,
+        bytes: plain.length,
+      });
+      res.writeHead(202).end();
       return;
     }
     if (url.pathname === '/control') {
@@ -181,6 +206,9 @@ try {
     state.requests.push({
       path: url.pathname,
       user: url.searchParams.get('u'),
+      instanceId: url.searchParams.get('i'),
+      query: [...url.searchParams],
+      browser: Boolean(req.headers.origin),
       revision: req.headers['if-none-match'] ?? null,
       pin: url.searchParams.get('rev'),
       claims: url.searchParams.get('claim.role'),
@@ -206,7 +234,10 @@ try {
           { featureKey: 'backend-rule-only', filters: [{ name: 'AlwaysOn' }] },
         ]
       : {
-          on: state.enabled && url.searchParams.get('u') === 'alice',
+          on:
+            state.enabled &&
+            (url.searchParams.get('i') === 'token-a' ||
+              (!url.searchParams.has('i') && url.searchParams.get('u') === 'alice')),
           off: false,
           Order: {
             requirement: 'all',
@@ -217,7 +248,13 @@ try {
     if (!backend && state.shape !== null) defs.Order = state.shape;
     const body = state.invalid ? '{}' : await sign(defs);
     const revision = state.revision;
-    if (!backend && state.delayUser && url.searchParams.get('u') === state.delayUser) {
+    if (
+      !backend &&
+      ((state.delayUser && url.searchParams.get('u') === state.delayUser) ||
+        (req.headers.origin &&
+          state.delayBrowserUser &&
+          url.searchParams.get('u') === state.delayBrowserUser))
+    ) {
       state.pending++;
       await new Promise((resolve) => pending.push(resolve));
       state.pending--;
@@ -258,22 +295,25 @@ try {
       TOGGLY_APP_KEY: 'backend-private-fixture',
       TOGGLY_BASE_URI: definitions,
     },
+    detached: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   app.stdout.pipe(process.stdout);
   app.stderr.pipe(process.stderr);
   for (let count = 0; count < 100; count++) {
     try {
-      await fetch(origin + '/server');
+      await fetch(origin + '/server', { signal: AbortSignal.timeout(2000) });
       break;
     } catch {
       if (count === 99) throw new Error('Host did not start');
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
+  browser = await chromium.launchServer({ headless: true, timeout: 30000 });
+  console.log('Owned browser PID:', browser.process().pid);
   await writeFile(
     join(temporary, 'playwright.config.mjs'),
-    `export default ${JSON.stringify({ testDir: join(root, 'tests/host-browser'), workers: 1, use: { baseURL: origin }, reporter: 'line' })};`,
+    `export default ${JSON.stringify({ testDir: join(root, 'tests/host-browser'), workers: 1, use: { baseURL: origin, connectOptions: { wsEndpoint: browser.wsEndpoint() } }, reporter: 'line' })};`,
   );
   await run(
     process.execPath,
@@ -289,17 +329,33 @@ try {
   console.log(
     'Packed SvelteKit host: typecheck, build, server/browser export boundary and Chromium protocol checks passed.',
   );
+} catch (error) {
+  failure = error;
 } finally {
-  for (const resume of pending.splice(0)) resume();
-  if (app) {
-    app.kill('SIGTERM');
-    await Promise.race([once(app, 'close'), new Promise((resolve) => setTimeout(resolve, 3000))]);
-    if (app.exitCode === null) app.kill('SIGKILL');
-  }
-  if (sockets) {
-    for (const socket of sockets.clients) socket.terminate();
-    await new Promise((resolve) => sockets.close(resolve));
-  }
-  if (server) await new Promise((resolve) => server.close(resolve));
-  await rm(temporary, { recursive: true, force: true });
+  await cleanupAll(
+    [
+      () => closeBrowser(browser),
+      () => stopChild(app),
+      async () => {
+        for (const resume of pending.splice(0)) resume();
+      },
+      async () => {
+        if (sockets) {
+          for (const socket of sockets.clients) socket.terminate();
+          await new Promise((resolve) => sockets.close(resolve));
+        }
+      },
+      async () => {
+        if (server) {
+          server.closeAllConnections();
+          await new Promise((resolve) => server.close(resolve));
+        }
+      },
+      async () => {
+        await rm(temporary, { recursive: true, force: true });
+        console.log('Owned packed host root removed:', temporary);
+      },
+    ],
+    failure,
+  );
 }

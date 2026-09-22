@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { FeatureRequirement, TogglyEntityContext } from '@ops-ai/react-native-toggly-core';
 import { useTogglyContext } from '../contexts/TogglyContext';
 
@@ -78,13 +78,20 @@ export function useFeatureFlag(
 ): UseFeatureFlagResult {
   const { defaultValue = false, negate = false, context, contextKind } = options;
   const { toggly, isReady } = useTogglyContext();
+  const currentOwner = useRef(toggly);
+  currentOwner.current = toggly;
+  const request = useRef(0);
+  const effectiveChange = useRef({ version: 0, pending: Promise.resolve() });
+  const [resultOwner, setResultOwner] = useState(toggly);
+  useEffect(() => () => { request.current++; }, [toggly]);
 
   const [isEnabled, setIsEnabled] = useState(defaultValue);
   const [isLoading, setIsLoading] = useState(!isReady);
   const [error, setError] = useState<Error | null>(null);
 
   const evaluate = useCallback(async () => {
-    if (!isReady) return;
+    if (!isReady || currentOwner.current !== toggly) return;
+    const ownRequest = ++request.current;
 
     setIsLoading(true);
     setError(null);
@@ -97,12 +104,16 @@ export function useFeatureFlag(
         context,
         contextKind,
       );
+      if (currentOwner.current !== toggly || ownRequest !== request.current) return;
+      setResultOwner(toggly);
       setIsEnabled(result);
     } catch (err) {
+      if (currentOwner.current !== toggly || ownRequest !== request.current) return;
+      setResultOwner(toggly);
       setError(err instanceof Error ? err : new Error('Evaluation failed'));
       setIsEnabled(defaultValue);
     } finally {
-      setIsLoading(false);
+      if (currentOwner.current === toggly && ownRequest === request.current) setIsLoading(false);
     }
   }, [toggly, featureKey, negate, isReady, defaultValue, context, contextKind]);
 
@@ -115,21 +126,26 @@ export function useFeatureFlag(
     if (!isReady) return;
 
     const unsubscribe = toggly.on('effectiveFlagsChanged', () => {
-      evaluate();
+      effectiveChange.current = { version: effectiveChange.current.version + 1, pending: evaluate() };
     });
 
     return unsubscribe;
   }, [toggly, isReady, evaluate]);
 
   const refresh = useCallback(async () => {
+    const version = effectiveChange.current.version;
     await toggly.refresh();
-    await evaluate();
+    if (currentOwner.current !== toggly) return;
+    // Core may already have triggered this consumer through its effective event.
+    // A no-event refresh (for example offline) still needs an evaluation.
+    if (effectiveChange.current.version === version) await evaluate();
+    else await effectiveChange.current.pending;
   }, [toggly, evaluate]);
 
   return {
-    isEnabled,
-    isLoading,
-    error,
+    isEnabled: resultOwner === toggly ? isEnabled : defaultValue,
+    isLoading: resultOwner !== toggly || isLoading,
+    error: resultOwner === toggly ? error : null,
     refresh,
   };
 }
@@ -169,6 +185,8 @@ export function useFeatureGate(
   featureKeys: string[],
   options: UseFeatureGateOptions = {}
 ): UseFeatureFlagResult {
+  const keysToken = JSON.stringify(featureKeys);
+  const stableKeys = useMemo(() => [...featureKeys], [keysToken]);
   const {
     defaultValue = false,
     negate = false,
@@ -177,14 +195,22 @@ export function useFeatureGate(
     contextKind,
   } = options;
   const { toggly, isReady } = useTogglyContext();
+  const currentOwner = useRef(toggly);
+  currentOwner.current = toggly;
+  const request = useRef(0);
+  const effectiveChange = useRef({ version: 0, pending: Promise.resolve() });
+  const [resultOwner, setResultOwner] = useState(toggly);
+  useEffect(() => () => { request.current++; }, [toggly]);
 
   const [isEnabled, setIsEnabled] = useState(defaultValue);
   const [isLoading, setIsLoading] = useState(!isReady);
   const [error, setError] = useState<Error | null>(null);
 
   const evaluate = useCallback(async () => {
-    if (!isReady) return;
-    if (featureKeys.length === 0) {
+    if (!isReady || currentOwner.current !== toggly) return;
+    const ownRequest = ++request.current;
+    if (stableKeys.length === 0) {
+      setResultOwner(toggly);
       setIsEnabled(true);
       setIsLoading(false);
       return;
@@ -195,20 +221,24 @@ export function useFeatureGate(
 
     try {
       const result = await toggly.evaluateFeatureGate(
-        featureKeys,
+        stableKeys,
         requirement,
         negate,
         context,
         contextKind,
       );
+      if (currentOwner.current !== toggly || ownRequest !== request.current) return;
+      setResultOwner(toggly);
       setIsEnabled(result);
     } catch (err) {
+      if (currentOwner.current !== toggly || ownRequest !== request.current) return;
+      setResultOwner(toggly);
       setError(err instanceof Error ? err : new Error('Evaluation failed'));
       setIsEnabled(defaultValue);
     } finally {
-      setIsLoading(false);
+      if (currentOwner.current === toggly && ownRequest === request.current) setIsLoading(false);
     }
-  }, [toggly, featureKeys, requirement, negate, isReady, defaultValue, context, contextKind]);
+  }, [toggly, stableKeys, requirement, negate, isReady, defaultValue, context, contextKind]);
 
   useEffect(() => {
     evaluate();
@@ -219,21 +249,26 @@ export function useFeatureGate(
     if (!isReady) return;
 
     const unsubscribe = toggly.on('effectiveFlagsChanged', () => {
-      evaluate();
+      effectiveChange.current = { version: effectiveChange.current.version + 1, pending: evaluate() };
     });
 
     return unsubscribe;
   }, [toggly, isReady, evaluate]);
 
   const refresh = useCallback(async () => {
+    const version = effectiveChange.current.version;
     await toggly.refresh();
-    await evaluate();
+    if (currentOwner.current !== toggly) return;
+    // Core may already have triggered this consumer through its effective event.
+    // A no-event refresh (for example offline) still needs an evaluation.
+    if (effectiveChange.current.version === version) await evaluate();
+    else await effectiveChange.current.pending;
   }, [toggly, evaluate]);
 
   return {
-    isEnabled,
-    isLoading,
-    error,
+    isEnabled: resultOwner === toggly ? isEnabled : defaultValue,
+    isLoading: resultOwner !== toggly || isLoading,
+    error: resultOwner === toggly ? error : null,
     refresh,
   };
 }

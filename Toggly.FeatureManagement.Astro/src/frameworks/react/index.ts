@@ -6,3 +6,5 @@ export { Feature, useFeatureFlag, useFeatureGate, useVariant } from './Feature.j
 export type { FeatureProps } from './Feature.js';
 
 
+
+export {recordUsage, recordView, incrementCounter, setGauge, flushTelemetry} from '../../client/store.js';

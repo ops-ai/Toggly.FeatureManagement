@@ -26,6 +26,7 @@ describe('Local gates', () => {
     let gateEnabled = false;
     const service = new Toggly({
       appKey: 'test-key',
+      enableTelemetry: false,
       environment: 'Production',
       enableLiveUpdates: false,
       localGates: [{
@@ -52,6 +53,7 @@ describe('Local gates', () => {
     const listener = vi.fn();
     const service = new Toggly({
       appKey: 'test-key',
+      enableTelemetry: false,
       environment: 'Production',
       enableLiveUpdates: false,
       localGates: [{
@@ -86,6 +88,7 @@ describe('Local gates', () => {
 
     const service = new Toggly({
       appKey: 'test-key',
+      enableTelemetry: false,
       environment: 'Production',
       enableLiveUpdates: false,
     });

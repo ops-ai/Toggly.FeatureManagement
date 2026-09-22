@@ -1,3 +1,37 @@
+## 1.10.0
+
+2026-09-18
+
+### Fixed
+- Keep the active context authoritative over configured URL tokens, including
+  initialization without a token and explicit token clearing.
+
+### Added
+- Accept host-minted browser `instanceId`, prefer `i` over client targeting, and
+  retain queued attribution across identity and provider-context changes [OPS-1321].
+- Add default-on, bounded browser telemetry for effective feature checks,
+  explicit usage/views, counters, and gauges [OPS-1288].
+- Add independent usage and metrics category controls, custom ingestion URL and
+  flush interval configuration, lifecycle flushing, and explicit flush/dispose
+  APIs.
+- Exercise packed Gatsby 5 with React 18 in a real production browser against a
+  cross-origin collector, including gzip, pagehide, and owner replacement.
+
+### Fixed
+- Snapshot selected local gates before callbacks, suppress configured URL targeting
+  for minted identities, and discard retired Provider telemetry on replacement.
+- Keep the newest overlapping refresh and stop retired asynchronous refresh hooks.
+- Count initial React consumer checks only after commit; discarded hydration renders
+  and StrictMode replay stay silent while real remounts and subscribed recomputations retain checks.
+- Capture evaluated flags and attribution before reentrant entity/local callbacks.
+- Keep conditional revisions paired with the live in-memory context, remove
+  orphan legacy validators, and prevent late or failed identity refreshes from
+  restoring retired user flags.
+- Share one browser client owner across Gatsby's compiled CommonJS and ESM
+  entries while keeping SSR module state request-local.
+- Stop disposed or replaced initialization and refresh work from restoring stale
+  state or attributing events to a new app/environment.
+
 ## 1.9.0
 
 2026-09-03

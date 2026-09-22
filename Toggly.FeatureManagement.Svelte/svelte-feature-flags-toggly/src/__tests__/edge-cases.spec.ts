@@ -28,6 +28,7 @@ describe('Edge Cases & Error Handling', () => {
 
       await createToggly({
         appKey: 'bad-key',
+        enableTelemetry: false,
         featureDefaults: { F1: true },
       });
 
@@ -44,6 +45,7 @@ describe('Edge Cases & Error Handling', () => {
 
       await createToggly({
         appKey: 'test-key',
+        enableTelemetry: false,
         featureDefaults: { F1: true },
       });
 
@@ -57,6 +59,7 @@ describe('Edge Cases & Error Handling', () => {
 
       await createToggly({
         appKey: 'test-key',
+        enableTelemetry: false,
         featureDefaults: { F1: true },
       });
 
@@ -70,6 +73,7 @@ describe('Edge Cases & Error Handling', () => {
 
       await createToggly({
         appKey: 'test-key',
+        enableTelemetry: false,
         featureDefaults: { F1: true },
       });
 
@@ -86,6 +90,7 @@ describe('Edge Cases & Error Handling', () => {
 
       await createToggly({
         appKey: 'test-key',
+        enableTelemetry: false,
         featureDefaults: { F1: true },
       });
 
@@ -103,6 +108,7 @@ describe('Edge Cases & Error Handling', () => {
 
       await createToggly({
         appKey: 'test-key',
+        enableTelemetry: false,
         featureDefaults: { F1: true },
       });
 
@@ -120,6 +126,7 @@ describe('Edge Cases & Error Handling', () => {
 
       await createToggly({
         appKey: 'test-key',
+        enableTelemetry: false,
         featureDefaults: { F1: true },
       });
 
@@ -136,6 +143,7 @@ describe('Edge Cases & Error Handling', () => {
 
       const service = new Toggly({
         appKey: 'test-key',
+        enableTelemetry: false,
         featureDefaults: { F1: true },
         enableLiveUpdates: false,
         onError: (message) => errors.push(message),
@@ -160,6 +168,7 @@ describe('Edge Cases & Error Handling', () => {
 
       const service = new Toggly({
         appKey: 'test-key',
+        enableTelemetry: false,
         persistCache: false,
         enableLiveUpdates: false,
       });
@@ -181,13 +190,14 @@ describe('Edge Cases & Error Handling', () => {
 
       const service = new Toggly({
         appKey: 'test-key',
+        enableTelemetry: false,
         featureDefaults: { F1: true },
         enableLiveUpdates: false,
       });
       togglyServiceStore.set(service);
       await service._loadFeatures();
 
-      expect(localStorage.getItem('toggly:flags:test-key:Production')).toBeNull();
+      expect(localStorage.getItem('toggly:flags:test-key:Production:["evaluated",["context",""]]')).toBeNull();
       expect(await service.isFeatureOn('F1')).toBe(true);
     });
 
@@ -202,6 +212,7 @@ describe('Edge Cases & Error Handling', () => {
 
       const service = new Toggly({
         appKey: 'test-key',
+        enableTelemetry: false,
         persistCache: false,
         enableLiveUpdates: false,
       });
@@ -213,13 +224,14 @@ describe('Edge Cases & Error Handling', () => {
 
     it('should fall back to cached variant defs when variants fetch fails', async () => {
       localStorage.setItem(
-        'toggly:variants:test-key:Production',
+        'toggly:variants:test-key:Production:["variants",["context",""]]',
         JSON.stringify({ VariantFlag: { enabled: true, variant: 'A' } }),
       );
       vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network'));
 
       const service = new Toggly({
         appKey: 'test-key',
+        enableTelemetry: false,
         environment: 'Production',
         enableVariants: true,
         enableLiveUpdates: false,
@@ -384,6 +396,7 @@ describe('Edge Cases & Error Handling', () => {
 
       await createToggly({
         appKey: 'test-key',
+        enableTelemetry: false,
         environment: 'Production',
         featureFlagsRefreshInterval: 5000,
       });

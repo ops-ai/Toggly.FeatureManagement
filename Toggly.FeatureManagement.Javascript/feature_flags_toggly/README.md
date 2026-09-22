@@ -34,6 +34,75 @@ omitting identity also generates an identifier when none exists. Explicit
 Supplied collections are copied. Context remains usable in memory when
 localStorage is unavailable. Use `setContext` for later user/context changes.
 
+## Frontend telemetry
+
+Requires **1.9.0 or later**.
+
+With an application key, the SDK records a count for each feature actually
+checked and sends batched counts to `https://metrics.toggly.io`. Local and
+entity gates affect the recorded enabled or disabled result. Assigned variants
+are recorded by name, including when `persistCache: false` or browser storage
+is unavailable. The active assignment stays in memory until its context changes
+or the cache is explicitly cleared. Feature refreshes and cache reads do not count
+as checks. Boolean and variant response caches are isolated; upgrading to 1.9.0
+fetches a fresh definitions body before reusing a persisted revision.
+
+```javascript
+await Toggly.init({
+  appKey: 'your-public-app-key',
+  environment: 'Production',
+  // Optional: enableTelemetry: false,
+  // Optional: metricsBaseUrl: 'https://your-metrics-host.example',
+  // Optional: telemetryFlushIntervalMs: 45000, // 30000 to 60000
+});
+
+Toggly.isFeatureOn('NewDashboard');
+Toggly.recordUsage('NewDashboard');
+Toggly.recordView('NewDashboard', 'Treatment');
+Toggly.incrementCounter('checkout_started');
+Toggly.setGauge('cart_size', 3);
+await Toggly.flushTelemetry();
+```
+
+The explicit methods do not check a feature. `recordUsage` and `recordView`
+default to the `enabled` variant. Telemetry contains application key,
+environment, feature/variant counts, and metric values. It also carries a
+host-supplied minted `instanceId` as `i`, or the current client identity as `u`
+when no minted token is configured. Groups, claims and entity context are omitted. Omit the application key or
+set `enableTelemetry: false` to keep telemetry inactive. Browser page exit
+initiates a best-effort flush.
+
+## Host-minted identities
+
+Requires **1.9.0 or later**. Obtain the capability from your own trusted backend;
+never put a Backend application key in the browser.
+
+```javascript
+await Toggly.init({
+  appKey: 'your-public-app-key',
+  identity: 'user-123',
+  instanceId: tokenFromYourBackend,
+});
+```
+
+The definitions request sends `i` and suppresses client identity, groups and
+claims while that token is configured. Both regular and variant definitions
+retain their existing targeting parameters without a token. Tokens are held
+in memory; definitions and revisions are cached separately by token and
+client context. Reinitialization does not reuse an omitted token.
+
+`Toggly.instanceId = replacementToken` changes the token synchronously; call
+`await Toggly.refresh()` to fetch its definitions. Setting it to `''` deliberately
+falls back to the current client identity. `clearIdentity()` clears both the
+identity and token; `clearContext()` also clears groups and claims and refreshes.
+Changing targeting context immediately clears the prior in-memory snapshot and
+invalidates pending responses. Synchronous identity setters retain their
+existing no-automatic-fetch behavior; `setContext` refreshes after its changes.
+
+Telemetry attribution acceptance is server-controlled. The
+`AcceptClientGeneratedIdentitiesForMetrics` application setting is **off by
+default** and must be enabled to accept client `u`. An unknown, expired or rotated `i` can be
+accepted anonymously; HTTP 202 does not prove attribution or metric persistence.
 
 ## What is a Feature Flag
 
@@ -46,7 +115,7 @@ In agile settings the feature flag is used in production, to switch on the featu
 Simply embed our latest bundle from the following CDN.
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/@ops-ai/feature-flags-toggly@1.0.2/dist/feature-flags-toggly.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ops-ai/feature-flags-toggly@1.9.0/dist/feature-flags-toggly.bundle.js"></script>
 ```
 
 Alternatively, you can use NPM to manually build the bundled *.js file.
@@ -329,3 +398,31 @@ Evaluated-signed defs may be `boolean | EntityGate`. Use `isFeatureOn` (not `===
 ## Find out more about Toggly.io
 
 Visit [our official website](https://toggly.io) or [check out a video overview of our product](https://docs.toggly.io/).
+
+### Cleanup and browser verification
+
+`Toggly.cancelRefreshInterval()` synchronously stops the current reporter,
+WebSocket and background refresh work, aborts owned definitions requests, and
+starts one best-effort final telemetry flush. Identity, token and compatible
+application/environment changes preserve one reporter: accepted events keep
+their original attribution, and new events immediately use the new context.
+All contexts share the same 2,000-entry / 256 KiB pending and in-flight budget.
+Evaluations capture their context and variant before user callbacks; a callback
+changing identity cannot relabel that evaluation's check.
+
+Reinitialization with different metrics endpoint, interval, error callback or
+opt-out settings discards the old telemetry queue and aborts its transport before
+creating another owner. This also cancels an earlier cleanup's final request;
+an abort cannot establish whether the server already received it. Reinitializing
+without an app key pauses new telemetry while preserving accepted old data for
+flush. Reactivation reattaches browser lifecycle listeners. Late definitions
+responses and hook/WebSocket continuations cannot restore a replaced context. Use
+`await Toggly.flushTelemetry()` before cleanup when explicit completion is
+needed. Restarting only the definitions interval preserves the current reporter.
+
+Maintainers can run `npm run test:browser-host` to build and pack the SDK, install
+an isolated consumer, and exercise its actual browser bundle against a local
+collector. This also checks TypeScript4.9 declarations, import-only Node silence,
+CORS/gzip, effective counts and lifecycle isolation. The default install resolves
+public npm dependencies; `TOGGLY_CLIENT_TELEMETRY_TARBALL` is an optional explicit
+local artifact override for intermediate verification.

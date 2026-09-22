@@ -38,7 +38,7 @@ describe('TogglyService', () => {
         feature2: false,
       };
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         featureDefaults,
         storage: mockStorage,
       });
@@ -51,7 +51,7 @@ describe('TogglyService', () => {
     });
 
     it('should generate device ID when no identity provided', async () => {
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         storage: mockStorage,
       });
 
@@ -63,7 +63,7 @@ describe('TogglyService', () => {
 
     it('should use provided identity', async () => {
       const identity = 'user-123';
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         identity,
         storage: mockStorage,
       });
@@ -85,7 +85,7 @@ describe('TogglyService', () => {
         headers: new Map([['etag', '"abc123"']]),
       });
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         appKey: 'test-key',
         environment: 'Production',
         storage: mockStorage,
@@ -105,7 +105,7 @@ describe('TogglyService', () => {
 
       (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         appKey: 'test-key',
         featureDefaults,
         storage: mockStorage,
@@ -121,7 +121,7 @@ describe('TogglyService', () => {
 
   describe('feature evaluation', () => {
     beforeEach(async () => {
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         featureDefaults: {
           enabledFeature: true,
           disabledFeature: false,
@@ -219,7 +219,7 @@ describe('TogglyService', () => {
 
   describe('identity management', () => {
     it('should update identity and refresh features', async () => {
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         featureDefaults: { feature1: true },
         storage: mockStorage,
       });
@@ -236,7 +236,7 @@ describe('TogglyService', () => {
     });
 
     it('should revert to device ID when identity is null', async () => {
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         identity: 'user-123',
         storage: mockStorage,
       });
@@ -260,7 +260,7 @@ describe('TogglyService', () => {
         headers: new Map(),
       });
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         appKey: 'test-key',
         storage: mockStorage,
       });
@@ -274,7 +274,7 @@ describe('TogglyService', () => {
 
     it('should clear cache when requested', async () => {
       await mockStorage.set('@toggly:jwks', '{"keys":[]}');
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         featureDefaults: { feature1: true },
         storage: mockStorage,
       });
@@ -292,7 +292,7 @@ describe('TogglyService', () => {
       const beforeEvaluationMock = jest.fn();
       const afterEvaluationMock = jest.fn();
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         featureDefaults: { testFeature: true },
         hooks: [
           {
@@ -314,7 +314,7 @@ describe('TogglyService', () => {
     it('should add hook dynamically', async () => {
       const hookMock = jest.fn();
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         featureDefaults: { testFeature: true },
         storage: mockStorage,
       });
@@ -333,7 +333,7 @@ describe('TogglyService', () => {
     it('should remove hook by name', async () => {
       const hookMock = jest.fn();
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         featureDefaults: { testFeature: true },
         hooks: [
           {
@@ -357,7 +357,7 @@ describe('TogglyService', () => {
     it('should emit initialized event', async () => {
       const listener = jest.fn();
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         featureDefaults: { feature1: true },
         storage: mockStorage,
       });
@@ -377,7 +377,7 @@ describe('TogglyService', () => {
     it('should emit identityChanged event', async () => {
       const listener = jest.fn();
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         identity: 'user-1',
         storage: mockStorage,
       });
@@ -400,7 +400,7 @@ describe('TogglyService', () => {
     it('should unsubscribe from events', async () => {
       const listener = jest.fn();
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         storage: mockStorage,
       });
 
@@ -431,7 +431,7 @@ describe('TogglyService', () => {
           headers: new Map(),
         });
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         appKey: 'test-key',
         storage: mockStorage,
       });
@@ -446,7 +446,7 @@ describe('TogglyService', () => {
     it('should remove state change handler', async () => {
       const handler = jest.fn();
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         featureDefaults: { feature1: true },
         storage: mockStorage,
       });
@@ -469,7 +469,7 @@ describe('TogglyService', () => {
         headers: new Map(),
       });
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         appKey: 'test-key',
         storage: mockStorage,
       });
@@ -486,7 +486,7 @@ describe('TogglyService', () => {
 
   describe('debug info', () => {
     it('should return debug information', async () => {
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         appKey: 'test-key',
         environment: 'Production',
         identity: 'user-123',
@@ -507,7 +507,7 @@ describe('TogglyService', () => {
     it('should clean up resources on dispose', async () => {
       const listener = jest.fn();
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         featureDefaults: { feature1: true },
         storage: mockStorage,
       });
@@ -532,7 +532,7 @@ describe('TogglyService', () => {
         getState: jest.fn().mockResolvedValue({ isConnected: true }),
       };
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         featureDefaults: { feature1: true },
         storage: mockStorage,
         networkInfo: mockNetworkInfo,
@@ -558,7 +558,7 @@ describe('TogglyService', () => {
         }),
       };
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         featureDefaults: { feature1: true },
         storage: mockStorage,
         appState: mockAppState,
@@ -580,7 +580,7 @@ describe('TogglyService', () => {
         subscribe: jest.fn(() => () => {}),
       };
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         appKey: 'test-key',
         featureDefaults: { feature1: true },
         storage: mockStorage,
@@ -600,7 +600,7 @@ describe('TogglyService', () => {
         getState: jest.fn().mockResolvedValue({ isConnected: false }),
       };
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         appKey: 'test-key',
         featureDefaults: { feature1: true },
         storage: mockStorage,
@@ -630,7 +630,7 @@ describe('TogglyService', () => {
         statusText: 'Not Modified',
       });
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         appKey: 'test-key',
         storage: mockStorage,
       });
@@ -649,7 +649,7 @@ describe('TogglyService', () => {
         statusText: 'Internal Server Error',
       });
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         appKey: 'test-key',
         featureDefaults: { fallback: true },
         storage: mockStorage,
@@ -676,7 +676,7 @@ describe('TogglyService', () => {
         headers: new Map(),
       });
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         appKey: 'test-key',
         useSignedDefinitions: true,
         verifySignatures: false,
@@ -703,7 +703,7 @@ describe('TogglyService', () => {
           headers: new Map(),
         });
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         appKey: 'test-key',
         useSignedDefinitions: true,
         storage: mockStorage,
@@ -733,7 +733,7 @@ describe('TogglyService', () => {
         }))
       );
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         appKey: 'test-key',
         storage: mockStorage,
       });
@@ -756,7 +756,7 @@ describe('TogglyService', () => {
     it('should receive all events', async () => {
       const allEventsListener = jest.fn();
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         featureDefaults: { feature1: true },
         storage: mockStorage,
       });
@@ -771,7 +771,7 @@ describe('TogglyService', () => {
 
   describe('feature evaluation edge cases', () => {
     it('should handle single feature in gate with negate', async () => {
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         featureDefaults: { feature1: true },
         storage: mockStorage,
       });
@@ -782,7 +782,7 @@ describe('TogglyService', () => {
     });
 
     it('should use defaults when features is null', async () => {
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         featureDefaults: { defaultFeature: true },
         storage: mockStorage,
       });
@@ -795,7 +795,7 @@ describe('TogglyService', () => {
 
   describe('showFeatureDuringEvaluation', () => {
     it('should return the configured value', () => {
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         showFeatureDuringEvaluation: true,
         storage: mockStorage,
       });
@@ -826,7 +826,7 @@ describe('TogglyService', () => {
           headers: new Map(),
         });
 
-      service = new TogglyService({
+      service = new TogglyService({ enableTelemetry: false,
         appKey: 'test-key',
         storage: mockStorage,
       });

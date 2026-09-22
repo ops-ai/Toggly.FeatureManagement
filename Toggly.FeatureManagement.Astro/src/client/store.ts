@@ -5,10 +5,13 @@
  * This module includes its own embedded Toggly client implementation.
  */
 
+import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
+import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
 import { atom, computed, type ReadableAtom } from 'nanostores';
 import type { TogglyConfig, Flags, VariantResult, EvaluatedVariantDef } from '../types/index.js';
 import {
   appendEvaluationContext,
+  isEntityGate,
   normalizeEntityContext,
   registerContext as registerEntityContext,
   resolveEvaluatedDefinition,
@@ -43,10 +46,6 @@ import {
 } from './ws-sync.js';
 
 const FALLBACK_REFRESH_INTERVAL_MS = 20 * 60 * 1000;
-
-function revisionCacheKey(appKey: string, environment: string): string {
-  return `toggly:revision:${appKey}:${environment}`;
-}
 
 /**
  * Atom containing all feature flags
@@ -83,7 +82,13 @@ let clientInstance: TogglyClientInstance | null = null;
  */
 class TogglyClientInstance {
   private config: TogglyConfig;
+  private disposed = false;
+  private generation = 0;
+  private reporter: TelemetryReporter | undefined;
+  private detachTelemetry: (() => void) | undefined;
+  private requests = new Map<AbortController, ReturnType<typeof setTimeout>>();
   private cache: Flags | null = null;
+  private hasDefinitionsBody = false;
   private variantCache: Record<string, EvaluatedVariantDef> | null = null;
   private refreshInterval: NodeJS.Timeout | null = null;
   public hookExecutor = new HookExecutor();
@@ -111,9 +116,21 @@ class TogglyClientInstance {
       enableVariants: false,
       hooks: [],
       ...config,
+      groups: config.groups ? [...config.groups] : undefined,
+      claims: config.claims ? {...config.claims} : undefined,
     };
 
-    this.definitionsRevision = this.readCachedRevision();
+    if (typeof window !== 'undefined' && typeof document !== 'undefined' &&
+      typeof window.addEventListener === 'function' && typeof document.addEventListener === 'function' &&
+      this.config.appKey?.trim() && this.config.enableTelemetry !== false &&
+      (this.config.enableUsageTracking !== false || this.config.enableMetrics !== false)) {
+      this.reporter = createTelemetryReporter({appKey: this.config.appKey, environment: this.config.environment,
+        instanceId: this.config.instanceId, identity: this.config.identity,
+        metricsBaseUrl: this.config.metricsBaseUrl, telemetryFlushIntervalMs: this.config.telemetryFlushIntervalMs,
+        fetch: this.config.telemetryFetch, onDiagnostic: code => {try {this.config.onError?.(code);} catch { /* Host diagnostics cannot affect evaluation. */ }}});
+      this.detachTelemetry = attachBrowserLifecycle(this.reporter);
+    }
+    this.removeLegacyRevision();
     
     // Register initial hooks
     if (this.config.hooks) {
@@ -130,14 +147,19 @@ class TogglyClientInstance {
     this.localGateIndex = buildFlagGateIndex(this.localGates);
   }
 
-  getEffectiveFlag(
-    flagKey: string,
-    definition?: EvaluatedDefinitionValue,
-    defaultValue = false,
-    entityContext?: TogglyEntityContext | null,
-  ): boolean {
-    const remote = resolveEvaluatedDefinition(definition, entityContext, defaultValue);
-    return applyLocalGate(remote, flagKey, this.localGates, this.localGateIndex);
+  /** Snapshot attribution, assigned variants and gates before any host callback. */
+  captureEvaluation(record = true) {
+    const variants = Object.fromEntries(Object.entries(this.variantCache ?? {}).map(([key, value]) => [key, value.variant]));
+    const gates = this.localGates.map(gate => ({...gate, flagKeys:[...gate.flagKeys]}));
+    const index = this.localGateIndex;
+    const check = record && this.cache !== null && !this.disposed && this.config.enableUsageTracking !== false
+      ? this.reporter?.captureCheck() : undefined;
+    return (key: string, definition: EvaluatedDefinitionValue | undefined, defaultValue = false, entity?: TogglyEntityContext | null): boolean => {
+      const remote = resolveEvaluatedDefinition(definition, entity, defaultValue);
+      const result = applyLocalGate(remote, key, gates, index);
+      check?.(key, result ? variants[key] || 'enabled' : 'disabled');
+      return result;
+    };
   }
 
   registerContext<T>(
@@ -151,78 +173,47 @@ class TogglyClientInstance {
     $localGatesRevision.set($localGatesRevision.get() + 1);
   }
 
-  private readCachedRevision(): string | null {
-    const appKey = this.config.appKey;
-    if (!appKey) {
-      return null;
-    }
+  // Astro has no persisted definitions body. A disk validator cannot be paired
+  // after a cold start, so remove the old orphan and retain validators in memory.
+  private removeLegacyRevision(): void {
     try {
-      if (typeof localStorage === 'undefined') {
-        return null;
+      if (this.config.appKey && typeof localStorage !== 'undefined') {
+        localStorage.removeItem(`toggly:revision:${this.config.appKey}:${this.config.environment}`);
       }
-      return localStorage.getItem(
-        revisionCacheKey(appKey, this.config.environment ?? 'Production')
-      );
-    } catch {
-      return null;
-    }
+    } catch { /* Storage denial must not affect initialization. */ }
   }
 
   private cacheDefinitionsRevision(revision: string | null | undefined): void {
-    if (!revision) {
-      return;
-    }
-    const cleaned = revision.replace(/^"+|"+$/g, '');
-    this.definitionsRevision = cleaned;
-    const appKey = this.config.appKey;
-    if (!appKey) {
-      return;
-    }
-    try {
-      if (typeof localStorage === 'undefined') {
-        return;
-      }
-      localStorage.setItem(
-        revisionCacheKey(appKey, this.config.environment ?? 'Production'),
-        cleaned
-      );
-    } catch {
-      // Ignore storage failures (private mode, SSR, etc.)
-    }
+    if (revision && this.hasDefinitionsBody) this.definitionsRevision = revision.replace(/^"+|"+$/g, '');
   }
 
   private clearDefinitionsRevision(): void {
     this.definitionsRevision = null;
-    const appKey = this.config.appKey;
-    if (!appKey) {
-      return;
-    }
-    try {
-      if (typeof localStorage === 'undefined') {
-        return;
-      }
-      localStorage.removeItem(
-        revisionCacheKey(appKey, this.config.environment ?? 'Production')
-      );
-    } catch {
-      // Ignore storage failures
-    }
   }
 
   private getApiUrl(): string {
-    const { baseURI, appKey, environment, identity, groups, claims, enableVariants } = this.config;
+    const { baseURI, appKey, environment, identity, instanceId, groups, claims, enableVariants } = this.config;
 
     if (!appKey) {
       return '';
     }
 
-    const baseUrl = baseURI!.replace(/\/$/, '');
+    const url = new URL(baseURI!);
     const path = enableVariants
       ? `/evaluated-variants-signed/${appKey}/${environment}`
       : `/evaluated-signed/${appKey}/${environment}`;
-    const url = new URL(`${baseUrl}${path}`);
+    url.pathname = `${url.pathname.replace(/\/$/, '')}${path}`;
 
-    appendEvaluationContext(
+    // Attribution belongs to the current context, never to inherited URL defaults.
+    url.searchParams.delete('i');
+    if (instanceId?.trim()) {
+      for (const key of [...url.searchParams.keys()]) {
+        if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) {
+          url.searchParams.delete(key);
+        }
+      }
+      url.searchParams.set('i', instanceId.trim());
+    } else appendEvaluationContext(
       url,
       { identity, groups, claims },
       enableVariants ? 'variants' : 'evaluated',
@@ -232,6 +223,8 @@ class TogglyClientInstance {
   }
 
   async fetchFlags(): Promise<{ flags: Flags; variantDefs: Record<string, EvaluatedVariantDef> | null }> {
+    const expected = this.generation;
+    if (this.disposed) return {flags: {}, variantDefs: null};
     const url = this.getApiUrl();
     const enableVariants = this.config.enableVariants === true;
 
@@ -245,14 +238,15 @@ class TogglyClientInstance {
       };
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.config.connectTimeout);
+    this.requests.set(controller, timeoutId);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.config.connectTimeout);
 
       const headers: Record<string, string> = {
         Accept: 'application/json',
       };
-      if (this.definitionsRevision) {
+      if (this.hasDefinitionsBody && this.definitionsRevision) {
         headers['If-None-Match'] = this.definitionsRevision;
       }
 
@@ -264,14 +258,13 @@ class TogglyClientInstance {
       });
 
       clearTimeout(timeoutId);
+      if (this.disposed || expected !== this.generation) return {flags: {}, variantDefs: null};
 
       const responseRevision = extractDefinitionsRevision(response);
-      if (responseRevision) {
-        this.cacheDefinitionsRevision(responseRevision);
-      }
 
       if (response.status === 304) {
-        if (this.cache) {
+        if (this.hasDefinitionsBody && this.cache) {
+          this.cacheDefinitionsRevision(responseRevision);
           this.lastError = null;
           return {
             flags: { ...this.cache },
@@ -294,16 +287,24 @@ class TogglyClientInstance {
         maxSignatureAgeSeconds: this.config.maxSignatureAgeSeconds,
         // Public JWKS does not need SDK definition-request headers.
       });
+      if (this.disposed || expected !== this.generation) return {flags: {}, variantDefs: null};
       let flags: Flags;
       let variantDefs: Record<string, EvaluatedVariantDef> | null;
 
       if (enableVariants) {
-        variantDefs = parseVariantDefsPayload(
-          this.config.verifySignatures ? { defs: payload } : payload
-        );
+        const body = unwrapDefsPayload(payload);
+        if (!body || typeof body !== 'object' || Array.isArray(body) ||
+          Object.values(body).some(entry => !entry || typeof entry !== 'object' || Array.isArray(entry) ||
+            typeof entry.enabled !== 'boolean' || (entry.variant !== undefined && typeof entry.variant !== 'string'))) {
+          throw new Error('Invalid variant definitions body');
+        }
+        variantDefs = parseVariantDefsPayload({defs: body});
         flags = variantDefsToFlags(variantDefs);
       } else {
-        flags = unwrapDefsPayload(payload) as Flags;
+        const body = unwrapDefsPayload(payload);
+        if (!body || typeof body !== 'object' || Array.isArray(body) ||
+          Object.values(body).some(entry => typeof entry !== 'boolean' && !isEntityGate(entry))) throw new Error('Invalid definitions body');
+        flags = body as Flags;
         variantDefs = null;
       }
 
@@ -314,12 +315,20 @@ class TogglyClientInstance {
         }
       }
 
+      // Commit body before its validator; no callback may observe a mismatched pair.
+      this.cache = flags;
+      this.variantCache = variantDefs;
+      this.hasDefinitionsBody = true;
+      this.definitionsRevision = null;
+      this.cacheDefinitionsRevision(responseRevision);
       this.lastError = null;
       return { flags, variantDefs };
     } catch (error) {
+      if (this.disposed || expected !== this.generation) return {flags: {}, variantDefs: null};
       const fetchError = error instanceof Error ? error : new Error(String(error));
       this.lastError = fetchError;
-      this.config.onError?.('Error fetching feature flags', error);
+      try {this.config.onError?.('Error fetching feature flags', error);} catch { /* Diagnostics cannot replace evaluation. */ }
+      if (this.disposed || expected !== this.generation) return {flags: {}, variantDefs: null};
       $error.set(fetchError);
 
       if (this.config.isDebug) {
@@ -345,22 +354,33 @@ class TogglyClientInstance {
         flags: { ...this.config.flagDefaults! },
         variantDefs: enableVariants ? {} : null,
       };
+    } finally {
+      clearTimeout(timeoutId);
+      this.requests.delete(controller);
     }
   }
 
   async init(): Promise<void> {
+    const expected = ++this.generation;
     try {
       const { flags, variantDefs } = await this.fetchFlags();
+      if (this.disposed || expected !== this.generation) return;
       this.cache = flags;
       this.variantCache = variantDefs;
       $flags.set(flags);
+      if (this.disposed || expected !== this.generation) return;
       $variants.set(variantDefs ?? {});
+      if (this.disposed || expected !== this.generation) return;
       $isReady.set(true);
+      if (this.disposed || expected !== this.generation) return;
       $error.set(this.lastError);
+      if (this.disposed || expected !== this.generation) return;
       
       // Trigger afterRefresh hooks
-      await this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags));
+      await this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags),
+        () => !this.disposed && expected === this.generation);
 
+      if (this.disposed || expected !== this.generation) return;
       this.startWebSocket();
 
       // Start refresh interval if configured
@@ -371,6 +391,7 @@ class TogglyClientInstance {
         this.startRefreshInterval();
       }
     } catch (error) {
+      if (this.disposed || expected !== this.generation) return;
       $error.set(error as Error);
       $isReady.set(true); // Still mark as ready even on error
       console.error('[Toggly Client] Initialization error:', error);
@@ -378,16 +399,23 @@ class TogglyClientInstance {
   }
 
   async refresh(): Promise<void> {
+    if (this.disposed) return;
+    const expected = ++this.generation;
     try {
       const { flags, variantDefs } = await this.fetchFlags();
+      if (this.disposed || expected !== this.generation) return;
       this.cache = flags;
       this.variantCache = variantDefs;
       $flags.set(flags);
+      if (this.disposed || expected !== this.generation) return;
       $variants.set(variantDefs ?? {});
+      if (this.disposed || expected !== this.generation) return;
       $error.set(this.lastError);
+      if (this.disposed || expected !== this.generation) return;
       
       // Trigger afterRefresh hooks
-      await this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags));
+      await this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags),
+        () => !this.disposed && expected === this.generation);
 
       if (this.config.isDebug) {
         console.log('[Toggly Client] Flags refreshed');
@@ -421,7 +449,7 @@ class TogglyClientInstance {
       this.scheduleDebouncedRefresh();
       return;
     }
-    if (message.etag) {
+    if (message.etag === this.definitionsRevision) {
       this.cacheDefinitionsRevision(message.etag);
     }
   }
@@ -433,12 +461,13 @@ class TogglyClientInstance {
       {
         refreshJwks: () => this.scheduleDebouncedRefresh(true),
         refreshPinned: () => this.scheduleDebouncedRefresh(true),
-        cacheEtagIfPresent: (etag) => this.cacheDefinitionsRevision(etag),
+        cacheEtagIfPresent: (etag) => {if (etag === this.definitionsRevision) this.cacheDefinitionsRevision(etag);},
       },
     );
   }
 
   startWebSocket(): void {
+    if (this.disposed || typeof window === 'undefined') return;
     if (!this.config.appKey) {
       return;
     }
@@ -563,6 +592,7 @@ class TogglyClientInstance {
   }
 
   private startRefreshInterval(): void {
+    if (this.disposed || typeof window === 'undefined') return;
     if (this.refreshInterval) {
       return;
     }
@@ -601,35 +631,81 @@ class TogglyClientInstance {
     this.stopWebSocket();
   }
 
-  setIdentity(identity: string): void {
-    this.config.identity = identity;
-    this.refresh(); // Refresh with new identity
+  setIdentity(identity: string | undefined): void {
+    void this.updateContext({...this.config, identity}, true);
   }
 
   clearIdentity(): void {
-    this.config.identity = undefined;
-    this.refresh(); // Refresh without identity
+    this.setIdentity(undefined);
   }
 
-  resolveVariant(featureKey: string): VariantResult | null {
-    if (!this.config.enableVariants) {
-      return null;
+  async updateContext(config: TogglyConfig, refreshUnchanged = false): Promise<void> {
+    const next = {...this.config, identity: config.identity, instanceId: config.instanceId,
+      groups: config.groups ? [...config.groups] : undefined,
+      claims: config.claims ? {...config.claims} : undefined, enableVariants: config.enableVariants ?? false};
+    const oldUrl = this.getApiUrl();
+    const oldIdentity = this.config.identity;
+    this.config = next;
+    this.reporter?.setContext({identity: next.identity, instanceId: next.instanceId});
+    if (oldUrl === this.getApiUrl()) {
+      if (refreshUnchanged) {await this.refresh(); return;}
+      if (oldIdentity === next.identity) console.warn('[Toggly Client] Client already initialized');
+      return;
     }
-    const defs = this.variantCache;
-    if (!defs) {
-      return null;
-    }
-    const entry = defs[featureKey];
-    if (!entry?.variant) {
-      return null;
-    }
-    if (!this.getEffectiveFlag(featureKey, entry.enabled === true)) {
-      return null;
-    }
-    return {
-      name: entry.variant,
-      configurationValue: entry.configurationValue,
-    };
+    const expected = ++this.generation;
+    for (const [controller, timer] of this.requests) {clearTimeout(timer); controller.abort();}
+    this.requests.clear();
+    this.stopWebSocket();
+    this.cache = null;
+    this.hasDefinitionsBody = false;
+    this.variantCache = null;
+    this.clearDefinitionsRevision();
+    $flags.set({...this.config.flagDefaults});
+    if (this.disposed || expected !== this.generation) return;
+    $variants.set({});
+    if (this.disposed || expected !== this.generation) return;
+    $error.set(null);
+    if (this.disposed || expected !== this.generation) return;
+    await this.init();
+  }
+
+  matchesOwner(config: TogglyConfig): boolean {
+    return this.config.appKey === config.appKey && this.config.environment === (config.environment ?? 'Production') &&
+      this.config.baseURI === (config.baseURI ?? 'https://definitions.toggly.io') &&
+      this.config.telemetryFetch === config.telemetryFetch &&
+      this.config.verifySignatures === (config.verifySignatures ?? false) &&
+      (['enableTelemetry', 'enableUsageTracking', 'enableMetrics', 'metricsBaseUrl', 'telemetryFlushIntervalMs'] as const)
+        .every(key => this.config[key] === config[key]);
+  }
+
+  recordUsage(key: string, variant = 'enabled'): void {
+    if (!this.disposed && this.config.enableUsageTracking !== false) this.reporter?.recordUsage(key, variant);
+  }
+  recordView(key: string, variant = 'enabled'): void {
+    if (!this.disposed && this.config.enableUsageTracking !== false) this.reporter?.recordView(key, variant);
+  }
+  incrementCounter(key: string, value = 1): void {
+    if (!this.disposed && this.config.enableMetrics !== false) this.reporter?.incrementCounter(key, value);
+  }
+  setGauge(key: string, value: number): void {
+    if (!this.disposed && this.config.enableMetrics !== false) this.reporter?.setGauge(key, value);
+  }
+  async flushTelemetry(): Promise<void> {await this.reporter?.flush();}
+  dispose(flush = true): void {
+    this.disposed = true; this.generation++;
+    this.stopRefreshInterval();
+    for (const [controller, timer] of this.requests) {clearTimeout(timer); controller.abort();}
+    this.requests.clear();
+    this.detachTelemetry?.(); this.reporter?.dispose({flush});
+  }
+
+  resolveVariant(featureKey: string, record = true): VariantResult | null {
+    const entry = this.config.enableVariants ? this.variantCache?.[featureKey] : undefined;
+    const variant = entry?.variant;
+    const configurationValue = entry?.configurationValue;
+    const enabled = this.captureEvaluation(record)(featureKey, entry ? entry.enabled === true : this.cache?.[featureKey]);
+    if (!variant || !enabled) return null;
+    return {name: variant, configurationValue};
   }
 }
 
@@ -639,9 +715,15 @@ class TogglyClientInstance {
  * @param config - Toggly configuration
  */
 export async function initTogglyClient(config: TogglyConfig): Promise<void> {
-  if (clientInstance) {
-    console.warn('[Toggly Client] Client already initialized');
+  // Explicit Node initialization loads definitions; telemetry and background work stay browser-gated.
+  if (clientInstance?.matchesOwner(config)) {
+    await clientInstance.updateContext(config);
     return;
+  }
+  if (clientInstance) {
+    clientInstance.dispose(false);
+    clientInstance = null;
+    $flags.set({}); $variants.set({}); $isReady.set(false); $error.set(null);
   }
 
   clientInstance = new TogglyClientInstance(config);
@@ -730,11 +812,13 @@ export function notifyLocalGatesChanged(): void {
  * Reset the client instance (for testing purposes)
  * @internal
  */
-export function __resetClient(): void {
-  if (clientInstance) {
-    clientInstance.stopRefreshInterval();
-  }
+export function __resetClient(): void { destroyTogglyClient(); }
+
+/** Release the shared browser owner; island unmount alone does not dispose it. */
+export function destroyTogglyClient(): void {
+  const previous = clientInstance;
   clientInstance = null;
+  previous?.dispose();
   $flags.set({});
   $variants.set({});
   $isReady.set(false);
@@ -760,6 +844,35 @@ export function getVariantValue(featureKey: string): unknown | null {
   return variant?.configurationValue ?? null;
 }
 
+/** Nanostores keeps unobserved atoms warm for one second; those projections
+ * must not become UI checks after an island unsubscribes. Explicit get() only
+ * counts if its dependencies cause a real recomputation. */
+function evaluatedComputed<Input, Output>(source: ReadableAtom<Input>, evaluate: (value: Input, record: boolean) => Output): ReadableAtom<Output> {
+  let reading = false;
+  let listeners = 0;
+  const result = computed([source, $localGatesRevision], value => evaluate(value, reading || listeners > 0));
+  const get = result.get;
+  result.get = () => {
+    reading = true;
+    try {return get();} finally {reading = false;}
+  };
+  const listen = result.listen;
+  result.listen = listener => {
+    listeners++;
+    const unsubscribe = listen(listener);
+    let active = true;
+    return () => {if (active) {active = false; listeners--; unsubscribe();}};
+  };
+  return result;
+}
+
+/** Copy the supported entity gate's mutable rules before host callbacks run. */
+function snapshotDefinition(definition: EvaluatedDefinitionValue | undefined): EvaluatedDefinitionValue | undefined {
+  return isEntityGate(definition)
+    ? { ...definition, rules: definition.rules.map(rule => ({ ...rule })) }
+    : definition;
+}
+
 /**
  * Create a computed atom for a specific feature flag
  * 
@@ -775,12 +888,14 @@ export function $flag(
   entity?: TogglyEntityContext | Record<string, unknown> | null,
   kind?: string,
 ): ReadableAtom<boolean> {
-  return computed([$flags, $localGatesRevision], (flags) => {
+  return evaluatedComputed($flags, (flags, record) => {
+    const definition = snapshotDefinition(flags[key]);
+    const evaluate = clientInstance?.captureEvaluation(record);
     const entityContext = normalizeEntityContext(entity, kind);
-    if (!clientInstance) {
-      return resolveEvaluatedDefinition(flags[key], entityContext, defaultValue);
+    if (!evaluate) {
+      return resolveEvaluatedDefinition(definition, entityContext, defaultValue);
     }
-    return clientInstance.getEffectiveFlag(key, flags[key], defaultValue, entityContext);
+    return evaluate(key, definition, defaultValue, entityContext);
   });
 }
 
@@ -799,18 +914,21 @@ export function $gate(
   entity?: TogglyEntityContext | Record<string, unknown> | null,
   kind?: string,
 ): ReadableAtom<boolean> {
-  return computed([$flags, $localGatesRevision], (flags) => {
+  return evaluatedComputed($flags, (flags, record) => {
     if (keys.length === 0) {
       return !negate;
     }
 
+    const selectedKeys = [...keys];
+    const definitions = Object.fromEntries(selectedKeys.map(key => [key, snapshotDefinition(flags[key])]));
+    const effective = clientInstance?.captureEvaluation(record);
     const entityContext = normalizeEntityContext(entity, kind);
     const evaluate = (key: string) =>
-      clientInstance
-        ? clientInstance.getEffectiveFlag(key, flags[key], false, entityContext)
-        : resolveEvaluatedDefinition(flags[key], entityContext);
+      effective
+        ? effective(key, definitions[key], false, entityContext)
+        : resolveEvaluatedDefinition(definitions[key], entityContext);
 
-    const isEnabled = requirement === 'any' ? keys.some(evaluate) : keys.every(evaluate);
+    const isEnabled = requirement === 'any' ? selectedKeys.some(evaluate) : selectedKeys.every(evaluate);
 
     return negate ? !isEnabled : isEnabled;
   });
@@ -820,11 +938,12 @@ export function $gate(
  * Reactive variant assignment for a feature (null when disabled, missing, or no variant name).
  */
 export function $variant(featureKey: string): ReadableAtom<VariantResult | null> {
-  return computed([$variants, $localGatesRevision], () => {
+  return evaluatedComputed($variants, (variants, record) => {
     if (!clientInstance) {
-      return null;
+      const entry = variants[featureKey];
+      return entry?.enabled && entry.variant ? {name: entry.variant, configurationValue: entry.configurationValue} : null;
     }
-    return clientInstance.resolveVariant(featureKey);
+    return clientInstance.resolveVariant(featureKey, record);
   });
 }
 
@@ -851,3 +970,10 @@ export function removeHook(name: string): boolean {
   return clientInstance.hookExecutor.removeHook(name);
 }
 
+
+/** Explicit browser events never evaluate flags. */
+export function recordUsage(key: string, variant = 'enabled'): void {clientInstance?.recordUsage(key, variant);}
+export function recordView(key: string, variant = 'enabled'): void {clientInstance?.recordView(key, variant);}
+export function incrementCounter(key: string, value = 1): void {clientInstance?.incrementCounter(key, value);}
+export function setGauge(key: string, value: number): void {clientInstance?.setGauge(key, value);}
+export async function flushTelemetry(): Promise<void> {await clientInstance?.flushTelemetry();}

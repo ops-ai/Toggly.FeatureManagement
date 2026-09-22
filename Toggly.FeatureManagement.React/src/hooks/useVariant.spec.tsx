@@ -66,7 +66,7 @@ describe('useVariant', () => {
       })
 
     const toggly = new Toggly({
-      appKey: 'k',
+      enableTelemetry: false, appKey: 'k',
       environment: 'Production',
       enableVariants: true,
       enableLiveUpdates: false,

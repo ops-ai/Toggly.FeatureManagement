@@ -573,3 +573,7 @@ npm install --save-dev @types/react @types/react-native
 ## Find out more about Toggly.io
 
 Visit [our official website](https://toggly.io) or [check out the documentation](https://docs.toggly.io/).
+
+## Frontend telemetry
+
+Core 1.8 and the React Native adapter 1.4 collect compact feature checks by default for keyed clients. Pass `enableTelemetry={false}` to opt out. `useToggly()` also exposes explicit usage/view events, app-level counters/gauges, and `flushTelemetry()`. Pass an optional host-minted `instanceId` through the provider or `useToggly().setContext`. Reports use the current token as `i`, otherwise the current identity as `u`; server acceptance of client-supplied identity is disabled by default. Queues belong to the Core owner and are never stored by AsyncStorage or MMKV companions. See the [Core telemetry API](libs/core/README.md#frontend-telemetry) and [React Native lifecycle configuration](libs/react-native/README.md#frontend-telemetry).

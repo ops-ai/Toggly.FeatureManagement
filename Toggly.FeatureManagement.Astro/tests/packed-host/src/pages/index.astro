@@ -1,16 +1,22 @@
 ---
+import {ClientRouter} from 'astro:transitions';
+import FeatureClient from '@ops-ai/astro-feature-flags-toggly/components/FeatureClient.astro';
 import Feature from '@ops-ai/astro-feature-flags-toggly/components/Feature.astro';
 import ReactIsland from '../islands/ReactIsland';
 import VueIsland from '../islands/VueIsland.vue';
 import SvelteIsland from '../islands/SvelteIsland.svelte';
 ---
-<html><head><title>Packed Astro SDK host</title></head><body>
+<html><head><ClientRouter /><title>Packed Astro SDK host</title></head><body>
 <Feature flag="Visible"><p id="server-visible">server-enabled</p></Feature>
 <Feature flag="Hidden"><p id="server-hidden">server-hidden</p></Feature>
 <Feature flag="Hidden" negate><p id="server-negate">server-negate</p></Feature>
+<FeatureClient flag="Visible"><span id="feature-client">client-enabled</span></FeatureClient>
 <ReactIsland client:load /><VueIsland client:load /><SvelteIsland client:load />
+<a id="navigate" href="/navigation/">Navigate</a>
 <output id="refresh-error"></output><button id="local">Toggle local gate</button><button id="refresh">Refresh remote flags</button>
 <script>
+import * as telemetry from '@ops-ai/astro-feature-flags-toggly/client/store';
+Object.assign(window, {telemetry});
 import { setLocalGates, notifyLocalGatesChanged, refreshFlags, $error } from '@ops-ai/astro-feature-flags-toggly/client/store';
 let localEnabled = true;
 document.querySelector('#local')!.addEventListener('click', () => {

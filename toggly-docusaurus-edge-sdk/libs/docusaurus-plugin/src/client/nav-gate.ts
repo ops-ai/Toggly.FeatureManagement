@@ -45,44 +45,54 @@ async function gateNavbar(): Promise<void> {
     return;
   }
 
-  const config = (typeof window !== 'undefined' && (window as any).__TOGGLY_CONFIG__) || __TOGGLY_CONFIG__;
+  const config =
+    (typeof window !== 'undefined' && (window as any).__TOGGLY_CONFIG__) || __TOGGLY_CONFIG__;
   const client = createTogglyClient(config);
 
-  let flags: Flags = {};
   try {
-    flags = await client.getFlags();
-  } catch {
-    // If flags cannot be fetched, fail open: do nothing to avoid hiding links incorrectly
-    return;
-  }
+    let flags: Flags = {};
+    try {
+      flags = await client.getFlags();
+    } catch {
+      // If flags cannot be fetched, fail open: do nothing to avoid hiding links incorrectly
+      return;
+    }
 
-  // If we received no flags at all, fail open
-  if (!flags || Object.keys(flags).length === 0) {
-    return;
-  }
+    // If we received no flags at all, fail open
+    if (!flags || Object.keys(flags).length === 0) {
+      return;
+    }
 
-  // Query all navbar links
-  const links = Array.from(
-    document.querySelectorAll<HTMLAnchorElement>('a.navbar__item, a.navbar__link, a.menu__link')
-  );
-  for (const link of links) {
-    const path = normalizePath(link.getAttribute('href') || '');
-    if (!path) continue;
+    // Query all navbar links
+    const links = Array.from(
+      document.querySelectorAll<HTMLAnchorElement>('a.navbar__item, a.navbar__link, a.menu__link')
+    );
+    for (const link of links) {
+      const path = normalizePath(link.getAttribute('href') || '');
+      if (!path) continue;
 
-    const feature = PAGE_FEATURES[path];
-    if (!feature) continue;
+      const feature = PAGE_FEATURES[path];
+      if (!feature) continue;
 
-    const enabled = flags[feature];
-    // Hide when the feature is explicitly false or not truthy
-    if (enabled !== true) {
-      const parent = link.parentElement;
-      if (parent && parent.childElementCount === 1) {
-        parent.remove(); // remove the li if link is sole child
-      } else {
-        link.remove();
+      const enabled = client.evaluateFlag(feature, flags);
+      // Hide when the feature is explicitly false or not truthy
+      if (enabled !== true) {
+        const parent = link.parentElement;
+        if (parent && parent.childElementCount === 1) {
+          parent.remove(); // remove the li if link is sole child
+        } else {
+          link.remove();
+        }
       }
     }
+  } finally {
+    client.dispose();
   }
+}
+
+/** Docusaurus invokes this after SPA navigation updates the page's links. */
+export function onRouteDidUpdate(): void {
+  if (typeof window !== 'undefined') void gateNavbar();
 }
 
 if (typeof window !== 'undefined' && document?.addEventListener) {
