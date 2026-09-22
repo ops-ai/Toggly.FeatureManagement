@@ -9,6 +9,7 @@ import {
   useCallback,
   useMemo,
   useEffect,
+  useLayoutEffect,
   useRef,
   type ReactElement,
   type ReactNode,
@@ -123,6 +124,10 @@ function transportId(value?: TogglyConfig['telemetryFetch']): number {
   return id;
 }
 
+// Browser targeting changes must commit before descendant passive refreshes.
+// Server imports and renders retain the inert passive-effect path.
+const useCommittedContextEffect = typeof globalThis.window === 'undefined' ? useEffect : useLayoutEffect;
+
 /**
  * Toggly Provider component
  */
@@ -157,6 +162,10 @@ function TogglyProviderOwner({
   const contextRef = useRef({
     identity: serverContext ? serverContext.identity : mergedConfig?.identity,
     instanceId: mergedConfig?.instanceId?.trim() || undefined,
+    groups: [...(mergedConfig?.groups ?? [])],
+    claims: { ...mergedConfig?.claims },
+  });
+  const committedTargetingProps = useRef({
     groups: [...(mergedConfig?.groups ?? [])],
     claims: { ...mergedConfig?.claims },
   });
@@ -205,10 +214,18 @@ function TogglyProviderOwner({
   );
   const localGatesListenersRef = useRef(new Set<() => void>());
 
-  const captureEvaluation = useCallback(() => {
-    const capturedFlags = JSON.parse(JSON.stringify(flagsRef.current)) as FeatureFlags;
-    const gates = localGatesRef.current.map(gate => ({ ...gate, flagKeys: [...gate.flagKeys] }));
-    const index = buildFlagGateIndex(gates);
+  const captureEvaluation = useCallback((featureKeys: readonly string[]) => {
+    const selectedKeys = new Set(featureKeys);
+    const selectedFlags = Object.fromEntries([...selectedKeys].map(key => [key, flagsRef.current[key]]));
+    const capturedFlags = JSON.parse(JSON.stringify(selectedFlags)) as FeatureFlags;
+    const applicableGates = localGatesRef.current.filter(gate => gate.flagKeys.some(key => selectedKeys.has(key)));
+    const index = buildFlagGateIndex(applicableGates);
+    // Preserve the shared helper's first-gate-by-id semantics, including when
+    // several gate entries share an id. Only applicable callbacks are captured.
+    const gates = [...new Set(index.values())].map(id => {
+      const gate = localGatesRef.current.find(candidate => candidate.id === id)!;
+      return { ...gate, flagKeys: [...gate.flagKeys] };
+    });
     const record = telemetry.captureCheck();
     return (featureKey: string, defaultValue = false, entityContext?: TogglyEntityContext | null): boolean => {
       const remote = coreIsFeatureEnabled(capturedFlags, featureKey, defaultValue, entityContext);
@@ -340,7 +357,7 @@ function TogglyProviderOwner({
       entity?: TogglyEntityContext | Record<string, unknown> | null,
       kind?: string,
     ): boolean => {
-      const evaluate = captureEvaluation();
+      const evaluate = captureEvaluation([featureKey]);
       return evaluate(
         featureKey,
         defaultValue,
@@ -376,16 +393,17 @@ function TogglyProviderOwner({
         return !negate;
       }
 
-      const evaluate = captureEvaluation();
+      const selectedKeys = [...featureKeys];
+      const evaluate = captureEvaluation(selectedKeys);
       const entityContext = normalizeEntityContext(entity, kind);
 
       let result: boolean;
       if (requirement === 'any') {
-        result = featureKeys.some((key) =>
+        result = selectedKeys.some((key) =>
           evaluate(key, false, entityContext),
         );
       } else {
-        result = featureKeys.every((key) =>
+        result = selectedKeys.every((key) =>
           evaluate(key, false, entityContext),
         );
       }
@@ -450,6 +468,25 @@ function TogglyProviderOwner({
     },
     [hooks, fetchFlags, updateFlags, installContext, logger, isCurrentGeneration, completeIdentification, currentIdentifyHooks]
   );
+
+  useCommittedContextEffect(() => {
+    const previous = committedTargetingProps.current;
+    const groups = [...(mergedConfig?.groups ?? [])];
+    const claims = { ...mergedConfig?.claims };
+    const groupsChanged = previous.groups.length !== groups.length || groups.some((group, index) => group !== previous.groups[index]);
+    const claimKeys = Object.keys(claims);
+    const claimsChanged = Object.keys(previous.claims).length !== claimKeys.length || claimKeys.some(key => claims[key] !== previous.claims[key]);
+    if (!groupsChanged && !claimsChanged) return;
+    committedTargetingProps.current = { groups, claims };
+    generationRef.current++;
+    updateRevisionRef.current++;
+    installContext({
+      ...contextRef.current,
+      groups: groupsChanged ? groups : contextRef.current.groups,
+      claims: claimsChanged ? claims : contextRef.current.claims,
+    });
+    setIsReady(false);
+  }, [mergedConfig?.groups, mergedConfig?.claims, installContext]);
 
   const reset = useCallback(async (): Promise<void> => {
     if (!mountedRef.current) return;

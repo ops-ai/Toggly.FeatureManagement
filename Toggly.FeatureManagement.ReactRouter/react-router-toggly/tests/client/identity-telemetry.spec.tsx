@@ -223,3 +223,119 @@ test.each(['before','after'])('preserves identify ownership when a %s hook reent
   expect(order.filter(value=>value.endsWith(':carol'))).toEqual(['before:first:carol','before:second:carol','after:second:carol','after:first:carol']);
   view.unmount();
 });
+
+test('single and multi-leaf checks do not copy unrelated definitions or gate callbacks', () => {
+  const unrelated = jest.fn(()=>true);
+  const flags = {On:true, Next:true};
+  Object.defineProperty(flags, 'Unrelated', {enumerable:true, get:unrelated});
+  const unusedGate = {id:'unused',flagKeys:['Unrelated'],get isEnabled(){unrelated();return ()=>true;}};
+  const view = render(<TogglyProvider config={config} serverContext={{...snapshot,flags}}><Capture/></TogglyProvider>);
+  current.setLocalGates([unusedGate]);
+  unrelated.mockClear();
+  expect(current.isEnabled('On')).toBe(true);
+  expect(current.evaluateGate(['On','Next'])).toBe(true);
+  expect(current.isEnabled('Missing', true)).toBe(true);
+  expect(unrelated).not.toHaveBeenCalled();
+  view.unmount();
+});
+
+test('captures selected gate callbacks and caller keys before reentrant mapper mutation', async () => {
+  const view = render(<TogglyProvider config={config} serverContext={{...snapshot,flags:{On:true,Next:true}}}><Capture/></TogglyProvider>);
+  const gate={id:'selected',flagKeys:['Next'],isEnabled:()=>true};
+  const keys=['On','Next'];
+  current.setLocalGates([gate]);
+  current.registerContext('SelectedCallbacks',()=>{gate.isEnabled=()=>false;keys.push('Missing');return {};});
+  expect(current.evaluateGate(keys,'all',false,{},'SelectedCallbacks')).toBe(true);
+  expect(current.isEnabled('Next')).toBe(false);
+  await current.flushTelemetry();
+  const counts=bodies.flatMap(body=>Object.keys(body.f??{}));
+  expect(counts).not.toContain('Missing');
+  view.unmount();
+});
+
+test('syncs changed and omitted targeting props before a descendant passive refresh', async () => {
+  function RefreshAfterCommit({revision}:{revision:number}) {
+    const client=useTogglyContext();
+    React.useEffect(()=>{if(revision)void client.refresh();},[revision]);
+    return <Capture/>;
+  }
+  const original={...config,groups:['old'],claims:{plan:'basic'}};
+  const view=render(<TogglyProvider config={original} serverContext={snapshot}><RefreshAfterCommit revision={0}/></TogglyProvider>);
+  view.rerender(<TogglyProvider config={{...original,groups:['new'],claims:{plan:'paid'}}} serverContext={snapshot}><RefreshAfterCommit revision={1}/></TogglyProvider>);
+  await waitFor(()=>expect(current.isReady).toBe(true));
+  let url=new URL((fetch as jest.Mock).mock.calls.at(-1)![0]);
+  expect(url.searchParams.getAll('g')).toEqual(['new']);expect(url.searchParams.get('claim.plan')).toBe('paid');
+  view.rerender(<TogglyProvider config={config} serverContext={snapshot}><RefreshAfterCommit revision={2}/></TogglyProvider>);
+  await waitFor(()=>expect(current.isReady).toBe(true));
+  url=new URL((fetch as jest.Mock).mock.calls.at(-1)![0]);
+  expect(url.searchParams.has('g')).toBe(false);expect(url.searchParams.has('claim.plan')).toBe(false);
+  view.unmount();
+});
+
+test('equivalent targeting props preserve identify overrides and changed fields stay on the same owner', async () => {
+  const original={...config,instanceId:'initial-token',groups:['configured'],claims:{plan:'basic',region:'us'}};
+  const view=render(<TogglyProvider config={original} serverContext={snapshot}><Capture/></TogglyProvider>);
+  const hook=jest.fn();
+  act(()=>current.addHook({getMetadata:()=>({name:'retained'}),beforeIdentify:hook}));
+  current.recordUsage('Before');
+  await act(async()=>{await current.identify('bob',{groups:['explicit'],claims:{plan:'explicit'}});});
+  view.rerender(<TogglyProvider config={{...original,groups:['configured'],claims:{region:'us',plan:'basic'}}} serverContext={snapshot}><Capture/></TogglyProvider>);
+  await act(async()=>{await current.refresh();});
+  let url=new URL((fetch as jest.Mock).mock.calls.at(-1)![0]);
+  expect(url.searchParams.getAll('g')).toEqual(['explicit']);expect(url.searchParams.get('claim.plan')).toBe('explicit');
+  const requests=(fetch as jest.Mock).mock.calls.length;
+  view.rerender(<TogglyProvider config={{...original,groups:['changed']}} serverContext={snapshot}><Capture/></TogglyProvider>);
+  expect((fetch as jest.Mock).mock.calls).toHaveLength(requests);
+  expect(current.isReady).toBe(false);expect(current.flags).toEqual({Safe:true});expect(current.identity).toBe('bob');
+  await act(async()=>{await current.refresh();});
+  url=new URL((fetch as jest.Mock).mock.calls.at(-1)![0]);
+  expect(url.searchParams.getAll('g')).toEqual(['changed']);expect(url.searchParams.get('claim.plan')).toBe('explicit');
+  expect(url.searchParams.get('u')).toBe('bob');expect(url.searchParams.has('i')).toBe(false);
+  current.recordUsage('After');await current.flushTelemetry();
+  expect(bodies.map(body=>[body.i,body.u,Object.keys(body.f)])).toEqual([['initial-token',undefined,['Before']],[undefined,'bob',['After']]]);
+  await act(async()=>{await current.identify('next',{instanceId:'minted'});});
+  expect(hook).toHaveBeenCalledTimes(2);
+  view.rerender(<TogglyProvider config={{...original,groups:['changed'],claims:{plan:'new'}}} serverContext={snapshot}><Capture/></TogglyProvider>);
+  await act(async()=>{await current.refresh();});
+  url=new URL((fetch as jest.Mock).mock.calls.at(-1)![0]);
+  expect(url.searchParams.get('i')).toBe('minted');expect(url.searchParams.has('u')).toBe(false);expect(url.searchParams.has('claim.plan')).toBe(false);
+  view.unmount();
+});
+
+test.each(['response','hook'])('targeting prop commit retires an older pending %s', async boundary => {
+  const changed=jest.fn();
+  const view=render(<TogglyProvider config={config} serverContext={snapshot} onFlagsChange={changed}><Capture/></TogglyProvider>);
+  let release!:(value?:any)=>void;
+  if(boundary==='response') (fetch as jest.Mock).mockImplementationOnce(()=>new Promise(resolve=>{release=resolve;}));
+  else act(()=>current.addHook({getMetadata:()=>({name:'held-props'}),afterRefresh:()=>new Promise<void>(resolve=>{release=resolve;})}));
+  let pending!:Promise<void>;await act(async()=>{pending=current.refresh();});
+  await waitFor(()=>expect(release).toBeDefined());
+  view.rerender(<TogglyProvider config={{...config,claims:{plan:'new'}}} serverContext={snapshot} onFlagsChange={changed}><Capture/></TogglyProvider>);
+  expect(current.isReady).toBe(false);expect(current.flags).toEqual({Safe:true});
+  await act(async()=>{release({ok:true,json:async()=>({On:true})});await pending;});
+  expect(current.isReady).toBe(false);expect(current.flags).toEqual({Safe:true});expect(changed).not.toHaveBeenCalled();
+  view.unmount();
+});
+
+test('abandoned targeting prop render cannot replace committed request context', async () => {
+  const original={...config,groups:['committed']};
+  function MaybeSuspended({suspend}:{suspend:boolean}) {if(suspend)throw new Promise(()=>{});return <Capture/>;}
+  const tree=(suspend:boolean)=><React.Suspense fallback="waiting"><TogglyProvider config={suspend?{...original,groups:['abandoned']}:original} serverContext={snapshot}><MaybeSuspended suspend={suspend}/></TogglyProvider></React.Suspense>;
+  const view=render(tree(false));
+  view.rerender(tree(true));
+  await act(async()=>{await current.refresh();});
+  const url=new URL((fetch as jest.Mock).mock.calls.at(-1)![0]);
+  expect(url.searchParams.getAll('g')).toEqual(['committed']);
+  view.unmount();
+});
+
+test('selected local gates retain first-id resolution and observe mutation at the next public check', () => {
+  const first={id:'shared',flagKeys:['Unrelated'],isEnabled:()=>false};
+  const second={id:'shared',flagKeys:['On'],isEnabled:()=>true};
+  const view=render(<TogglyProvider config={config} serverContext={snapshot}><Capture/></TogglyProvider>);
+  current.setLocalGates([first,second]);
+  expect(current.isEnabled('On')).toBe(false);
+  first.isEnabled=()=>true;
+  expect(current.isEnabled('On')).toBe(true);
+  view.unmount();
+});
