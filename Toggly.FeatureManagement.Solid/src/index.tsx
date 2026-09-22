@@ -72,7 +72,7 @@ export function createToggly(
     { definitions: {}, loading: false, error: undefined },
     { equals: false },
   );
-  const definitions = createMemo(() => state().definitions);
+  let definitions: Accessor<EvaluatedDefinitions> = () => state().definitions;
   const [started, setStarted] = createSignal(false);
   const [resource, { mutate, refetch }] = createResource(
     started,
@@ -97,6 +97,9 @@ export function createToggly(
       if (!retired) setState(next);
     });
     if (initialSnapshot) mutate(created.flags());
+    // Server memos evaluate once: seed from accepted client state, never the
+    // placeholder. Retired owners keep the inert accessor without a new memo.
+    definitions = createMemo(() => state().definitions);
     // Activate only after every owner cleanup and subscription is installed.
     setStarted(!initialSnapshot && !isServer);
   }

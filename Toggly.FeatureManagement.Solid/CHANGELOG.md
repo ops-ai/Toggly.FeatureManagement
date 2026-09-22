@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- Preserve accepted snapshots and configured defaults in server-rendered feature accessors and Provider consumers while retaining construction-time owner disposal.
 - Keep cleared instance tokens out of configured URLs and normalize tokens in consecutive route snapshots.
 - Retire clients when synchronous diagnostics or transports dispose their Solid owner during construction.
 

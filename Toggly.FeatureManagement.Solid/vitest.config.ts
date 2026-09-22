@@ -10,12 +10,17 @@ export default defineConfig({
           setupFiles: ['tests/setup.ts'],
           environment: 'jsdom',
           include: ['tests/*.test.ts', 'tests/*.test.tsx'],
-          exclude: ['tests/server.test.ts'],
+          exclude: ['tests/server.test.ts', 'tests/native-ssr.test.tsx'],
         },
       },
       {
+        plugins: [solid({ ssr: true })],
         resolve: { conditions: ['node'] },
-        test: { name: 'server', environment: 'node', include: ['tests/server.test.ts'] },
+        test: {
+          name: 'server',
+          environment: 'node',
+          include: ['tests/server.test.ts', 'tests/native-ssr.test.tsx'],
+        },
       },
     ],
     coverage: {
