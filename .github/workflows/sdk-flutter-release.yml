@@ -492,8 +492,14 @@ jobs:
         run: |
           flutter pub get
           # pub get may rewrite checked-in analysis_options.yaml; pub.dev
-          # rejects a dirty git tree on dry-run.
-          git checkout -- analysis_options.yaml example/analysis_options.yaml 2>/dev/null || true
+          # rejects a dirty git tree on dry-run. Only restore paths that exist —
+          # a missing example/analysis_options.yaml used to abort the whole
+          # checkout and leave the package file dirty.
+          for f in analysis_options.yaml example/analysis_options.yaml; do
+            if [ -f "$f" ]; then
+              git checkout -- "$f"
+            fi
+          done
 
       # Generate Isar (or other) codegen so *.g.dart files are present in the published archive.
       - name: Run code generation (if needed)
@@ -510,20 +516,49 @@ jobs:
         working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
         run: |
           # pub publish runs pub get and rewrites analysis_options.yaml mid-flight.
-          # Hide those paths from git so dry-run does not fail on a dirty tree.
-          git update-index --skip-worktree analysis_options.yaml example/analysis_options.yaml 2>/dev/null || true
+          # Hide existing tracked paths so dry-run does not fail on a dirty tree.
+          # Important: update-index fails the whole argv if any path is missing
+          # (e.g. no example/analysis_options.yaml) — apply one file at a time.
+          hide_analysis_rewrites() {
+            for f in analysis_options.yaml example/analysis_options.yaml; do
+              if [ -f "$f" ] && git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
+                git update-index --skip-worktree "$f"
+              fi
+            done
+          }
+          show_analysis_rewrites() {
+            for f in analysis_options.yaml example/analysis_options.yaml; do
+              if [ -f "$f" ] && git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
+                git update-index --no-skip-worktree "$f"
+                git checkout -- "$f"
+              fi
+            done
+          }
+          hide_analysis_rewrites
           flutter pub publish --dry-run
-          git update-index --no-skip-worktree analysis_options.yaml example/analysis_options.yaml 2>/dev/null || true
-          git checkout -- analysis_options.yaml example/analysis_options.yaml 2>/dev/null || true
+          show_analysis_rewrites
 
       - name: Publish to pub.dev
         working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
         run: |
-          git update-index --skip-worktree analysis_options.yaml example/analysis_options.yaml 2>/dev/null || true
+          hide_analysis_rewrites() {
+            for f in analysis_options.yaml example/analysis_options.yaml; do
+              if [ -f "$f" ] && git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
+                git update-index --skip-worktree "$f"
+              fi
+            done
+          }
+          show_analysis_rewrites() {
+            for f in analysis_options.yaml example/analysis_options.yaml; do
+              if [ -f "$f" ] && git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
+                git update-index --no-skip-worktree "$f"
+                git checkout -- "$f"
+              fi
+            done
+          }
+          hide_analysis_rewrites
           flutter pub publish --force
-          git update-index --no-skip-worktree analysis_options.yaml example/analysis_options.yaml 2>/dev/null || true
-          git checkout -- analysis_options.yaml example/analysis_options.yaml 2>/dev/null || true
-
+          show_analysis_rewrites
 
       - name: Create GitHub Release (core)
         if: needs.validate.outputs.is_provider != 'true'
