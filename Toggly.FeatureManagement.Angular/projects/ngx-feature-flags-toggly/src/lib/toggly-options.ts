@@ -30,12 +30,21 @@ export class TogglyOptions implements ITogglyOptions {
 
   /** Your Toggly application key */
   appKey?: string
+  /** Enable aggregate frontend telemetry when an app key is configured. Default: true. */
+  enableTelemetry?: boolean
+  /** Independent metrics base URL. Default: https://metrics.toggly.io. */
+  metricsBaseUrl?: string
+  /** Base flush interval from 30000 through 60000 ms, jittered by +/-20%. Default: 45000. */
+  telemetryFlushIntervalMs?: number
 
   /** Environment name (default: Production) */
   environment?: string
 
   /** User identity for personalized feature flags */
   identity?: string
+
+  /** Opaque instance capability supplied by your trusted backend; takes precedence over identity. */
+  instanceId?: string
 
   /** User groups for group-based targeting rules */
   groups?: string[]

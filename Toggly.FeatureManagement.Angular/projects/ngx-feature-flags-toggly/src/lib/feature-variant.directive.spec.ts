@@ -44,7 +44,7 @@ describe('FeatureVariantDirective', () => {
       imports: [
         VariantHostComponent,
         NgxFeatureFlagsTogglyModule.forRoot({
-          appKey: 'k',
+          enableTelemetry: false, appKey: 'k',
           environment: 'Production',
           enableVariants: true,
         }),
