@@ -1,4 +1,4 @@
-import type { EvaluatedDefinitions } from './types.js';
+import type { EvaluatedDefinitions, EvaluatedVariantDef } from './types.js';
 
 const operators = new Set(['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'in', 'contains']);
 const valueTypes = new Set(['datetime', 'number', 'boolean', 'string', 'string[]']);
@@ -34,5 +34,23 @@ export function validateEvaluatedDefinitions(
 ): asserts value is EvaluatedDefinitions {
   if (!isRecord(value) || !Object.values(value).every(isDefinition)) {
     throw new Error('Invalid evaluated definitions structure');
+  }
+}
+
+function isVariantDefinition(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.enabled === 'boolean' &&
+    (value.variant === undefined || typeof value.variant === 'string')
+  );
+}
+
+/** Signatures authenticate bytes, not their schema; reject the whole `/evaluated-variants-signed`
+ * response before allowlisting, publishing, or adopting its HTTP revision. */
+export function validateVariantDefs(
+  value: unknown,
+): asserts value is Record<string, EvaluatedVariantDef> {
+  if (!isRecord(value) || !Object.values(value).every(isVariantDefinition)) {
+    throw new Error('Invalid evaluated variant definitions structure');
   }
 }

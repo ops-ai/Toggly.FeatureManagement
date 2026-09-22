@@ -1,12 +1,18 @@
 import {
   InMemoryJwksCache,
   fetchEvaluatedSignedDefinitions,
+  asVariantDefsRecord,
   type JwkSet,
 } from '@ops-ai/toggly-signed-defs';
-import { validateEvaluatedDefinitions } from './validation.js';
+import { validateEvaluatedDefinitions, validateVariantDefs } from './validation.js';
 import { createPersistence, verifyEnvelope } from './persistence.js';
 import { buildBrowserDefinitionsUrl, captureEvaluatedResponse } from './transport.js';
-import type { BrowserOptions, TogglySnapshot, EvaluatedDefinitions } from './types.js';
+import type {
+  BrowserOptions,
+  TogglySnapshot,
+  EvaluatedDefinitions,
+  EvaluatedVariantDef,
+} from './types.js';
 
 /** Trusted keys, timestamps and persistence retirement survive reconnects within one layout. */
 export interface BrowserSession {
@@ -22,18 +28,21 @@ export function connectBrowser(
   publish: (
     defs: EvaluatedDefinitions,
     verification?: Pick<TogglySnapshot, 'signedTimestamp' | 'signingKey'>,
+    variants?: Record<string, EvaluatedVariantDef>,
   ) => void,
   session: BrowserSession = { timestamps: new Map(), keys: new Map(), persistence: new Map() },
 ): () => void {
   if (!options.appKey) return () => {};
   const baseURI = options.baseURI ?? 'https://definitions.toggly.io';
   const appKey = options.appKey;
+  const mode: 'evaluated' | 'variants' = options.enableVariants ? 'variants' : 'evaluated';
   const { timestamps, keys: observedKeys } = session;
   const url = buildBrowserDefinitionsUrl(
     baseURI,
     appKey,
     options.environment ?? 'Production',
     snapshot.context,
+    options.enableVariants,
   );
   let jwks = new InMemoryJwksCache();
   const endpoint = baseURI.replace(/\/$/, '');
@@ -74,17 +83,21 @@ export function connectBrowser(
   // Restore once per connection; newer live state must never be replaced by storage.
   const restoreCached = (ownRequest: number): Promise<void> | undefined => {
     const cached = mayRestore
-      ? persistence.read(url, options, timestamps.get(url) ?? 0, observedKeys.get(baseURI))
+      ? persistence.read(url, options, timestamps.get(url) ?? 0, observedKeys.get(baseURI), mode)
       : undefined;
     mayRestore = false;
     return cached
       ?.then((restored) => {
         if (disposed || ownRequest !== requestId) return;
         timestamps.set(url, restored.timestamp);
-        publish(restored.definitions, {
-          signedTimestamp: restored.timestamp,
-          signingKey: restored.keys.keys[0],
-        });
+        publish(
+          restored.definitions,
+          {
+            signedTimestamp: restored.timestamp,
+            signingKey: restored.keys.keys[0],
+          },
+          restored.variants,
+        );
       })
       .catch(() => {
         // Invalid stored state must not prevent a fresh network attempt.
@@ -131,21 +144,29 @@ export function connectBrowser(
         validateUnchangedResponse(unconditional);
         return;
       }
-      validateEvaluatedDefinitions(result.defs);
+      if (mode === 'variants') {
+        validateVariantDefs(asVariantDefsRecord(result.defs));
+      } else {
+        validateEvaluatedDefinitions(result.defs);
+      }
       const body = capture.body();
       if (!body) throw new Error('Missing signed envelope');
       const keys = await requestKeys.get({ ...options, baseURI, fetchImpl: fetcher });
-      const verified = await verifyEnvelope(body, keys, options, timestamps.get(url) ?? 0);
+      const verified = await verifyEnvelope(body, keys, options, timestamps.get(url) ?? 0, mode);
       if (disposed || ownRequest !== requestId) return;
       timestamps.set(url, verified.timestamp);
       observedKeys.set(baseURI, structuredClone(keys));
       persistence.write(url, body, verified.keys);
       // HTTP confirms revisions only after verification. WS metadata never becomes a cache validator.
       revision = result.revision;
-      publish(verified.definitions, {
-        signedTimestamp: verified.timestamp,
-        signingKey: verified.keys.keys[0],
-      });
+      publish(
+        verified.definitions,
+        {
+          signedTimestamp: verified.timestamp,
+          signingKey: verified.keys.keys[0],
+        },
+        verified.variants,
+      );
     } catch (cause) {
       if (!disposed && ownRequest === requestId) report(cause);
     } finally {
