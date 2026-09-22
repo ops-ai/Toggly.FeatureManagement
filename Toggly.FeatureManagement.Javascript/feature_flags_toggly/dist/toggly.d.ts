@@ -3,6 +3,10 @@ import type { Hook, TogglyEvaluationContext, EvaluatedDefinitions, TogglyEntityC
 import { type LocalGate } from '@ops-ai/toggly-local-gates';
 export declare class Toggly {
     private static _config;
+    private static _generation;
+    private static _active;
+    private static _instanceId;
+    private static _requests;
     private static _contextMemory;
     private static _contextMemoryOnly;
     private static _refreshInterval;
@@ -12,8 +16,12 @@ export declare class Toggly {
     private static _localGateIndex;
     private static _localGatesChangedListeners;
     private static _inMemoryFlags;
+    private static _inMemoryVariants;
     private static _hasLoadedFlags;
     private static _lastError;
+    private static _telemetry;
+    private static _retiredTelemetry;
+    private static _detachTelemetry;
     static _ws: WebSocket | null;
     static _wsConnected: boolean;
     static _wsReconnectTimer: any;
@@ -26,6 +34,7 @@ export declare class Toggly {
     static _fallbackRefreshInterval: number;
     private static get _revisionCacheKey();
     private static get definitionsRevision();
+    private static get _hasPersistedDefinitions();
     private static cacheDefinitionsRevision;
     private static scheduleDebouncedRefresh;
     private static handleWsSyncMessage;
@@ -47,16 +56,30 @@ export declare class Toggly {
     static init(config?: TogglyConfig): Promise<{
         [key: string]: boolean;
     }>;
+    private static startTelemetry;
+    private static updateTelemetryContext;
+    private static stopTelemetry;
+    private static captureEvaluation;
+    static recordUsage(featureKey: string, variant?: string): void;
+    static recordView(featureKey: string, variant?: string): void;
+    static incrementCounter(metricKey: string, value?: number): void;
+    static setGauge(metricKey: string, value: number): void;
+    static flushTelemetry(): Promise<void>;
     static get featureFlagsValue(): EvaluatedDefinitions;
     private static readContextValue;
     private static writeContextValue;
     static get identity(): string;
     static set identity(v: string);
     static clearIdentity(): void;
+    private static executeIdentifyHooks;
     static get groups(): string[];
     static set groups(values: string[]);
     static get claims(): Record<string, string>;
     static set claims(values: Record<string, string>);
+    /** Host-minted capability, held in memory. Empty falls back to the current identity. */
+    static get instanceId(): string;
+    static set instanceId(value: string);
+    private static contextChanged;
     static get evaluationContext(): TogglyEvaluationContext;
     static setContext(context: TogglyEvaluationContext): Promise<{
         [key: string]: boolean;
@@ -106,7 +129,6 @@ export declare class Toggly {
         [key: string]: boolean;
     }>;
     private static _getEffectiveFlagValue;
-    private static _isEffectiveFlagEnabled;
     private static _evaluateFeatureGate;
     static evaluateFeatureGate(featureGate: string[], requirement?: FeatureRequirement, negate?: boolean, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string): boolean;
     static isFeatureOn(featureKey: string, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string): boolean;
@@ -135,6 +157,7 @@ export declare class Toggly {
     static subscribeLocalGatesChanged(listener: () => void): () => void;
     static startWebSocket(): void;
     static stopWebSocket(): void;
+    private static stopDefinitionResources;
     static cancelRefreshInterval(): void;
     static startRefreshInterval(): void;
 }

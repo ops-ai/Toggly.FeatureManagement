@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import type { FeatureRequirement } from '@ops-ai/nextjs-toggly-core'
 import type { TogglyEntityContext } from '@ops-ai/nextjs-toggly-core'
 import { useToggly } from './context'
@@ -34,6 +34,9 @@ export function useFeatureFlag(
 ): UseFeatureFlagReturn {
   const { context, contextKind } = options
   const { features, isReady, isLoading: contextLoading, isFeatureOn, refresh: contextRefresh } = useToggly()
+  const request = useRef(0)
+  const active = useRef(true)
+  useEffect(() => { active.current = true; return () => {active.current = false; request.current++} }, [])
   const [checked, setChecked] = useState(false)
   const [isEnabled, setIsEnabled] = useState(() => features[featureKey] === true)
 
@@ -42,16 +45,19 @@ export function useFeatureFlag(
   }, [featureKey, context, contextKind])
 
   const checkFeature = useCallback(async () => {
-    if (!isReady) {
-      setIsEnabled(features[featureKey] === true)
+    const current = ++request.current
+    if (!isReady && !Object.prototype.hasOwnProperty.call(features, featureKey)) {
+      setIsEnabled(false)
       return
     }
 
     try {
       const result = await isFeatureOn(featureKey, context, contextKind)
+      if (!active.current || current !== request.current) return
       setIsEnabled(result)
       setChecked(true)
     } catch {
+      if (!active.current || current !== request.current) return
       setIsEnabled(false)
       setChecked(true)
     }
@@ -59,21 +65,13 @@ export function useFeatureFlag(
 
   // Check feature when ready changes
   useEffect(() => {
-    checkFeature()
+    void checkFeature()
+    return () => { request.current++ }
   }, [checkFeature])
-
-  // Defaults only apply before the client is ready. After init, isFeatureOn
-  // is the source of truth (mixed boolean + entity-gate defs).
-  useEffect(() => {
-    if (!isReady) {
-      setIsEnabled(features[featureKey] === true)
-    }
-  }, [features, featureKey, isReady])
 
   const refresh = useCallback(async () => {
     await contextRefresh()
-    await checkFeature()
-  }, [contextRefresh, checkFeature])
+  }, [contextRefresh])
 
   const isLoading = contextLoading || (isReady && !checked)
 
@@ -142,25 +140,31 @@ export function useFeatureGate(
   isLoading: boolean
   refresh: () => Promise<void>
 } {
+  const keySignature = JSON.stringify(featureKeys)
+  const keys = useMemo(() => JSON.parse(keySignature) as string[], [keySignature])
   const { features, isReady, isLoading: contextLoading, evaluateFeatureGate } = useToggly()
+  const request = useRef(0)
+  const active = useRef(true)
+  useEffect(() => { active.current = true; return () => {active.current = false; request.current++} }, [])
   const [checked, setChecked] = useState(false)
   const [isAllowed, setIsAllowed] = useState(() => {
     if (requirement === 'any') {
-      const result = featureKeys.some((key) => features[key] === true)
+      const result = keys.some((key) => features[key] === true)
       return negate ? !result : result
     }
-    const result = featureKeys.every((key) => features[key] === true)
+    const result = keys.every((key) => features[key] === true)
     return negate ? !result : result
   })
 
   const checkGate = useCallback(async () => {
-    if (!isReady) {
-      // Use local calculation before ready
+    const current = ++request.current
+    if (!isReady && !keys.every(key => Object.prototype.hasOwnProperty.call(features, key))) {
+      // An unresolved loading snapshot does not evaluate flags.
       let result: boolean
       if (requirement === 'any') {
-        result = featureKeys.some((key) => features[key] === true)
+        result = keys.some((key) => features[key] === true)
       } else {
-        result = featureKeys.every((key) => features[key] === true)
+        result = keys.every((key) => features[key] === true)
       }
       setIsAllowed(negate ? !result : result)
       return
@@ -168,37 +172,26 @@ export function useFeatureGate(
 
     try {
       const result = await evaluateFeatureGate(
-        featureKeys,
+        keys,
         requirement,
         negate,
         context,
         contextKind,
       )
+      if (!active.current || current !== request.current) return
       setIsAllowed(result)
       setChecked(true)
     } catch {
+      if (!active.current || current !== request.current) return
       setIsAllowed(negate)
       setChecked(true)
     }
-  }, [featureKeys, features, isReady, evaluateFeatureGate, requirement, negate, context, contextKind])
+  }, [keys, features, isReady, evaluateFeatureGate, requirement, negate, context, contextKind])
 
   useEffect(() => {
-    checkGate()
+    void checkGate()
+    return () => { request.current++ }
   }, [checkGate])
-
-  // Defaults only apply before the client is ready. After init, evaluateFeatureGate
-  // is the source of truth (mixed boolean + entity-gate defs).
-  useEffect(() => {
-    if (!isReady) {
-      let result: boolean
-      if (requirement === 'any') {
-        result = featureKeys.some((key) => features[key] === true)
-      } else {
-        result = featureKeys.every((key) => features[key] === true)
-      }
-      setIsAllowed(negate ? !result : result)
-    }
-  }, [features, featureKeys, isReady, requirement, negate])
 
   const refresh = useCallback(async () => {
     await checkGate()
@@ -278,6 +271,7 @@ export function useIdentity(): {
   identity: string | undefined
   setIdentity: (identity: string) => Promise<void>
   setContext: (context: {
+    instanceId?: string
     identity?: string
     groups?: string[]
     claims?: Record<string, string>
@@ -305,6 +299,7 @@ export function useIdentity(): {
 
   const setContext = useCallback(
     async (contextUpdate: {
+      instanceId?: string
       identity?: string
       groups?: string[]
       claims?: Record<string, string>

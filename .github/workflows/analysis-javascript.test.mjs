@@ -62,6 +62,7 @@ const packedHostHarnesses = [
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/host-resources.mjs',
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/**',
   'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-host.mjs',
+  'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-browser-host.mjs',
   'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/tests/host/**'
 ];
 
@@ -164,6 +165,17 @@ test('runs Vue packed browser telemetry checks with an explicit Chrome executabl
   assert.match(hostJob, /run: npm run test:host/);
 });
 
+test('runs the complete packed Angular host matrix in the required test job', () => {
+  const testJob = workflow.slice(workflow.indexOf('\n  test:'), workflow.indexOf('\n  test-docusaurus-host:'));
+  assert.match(testJob, /- name: Verify packed Angular consumers in Chrome\s+if: matrix\.sdk == 'Angular'\s+working-directory: \$\{\{ matrix\.path \}\}\s+env:\s+CHROME_BIN: \/usr\/bin\/google-chrome\s+run: \|\s+test -x "\$CHROME_BIN"\s+npm run test:hosts/);
+});
+
+test('canonical Svelte host check also runs the real browser matrix', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../../Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/package.json', import.meta.url), 'utf8'));
+  assert.equal(manifest.scripts['test:host'], 'node scripts/test-host.mjs && npm run test:browser-host');
+  assert.equal(manifest.scripts['test:browser-host'], 'node scripts/test-browser-host.mjs');
+});
+
 test('selects system Chrome before packed Client-Core tests', () => {
   assert.match(
     workflow,
@@ -174,4 +186,17 @@ test('selects system Chrome before packed Client-Core tests', () => {
     workflow,
     /if: matrix\.sdk == 'Gatsby' \|\| matrix\.sdk == 'Client-Telemetry' \|\| matrix\.sdk == 'Client-Core'/,
   );
+});
+
+
+test('classifies the JavaScript packed browser harness as test code in both scanners', () => {
+  const harness = 'Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs';
+  for (const property of ['exclusions', 'test.inclusions']) {
+    const values = [...workflow.matchAll(new RegExp('-Dsonar\\.' + property.replace('.', '\\.') + '=([^\\n]+)', 'g'))];
+    assert.equal(values.length, 2);
+    for (const [, value] of values) assert.ok(value.split(',').includes(harness), property);
+  }
+  for (const [, value] of workflow.matchAll(/-Dsonar\.coverage\.exclusions=([^\n]+)/g)) {
+    assert.ok(!value.includes('Toggly.FeatureManagement.Javascript'));
+  }
 });

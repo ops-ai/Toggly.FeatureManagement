@@ -22,6 +22,7 @@ class MockWebSocket {
   onerror: ((error: any) => void) | null = null;
   readyState = MockWebSocket.CONNECTING;
   url: string;
+  context = Toggly.evaluationContext;
 
   constructor(url: string) {
     this.url = url;
@@ -115,7 +116,7 @@ describe('Toggly WebSocket', () => {
       });
 
       expect(latestWs()).toBeDefined();
-      expect(latestWs().url).toBe('wss://definitions.toggly.io/my-app-key/ws?sdk=javascript&sdkVersion=1.3.1');
+      expect(latestWs().url).toBe('wss://definitions.toggly.io/my-app-key/ws?sdk=javascript&sdkVersion=1.9.0');
     });
 
     it('sets wsConnected to true on open', async () => {
@@ -130,6 +131,68 @@ describe('Toggly WebSocket', () => {
       latestWs().triggerOpen();
 
       expect(Toggly._wsConnected).toBe(true);
+    });
+  });
+
+  describe('context updates', () => {
+    beforeEach(async () => {
+      mockFetch.mockResolvedValue(mockInitResponse);
+      await Toggly.init({
+        appKey: 'test-key', environment: 'Test', identity: 'old-user',
+        groups: ['old-group'], claims: { plan: 'old' },
+        enableTelemetry: false, featureFlagsRefreshInterval: 0,
+      });
+    });
+
+    it('reconnects once with the complete context and completes identification hooks', async () => {
+      const oldSocket = latestWs();
+      const before = instances.length;
+      const hooks: string[] = [];
+      Toggly.addHook({
+        getMetadata: () => ({ name: 'batch-context', version: '1.0.0' }),
+        beforeIdentify: async identity => { hooks.push(`before:${identity}`); },
+        afterIdentify: async identity => { hooks.push(`after:${identity}`); },
+      });
+      try {
+        await Toggly.setContext({ identity: 'new-user', groups: ['new-group'], claims: { plan: 'new' } });
+        await Promise.resolve();
+        expect(instances).toHaveLength(before + 1);
+        expect(oldSocket.readyState).toBe(MockWebSocket.CLOSED);
+        expect(Toggly.evaluationContext).toEqual({ identity: 'new-user', groups: ['new-group'], claims: { plan: 'new' } });
+        expect(latestWs().context).toEqual(Toggly.evaluationContext);
+        expect(hooks).toEqual(['before:new-user', 'after:new-user']);
+        const count = instances.length;
+        await Toggly.setContext({ identity: 'new-user', groups: ['new-group'], claims: { plan: 'new' } });
+        expect(instances).toHaveLength(count);
+      } finally { Toggly.removeHook('batch-context'); }
+    });
+
+    it('clears the complete context with one reconnect and no reconnect on a repeated clear', async () => {
+      const before = instances.length;
+      const afterIdentify = jest.fn();
+      Toggly.addHook({ getMetadata: () => ({ name: 'clear-context', version: '1.0.0' }), afterIdentify });
+      try {
+        await Toggly.clearContext();
+        await Promise.resolve();
+        expect(instances).toHaveLength(before + 1);
+        expect(Toggly.evaluationContext).toEqual({ identity: undefined, groups: undefined, claims: undefined });
+        expect(latestWs().context).toEqual(Toggly.evaluationContext);
+        expect(afterIdentify).toHaveBeenCalledTimes(1);
+        expect(afterIdentify.mock.calls[0][0]).toBe('');
+        await Toggly.clearContext();
+        expect(instances).toHaveLength(before + 1);
+        expect(afterIdentify).toHaveBeenCalledTimes(1);
+      } finally { Toggly.removeHook('clear-context'); }
+    });
+
+    it('keeps direct context setters immediate', () => {
+      const before = instances.length;
+      Toggly.identity = 'direct-user';
+      expect(instances).toHaveLength(before + 1);
+      Toggly.groups = ['direct-group'];
+      expect(instances).toHaveLength(before + 2);
+      Toggly.claims = { plan: 'direct' };
+      expect(instances).toHaveLength(before + 3);
     });
   });
 
@@ -275,7 +338,7 @@ describe('Toggly WebSocket', () => {
         'abc123',
       );
 
-      localStorage.setItem(StorageKeys.flagsCacheKey('test-key', 'Test', 'u:mock-uuid-ws'), JSON.stringify({ FlagOn: true }));
+      localStorage.setItem(StorageKeys.flagsCacheKey('test-key', 'Test', 'v3:evaluated:u:mock-uuid-ws'), JSON.stringify({ FlagOn: true }));
       await initWithWs();
       const before = mockFetch.mock.calls.length;
 

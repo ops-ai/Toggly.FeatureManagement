@@ -4,6 +4,7 @@
   "private": true,
   "description": "Feature flags for Next.js - monorepo",
   "scripts": {
+    "test:hosts": "node --test scripts/host-resources.test.mjs && node scripts/test-hosts.mjs",
     "build": "pnpm -r --filter \"./nextjs-*\" build",
     "test": "pnpm -r --filter \"./nextjs-*\" test",
     "test:coverage": "pnpm -r --filter \"./nextjs-*\" test:coverage",
