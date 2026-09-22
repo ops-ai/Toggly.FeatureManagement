@@ -67,7 +67,9 @@ jobs:
         with:
           manifest_path: ${{ env.SDK_ROOT }}/build.gradle.kts
           manifest_type: gradle_kts
-          registry: none
+          # Compare against Maven Central (not git tags). Tags alone previously
+          # marked releases "done" while Central Portal deployments sat unpublished.
+          registry: maven
           package_name: io.toggly:toggly-android-core
           tag_prefix: android-sdk-v
           release_mode: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.release_mode || 'publish' }}
@@ -123,8 +125,13 @@ jobs:
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_PRIVATE_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.GPG_PASSPHRASE }}
           ORG_GRADLE_PROJECT_VERSION_NAME: ${{ needs.validate.outputs.version }}
+          # Belt-and-suspenders with DSL automaticRelease = true on each module.
+          ORG_GRADLE_PROJECT_SONATYPE_AUTOMATIC_RELEASE: 'true'
         run: |
-          ./gradlew publishAllPublicationsToMavenCentralRepository \
+          # Modules set publishToMavenCentral(..., automaticRelease = true) so
+          # upload + Central Portal release happen in one build (parity with
+          # Java autoPublish=true). Do not use upload-only without release.
+          ./gradlew publishAndReleaseToMavenCentral \
             -Pversion=${{ needs.validate.outputs.version }}
 
   release:
