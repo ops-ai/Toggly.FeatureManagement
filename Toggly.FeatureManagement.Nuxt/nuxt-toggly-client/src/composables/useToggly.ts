@@ -26,8 +26,8 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
   const error = ref<Error | null>(null)
   const features = ref<Record<string, boolean>>({ ...config.featureDefaults })
   const identity = ref<string | undefined>(config.identity)
-  let operation = 0
-  const current = (expected: number) => expected === operation && (typeof window === 'undefined' || globalClient === client)
+  let retired = false
+  const current = () => !retired && (typeof window === 'undefined' || globalClient === client)
 
   // Merge config with defaults
   const mergedConfig: TogglyClientConfig = {
@@ -66,10 +66,26 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     } catch { /* Optional persistence must not prevent context changes. */ }
   }
   if (typeof window !== 'undefined') globalClient = client
-  client.subscribeFeaturesRefresh?.(() => {
+  // Read accepted core state, never the result captured by an older invocation.
+  // A skipped refresh does not supersede the initialization still in flight.
+  function project() {
+    if (!current()) return
     features.value = client.state.features as Record<string, boolean>
+    isReady.value = client.state.initialized
+    isLoading.value = client.state.loading
     error.value = client.state.error
-  })
+    identity.value = client.identity
+  }
+  const unsubscribe = client.subscribeFeaturesRefresh?.(project)
+  const destroy = client.destroy.bind(client)
+  client.destroy = options => {
+    if (retired) return
+    retired = true
+    isLoading.value = false
+    isReady.value = false
+    unsubscribe?.()
+    destroy(options)
+  }
 
   const toggly: UseTogglyReturn = {
     client,
@@ -87,53 +103,27 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     },
 
     async init(newConfig?: TogglyConfig) {
-      const expected = ++operation
-      isLoading.value = true
-      error.value = null
-
       try {
-        await client.init(newConfig)
-        if (!current(expected)) return
-        features.value = client.state.features as Record<string, boolean>
-        isReady.value = true
-
-        // Check if client encountered an error (it catches internally)
-        if (client.state.error) {
-          error.value = client.state.error
-        }
-
-        // Update identity ref
-        identity.value = client.identity
-        persistIdentity()
-      } catch (e) {
-        if (!current(expected)) return
-        error.value = e as Error
-        // Still mark as ready since we use defaults
-        isReady.value = true
+        const pending = client.init(newConfig)
+        project()
+        await pending
+      } catch {
+        // Core owns initialization defaults and errors. Disposal cannot make it ready.
       } finally {
-        if (current(expected)) isLoading.value = false
+        project()
+        if (current()) persistIdentity()
       }
     },
 
     async refresh() {
-      const expected = ++operation
-      isLoading.value = true
-      error.value = client.state.error
-
       try {
-        await client.refresh()
-        if (!current(expected)) return
-        features.value = client.state.features as Record<string, boolean>
-        isReady.value = client.state.initialized
-        error.value = client.state.error
-
+        const pending = client.refresh()
+        project()
+        await pending
       } catch (e) {
-        if (!current(expected)) return
-        features.value = client.state.features as Record<string, boolean>
-        error.value = e as Error
-        throw e
+        if (current()) throw e
       } finally {
-        if (current(expected)) isLoading.value = false
+        project()
       }
     },
 
@@ -142,24 +132,15 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     },
 
     async setContext(update) {
-      const expected = ++operation
-      isLoading.value = true
       try {
-        await client.setContext(update)
-        if (!current(expected)) return
-        isReady.value = client.state.initialized
-        error.value = client.state.error
+        const pending = client.setContext(update)
+        project()
+        await pending
       } catch (e) {
-        if (!current(expected)) return
-        error.value = e as Error
-        throw e
+        if (current()) throw e
       } finally {
-        if (current(expected)) {
-          isLoading.value = false
-          identity.value = client.identity
-          features.value = client.state.features as Record<string, boolean>
-          persistIdentity()
-        }
+        project()
+        if (current()) persistIdentity()
       }
     },
 

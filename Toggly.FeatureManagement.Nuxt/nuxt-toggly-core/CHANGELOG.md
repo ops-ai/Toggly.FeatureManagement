@@ -8,6 +8,7 @@
 - Ignore unrelated SSR/legacy snapshots for minted contexts and tolerate unavailable browser storage.
 
 ### Changed
+- Keep browser loading scoped to admitted operations through refresh hooks and discard inherited URL tokens when the current context has no instance token.
 - Fence superseded refresh hooks and listeners, copy selected local gate callbacks, and preserve trusted eager gate hook/check ordering.
 - Build browser definitions paths independently of base queries and scrub existing targeting parameters for minted requests.
 - Browser feature gates short-circuit and record only the effective keys actually evaluated, after entity and local gates and before gate negation.

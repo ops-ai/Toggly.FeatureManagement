@@ -56,3 +56,57 @@ it('starts checks when a keyless hydrated facade is initialized with its app key
  const wrapper=mount(Feature,{props:{featureKey:'On'},slots:{default:'allowed'},global:{provide:{[TOGGLY_INJECTION_KEY as symbol]:t}}})
  try{await flushPromises();expect(packets).toEqual([]);await t.init({appKey:'fixture'});await flushPromises();expect(wrapper.text()).toBe('allowed');await t.telemetry.flushTelemetry();expect(packets).toEqual([{k:'fixture',e:'Production',u:'alice',f:{On:{enabled:[1]}}}])}finally{wrapper.unmount()}
 })
+
+it('projects admitted initialization after a skipped refresh without extra loading-only checks',async()=>{
+ let release!:(value:Response)=>void
+ vi.mocked(fetch).mockImplementationOnce(()=>new Promise<Response>(r=>{release=r}))
+ const t=owner();const wrapper=mount(defineComponent({setup(){const gate=useFeatureGate(['On']);return()=>h('span',String(gate.isEnabled.value))}}),{global:{provide:{[TOGGLY_INJECTION_KEY as symbol]:t}}})
+ try {
+  const initial=t.init();await flushPromises();expect(t.isLoading.value).toBe(true)
+  await t.refresh();expect(t.isLoading.value).toBe(true);expect(t.isReady.value).toBe(false);expect(fetch).toHaveBeenCalledTimes(1)
+  await t.telemetry.flushTelemetry();expect(packets).toEqual([])
+  release(new Response(JSON.stringify({On:true})));await initial;await flushPromises()
+  expect(t.isReady.value).toBe(true);expect(t.isLoading.value).toBe(false);expect(t.features.value.On).toBe(true);expect(wrapper.text()).toBe('true')
+  await t.telemetry.flushTelemetry();expect(packets).toEqual([{k:'oracle',e:'Production',u:'alice',f:{On:{enabled:[1]}}}])
+ }finally{wrapper.unmount()}
+})
+it.each(['destroy','replacement'])('never publishes a pending initialization after %s',async action=>{
+ let release!:(value:Response)=>void
+ vi.mocked(fetch).mockImplementationOnce(()=>new Promise<Response>(r=>{release=r}))
+ const t=owner();const initial=t.init();await flushPromises();expect(t.isLoading.value).toBe(true)
+ if(action==='destroy')t.client.destroy();else {const next=owner({identity:'bob'});await next.init();expect(next.isReady.value).toBe(true);expect(next.features.value.On).toBe(true)}
+ expect(t.isLoading.value).toBe(false);release(new Response(JSON.stringify({On:true})));await initial
+ expect(t.isReady.value).toBe(false);expect(t.isLoading.value).toBe(false);expect(t.features.value.On).toBeUndefined();expect(t.client.state.initialized).toBe(false)
+ await t.telemetry.flushTelemetry();expect(packets).toEqual([])
+})
+it('keeps the latest admitted hook chain loading and ignores the retired chain settlement',async()=>{
+ const releases:Array<()=>void>=[];let hold=false
+ const t=owner({hooks:[{getMetadata:()=>({name:'hold'}),afterRefresh:()=>hold?new Promise<void>(r=>releases.push(r)):undefined}]});await t.init();hold=true
+ const old=t.refresh();await flushPromises();expect(t.isLoading.value).toBe(true)
+ defs={On:false};const next=t.refresh();await flushPromises();expect(t.isLoading.value).toBe(true)
+ releases[0]();await old;expect(t.isLoading.value).toBe(true)
+ releases[1]();await next;expect(t.isLoading.value).toBe(false);expect(t.features.value.On).toBe(false)
+})
+it('projects accepted defaults and current failure without reviving a superseded error',async()=>{
+ vi.mocked(fetch).mockRejectedValueOnce(Error('initial offline'))
+ const t=owner({featureDefaults:{On:true}});await t.init();expect(t.isReady.value).toBe(true);expect(t.features.value.On).toBe(true);expect(t.error.value?.message).toBe('initial offline')
+ let reject!:(error:Error)=>void;vi.mocked(fetch).mockImplementationOnce(()=>new Promise<Response>((_r,j)=>{reject=j}))
+ const stale=t.refresh();await flushPromises();await t.init();expect(t.error.value).toBeNull();reject(Error('old offline'));await stale;expect(t.error.value).toBeNull();expect(t.isLoading.value).toBe(false)
+ vi.mocked(fetch).mockRejectedValueOnce(Error('current offline'));await expect(t.refresh()).rejects.toThrow('current offline');expect(t.error.value?.message).toBe('current offline');expect(t.isReady.value).toBe(true);expect(t.isLoading.value).toBe(false)
+})
+it('settles admitted context-only work after it retires pending initialization',async()=>{
+ let release!:(value:Response)=>void
+ vi.mocked(fetch).mockImplementationOnce(()=>new Promise<Response>(r=>{release=r}))
+ const t=owner();const pending=t.init();await flushPromises();await t.setContext({instanceId:'new'})
+ expect(t.isLoading.value).toBe(false);expect(t.isReady.value).toBe(false)
+ release(new Response(JSON.stringify({On:true})));await pending;expect(t.isLoading.value).toBe(false);expect(t.isReady.value).toBe(false);expect(t.features.value).toEqual({})
+ await t.init();expect(t.isReady.value).toBe(true);expect(t.features.value.On).toBe(true)
+})
+it('keeps newer network work loading when an older identify hook completes',async()=>{
+ const t=owner();await t.init();let releaseHook!:()=>void
+ t.client.addHook({getMetadata:()=>({name:'identify'}),afterIdentify:()=>new Promise<void>(resolve=>{releaseHook=resolve})})
+ const old=t.setContext({identity:'bob'});await flushPromises();expect(t.isLoading.value).toBe(true)
+ let releaseFetch!:(value:Response)=>void;vi.mocked(fetch).mockImplementationOnce(()=>new Promise<Response>(resolve=>{releaseFetch=resolve}))
+ const current=t.refresh();await flushPromises();releaseHook();await old;expect(t.isLoading.value).toBe(true)
+ releaseFetch(new Response(JSON.stringify({On:false})));await current;expect(t.isLoading.value).toBe(false);expect(t.features.value.On).toBe(false);expect(t.identity.value).toBe('bob')
+})

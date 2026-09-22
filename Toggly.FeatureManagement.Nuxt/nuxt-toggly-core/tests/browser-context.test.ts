@@ -89,3 +89,14 @@ it('preserves non-minted targeting and unrelated base query values',async()=>{
  const client=owner({baseUri:'https://defs.invalid/base?keep=yes',instanceId:undefined,groups:['staff'],claims:{role:'admin'}});await client.init()
  const url=new URL(String(vi.mocked(fetch).mock.calls[0][0]));expect(url.pathname).toBe('/base/evaluated-signed/context/Production');expect(url.searchParams.get('u')).toBe('alice');expect(url.searchParams.get('g')).toBe('staff');expect(url.searchParams.get('claim.role')).toBe('admin');expect(url.searchParams.get('keep')).toBe('yes')
 })
+it.each(['local','remote'] as const)('never revives inherited i during %s initial blank, rotation and clear',async evaluationMode=>{
+ vi.mocked(fetch).mockImplementation(async()=>new Response(JSON.stringify(evaluationMode==='local'?[{featureKey:'Flag',filters:[{name:'AlwaysOn',parameters:{}}]}]:{Flag:true})))
+ const client=owner({evaluationMode,baseUri:'https://defs.invalid/base?i=retired&%69=older&keep=a&keep=b',instanceId:' '})
+ const check=async(token:string|null,identity:string)=>{
+  const [input,request]=vi.mocked(fetch).mock.calls.at(-1)!;const url=new URL(String(input))
+  expect(url.searchParams.getAll('i')).toEqual(token?[token]:[]);expect(url.searchParams.getAll('keep')).toEqual(['a','b']);expect(url.pathname).toBe(`/base/${evaluationMode==='local'?'definitions-signed':'evaluated-signed'}/context/Production`)
+  expect(new Headers(request?.headers).get('x-toggly-identity')).toBe(token?null:identity);expect(await client.isFeatureOn('Flag')).toBe(true)
+ }
+ await client.init();await check(null,'alice');await client.setContext({instanceId:' current '});await check('current','alice');await client.setContext({identity:'bob'});await check(null,'bob')
+ await client.init({instanceId:undefined});await check(null,'bob');await client.setContext({instanceId:'next'});await check('next','bob');await client.setContext({instanceId:' '});await check(null,'bob')
+})

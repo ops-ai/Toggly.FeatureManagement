@@ -446,6 +446,8 @@ export function createTogglyClient(
       endpoint(config.baseUri, config.appKey, config.environment)
     )
     if (frontend) {
+      // Only the current context owns the token; a configured URL cannot revive it.
+      fetchUrl.searchParams.delete('i')
       fetchUrl.pathname = `${fetchUrl.pathname.replace(/\/$/, '')}/${local ? 'definitions-signed' : 'evaluated-signed'}/${config.appKey}/${config.environment}`
     }
     if (frontend && config.instanceId?.trim()) {
@@ -588,7 +590,10 @@ export function createTogglyClient(
 
       throw error
     } finally {
-      if (!frontend || expected === generation) {state.loading = false; refreshInFlight = false}
+      if (!frontend || expected === generation) {
+        if (!frontend) state.loading = false
+        refreshInFlight = false
+      }
     }
   }
 
@@ -825,6 +830,7 @@ export function createTogglyClient(
         // Execute afterRefresh hooks
         await hookExecutor.executeAfterRefresh(state.features, current)
         if (destroyed || !current()) return state.features
+        if (frontend) state.loading = false
         notifyFeaturesRefresh()
 
         // Start auto-refresh
@@ -864,14 +870,20 @@ export function createTogglyClient(
       const expected = generation
       const operation = ++refreshOperation
       const current = () => !frontend || (!destroyed && expected === generation && operation === refreshOperation)
-      const { features, performed } = await refreshFeatures()
-      if (performed) {
-        // Execute afterRefresh hooks
-        await hookExecutor.executeAfterRefresh(state.features, current)
-        if (!current()) return state.features
-        notifyFeaturesRefresh()
+      try {
+        const { features, performed } = await refreshFeatures()
+        if (performed) {
+          // Execute afterRefresh hooks
+          await hookExecutor.executeAfterRefresh(state.features, current)
+          if (!current()) return state.features
+          if (frontend) state.loading = false
+          notifyFeaturesRefresh()
+        }
+        return frontend ? state.features : features
+      } finally {
+        // Only admitted current work settles loading; a skipped call owns nothing.
+        if (frontend && current()) state.loading = false
       }
-      return frontend ? state.features : features
     },
 
     async isFeatureOn(
@@ -1030,21 +1042,28 @@ export function createTogglyClient(
         return
       }
       const expected = ++generation
-      const hooks = update.identity !== undefined ? await hookExecutor.executeBeforeIdentify(update.identity) : undefined
-      if (destroyed || expected !== generation) return
-      const localDefinitions = isLocalEvaluation() && !config.instanceId && !update.instanceId ? state.definitions : undefined
-      if (update.identity !== undefined) {config.identity = update.identity; if (update.instanceId === undefined) config.instanceId = undefined}
-      if (update.instanceId !== undefined) config.instanceId = update.instanceId.trim() || undefined
-      if (update.groups !== undefined) config.groups = update.groups
-      if (update.claims !== undefined) config.claims = update.claims
-      transitionContext()
-      const installed = generation
-      if (localDefinitions?.size) {applyLocalDefinitions(localDefinitions); cachedDefinitionsRevision = null; saveSnapshot(); notifyFeaturesRefresh()}
-      if (hooks) await hookExecutor.executeAfterIdentify(update.identity!, hooks)
-      if (destroyed || installed !== generation) return
-      if (state.initialized) try {
-        if (!isLocalEvaluation() || !localDefinitions?.size) await client.refresh()
-      } finally {if (!destroyed && installed === generation) {startRefreshInterval(); startWebSocket()}}
+      const operation = ++refreshOperation
+      let installed = expected
+      state.loading = true
+      try {
+        const hooks = update.identity !== undefined ? await hookExecutor.executeBeforeIdentify(update.identity) : undefined
+        if (destroyed || expected !== generation || operation !== refreshOperation) return
+        const localDefinitions = isLocalEvaluation() && !config.instanceId && !update.instanceId ? state.definitions : undefined
+        if (update.identity !== undefined) {config.identity = update.identity; if (update.instanceId === undefined) config.instanceId = undefined}
+        if (update.instanceId !== undefined) config.instanceId = update.instanceId.trim() || undefined
+        if (update.groups !== undefined) config.groups = update.groups
+        if (update.claims !== undefined) config.claims = update.claims
+        transitionContext()
+        installed = generation
+        if (localDefinitions?.size) {applyLocalDefinitions(localDefinitions); cachedDefinitionsRevision = null; saveSnapshot(); notifyFeaturesRefresh()}
+        if (hooks) await hookExecutor.executeAfterIdentify(update.identity!, hooks)
+        if (destroyed || installed !== generation || operation !== refreshOperation) return
+        if (state.initialized) try {
+          if (!isLocalEvaluation() || !localDefinitions?.size) await client.refresh()
+        } finally {if (!destroyed && installed === generation) {startRefreshInterval(); startWebSocket()}}
+      } finally {
+        if (!destroyed && installed === generation && operation === refreshOperation) state.loading = false
+      }
     },
 
     hydrateEvaluatedFeatures(features: Record<string, boolean>): FeatureDefinitions {
@@ -1169,6 +1188,7 @@ export function createTogglyClient(
 
     destroy(options?: {flush?: boolean}): void {
       destroyed = true
+      if (frontend) state.loading = false
       generation++
       stopWebSocket()
       stopRefreshInterval()

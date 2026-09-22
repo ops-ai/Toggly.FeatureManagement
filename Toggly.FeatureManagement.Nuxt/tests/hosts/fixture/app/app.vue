@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { createToggly } from '@ops-ai/nuxt-toggly-client'
+import { createApp, defineComponent, h, nextTick } from 'vue'
+import { createToggly, useFeatureGate as useClientGate, TOGGLY_INJECTION_KEY } from '@ops-ai/nuxt-toggly-client'
 const toggly = useToggly()
 const evaluationTrace: unknown[] = []
 let evaluationPhase = 'mount'
@@ -86,6 +87,41 @@ onMounted(() => {
         environmentDisabled: typeof process !== 'undefined' && process.env?.TOGGLY_DISABLE_TELEMETRY,
       },
     }
+  }
+  ;(window as any).verifyFacadeOwnership = async (dispose: boolean) => {
+    const owner=createToggly({appKey:'ownership-fixture',identity:'alice',persistIdentity:false,
+      baseUri:location.origin+'/api/definitions',metricsBaseUrl:useRuntimeConfig().public.toggly.metricsBaseUrl,refreshInterval:0,enableLiveUpdates:false})
+    const element=document.createElement('div');document.body.appendChild(element)
+    const app=createApp(defineComponent({setup(){const gate=useClientGate(['Enabled']);return()=>h('span',String(gate.isEnabled.value))}}))
+    app.provide(TOGGLY_INJECTION_KEY,owner);app.mount(element)
+    const original=globalThis.fetch
+    let release!:()=>void,enter!:()=>void
+    const held=new Promise<void>(resolve=>{release=resolve}),started=new Promise<void>(resolve=>{enter=resolve})
+    globalThis.fetch=async(input,options)=>{
+      const response=await original(input,options)
+      if(String(input).includes('/api/definitions/')){enter();await held}
+      return response
+    }
+    const snapshot=()=>({ready:owner.isReady.value,loading:owner.isLoading.value,coreReady:owner.client.state.initialized,flag:owner.features.value.Enabled??null,gate:element.textContent})
+    try {
+      const initial=owner.init();await started
+      if(dispose)owner.client.destroy();else await owner.refresh()
+      const pending=snapshot();await owner.telemetry.flushTelemetry()
+      release();await initial;await nextTick();await new Promise(resolve=>setTimeout(resolve,0))
+      const settled=snapshot();await owner.telemetry.flushTelemetry()
+      return {pending,settled}
+    } finally {release();globalThis.fetch=original;app.unmount();element.remove();owner.client.destroy()}
+  }
+  ;(window as any).verifyInheritedToken = async (evaluationMode: 'local'|'remote') => {
+    const owner=createToggly({appKey:'inherited-'+evaluationMode,evaluationMode,instanceId:' ',identity:'alice',persistIdentity:false,
+      baseUri:location.origin+'/minted-definitions?i=retired&%69=older&keep=a&keep=b',metricsBaseUrl:useRuntimeConfig().public.toggly.metricsBaseUrl,refreshInterval:0,enableLiveUpdates:false})
+    const results:boolean[]=[]
+    const check=async()=>{results.push(await owner.isFeatureOn(evaluationMode==='local'?'Raw':'Flag'));await owner.telemetry.flushTelemetry()}
+    try {
+      await owner.init();await check();await owner.setContext({instanceId:'token-a'});await check();await owner.setContext({identity:'bob'});await check()
+      await owner.setContext({instanceId:'token-a'});await check();await owner.setContext({instanceId:' '});await check()
+      return results
+    } finally {owner.client.destroy()}
   }
   ;(window as any).verifyMinted = async () => {
     const options = {appKey:'minted-fixture',instanceId:'token-a',identity:'legacy',groups:['private'],claims:{plan:'secret'},persistFeatures:true,

@@ -305,6 +305,28 @@ await withResources(async ownHost => {
   assert(mintedRequests.some(request=>request.token==='token-a'&&!request.local&&request.conditional==='remote-token-a'))
   assert(mintedRequests.some(request=>request.local&&!request.conditional),'local mode cannot send remote validator')
   console.log('PASS minted context: i precedence, owner replacement, captured reentrant check, mode/body/304 public results and plain keepalive')
+  const ownershipStart=telemetryRequests.length
+  for(const dispose of [false,true]) {
+    const result=await bounded(()=>page.evaluate(dispose=>window.verifyFacadeOwnership(dispose),dispose),'facade ownership checks',30000)
+    assert.deepEqual(result.pending,{ready:false,loading:!dispose,coreReady:false,flag:null,gate:'false'})
+    assert.deepEqual(result.settled,dispose?{ready:false,loading:false,coreReady:false,flag:null,gate:'false'}:{ready:true,loading:false,coreReady:true,flag:true,gate:'true'})
+  }
+  assert.deepEqual(telemetryRequests.slice(ownershipStart).filter(request=>request.payload?.k==='ownership-fixture').map(request=>request.payload),[
+    {k:'ownership-fixture',e:'Production',u:'alice',f:{Enabled:{enabled:[1]}}},
+  ],'loading-only projection and disposed initialization add no checks')
+  const inheritedRequests=[]
+  page.on('request',request=>{const target=new URL(request.url());if(target.pathname.includes('/inherited-'))inheritedRequests.push({tokens:target.searchParams.getAll('i'),keep:target.searchParams.getAll('keep'),identity:request.headers()['x-toggly-identity']??null})})
+  for(const mode of ['local','remote']) {
+    const start=telemetryRequests.length,requestsStart=inheritedRequests.length
+    assert.deepEqual(await bounded(()=>page.evaluate(mode=>window.verifyInheritedToken(mode),mode),'inherited token checks',30000),mode==='local'?[true,true,true,true,true]:[false,true,false,true,false])
+    assert.deepEqual(inheritedRequests.slice(requestsStart),[
+      {tokens:[],keep:['a','b'],identity:'alice'},{tokens:['token-a'],keep:['a','b'],identity:null},
+      {tokens:[],keep:['a','b'],identity:'bob'},{tokens:['token-a'],keep:['a','b'],identity:null},{tokens:[],keep:['a','b'],identity:'bob'},
+    ])
+    assert.deepEqual(telemetryRequests.slice(start).filter(request=>request.payload?.k==='inherited-'+mode).map(request=>request.payload),
+      [{u:'alice'},{i:'token-a'},{u:'bob'},{i:'token-a'},{u:'bob'}].map((identity,index)=>({k:'inherited-'+mode,e:'Production',...identity,f:{[mode==='local'?'Raw':'Flag']:{[mode==='local'||index%2===1?'enabled':'disabled']:[1]}}})))
+  }
+  console.log('PASS facade admitted initialization/disposal and both-mode inherited-token clear: exact public results, URLs and packets')
   assert.deepEqual(outbound, [])
   assert.deepEqual(errors, [])
   console.log(`PASS Nuxt ${version}: packed install, types, build, SSR gates, request isolation, hydration, initialization, identity, refresh, directives`)
