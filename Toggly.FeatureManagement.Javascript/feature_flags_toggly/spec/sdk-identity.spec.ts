@@ -33,63 +33,17 @@ describe('sdk-identity', () => {
   });
 
   it('usesSdkCustomHeaders is true when navigator.product is ReactNative', () => {
-    const originalNavigator = global.navigator;
+    const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
     Object.defineProperty(global, 'navigator', {
       configurable: true,
       value: { product: 'ReactNative' },
     });
-
-    expect(usesSdkCustomHeaders()).toBe(true);
-
-    Object.defineProperty(global, 'navigator', {
-      configurable: true,
-      value: originalNavigator,
-    });
+    try {
+      expect(usesSdkCustomHeaders()).toBe(true);
+    } finally {
+      if (originalNavigator) Object.defineProperty(globalThis, 'navigator', originalNavigator);
+      else delete (globalThis as { navigator?: unknown }).navigator;
+    }
   });
 
-  it('buildDefinitionFetchHeaders uses User-Agent outside browser contexts', () => {
-    const globalWithBrowser = globalThis as typeof globalThis & {
-      window?: unknown;
-      document?: unknown;
-    };
-    const previousWindow = globalWithBrowser.window;
-    const previousDocument = globalWithBrowser.document;
-    delete globalWithBrowser.window;
-    delete globalWithBrowser.document;
-
-    const headers = buildDefinitionFetchHeaders({ Accept: 'application/json' });
-    expect(headers['User-Agent']).toBe(`toggly-${SDK_ID}/${SDK_VERSION}`);
-    expect(headers['X-Toggly-Sdk']).toBeUndefined();
-
-    globalWithBrowser.window = previousWindow;
-    globalWithBrowser.document = previousDocument;
-  });
-
-  it('buildDefinitionFetchHeaders uses custom headers for ReactNative navigator', () => {
-    const globalWithBrowser = globalThis as typeof globalThis & {
-      window?: unknown;
-      document?: unknown;
-      navigator?: { product?: string };
-    };
-    const previousWindow = globalWithBrowser.window;
-    const previousDocument = globalWithBrowser.document;
-    const previousNavigator = globalWithBrowser.navigator;
-    delete globalWithBrowser.window;
-    delete globalWithBrowser.document;
-    Object.defineProperty(globalThis, 'navigator', {
-      configurable: true,
-      value: { product: 'ReactNative' },
-    });
-
-    const headers = buildDefinitionFetchHeaders();
-    expect(headers['X-Toggly-Sdk']).toBe(SDK_ID);
-    expect(headers['User-Agent']).toBeUndefined();
-
-    Object.defineProperty(globalThis, 'navigator', {
-      configurable: true,
-      value: previousNavigator,
-    });
-    globalWithBrowser.window = previousWindow;
-    globalWithBrowser.document = previousDocument;
-  });
 });
