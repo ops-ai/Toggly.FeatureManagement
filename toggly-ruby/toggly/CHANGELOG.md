@@ -9,13 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Server-evaluated feature variants (dual-rail, matching the Python/Go SDK
-  contract). Set `enable_variants: true` on `Config` to additionally fetch
-  `evaluated-variants-signed/{app_key}/{environment}` alongside the existing
-  `definitions` / `definitions-signed` pipeline that still drives `enabled?`
-  when variants are off. New `Config` options: `enable_variants`,
-  `variant_identity`, `variant_groups`, `variant_claims`. New
-  `Client#get_variant` / `Client#get_variant_value` return the assigned
+- Server-evaluated feature variants (dual-rail). Set `enable_variants: true`
+  on `Config` to additionally fetch `evaluated-variants-signed/{app_key}/
+  {environment}` on its own rail alongside the existing `definitions` /
+  `definitions-signed` pipeline. `definitions` / `definitions-signed` remain
+  the sole source of truth for `enabled?` regardless of `enable_variants` —
+  evaluated variants are additive and only feed `get_variant` /
+  `get_variant_value`; they never override `enabled?`. New `Config` options:
+  `enable_variants`, `variant_identity`, `variant_groups`, `variant_claims`.
+  New `Client#get_variant` / `Client#get_variant_value` return the assigned
   variant name and `configuration_value`, or `nil` when unassigned or
   disabled. New `Client#set_variant_identity` updates the `userId` sent to
   `evaluated-variants-signed` and refreshes.

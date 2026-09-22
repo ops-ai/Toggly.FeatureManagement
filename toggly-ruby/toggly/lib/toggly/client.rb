@@ -83,15 +83,13 @@ module Toggly
     def enabled?(feature_key, context: nil, default: nil)
       key = feature_key.to_s
 
-      variant_entry, definition = @mutex.synchronize do
-        [(@variant_defs[key] if @config.enable_variants), @definitions[key]]
-      end
+      definition = @mutex.synchronize { @definitions[key] }
 
-      # Dual-rail: a server-evaluated variant assignment (when enabled) wins
-      # over local rule evaluation — the server already picked the outcome.
-      result = if variant_entry
-                 variant_entry.enabled
-               elsif definition.nil?
+      # Dual-rail: definitions/definitions-signed are the sole source of
+      # truth for enabled? — this holds even when config.enable_variants is
+      # true. Evaluated variants (@variant_defs) are an additive rail read
+      # only by get_variant / get_variant_value and never override this.
+      result = if definition.nil?
                  if !default.nil?
                    default
                  elsif @config.defaults.key?(key)
@@ -219,16 +217,15 @@ module Toggly
       end
 
       begin
-        if @config.enable_variants
-          refresh_variants(force: force)
-        else
-          refresh_definitions(force: force)
-        end
-      rescue StandardError => e
-        log_error("Failed to refresh definitions: #{e.message}")
-        # Network error / timeout keeping last-good revision (incl. empty) — hit.
-        record_definition_cache_hit if definitions_cached?
-        false
+        # Dual-rail: definitions/definitions-signed are always refreshed —
+        # the sole source of truth for enabled?. When config.enable_variants
+        # is true, evaluated-variants-signed is ALSO fetched on its own rail,
+        # additive only for get_variant / get_variant_value. A failure on
+        # either rail must never affect the other.
+        definitions_updated = refresh_definitions_rail(force: force)
+        variants_updated = @config.enable_variants ? refresh_variants_rail(force: force) : false
+
+        definitions_updated || variants_updated
       ensure
         drain_pending = false
         @mutex.synchronize do
@@ -338,6 +335,17 @@ module Toggly
     private
 
     # Definitions rail: `definitions` / `definitions-signed` → local rule eval.
+    # Always runs (dual-rail): the sole source of truth for `enabled?`,
+    # regardless of `config.enable_variants`.
+    def refresh_definitions_rail(force:)
+      refresh_definitions(force: force)
+    rescue StandardError => e
+      log_error("Failed to refresh definitions: #{e.message}")
+      # Network error / timeout keeping last-good revision (incl. empty) — hit.
+      record_definition_cache_hit if definitions_cached?
+      false
+    end
+
     def refresh_definitions(force:)
       result = @provider.fetch(force: force)
       record_refresh_cache_outcome(result.cache_outcome)
@@ -349,7 +357,7 @@ module Toggly
           @ready = true
         end
 
-        save_snapshot
+        save_definitions_snapshot
         log_info("Definitions refreshed (#{result.definitions.size} features)")
         true
       else
@@ -358,18 +366,28 @@ module Toggly
     end
 
     # Variants rail: `evaluated-variants-signed` → server-evaluated assignment.
+    # Additive only (used by get_variant / get_variant_value); runs only when
+    # `config.enable_variants` is true and never influences `enabled?`. A
+    # failure here must never affect the definitions rail above, and is not
+    # counted in definition cache-hit/miss telemetry (that metric is scoped
+    # to the definitions rail).
+    def refresh_variants_rail(force:)
+      refresh_variants(force: force)
+    rescue StandardError => e
+      log_error("Failed to refresh evaluated variants: #{e.message}")
+      false
+    end
+
     def refresh_variants(force:)
       result = @provider.fetch_variants(force: force)
-      record_refresh_cache_outcome(result.cache_outcome)
 
       if result.variants
         @mutex.synchronize do
           @variant_defs = result.variants
-          @definitions_loaded = true
           @ready = true
         end
 
-        save_snapshot
+        save_variants_snapshot
         log_info("Evaluated variants refreshed (#{result.variants.size} features)")
         true
       else

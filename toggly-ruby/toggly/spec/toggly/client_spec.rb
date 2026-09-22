@@ -249,21 +249,47 @@ RSpec.describe Toggly::Client do
     end
 
     before do
+      # Local definitions rail — remains the sole source of truth for
+      # enabled?, even with enable_variants: true.
+      stub_definitions_api(
+        app_key: app_key,
+        environment: environment,
+        features: [
+          { "featureKey" => "checkout-flow", "enabled" => true },
+          { "featureKey" => "disabled-experiment", "enabled" => false },
+          { "featureKey" => "no-variant-assigned", "enabled" => true },
+          { "featureKey" => "variant-disagrees-with-definition", "enabled" => true }
+        ]
+      )
+      # Additive evaluated-variants rail — only feeds get_variant /
+      # get_variant_value, never enabled?.
       stub_variants_api(
         app_key: app_key,
         environment: environment,
         defs: {
           "checkout-flow" => { "enabled" => true, "variant" => "treatment", "configurationValue" => { "cta" => "Buy now" } },
           "disabled-experiment" => { "enabled" => false, "variant" => "control" },
-          "no-variant-assigned" => { "enabled" => true }
+          "no-variant-assigned" => { "enabled" => true },
+          # Server-evaluated assignment disagrees with the local definition
+          # (enabled: false vs. the definition's enabled: true) — enabled?
+          # must still follow the definition.
+          "variant-disagrees-with-definition" => { "enabled" => false, "variant" => "treatment" }
         }
       )
     end
 
     describe "#enabled?" do
-      it "uses the server-evaluated enabled flag" do
+      it "evaluates from local definitions, not the evaluated-variant enabled flag" do
         expect(client.enabled?("checkout-flow")).to be true
         expect(client.enabled?("disabled-experiment")).to be false
+      end
+
+      it "is not overridden by a conflicting evaluated-variant assignment (regression)" do
+        # The evaluated-variants-signed rail says this feature is OFF for the
+        # assigned variant, but the definitions rail says it is ON.
+        # Definitions must remain authoritative for enabled? even when
+        # enable_variants is true.
+        expect(client.enabled?("variant-disagrees-with-definition")).to be true
       end
 
       it "falls through to defaults for unknown features" do

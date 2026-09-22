@@ -56,8 +56,10 @@ module Toggly
     attr_accessor :allowed_key_ids
 
     # @return [Boolean] When true, additionally fetch server-evaluated variants
-    #   from `evaluated-variants-signed` (dual-rail: `definitions` /
-    #   `definitions-signed` still drive `enabled?` when this is off).
+    #   from `evaluated-variants-signed` on their own rail (dual-rail).
+    #   `definitions` / `definitions-signed` remain the sole source of truth
+    #   for `enabled?` regardless of this setting — evaluated variants are
+    #   additive and only feed `Client#get_variant` / `#get_variant_value`.
     attr_accessor :enable_variants
 
     # @return [String, nil] `userId` sent to `evaluated-variants-signed` for targeting.
