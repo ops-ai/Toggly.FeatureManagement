@@ -11,6 +11,7 @@ try {
     '--reporter=lcovonly', `--reports-dir=${temporaryCoverage}`,
     '--include=scripts/build-compatible-package.mjs',
     process.execPath, '--test', 'scripts/build-compatible-package.spec.ts'], { stdio: 'inherit' });
+  execFileSync(process.execPath, ['--test', 'scripts/verify-host-cleanup.spec.ts'], { stdio: 'inherit' });
   const tooling = fs.readFileSync(path.join(temporaryCoverage, 'lcov.info'), 'utf8');
   assert.match(tooling, /SF:scripts\/build-compatible-package\.mjs/);
   assert.match(tooling, /LH:[1-9]\d*/);

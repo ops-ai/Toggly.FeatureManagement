@@ -9,7 +9,13 @@ const coreRoot = resolve(scriptsDir, '..', '..', 'core')
 const coreLink = join(packageRoot, 'node_modules', '@ops-ai', 'react-native-toggly-core')
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
-execFileSync(npm, ['ci', '--ignore-scripts'], { cwd: coreRoot, stdio: 'inherit' })
+const artifacts = JSON.parse(process.env.TOGGLY_SHARED_ARTIFACTS ?? '[]')
+if (!Array.isArray(artifacts) || artifacts.some(value => typeof value !== 'string')) {
+  throw new Error('TOGGLY_SHARED_ARTIFACTS must be a JSON string array')
+}
+execFileSync(npm, artifacts.length
+  ? ['install', '--no-save', '--package-lock=false', ...artifacts]
+  : ['ci', '--ignore-scripts'], { cwd: coreRoot, stdio: 'inherit' })
 execFileSync(npm, ['run', 'build'], { cwd: coreRoot, stdio: 'inherit' })
 
 if (!existsSync(join(coreRoot, 'dist', 'cjs', 'index.js'))) {

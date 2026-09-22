@@ -12,7 +12,7 @@ describe('ws-sync', () => {
   it('buildWebSocketUrl converts http(s) to ws(s) and appends sdk params', () => {
     const url = buildWebSocketUrl('https://api.toggly.io', 'app-key', 'rev-1');
     expect(url).toBe(
-      'wss://api.toggly.io/app-key/ws?rev=rev-1&sdk=react-native&sdkVersion=1.3.1'
+      'wss://api.toggly.io/app-key/ws?rev=rev-1&sdk=react-native&sdkVersion=1.8.0'
     );
   });
 

@@ -3,6 +3,7 @@ export {
   default as togglyService,
   Toggly,
   type TogglyOptions,
+  type TogglyContextUpdate,
   type TogglyService,
   type EvaluatedVariantDef,
   type VariantResult,

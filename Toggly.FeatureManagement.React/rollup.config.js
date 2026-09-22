@@ -6,7 +6,7 @@ import dts from "rollup-plugin-dts";
 export default [
   {
     input: "src/index.ts",
-    external: ["react", "react/jsx-runtime", "@ops-ai/toggly-signed-defs"],
+    external: ["react", "react/jsx-runtime", "@ops-ai/toggly-signed-defs", "@ops-ai/toggly-client-telemetry", "@ops-ai/toggly-client-telemetry/browser"],
     output: [
       {
         file: "dist/cjs/index.cjs",

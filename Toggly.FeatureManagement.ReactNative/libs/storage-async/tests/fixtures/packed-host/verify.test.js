@@ -21,3 +21,5 @@ test('uses the retained default AsyncStorage singleton API', async () => {
   expect(mockAsyncStorage.setItem).toHaveBeenCalledWith('@toggly:definitions', '{}')
   expect(mockAsyncStorage.removeItem).toHaveBeenCalledWith('@toggly:definitions')
 })
+
+require('./telemetry-consumer.cjs')(() => createAsyncStorageAdapter());

@@ -1,4 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
+import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
+import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
 import { FeatureRequirement, StorageKeys, TogglyConfig, VariantResult, EvaluatedVariantDef } from './models';
 import { HookExecutor } from './hooks';
 import type { Hook, TogglyEvaluationContext, EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
@@ -51,8 +53,20 @@ const canUseStorage = (() => {
   }
 })();
 
+type EvaluationSnapshot = {
+  flags: EvaluatedDefinitions;
+  variants: { [key: string]: EvaluatedVariantDef } | null;
+  localGates: LocalGate[];
+  localGateIndex: FlagGateIndex;
+  recordCheck?: (featureKey: string, variant: string) => void;
+};
+
 export class Toggly {
   private static _config: TogglyConfig;
+  private static _generation = 0;
+  private static _active = false;
+  private static _instanceId = '';
+  private static _requests = new Set<AbortController>();
   private static _contextMemory = new Map<string, string | null>();
   private static _contextMemoryOnly = new Set<string>();
   private static _refreshInterval: number | undefined;
@@ -62,8 +76,12 @@ export class Toggly {
   private static _localGateIndex: FlagGateIndex = new Map();
   private static _localGatesChangedListeners = new Set<() => void>();
   private static _inMemoryFlags: EvaluatedDefinitions | null = null;
+  private static _inMemoryVariants: { [key: string]: EvaluatedVariantDef } | null = null;
   private static _hasLoadedFlags = false;
   private static _lastError: string | undefined;
+  private static _telemetry: TelemetryReporter | undefined;
+  private static _retiredTelemetry: TelemetryReporter | undefined;
+  private static _detachTelemetry: (() => void) | undefined;
 
   static _ws: WebSocket | null = null;
   static _wsConnected: boolean = false;
@@ -88,7 +106,7 @@ export class Toggly {
     if (Toggly._cachedDefinitionsRevision && Toggly._cachedRevisionContext === Toggly._revisionCacheKey) {
       return Toggly._cachedDefinitionsRevision;
     }
-    if (!Toggly._persistCache || !Toggly._cachedFeatureFlags || (Toggly._config.enableVariants && !Toggly.variantsValue)) {
+    if (!Toggly._hasPersistedDefinitions) {
       return null;
     }
     try {
@@ -98,15 +116,26 @@ export class Toggly {
     }
   }
 
+  private static get _hasPersistedDefinitions(): boolean {
+    if (!Toggly._persistCache) return false;
+    const keys = [Toggly._flagsCacheKey];
+    if (Toggly._config.enableVariants) keys.push(Toggly._variantsCacheKey);
+    try {
+      return keys.every(key => {
+        const body = JSON.parse(localStorage.getItem(key) ?? 'null');
+        return body !== null && typeof body === 'object' && !Array.isArray(body);
+      });
+    } catch { return false; }
+  }
+
   private static cacheDefinitionsRevision(revision: string | null | undefined): void {
     if (!revision) {
       return;
     }
     Toggly._cachedDefinitionsRevision = revision;
     Toggly._cachedRevisionContext = Toggly._revisionCacheKey;
-    if (!Toggly._persistCache) {
-      return;
-    }
+    // Other bundles can evict persisted bodies while this instance retains memory.
+    if (!Toggly._hasPersistedDefinitions) return;
     try {
       localStorage.setItem(Toggly._revisionCacheKey, revision);
     } catch (error) {
@@ -118,7 +147,9 @@ export class Toggly {
     if (Toggly._refreshDebounceTimer) {
       clearTimeout(Toggly._refreshDebounceTimer);
     }
+    const generation = Toggly._generation;
     Toggly._refreshDebounceTimer = setTimeout(() => {
+      if (generation !== Toggly._generation) return;
       Toggly._refreshDebounceTimer = null;
       if (forceJwksRefresh && Toggly._config.verifySignatures) {
         // Force re-fetch by clearing revision so signing key rotation always pulls fresh defs.
@@ -193,6 +224,7 @@ export class Toggly {
   }
 
   private static get _contextCacheKey(): string {
+    if (Toggly._instanceId) return `i:${encodeURIComponent(Toggly._instanceId)}`;
     const context = Toggly.evaluationContext;
     // Preserve safe identity-only caches; structured context needs escaped boundaries.
     if (!context.groups && !context.claims && !context.identity?.includes('|')) {
@@ -210,7 +242,7 @@ export class Toggly {
     return StorageKeys.flagsCacheKey(
       Toggly._config?.appKey ?? '',
       Toggly._config?.environment ?? 'Production',
-      Toggly._contextCacheKey,
+      `v3:${Toggly._config?.enableVariants ? 'variants' : 'evaluated'}:${Toggly._contextCacheKey}`,
     );
   }
 
@@ -243,6 +275,15 @@ export class Toggly {
   }
 
   static init(config: TogglyConfig = {} as TogglyConfig): Promise<{ [key: string]: boolean }> {
+    const reusableTelemetry = Toggly._active && Toggly._telemetry &&
+      (Toggly._config.metricsBaseUrl ?? 'https://metrics.toggly.io') === (config.metricsBaseUrl ?? 'https://metrics.toggly.io') &&
+      (Toggly._config.telemetryFlushIntervalMs ?? 45000) === (config.telemetryFlushIntervalMs ?? 45000) &&
+      (Toggly._config.enableTelemetry !== false) === (config.enableTelemetry !== false) &&
+      Toggly._config.onError === config.onError;
+    Toggly.stopDefinitionResources();
+    if (!reusableTelemetry) Toggly.stopTelemetry(false);
+    Toggly._inMemoryJwks = null;
+    Toggly._pendingDefinitionsPin = null;
     Toggly._config = Object.assign({
       baseURI: 'https://definitions.toggly.io',
       verifySignatures: false,
@@ -259,6 +300,7 @@ export class Toggly {
       ? { ...Toggly._config.flagDefaults }
       : null;
     Toggly._hasLoadedFlags = false;
+    Toggly._inMemoryVariants = null;
     Toggly._lastError = undefined;
     Toggly._cachedDefinitionsRevision = null;
     Toggly._wsReconnectAttempt = 0;
@@ -281,10 +323,100 @@ export class Toggly {
       Toggly.setLocalGates(Toggly._config.localGates);
     }
 
+    Toggly._instanceId = typeof config.instanceId === 'string' ? config.instanceId.trim() : '';
+    Toggly._active = true;
     Toggly.startRefreshInterval();
     Toggly.startWebSocket();
+    Toggly.startTelemetry();
 
     return Toggly.refresh();
+  }
+
+  private static startTelemetry(): void {
+    if (Toggly._telemetry) {
+      Toggly.updateTelemetryContext();
+      return;
+    }
+    if (!Toggly._config.appKey || Toggly._config.enableTelemetry === false ||
+        typeof window === 'undefined' || typeof document === 'undefined') return;
+    const onError = Toggly._config.onError;
+    try {
+      const reporter = createTelemetryReporter({
+        appKey: Toggly._config.appKey,
+        environment: Toggly._config.environment,
+        instanceId: Toggly._instanceId,
+        identity: Toggly.identity,
+        enableTelemetry: Toggly._config.enableTelemetry,
+        metricsBaseUrl: Toggly._config.metricsBaseUrl,
+        telemetryFlushIntervalMs: Toggly._config.telemetryFlushIntervalMs,
+        onDiagnostic: code => {
+          try { onError?.(`Frontend telemetry: ${code}`); } catch { /* Keep evaluation independent. */ }
+        },
+      });
+      Toggly._telemetry = reporter;
+      Toggly._detachTelemetry = attachBrowserLifecycle(reporter);
+    } catch {
+      try { onError?.('Frontend telemetry: invalid-option'); } catch { /* Keep evaluation independent. */ }
+    }
+  }
+
+  private static updateTelemetryContext(): void {
+    const reporter = Toggly._telemetry;
+    if (!reporter) return;
+    reporter.setContext({
+      appKey: Toggly._config.appKey ?? '', environment: Toggly._config.environment,
+      instanceId: Toggly._instanceId, identity: Toggly.identity,
+    });
+    Toggly._detachTelemetry?.();
+    Toggly._detachTelemetry = attachBrowserLifecycle(reporter);
+  }
+
+  private static stopTelemetry(flush = true): void {
+    try { Toggly._detachTelemetry?.(); } catch { /* Best-effort teardown. */ }
+    Toggly._detachTelemetry = undefined;
+    // Repeated public cleanup is idempotent; replacement explicitly discards.
+    if (flush && !Toggly._telemetry) return;
+    // Cancel even an earlier final send before creating another transport owner.
+    Toggly._retiredTelemetry?.dispose({ flush: false });
+    Toggly._retiredTelemetry = undefined;
+    const reporter = Toggly._telemetry;
+    Toggly._telemetry = undefined;
+    if (!reporter) return;
+    reporter.dispose({ flush });
+    if (flush) {
+      Toggly._retiredTelemetry = reporter;
+      void reporter.flush().then(() => {
+        if (Toggly._retiredTelemetry === reporter) Toggly._retiredTelemetry = undefined;
+      });
+    }
+  }
+
+  private static captureEvaluation(flags?: EvaluatedDefinitions): EvaluationSnapshot {
+    const recordCheck = Toggly._telemetry?.captureCheck();
+    return {
+      recordCheck, flags: flags ?? Toggly.featureFlagsValue, variants: Toggly.variantsValue,
+      localGates: Toggly._localGates, localGateIndex: Toggly._localGateIndex,
+    };
+  }
+
+  static recordUsage(featureKey: string, variant = 'enabled'): void {
+    Toggly._telemetry?.recordUsage(featureKey, variant);
+  }
+
+  static recordView(featureKey: string, variant = 'enabled'): void {
+    Toggly._telemetry?.recordView(featureKey, variant);
+  }
+
+  static incrementCounter(metricKey: string, value = 1): void {
+    Toggly._telemetry?.incrementCounter(metricKey, value);
+  }
+
+  static setGauge(metricKey: string, value: number): void {
+    Toggly._telemetry?.setGauge(metricKey, value);
+  }
+
+  static flushTelemetry(): Promise<void> {
+    return Toggly._telemetry?.flush() ?? Promise.resolve();
   }
 
   static get featureFlagsValue(): EvaluatedDefinitions {
@@ -330,22 +462,28 @@ export class Toggly {
   }
 
   static set identity(v: string) {
+    const previous = Toggly._contextCacheKey;
     Toggly.writeContextValue(StorageKeys.identityKey, v);
-    const dataMapPromise = Toggly._hookExecutor.executeBeforeIdentify(v);
-    Promise.resolve(dataMapPromise).then(dataMap =>
-      Toggly._hookExecutor.executeAfterIdentify(v, dataMap)
-    ).catch(err => console.error('[Toggly] Hook execution error:', err));
+    if (!v) Toggly._instanceId = '';
+    Toggly.contextChanged(previous);
+    Toggly.executeIdentifyHooks(v);
   }
 
   static clearIdentity() {
     const currentIdentity = Toggly.identity;
+    const previous = Toggly._contextCacheKey;
     Toggly.writeContextValue(StorageKeys.identityKey, null);
-    if (currentIdentity) {
-      const dataMapPromise = Toggly._hookExecutor.executeBeforeIdentify('');
-      Promise.resolve(dataMapPromise).then(dataMap =>
-        Toggly._hookExecutor.executeAfterIdentify('', dataMap)
-      ).catch(err => console.error('[Toggly] Hook execution error:', err));
-    }
+    Toggly._instanceId = '';
+    Toggly.contextChanged(previous);
+    if (currentIdentity) Toggly.executeIdentifyHooks('');
+  }
+
+  private static executeIdentifyHooks(identity: string): void {
+    const generation = Toggly._generation;
+    const dataMapPromise = Toggly._hookExecutor.executeBeforeIdentify(identity);
+    Promise.resolve(dataMapPromise).then(dataMap =>
+      generation === Toggly._generation ? Toggly._hookExecutor.executeAfterIdentify(identity, dataMap) : undefined
+    ).catch(err => console.error('[Toggly] Hook execution error:', err));
   }
 
   static get groups(): string[] {
@@ -357,7 +495,9 @@ export class Toggly {
   }
 
   static set groups(values: string[]) {
+    const previous = Toggly._contextCacheKey;
     Toggly.writeContextValue(StorageKeys.groupsKey, JSON.stringify(values ?? []));
+    Toggly.contextChanged(previous);
   }
 
   static get claims(): Record<string, string> {
@@ -369,7 +509,35 @@ export class Toggly {
   }
 
   static set claims(values: Record<string, string>) {
+    const previous = Toggly._contextCacheKey;
     Toggly.writeContextValue(StorageKeys.claimsKey, JSON.stringify(values ?? {}));
+    Toggly.contextChanged(previous);
+  }
+
+  /** Host-minted capability, held in memory. Empty falls back to the current identity. */
+  static get instanceId(): string { return Toggly._instanceId; }
+
+  static set instanceId(value: string) {
+    const previous = Toggly._contextCacheKey;
+    Toggly._instanceId = typeof value === 'string' ? value.trim() : '';
+    Toggly.contextChanged(previous);
+  }
+
+  private static contextChanged(previous: string): void {
+    if (!Toggly._active || previous === Toggly._contextCacheKey) return;
+    Toggly._generation++;
+    Toggly._requests.forEach(controller => controller.abort());
+    Toggly._requests.clear();
+    Toggly._inMemoryFlags = null;
+    Toggly._inMemoryVariants = null;
+    Toggly._hasLoadedFlags = false;
+    Toggly._cachedDefinitionsRevision = null;
+    Toggly._cachedRevisionContext = null;
+    Toggly._pendingDefinitionsPin = null;
+    Toggly.stopWebSocket();
+    Toggly.startWebSocket();
+    Toggly.startRefreshInterval();
+    Toggly.updateTelemetryContext();
   }
 
   static get evaluationContext(): TogglyEvaluationContext {
@@ -384,54 +552,58 @@ export class Toggly {
   }
 
   static setContext(context: TogglyEvaluationContext): Promise<{ [key: string]: boolean }> {
+    const previous = Toggly._contextCacheKey;
+    const currentIdentity = Toggly.identity;
+    // Apply the complete targeting snapshot before invalidating requests and transports.
     if (context.identity !== undefined) {
-      if (context.identity) {
-        Toggly.identity = context.identity;
-      } else {
-        Toggly.clearIdentity();
-      }
+      Toggly.writeContextValue(StorageKeys.identityKey, context.identity || null);
+      if (!context.identity) Toggly._instanceId = '';
     }
     if (context.groups !== undefined) {
-      Toggly.groups = context.groups;
+      Toggly.writeContextValue(StorageKeys.groupsKey, JSON.stringify(context.groups ?? []));
     }
     if (context.claims !== undefined) {
-      Toggly.claims = context.claims;
+      Toggly.writeContextValue(StorageKeys.claimsKey, JSON.stringify(context.claims ?? {}));
     }
-    Toggly._inMemoryFlags = null;
-    Toggly._hasLoadedFlags = false;
+    Toggly.contextChanged(previous);
+    if (context.identity !== undefined && (context.identity || currentIdentity)) {
+      Toggly.executeIdentifyHooks(context.identity || '');
+    }
     return Toggly.refresh();
   }
 
   static clearContext(): Promise<{ [key: string]: boolean }> {
-    Toggly.clearIdentity();
-    Toggly.groups = [];
-    Toggly.claims = {};
-    Toggly._inMemoryFlags = null;
-    Toggly._hasLoadedFlags = false;
-    return Toggly.refresh();
+    return Toggly.setContext({ identity: '', groups: [], claims: {} });
   }
 
   private static buildEvaluatedUrl(mode: 'evaluated' | 'variants'): string {
     const path = mode === 'variants' ? 'evaluated-variants-signed' : 'evaluated-signed';
-    const url = new URL(
-      `${Toggly._config.baseURI}/${path}/${Toggly._config.appKey}/${Toggly._config.environment}`
-    );
-    appendEvaluationContext(url, Toggly.evaluationContext, mode);
+    const url = new URL(Toggly._config.baseURI);
+    url.pathname = `${url.pathname.replace(/\/$/, '')}/${path}/${Toggly._config.appKey}/${Toggly._config.environment}`;
+    url.searchParams.delete('i');
+    if (Toggly._instanceId) {
+      for (const key of Array.from(url.searchParams.keys())) {
+        if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) url.searchParams.delete(key);
+      }
+      url.searchParams.set('i', Toggly._instanceId);
+    }
+    else appendEvaluationContext(url, Toggly.evaluationContext, mode);
     return url.toString();
   }
 
-  private static async fetchJwks(forceRefresh = false): Promise<JwkSet> {
+  private static async fetchJwks(forceRefresh = false, generation = Toggly._generation, signal?: AbortSignal): Promise<JwkSet> {
     if (!forceRefresh && Toggly._inMemoryJwks) {
       return Toggly._inMemoryJwks;
     }
     const response = await fetch(`${Toggly._config.baseURI}/.well-known/jwks`, {
       headers: Toggly.buildFetchHeaders(),
+      signal,
     });
     if (!response.ok) {
       throw new Error(`Failed to fetch JWKs: ${response.status} ${response.statusText}`);
     }
     const jwks = (await response.json()) as JwkSet;
-    Toggly._inMemoryJwks = jwks;
+    if (generation === Toggly._generation) Toggly._inMemoryJwks = jwks;
     return jwks;
   }
 
@@ -447,15 +619,16 @@ export class Toggly {
    * Parse evaluated-signed body. When verifySignatures is enabled, verify ES256
    * against the exact raw defs JSON (Web Crypto double-hash), matching Go/Node.
    */
-  private static async parseEvaluatedSignedBody(bodyText: string): Promise<{
+  private static async parseEvaluatedSignedBody(bodyText: string, generation = Toggly._generation, signal?: AbortSignal): Promise<{
     defs: unknown;
   }> {
-    if (!Toggly._config.verifySignatures) {
+    const config = Toggly._config;
+    if (!config.verifySignatures) {
       const payload = JSON.parse(bodyText) as { defs?: unknown };
       return { defs: payload?.defs ?? payload };
     }
     const { envelope, defsRaw } = parseSignedEnvelope(bodyText);
-    const jwks = await Toggly.fetchJwks();
+    const jwks = await Toggly.fetchJwks(false, generation, signal);
     await verifySignedDefinitions(
       defsRaw,
       {
@@ -464,8 +637,8 @@ export class Toggly {
         kid: envelope.kid,
       },
       jwks,
-      Toggly._config.allowedKeyIds,
-      { maxSignatureAgeSeconds: Toggly._config.maxSignatureAgeSeconds }
+      config.allowedKeyIds,
+      { maxSignatureAgeSeconds: config.maxSignatureAgeSeconds }
     );
     return { defs: parseDefinitionsFromRaw(defsRaw) };
   }
@@ -501,6 +674,10 @@ export class Toggly {
 
   static clearFeatureFlagsCache() {
     Toggly._inMemoryFlags = null;
+    Toggly._inMemoryVariants = null;
+    Toggly._hasLoadedFlags = false;
+    Toggly._cachedDefinitionsRevision = null;
+    Toggly._cachedRevisionContext = null;
     if (!canUseStorage) return;
     try {
       const flagsKey = Toggly._flagsCacheKey;
@@ -516,12 +693,14 @@ export class Toggly {
 
   static get variantsValue(): { [key: string]: EvaluatedVariantDef } | null {
     if (!Toggly._config?.enableVariants) return null;
+    if (Toggly._inMemoryVariants) return Toggly._inMemoryVariants;
     if (Toggly._persistCache) {
       try {
         const raw = localStorage.getItem(Toggly._variantsCacheKey);
         const parsed = JSON.parse(raw ?? 'null') as { [key: string]: EvaluatedVariantDef } | null;
         if (raw != null && parsed != null) {
           Toggly._touchCacheKey(Toggly._variantsCacheKey);
+          Toggly._inMemoryVariants = parsed;
         }
         return parsed;
       } catch { return null; }
@@ -530,6 +709,7 @@ export class Toggly {
   }
 
   static cacheVariants(variants: { [key: string]: EvaluatedVariantDef }) {
+    Toggly._inMemoryVariants = variants;
     if (!Toggly._persistCache) return;
     try {
       const key = Toggly._variantsCacheKey;
@@ -592,6 +772,15 @@ export class Toggly {
       for (const key of toEvict) {
         try {
           localStorage.removeItem(key);
+          // Revision slots follow scoped flags; a variant body may be evicted first.
+          const flagsKey = key.startsWith('toggly:flags:') ? key : Object.keys(index.entries).find(candidate =>
+            candidate.startsWith('toggly:flags:') &&
+            candidate.replace(/^toggly:flags:(.*?):v3:variants:/, 'toggly:variants:$1:') === key,
+          );
+          const revisionKey = flagsKey?.replace(
+            /^toggly:flags:(.*?):v3:(variants|evaluated):/, 'toggly:revision:$1:v2:$2:',
+          );
+          if (revisionKey && revisionKey !== flagsKey) localStorage.removeItem(revisionKey);
         } catch {
           /* ignore per-key removal failures */
         }
@@ -620,11 +809,11 @@ export class Toggly {
    * Returns null if no variant is assigned or variants are not enabled.
    */
   static getVariant(featureKey: string): VariantResult | null {
-    const variants = Toggly.variantsValue;
-    if (!variants) return null;
-    const entry = variants[featureKey];
+    const evaluation = Toggly.captureEvaluation();
+    const entry = evaluation.variants?.[featureKey];
+    const enabled = Toggly._getEffectiveFlagValue(evaluation.flags, featureKey, undefined, evaluation);
     if (!entry || !entry.variant) return null;
-    if (!Toggly._isEffectiveFlagEnabled(featureKey, entry.enabled === true)) {
+    if (!enabled || entry.enabled !== true) {
       return null;
     }
     return {
@@ -647,74 +836,98 @@ export class Toggly {
       return Toggly.fetchFeatureFlagsWithVariants();
     }
 
+    const generation = Toggly._generation;
+    const fallback = toBooleanDefinitions(Toggly._getFallbackFlags());
+    const controller = new AbortController();
+    Toggly._requests.add(controller);
     return new Promise((resolve) => {
       const { url, headers } = Toggly.consumePendingDefinitionsRequest('evaluated');
+      let acceptedResponse: Response;
 
       // Wrap the fetch invocation in a resolved Promise so that any synchronous
       // failure (e.g. a non-conforming fetch implementation returning undefined)
       // is funneled through the same .catch handler as a real network error.
       Promise.resolve()
-        .then(() => fetch(url, { headers }))
+        .then(() => generation === Toggly._generation ? fetch(url, { headers, signal: controller.signal }) : null)
         .then((response) => {
-          Toggly.applyFetchRevision(response);
+          if (generation !== Toggly._generation) { resolve(fallback); return null; }
           if (response.status === 304) {
+            Toggly.applyFetchRevision(response);
             const flags = Toggly._getFallbackFlags();
+            Toggly._inMemoryFlags = flags;
+            Toggly._hasLoadedFlags = true;
             resolve(toBooleanDefinitions(flags));
             return null;
           }
           if (!response.ok) {
             throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`);
           }
+          acceptedResponse = response;
           return Toggly.readResponseBody(response);
         })
         .then(async (bodyText) => {
+          if (generation !== Toggly._generation) { resolve(fallback); return; }
           if (!bodyText) {
             const flags = Toggly._getFallbackFlags();
             resolve(toBooleanDefinitions(flags));
             return;
           }
-          const { defs } = await Toggly.parseEvaluatedSignedBody(bodyText);
+          const { defs } = await Toggly.parseEvaluatedSignedBody(bodyText, generation, controller.signal);
+          if (generation !== Toggly._generation) { resolve(fallback); return; }
           const flags = (defs && typeof defs === 'object' ? defs : {}) as EvaluatedDefinitions;
           Toggly.cacheFeatureFlags(flags);
+          Toggly.applyFetchRevision(acceptedResponse);
           resolve(toBooleanDefinitions(flags));
 
           if (Toggly._config.isDebug) { console.log(`Toggly.fetchFeatureFlags - ${JSON.stringify(flags)}`); }
         })
         .catch((error) => {
+          if (generation !== Toggly._generation) { resolve(fallback); return; }
           Toggly._reportError('Error fetching feature flags', error);
           var flags = Toggly._getFallbackFlags();
           resolve(toBooleanDefinitions(flags));
 
           if (Toggly._config.isDebug) { console.log(`Toggly.loadedFromCache - ${JSON.stringify(flags)}`); }
-        });
+        }).finally(() => Toggly._requests.delete(controller));
     });
   }
 
   private static fetchFeatureFlagsWithVariants(): Promise<{ [key: string]: boolean }> {
+    const generation = Toggly._generation;
+    const fallback = toBooleanDefinitions(Toggly._getFallbackFlags());
+    const controller = new AbortController();
+    Toggly._requests.add(controller);
     return new Promise((resolve) => {
       const { url, headers } = Toggly.consumePendingDefinitionsRequest('variants');
+      let acceptedResponse: Response;
 
       Promise.resolve()
-        .then(() => fetch(url, { headers }))
+        .then(() => generation === Toggly._generation ? fetch(url, { headers, signal: controller.signal }) : null)
         .then((response) => {
-          Toggly.applyFetchRevision(response);
+          if (generation !== Toggly._generation) { resolve(fallback); return null; }
           if (response.status === 304) {
+            Toggly.applyFetchRevision(response);
             const flags = Toggly._getFallbackFlags();
+            Toggly._inMemoryFlags = flags;
+            Toggly._hasLoadedFlags = true;
             resolve(toBooleanDefinitions(flags));
             return null;
           }
           if (!response.ok) {
             throw new Error(`Failed to fetch feature flags: ${response.status} ${response.statusText}`);
           }
+          acceptedResponse = response;
           return Toggly.readResponseBody(response);
         })
         .then(async (bodyText) => {
+          if (generation !== Toggly._generation) { resolve(fallback); return; }
           if (!bodyText) {
             const flags = Toggly._getFallbackFlags();
             resolve(toBooleanDefinitions(flags));
             return;
           }
-          const { defs: rawDefs } = await Toggly.parseEvaluatedSignedBody(bodyText);
+          const { defs: rawDefs } = await Toggly.parseEvaluatedSignedBody(bodyText, generation, controller.signal);
+          if (generation !== Toggly._generation) { resolve(fallback); return; }
           const defs: { [key: string]: EvaluatedVariantDef } =
             rawDefs && typeof rawDefs === 'object' && !Array.isArray(rawDefs)
               ? (rawDefs as { [key: string]: EvaluatedVariantDef })
@@ -726,21 +939,24 @@ export class Toggly {
             boolFlags[key] = entry.enabled;
           }
           Toggly.cacheFeatureFlags(boolFlags);
+          Toggly.applyFetchRevision(acceptedResponse);
           resolve(boolFlags);
 
           if (Toggly._config.isDebug) { console.log(`Toggly.fetchFeatureFlagsWithVariants - ${JSON.stringify(defs)}`); }
         })
         .catch((error) => {
+          if (generation !== Toggly._generation) { resolve(fallback); return; }
           Toggly._reportError('Error fetching feature flags', error);
           const flags = Toggly._getFallbackFlags();
           resolve(toBooleanDefinitions(flags));
 
           if (Toggly._config.isDebug) { console.log(`Toggly.loadedFromCache - ${JSON.stringify(flags)}`); }
-        });
+        }).finally(() => Toggly._requests.delete(controller));
     });
   }
 
   static refresh(): Promise<{ [key: string]: boolean }> {
+    const generation = Toggly._generation;
     if (Toggly._config.isDebug) { console.log('Toggly.refresh'); }
 
     if (!Toggly._config.appKey) {
@@ -757,6 +973,7 @@ export class Toggly {
     }
 
     return Toggly.fetchFeatureFlags().then(flags => {
+      if (generation !== Toggly._generation) return flags;
       Promise.resolve(Toggly._hookExecutor.executeAfterRefresh(flags))
         .catch(err => console.error('[Toggly] Hook execution error:', err));
       return flags;
@@ -767,20 +984,15 @@ export class Toggly {
     flags: EvaluatedDefinitions,
     flagKey: string,
     entityContext?: TogglyEntityContext | null,
+    evaluation = Toggly.captureEvaluation(flags),
   ): boolean {
+    const assigned = evaluation.variants?.[flagKey];
     const remote = resolveEvaluatedDefinition(flags[flagKey], entityContext);
-    return applyLocalGate(remote, flagKey, Toggly._localGates, Toggly._localGateIndex);
-  }
-
-  private static _isEffectiveFlagEnabled(
-    flagKey: string,
-    remote: boolean,
-    entityContext?: TogglyEntityContext | null,
-  ): boolean {
-    const resolved = entityContext
-      ? resolveEvaluatedDefinition(Toggly.featureFlagsValue[flagKey], entityContext)
-      : remote;
-    return applyLocalGate(resolved, flagKey, Toggly._localGates, Toggly._localGateIndex);
+    const enabled = applyLocalGate(remote, flagKey, evaluation.localGates, evaluation.localGateIndex);
+    try {
+      evaluation.recordCheck?.(flagKey, (enabled && assigned?.enabled === true && assigned.variant) || (enabled ? 'enabled' : 'disabled'));
+    } catch { /* Telemetry must never change feature evaluation. */ }
+    return enabled;
   }
 
   private static _evaluateFeatureGate(
@@ -789,6 +1001,7 @@ export class Toggly {
     requirement: FeatureRequirement = FeatureRequirement.all,
     negate: boolean = false,
     entityContext?: TogglyEntityContext | null,
+    evaluation = Toggly.captureEvaluation(flags),
   ) {
     if (featureGate.length > 0 && Object.keys(flags).length === 0) {
       return negate;
@@ -799,12 +1012,12 @@ export class Toggly {
     if (requirement === FeatureRequirement.any) {
       isEnabled = featureGate.reduce((isEnabled, featureKey) => {
         return isEnabled ||
-          Toggly._getEffectiveFlagValue(flags, featureKey, entityContext);
+          Toggly._getEffectiveFlagValue(flags, featureKey, entityContext, evaluation);
       }, false);
     } else {
       isEnabled = featureGate.reduce((isEnabled, featureKey) => {
         return isEnabled &&
-          Toggly._getEffectiveFlagValue(flags, featureKey, entityContext);
+          Toggly._getEffectiveFlagValue(flags, featureKey, entityContext, evaluation);
       }, true);
     }
 
@@ -822,16 +1035,18 @@ export class Toggly {
     context?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
   ): boolean {
+    const generation = Toggly._generation;
+    const evaluation = Toggly.captureEvaluation();
     const entityContext = normalizeEntityContext(context, kind);
     if (featureGate.length === 0) {
-      return Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, featureGate, requirement, negate, entityContext);
+      return Toggly._evaluateFeatureGate(evaluation.flags, featureGate, requirement, negate, entityContext, evaluation);
     }
     
     const firstKey = featureGate[0];
     const dataMapPromise = Toggly._hookExecutor.executeBeforeEvaluation(firstKey);
-    const result = Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, featureGate, requirement, negate, entityContext);
+    const result = Toggly._evaluateFeatureGate(evaluation.flags, featureGate, requirement, negate, entityContext, evaluation);
     Promise.resolve(dataMapPromise).then(dataMap =>
-      Toggly._hookExecutor.executeAfterEvaluation(firstKey, dataMap, result)
+      generation === Toggly._generation ? Toggly._hookExecutor.executeAfterEvaluation(firstKey, dataMap, result) : undefined
     ).catch(err => console.error('[Toggly] Hook execution error:', err));
     
     return result;
@@ -842,11 +1057,13 @@ export class Toggly {
     context?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
   ): boolean {
+    const generation = Toggly._generation;
+    const evaluation = Toggly.captureEvaluation();
     const entityContext = normalizeEntityContext(context, kind);
     const dataMapPromise = Toggly._hookExecutor.executeBeforeEvaluation(featureKey);
-    const result = Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, [featureKey], FeatureRequirement.all, false, entityContext);
+    const result = Toggly._evaluateFeatureGate(evaluation.flags, [featureKey], FeatureRequirement.all, false, entityContext, evaluation);
     Promise.resolve(dataMapPromise).then(dataMap => 
-      Toggly._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)
+      generation === Toggly._generation ? Toggly._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result) : undefined
     ).catch(err => console.error('[Toggly] Hook execution error:', err));
     return result;
   }
@@ -856,10 +1073,12 @@ export class Toggly {
   }
 
   static isFeatureOff(featureKey: string): boolean {
+    const generation = Toggly._generation;
+    const evaluation = Toggly.captureEvaluation();
     const dataMapPromise = Toggly._hookExecutor.executeBeforeEvaluation(featureKey);
-    const result = Toggly._evaluateFeatureGate(Toggly.featureFlagsValue, [featureKey], FeatureRequirement.all, true);
+    const result = Toggly._evaluateFeatureGate(evaluation.flags, [featureKey], FeatureRequirement.all, true, undefined, evaluation);
     Promise.resolve(dataMapPromise).then(dataMap => 
-      Toggly._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)
+      generation === Toggly._generation ? Toggly._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result) : undefined
     ).catch(err => console.error('[Toggly] Hook execution error:', err));
     return result;
   }
@@ -911,6 +1130,7 @@ export class Toggly {
   }
 
   static startWebSocket() {
+    if (typeof window === 'undefined' || typeof WebSocket === 'undefined') return;
     if (!Toggly._config.appKey) {
       return;
     }
@@ -929,9 +1149,11 @@ export class Toggly {
 
     if (Toggly._config.isDebug) { console.log(`[Toggly] WebSocket connecting to ${wsUrl}`); }
 
+    const generation = Toggly._generation;
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
+      if (generation !== Toggly._generation || Toggly._ws !== ws) return;
       Toggly._wsConnected = true;
       Toggly._wsReconnectAttempt = 0;
       Toggly._lastFallbackRefresh = Date.now();
@@ -939,6 +1161,7 @@ export class Toggly {
     };
 
     ws.onmessage = (event) => {
+      if (generation !== Toggly._generation || Toggly._ws !== ws) return;
       const data = event.data;
 
       if (typeof data === 'string') {
@@ -969,6 +1192,7 @@ export class Toggly {
     };
 
     ws.onclose = () => {
+      if (generation !== Toggly._generation || Toggly._ws !== ws) return;
       Toggly._wsConnected = false;
       Toggly._ws = null;
       const delay = getNextReconnectDelayMs(Toggly._wsReconnectAttempt);
@@ -976,11 +1200,13 @@ export class Toggly {
       if (Toggly._config.isDebug) { console.log(`[Toggly] WebSocket closed, reconnecting in ${delay}ms`); }
 
       Toggly._wsReconnectTimer = setTimeout(() => {
+        if (generation !== Toggly._generation) return;
         Toggly.startWebSocket();
       }, delay);
     };
 
     ws.onerror = (error) => {
+      if (generation !== Toggly._generation || Toggly._ws !== ws) return;
       console.error('[Toggly] WebSocket error:', error);
     };
 
@@ -1010,17 +1236,29 @@ export class Toggly {
     Toggly._wsConnected = false;
   }
 
-  static cancelRefreshInterval() {
-    window.clearInterval(Toggly._refreshInterval);
+  private static stopDefinitionResources(): void {
+    Toggly._active = false;
+    Toggly._generation++;
+    Toggly._requests.forEach(controller => controller.abort());
+    Toggly._requests.clear();
+    if (typeof window !== 'undefined') window.clearInterval(Toggly._refreshInterval);
     Toggly._refreshInterval = undefined;
     Toggly.stopWebSocket();
   }
 
-  static startRefreshInterval() {
-    Toggly.cancelRefreshInterval();
+  static cancelRefreshInterval() {
+    Toggly.stopDefinitionResources();
+    Toggly.stopTelemetry();
+  }
 
-    if (Toggly._config.appKey && Toggly._config.featureFlagsRefreshInterval > 0) {
+  static startRefreshInterval() {
+    if (typeof window !== 'undefined') window.clearInterval(Toggly._refreshInterval);
+    Toggly._refreshInterval = undefined;
+    const generation = Toggly._generation;
+
+    if (typeof window !== 'undefined' && Toggly._config.appKey && Toggly._config.featureFlagsRefreshInterval > 0) {
       Toggly._refreshInterval = window.setInterval(() => {
+        if (generation !== Toggly._generation) return;
         if (Toggly._wsConnected && (Date.now() - Toggly._lastFallbackRefresh) < Toggly._fallbackRefreshInterval) {
           if (Toggly._config.isDebug) { console.log('[Toggly] Skipping interval refresh, WebSocket is connected'); }
           return;

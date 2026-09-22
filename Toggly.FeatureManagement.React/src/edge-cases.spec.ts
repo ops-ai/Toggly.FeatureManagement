@@ -25,7 +25,7 @@ describe('Edge Cases & Error Handling', () => {
       });
 
       const service = new Toggly({
-        appKey: 'bad-key',
+        enableTelemetry: false, appKey: 'bad-key',
         featureDefaults: { F1: true },
       });
 
@@ -37,7 +37,7 @@ describe('Edge Cases & Error Handling', () => {
       mockFetch.mockRejectedValue(new TypeError('Failed to fetch'));
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         featureDefaults: { F1: true },
       });
 
@@ -51,7 +51,7 @@ describe('Edge Cases & Error Handling', () => {
       );
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         featureDefaults: { F1: true },
       });
 
@@ -68,7 +68,7 @@ describe('Edge Cases & Error Handling', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         featureDefaults: { F1: true },
       });
 
@@ -86,7 +86,7 @@ describe('Edge Cases & Error Handling', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         featureDefaults: { F1: true },
       });
 
@@ -105,7 +105,7 @@ describe('Edge Cases & Error Handling', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         featureDefaults: { F1: true },
       });
 
@@ -219,7 +219,7 @@ describe('Edge Cases & Error Handling', () => {
 
     it('should handle appKey without environment', () => {
       mockFetch.mockRejectedValue(new Error('no net'));
-      const service = new Toggly({ appKey: 'test-key' });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'test-key' });
       expect(service).toBeTruthy();
     });
 
@@ -250,7 +250,7 @@ describe('Edge Cases & Error Handling', () => {
       mockFetch.mockReturnValue(pending);
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         featureDefaults: { F1: true },
       });
 

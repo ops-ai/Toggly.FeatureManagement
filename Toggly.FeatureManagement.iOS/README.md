@@ -94,9 +94,11 @@ Add the following to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/ops-ai/Toggly.FeatureManagement.git", from: "1.0.0")
+    .package(url: "https://github.com/ops-ai/Toggly.FeatureManagement.git", revision: "ios-sdk-v1.5.2")
 ]
 ```
+
+Release tags use the `ios-sdk-v` prefix. Pin the exact release with `revision:`; a semantic-version `from:` requirement does not select these prefixed tags. Version 1.5.2 adds the root manifest required for Git installation. Existing earlier tags retain their original layout.
 
 Then add the products you need:
 
@@ -115,7 +117,8 @@ Then add the products you need:
 
 1. File → Add Package Dependencies
 2. Enter: `https://github.com/ops-ai/Toggly.FeatureManagement.git`
-3. Select the packages you need
+3. Choose **Commit** and enter the full commit SHA referenced by the release tag `ios-sdk-v1.5.2`.
+4. Select the products you need.
 
 ## Packages
 

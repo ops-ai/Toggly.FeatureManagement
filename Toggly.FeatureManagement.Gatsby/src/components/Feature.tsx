@@ -7,7 +7,8 @@
 
 import React, { useMemo } from 'react';
 import { useStore } from '@nanostores/react';
-import { $flag, $isReady } from '../client/store.js';
+import { useConsumerStore } from '../hooks/useConsumerStore.js';
+import { createConsumerFlag, $isReady } from '../client/store.js';
 import type { FeatureProps } from '../types/index.js';
 
 /**
@@ -47,10 +48,10 @@ export function Feature({
 }: FeatureProps) {
   const isReady = useStore($isReady);
   const flagAtom = useMemo(
-    () => $flag(flag, false, context, contextKind),
+    () => createConsumerFlag(flag, false, context, contextKind),
     [flag, context, contextKind],
   );
-  const isOn = useStore(flagAtom);
+  const isOn = useConsumerStore(flagAtom);
   const isEnabled = negate ? !isOn : isOn;
 
   if (!isReady) {

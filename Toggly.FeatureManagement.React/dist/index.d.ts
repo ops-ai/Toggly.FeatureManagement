@@ -2,7 +2,7 @@
 import * as React from 'react';
 import React__default, { ReactNode } from 'react';
 import * as _ops_ai_toggly_hooks_types from '@ops-ai/toggly-hooks-types';
-import { EvaluatedDefinitions, Hook, TogglyEntityContext, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
+import { TogglyEvaluationContext, EvaluatedDefinitions, Hook, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 export { EvaluatedDefinitions, TogglyEntityContext, isEntityGate, mapEntityContext, normalizeEntityContext, registerContext } from '@ops-ai/toggly-hooks-types';
 import { LocalGate } from '@ops-ai/toggly-local-gates';
 
@@ -22,7 +22,25 @@ interface EvaluatedVariantDef {
     configurationValue?: unknown;
 }
 
+/** Partial targeting update; an explicit identity update clears an omitted token. */
+interface TogglyContextUpdate extends TogglyEvaluationContext {
+    instanceId?: string;
+}
+interface EvaluationSnapshot {
+    owner: Toggly;
+    features: EvaluatedDefinitions | null;
+    variants: {
+        [key: string]: EvaluatedVariantDef;
+    } | null;
+    recordCheck?: (featureKey: string, variant: string) => void;
+}
 interface TogglyOptions {
+    /** Aggregate browser telemetry defaults on with an application key. */
+    enableTelemetry?: boolean;
+    /** Independent HTTP(S) collector base URL. Default: https://metrics.toggly.io. */
+    metricsBaseUrl?: string;
+    /** Flush interval from 30000 to 60000 ms, jittered +/-20%. Default: 45000. */
+    telemetryFlushIntervalMs?: number;
     baseURI?: string;
     verifySignatures?: boolean;
     /**
@@ -38,6 +56,8 @@ interface TogglyOptions {
     appKey?: string;
     environment?: string;
     identity?: string;
+    /** Opaque instance capability supplied by your trusted backend. */
+    instanceId?: string;
     groups?: string[];
     claims?: Record<string, string>;
     featureDefaults?: EvaluatedDefinitions;
@@ -74,11 +94,19 @@ interface TogglyService {
     isFeatureOff: (featureKey: string, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string) => Promise<boolean>;
     getVariant: (featureKey: string) => VariantResult | null;
     getVariantValue: (featureKey: string) => unknown | null;
+    /** @internal Silent projection for cached UI state or an already evaluated component gate. */
+    _getVariantSnapshot?: (featureKey: string) => VariantResult | null;
+    recordUsage: (featureKey: string, variant?: string) => void;
+    recordView: (featureKey: string, variant?: string) => void;
+    incrementCounter: (metricKey: string, value?: number) => void;
+    setGauge: (metricKey: string, value: number) => void;
+    flushTelemetry: () => Promise<void>;
+    dispose: () => void;
     subscribeFeaturesRefresh: (listener: () => void) => () => void;
     setLocalGates: (gates: LocalGate[]) => void;
     notifyLocalGatesChanged: () => void;
     subscribeLocalGatesChanged: (listener: () => void) => () => void;
-    setContext: (context: TogglyEvaluationContext) => Promise<void>;
+    setContext: (context: TogglyContextUpdate) => Promise<void>;
     registerContext: <T>(kind: string, mapper: (entity: T) => TogglyEntityContext) => void;
 }
 declare class Toggly implements TogglyService {
@@ -94,6 +122,11 @@ declare class Toggly implements TogglyService {
     private _lastError;
     private _groups;
     private _claims;
+    private _telemetry?;
+    private _detachTelemetry?;
+    private _generation;
+    private _disposed;
+    private readonly _isBrowser;
     _ws: WebSocket | null;
     _wsConnected: boolean;
     _wsReconnectTimer: any;
@@ -108,6 +141,7 @@ declare class Toggly implements TogglyService {
     get lastError(): string | undefined;
     private _reportError;
     constructor(config: TogglyOptions);
+    private _ensureTelemetry;
     private get _definitionsRevision();
     private _cacheDefinitionsRevision;
     private _scheduleDebouncedRefresh;
@@ -117,7 +151,9 @@ declare class Toggly implements TogglyService {
     private get _canPersist();
     private _getEvaluationContext;
     private _contextCacheKey;
-    setContext: (context: TogglyEvaluationContext) => Promise<void>;
+    private _bodyCacheKey;
+    private _revisionScope;
+    setContext: (context: TogglyContextUpdate) => Promise<void>;
     _loadFeatures: (forceRefresh?: boolean, options?: {
         strict?: boolean;
     }) => Promise<{
@@ -127,8 +163,9 @@ declare class Toggly implements TogglyService {
     _featuresLoaded: () => Promise<{
         [key: string]: boolean;
     } | null>;
+    private _captureEvaluation;
     private _getEffectiveFlagValue;
-    _evaluateFeatureGate: (gate: string[], requirement?: string, negate?: boolean, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string) => Promise<boolean>;
+    _evaluateFeatureGate: (gate: string[], requirement?: string, negate?: boolean, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string, snapshot?: EvaluationSnapshot) => Promise<boolean>;
     evaluateFeatureGate: (featureKeys: string[], requirement?: string, negate?: boolean, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string) => Promise<boolean>;
     isFeatureOn: (featureKey: string, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string) => Promise<boolean>;
     isFeatureOff: (featureKey: string, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string) => Promise<boolean>;
@@ -137,6 +174,8 @@ declare class Toggly implements TogglyService {
      * Current variant assignment for a feature (requires {@link TogglyOptions.enableVariants} and loaded data).
      */
     getVariant(featureKey: string): VariantResult | null;
+    /** @internal Silent projection for cached UI state or an already evaluated component gate. */
+    _getVariantSnapshot(featureKey: string): VariantResult | null;
     /**
      * Configuration payload for the assigned variant, if any.
      */
@@ -161,6 +200,15 @@ declare class Toggly implements TogglyService {
      * Clear current identity-scoped flags/variants localStorage entries and update the LRU index.
      */
     clearFeatureFlagsCache(): void;
+    /** Record explicit usage without evaluating a feature. */
+    recordUsage(featureKey: string, variant?: string): void;
+    /** Record a view without evaluating a feature. */
+    recordView(featureKey: string, variant?: string): void;
+    incrementCounter(metricKey: string, value?: number): void;
+    setGauge(metricKey: string, value: number): void;
+    flushTelemetry(): Promise<void>;
+    /** Synchronously release resources and attempt one final telemetry flush. */
+    dispose(): void;
     /**
      * Add a hook dynamically
      */
@@ -204,21 +252,25 @@ declare class Feature extends React__default.Component<FeatureProps, {
 }> {
     static contextType: React__default.Context<TogglyContext>;
     context: React__default.ContextType<typeof context>;
+    private subscribedService?;
+    private mounted;
+    private evaluation;
     private unsubscribeRefresh;
     private unsubscribeLocalGates;
     constructor(props: FeatureProps);
     private buildGate;
     private applyVariantFilter;
     private runGate;
+    private bindService;
     componentDidMount(): void;
     componentDidUpdate(prevProps: FeatureProps): void;
     componentWillUnmount(): void;
-    render(): string | number | boolean | React__default.ReactFragment | JSX.Element | null | undefined;
+    render(): string | number | boolean | Iterable<React__default.ReactNode> | React__default.JSX.Element | null | undefined;
 }
 
 declare function createTogglyProvider(config: TogglyOptions): Promise<({ children }: {
     children: ReactNode;
-}) => JSX.Element>;
+}) => React__default.JSX.Element>;
 
 /**
  * Subscribes to the current {@link VariantResult} for a feature when variants are enabled on the service.
@@ -249,4 +301,4 @@ declare function useFeatureFlag(featureKey: string, options?: UseFeatureFlagOpti
  */
 declare function useFeatureGate(featureKeys: string[], options?: UseFeatureGateOptions): UseFeatureFlagResult;
 
-export { Consumer, EvaluatedVariantDef, Feature, Provider, Toggly, TogglyContext, TogglyOptions, TogglyService, UseFeatureFlagOptions, UseFeatureFlagResult, UseFeatureGateOptions, VariantResult, context, createTogglyProvider, useFeatureFlag, useFeatureGate, useVariant };
+export { Consumer, EvaluatedVariantDef, Feature, Provider, Toggly, TogglyContext, TogglyContextUpdate, TogglyOptions, TogglyService, UseFeatureFlagOptions, UseFeatureFlagResult, UseFeatureGateOptions, VariantResult, context, createTogglyProvider, useFeatureFlag, useFeatureGate, useVariant };

@@ -7,7 +7,8 @@
 
 import React, { useMemo } from 'react';
 import { useStore } from '@nanostores/react';
-import { $gate, $isReady } from '../client/store.js';
+import { useConsumerStore } from '../hooks/useConsumerStore.js';
+import { createConsumerGate, $isReady } from '../client/store.js';
 import type { FeatureGateProps } from '../types/index.js';
 
 /**
@@ -60,10 +61,12 @@ export function FeatureGate({
   const isReady = useStore($isReady);
   const keysKey = flagKeys.join('\0');
   const gateAtom = useMemo(
-    () => $gate(flagKeys, requirement, negate, context, contextKind),
+    () => createConsumerGate(flagKeys, requirement, negate, context, contextKind),
+    // The joined key preserves both membership and short-circuit order.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [keysKey, requirement, negate, context, contextKind],
   );
-  const isEnabled = useStore(gateAtom);
+  const isEnabled = useConsumerStore(gateAtom);
 
   if (!isReady) {
     return <>{loading}</>;

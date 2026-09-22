@@ -1,17 +1,19 @@
+import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry'
+import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser'
 import type {
   CacheLruIndex,
   EvaluatedDefinitions,
   Hook,
   TogglyEntityContext,
   TogglyEvaluationContext,
-  TogglyServiceContextHost,
 } from '@ops-ai/toggly-hooks-types';
 import {
-  buildEvaluatedSignedUrl,
+  appendEvaluationContext,
   evaluationContextCacheKey,
   isCacheLruEnabled,
   evaluateStoredFeatureKeys,
   normalizeEntityContext,
+  normalizeEvaluationClaims,
   toBooleanDefinitions,
   parseCacheLruIndex,
   registerContext as registerEntityContext,
@@ -20,7 +22,6 @@ import {
   selectCacheLruKeysToEvict,
   serializeCacheLruIndex,
   touchCacheLruKey,
-  setBrowserSdkEvaluationContext,
 } from '@ops-ai/toggly-hooks-types';
 import {
   applyLocalGate,
@@ -52,7 +53,10 @@ export type { EvaluatedVariantDef, VariantResult } from './variant.types';
 export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 export { isEntityGate, mapEntityContext, normalizeEntityContext, registerContext } from '@ops-ai/toggly-hooks-types';
 
-const canUseStorage = typeof window !== 'undefined' && typeof window.localStorage !== 'undefined'
+const canUseStorage = (() => {
+  try { return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined' }
+  catch { return false }
+})()
 const CACHE_PREFIX = 'toggly:flags:'
 const VARIANTS_CACHE_PREFIX = 'toggly:variants:'
 const REVISION_CACHE_PREFIX = 'toggly:revision:'
@@ -68,8 +72,8 @@ function getVariantsCacheKey(appKey: string, environment: string, contextKey = '
   return `${VARIANTS_CACHE_PREFIX}${appKey}:${environment}${suffix}`
 }
 
-function getRevisionCacheKey(appKey: string, environment: string): string {
-  return `${REVISION_CACHE_PREFIX}${appKey}:${environment}`
+function getRevisionCacheKey(appKey: string, environment: string, scope = ''): string {
+  return `${REVISION_CACHE_PREFIX}${appKey}:${environment}${scope ? ':' + scope : ''}`
 }
 
 function isTrackedCacheKey(key: string): boolean {
@@ -114,6 +118,11 @@ function enforceMaxCacheKeys(protectKeys: string[], maxCacheKeys?: number | null
     for (const key of toEvict) {
       try {
         localStorage.removeItem(key)
+        // Revisions follow their response-mode bodies without consuming LRU slots.
+        const revisionKey = key.replace(
+          /^toggly:(?:flags|variants):(.*?):v3:(variants|evaluated):/, 'toggly:revision:$1:v2:$2:',
+        )
+        if (revisionKey !== key) localStorage.removeItem(revisionKey)
       } catch { /* ignore per-key removal failures */ }
     }
     index = removeCacheLruKeys(index, toEvict)
@@ -138,27 +147,30 @@ function clearCachedFlagsAndVariants(
 ): void {
   if (!canUseStorage) return
   try {
-    const flagsKey = getCacheKey(appKey, environment, contextKey)
-    const variantsKey = getVariantsCacheKey(appKey, environment, contextKey)
-    const revisionKey = getRevisionCacheKey(appKey, environment)
-    localStorage.removeItem(flagsKey)
-    localStorage.removeItem(variantsKey)
-    localStorage.removeItem(revisionKey)
-    removeCacheKeysFromLruIndex([flagsKey, variantsKey], maxCacheKeys)
+    const bodyScopes = [contextKey, `v3:evaluated:${contextKey}`, `v3:variants:${contextKey}`]
+    const bodyKeys = bodyScopes.flatMap(scope => [
+      getCacheKey(appKey, environment, scope), getVariantsCacheKey(appKey, environment, scope),
+    ])
+    bodyKeys.forEach(key => localStorage.removeItem(key))
+    localStorage.removeItem(getRevisionCacheKey(appKey, environment))
+    for (const mode of ['variants', 'evaluated']) {
+      localStorage.removeItem(getRevisionCacheKey(appKey, environment, `v2:${mode}:${contextKey}`))
+    }
+    removeCacheKeysFromLruIndex(bodyKeys, maxCacheKeys)
   } catch { /* ignore */ }
 }
 
-function readCachedRevision(appKey: string, environment: string): string | null {
+function readCachedRevision(appKey: string, environment: string, scope: string): string | null {
   if (!canUseStorage) return null
   try {
-    return localStorage.getItem(getRevisionCacheKey(appKey, environment))
+    return localStorage.getItem(getRevisionCacheKey(appKey, environment, scope))
   } catch { return null }
 }
 
-function writeCachedRevision(appKey: string, environment: string, revision: string): void {
+function writeCachedRevision(appKey: string, environment: string, revision: string, scope: string): void {
   if (!canUseStorage) return
   try {
-    localStorage.setItem(getRevisionCacheKey(appKey, environment), revision)
+    localStorage.setItem(getRevisionCacheKey(appKey, environment, scope), revision)
   } catch { /* storage full or unavailable */ }
 }
 
@@ -240,7 +252,25 @@ function writeCachedVariants(
   } catch { /* storage full or unavailable */ }
 }
 
+/** Partial targeting update; an explicit identity update clears an omitted token. */
+export interface TogglyContextUpdate extends TogglyEvaluationContext {
+  instanceId?: string
+}
+
+interface EvaluationSnapshot {
+  owner: Toggly
+  features: EvaluatedDefinitions | null
+  variants: { [key: string]: EvaluatedVariantDef } | null
+  recordCheck?: (featureKey: string, variant: string) => void
+}
+
 export interface TogglyOptions {
+  /** Aggregate browser telemetry defaults on with an application key. */
+  enableTelemetry?: boolean
+  /** Independent HTTP(S) collector base URL. Default: https://metrics.toggly.io. */
+  metricsBaseUrl?: string
+  /** Flush interval from 30000 to 60000 ms, jittered +/-20%. Default: 45000. */
+  telemetryFlushIntervalMs?: number
   baseURI?: string
   verifySignatures?: boolean
   /**
@@ -256,6 +286,8 @@ export interface TogglyOptions {
   appKey?: string
   environment?: string
   identity?: string
+  /** Opaque instance capability supplied by your trusted backend. */
+  instanceId?: string
   groups?: string[]
   claims?: Record<string, string>
   featureDefaults?: EvaluatedDefinitions
@@ -309,11 +341,19 @@ export interface TogglyService {
   ) => Promise<boolean>
   getVariant: (featureKey: string) => VariantResult | null
   getVariantValue: (featureKey: string) => unknown | null
+  /** @internal Silent projection for cached UI state or an already evaluated component gate. */
+  _getVariantSnapshot?: (featureKey: string) => VariantResult | null
+  recordUsage: (featureKey: string, variant?: string) => void
+  recordView: (featureKey: string, variant?: string) => void
+  incrementCounter: (metricKey: string, value?: number) => void
+  setGauge: (metricKey: string, value: number) => void
+  flushTelemetry: () => Promise<void>
+  dispose: () => void
   subscribeFeaturesRefresh: (listener: () => void) => () => void
   setLocalGates: (gates: LocalGate[]) => void
   notifyLocalGatesChanged: () => void
   subscribeLocalGatesChanged: (listener: () => void) => () => void
-  setContext: (context: TogglyEvaluationContext) => Promise<void>
+  setContext: (context: TogglyContextUpdate) => Promise<void>
   registerContext: <T>(kind: string, mapper: (entity: T) => TogglyEntityContext) => void
 }
 
@@ -335,6 +375,11 @@ export class Toggly implements TogglyService {
   private _lastError: string | undefined
   private _groups: string[] = []
   private _claims: Record<string, string> = {}
+  private _telemetry?: TelemetryReporter
+  private _detachTelemetry?: () => void
+  private _generation = 0
+  private _disposed = false
+  private readonly _isBrowser = typeof window !== 'undefined' && typeof document !== 'undefined'
 
   _ws: WebSocket | null = null
   _wsConnected: boolean = false
@@ -382,7 +427,8 @@ export class Toggly implements TogglyService {
       }
     }
 
-    this._config = Object.assign({}, this._config, config)
+    this._config = Object.assign({}, this._config, config, { instanceId: config.instanceId?.trim() || undefined })
+
 
     this.shouldShowFeatureDuringEvaluation = this._config.showFeatureDuringEvaluation!
     
@@ -402,11 +448,7 @@ export class Toggly implements TogglyService {
     if (this._features === null && this._canPersist && this._config.appKey) {
       const appKey = this._config.appKey
       const env = this._config.environment ?? 'Production'
-      const contextKey = evaluationContextCacheKey({
-        identity: this._config.identity,
-        groups: this._groups.length ? this._groups : undefined,
-        claims: Object.keys(this._claims).length ? this._claims : undefined,
-      })
+      const contextKey = this._bodyCacheKey()
       if (this._config.enableVariants) {
         const vCached = readCachedVariants(appKey, env, contextKey, this._config.maxCacheKeys)
         if (vCached) {
@@ -423,6 +465,22 @@ export class Toggly implements TogglyService {
     }
   }
 
+  private _ensureTelemetry(): TelemetryReporter | undefined {
+    if (!this._disposed && !this._telemetry && this._isBrowser && this._config.appKey && this._config.enableTelemetry !== false) {
+      this._telemetry = createTelemetryReporter({
+        appKey: this._config.appKey,
+        identity: this._config.identity,
+        instanceId: this._config.instanceId,
+        environment: this._config.environment,
+        metricsBaseUrl: this._config.metricsBaseUrl,
+        telemetryFlushIntervalMs: this._config.telemetryFlushIntervalMs,
+        onDiagnostic: diagnostic => this._reportError(`Toggly telemetry: ${diagnostic}`),
+      })
+      this._detachTelemetry = attachBrowserLifecycle(this._telemetry)
+    }
+    return this._telemetry
+  }
+
   private get _definitionsRevision(): string | null {
     if (this._cachedDefinitionsRevision) {
       return this._cachedDefinitionsRevision
@@ -430,7 +488,12 @@ export class Toggly implements TogglyService {
     if (!this._canPersist || !this._config.appKey) {
       return null
     }
-    return readCachedRevision(this._config.appKey, this._config.environment ?? 'Production')
+    const appKey = this._config.appKey
+    const env = this._config.environment ?? 'Production'
+    const scope = this._bodyCacheKey()
+    if (readCachedFlags(appKey, env, scope) === null ||
+      (this._config.enableVariants && readCachedVariants(appKey, env, scope) === null)) return null
+    return readCachedRevision(appKey, env, this._revisionScope())
   }
 
   private _cacheDefinitionsRevision(revision: string | null | undefined): void {
@@ -439,7 +502,13 @@ export class Toggly implements TogglyService {
     }
     this._cachedDefinitionsRevision = revision
     if (this._canPersist) {
-      writeCachedRevision(this._config.appKey, this._config.environment ?? 'Production', revision)
+      const appKey = this._config.appKey
+      const env = this._config.environment ?? 'Production'
+      const scope = this._bodyCacheKey()
+      // Another live owner can evict our persisted snapshot while memory remains valid.
+      if (readCachedFlags(appKey, env, scope) === null ||
+        (this._config.enableVariants && readCachedVariants(appKey, env, scope) === null)) return
+      writeCachedRevision(appKey, env, revision, this._revisionScope())
     }
   }
 
@@ -447,7 +516,9 @@ export class Toggly implements TogglyService {
     if (this._refreshDebounceTimer) {
       clearTimeout(this._refreshDebounceTimer)
     }
+    const generation = this._generation
     this._refreshDebounceTimer = setTimeout(() => {
+      if (this._disposed || generation !== this._generation) return
       this._refreshDebounceTimer = null
       if (forceJwksRefresh) {
         this._cachedDefinitionsRevision = null
@@ -502,32 +573,64 @@ export class Toggly implements TogglyService {
   }
 
   private _contextCacheKey(): string {
-    return evaluationContextCacheKey(this._getEvaluationContext())
+    if (this._config.instanceId) return `i:${encodeURIComponent(this._config.instanceId)}`
+    const context = this._getEvaluationContext()
+    if (!context.groups && !context.claims && !context.identity?.includes('|')) return evaluationContextCacheKey(context)
+    return `v2:${encodeURIComponent(JSON.stringify([
+      context.identity ?? '', [...(context.groups ?? [])].sort((left, right) => left < right ? -1 : left > right ? 1 : 0),
+      Object.entries(normalizeEvaluationClaims(context.claims) ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+    ]))}`
   }
 
-  setContext = async (context: TogglyEvaluationContext): Promise<void> =>
-    setBrowserSdkEvaluationContext(
-      this as unknown as TogglyServiceContextHost<
-        EvaluatedDefinitions,
-        { [key: string]: EvaluatedVariantDef } | null
-      >,
-      context,
-      (this._config.featureDefaults ?? {}) as EvaluatedDefinitions,
-      {
-        notifyFeaturesRefresh: () => this.notifyFeaturesRefresh(),
-        loadFeaturesStrict: () => this._loadFeatures(true, { strict: true }),
-      },
-    )
+  private _bodyCacheKey(): string {
+    // Legacy bodies were shared across modes and cannot validate a scoped revision.
+    return `v3:${this._config.enableVariants ? 'variants' : 'evaluated'}:${this._contextCacheKey()}`
+  }
+
+  private _revisionScope(): string {
+    return `v2:${this._config.enableVariants ? 'variants' : 'evaluated'}:${this._contextCacheKey()}`
+  }
+
+  setContext = async (context: TogglyContextUpdate): Promise<void> => {
+    if (this._disposed) return
+    this._generation++
+    this._loadingFeatures = false
+    this.stopWebSocket()
+    if (context.identity !== undefined) {
+      this._config.identity = context.identity || undefined
+      if (context.instanceId === undefined) this._config.instanceId = undefined
+    }
+    if (context.instanceId !== undefined) this._config.instanceId = context.instanceId.trim() || undefined
+    if (context.groups !== undefined) this._groups = [...context.groups]
+    if (context.claims !== undefined) this._claims = { ...context.claims }
+    this._cachedDefinitionsRevision = null
+    this._pendingDefinitionsPin = null
+    this._lastFallbackRefresh = 0
+    const appKey = this._config.appKey ?? ''
+    const env = this._config.environment ?? 'Production'
+    const scope = this._bodyCacheKey()
+    this._variants = this._canPersist && this._config.enableVariants ? readCachedVariants(appKey, env, scope, this._config.maxCacheKeys) : null
+    this._features = this._variants ? variantDefsToFlags(this._variants)
+      : (this._canPersist ? readCachedFlags(appKey, env, scope, this._config.maxCacheKeys) : null) ?? { ...this._config.featureDefaults }
+    this._telemetry?.setContext({instanceId: this._config.instanceId, identity: this._config.identity})
+    const generation = this._generation
+    this.notifyFeaturesRefresh()
+    if (generation !== this._generation || this._disposed) return
+    // Failure retains this context and its scoped cache/defaults, never the previous user.
+    await this._loadFeatures(true, { strict: true })
+  }
 
   _loadFeatures = async (
     forceRefresh = false,
     options?: { strict?: boolean },
   ) => {
+    if (this._disposed) return this._booleanFeatures()
+    const generation = this._generation
     // Feature are currently being loaded
     if (this._loadingFeatures) {
       await new Promise<void>((resolve) => {
         const checkIfApiCallFinished = () => {
-          if (!this._loadingFeatures) {
+          if (!this._loadingFeatures || generation !== this._generation || this._disposed) {
             resolve()
           } else {
             setTimeout(checkIfApiCallFinished, 100)
@@ -537,6 +640,7 @@ export class Toggly implements TogglyService {
       })
     }
 
+    if (generation !== this._generation || this._disposed) return this._booleanFeatures()
     // Features already loaded
     if (this._features !== null && !forceRefresh) {
       // When WebSocket is connected, throttle HTTP refreshes to fallback interval
@@ -557,17 +661,23 @@ export class Toggly implements TogglyService {
 
     const appKey = this._config.appKey ?? ''
     const env = this._config.environment ?? 'Production'
-    const contextKey = this._contextCacheKey()
+    const contextKey = this._bodyCacheKey()
 
     try {
-      const url = buildEvaluatedSignedUrl(
-        this._config.baseURI ?? 'https://definitions.toggly.io',
-        appKey,
-        env,
-        this._getEvaluationContext(),
-        !!this._config.enableVariants,
-      )
-
+      const parsed = new URL(this._config.baseURI ?? 'https://definitions.toggly.io')
+      const mode = this._config.enableVariants ? 'variants' : 'evaluated'
+      const path = this._config.enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed'
+      parsed.pathname = `${parsed.pathname.replace(/\/$/, '')}/${path}/${appKey}/${env}`
+      parsed.searchParams.delete('i')
+      if (this._config.instanceId) {
+        const keys: string[] = []
+        parsed.searchParams.forEach((_value, key) => keys.push(key))
+        for (const key of keys) {
+          if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) parsed.searchParams.delete(key)
+        }
+        parsed.searchParams.set('i', this._config.instanceId)
+      } else appendEvaluationContext(parsed, this._getEvaluationContext(), mode)
+      const url = parsed.toString()
       const pin = this._pendingDefinitionsPin
       this._pendingDefinitionsPin = null
       const fetchUrl = appendDefinitionsRevisionParam(url, pin)
@@ -584,10 +694,10 @@ export class Toggly implements TogglyService {
           headers: buildDefinitionFetchHeaders(),
         },
       )
-      if (loaded.revision) {
-        this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
-      }
+      if (generation !== this._generation || this._disposed) return this._booleanFeatures()
       if (loaded.notModified) {
+        this._cacheDefinitionsRevision(loaded.revision?.replace(/^"+|"+$/g, ''))
+        if (isInitialLoad) this.startWebSocket()
         return this._booleanFeatures()
       }
       const parsedDefs = loaded.defs
@@ -608,12 +718,17 @@ export class Toggly implements TogglyService {
         }
       }
 
+      this._cacheDefinitionsRevision(loaded.revision?.replace(/^"+|"+$/g, ''))
+
       if (this._features) {
         await this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
       }
+      if (generation !== this._generation || this._disposed) return this._booleanFeatures()
       this.notifyFeaturesRefresh()
     } catch (error) {
+      if (generation !== this._generation || this._disposed) return this._booleanFeatures()
       this._reportError('Error fetching feature flags', error)
+      if (generation !== this._generation || this._disposed) return this._booleanFeatures()
       const recovered = resolveEvaluatedFetchErrorState({
         enableVariants: !!this._config.enableVariants,
         featuresAlreadyLoaded: this._features !== null,
@@ -641,12 +756,14 @@ export class Toggly implements TogglyService {
       if (this._features) {
         await this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
       }
+      if (generation !== this._generation || this._disposed) return this._booleanFeatures()
       this.notifyFeaturesRefresh()
     } finally {
-      this._loadingFeatures = false
+      if (generation === this._generation) this._loadingFeatures = false
     }
 
     // Start WebSocket live updates after initial feature load
+    if (generation !== this._generation || this._disposed) return this._booleanFeatures()
     if (isInitialLoad) {
       this.startWebSocket()
     }
@@ -665,70 +782,58 @@ export class Toggly implements TogglyService {
     return await this._loadFeatures()
   }
 
+  private _captureEvaluation(): EvaluationSnapshot {
+    return {owner: this, features: this._features, variants: this._variants, recordCheck: this._ensureTelemetry()?.captureCheck()}
+  }
+
   private _getEffectiveFlagValue(
     flagKey: string,
     entityContext?: TogglyEntityContext | null,
+    snapshot = this._captureEvaluation(),
   ): boolean {
-    const remote = resolveEvaluatedDefinition(this._features?.[flagKey], entityContext)
-    return applyLocalGate(remote, flagKey, this._localGates, this._localGateIndex)
+    if (snapshot.owner !== this) return false
+    const variant = snapshot.variants?.[flagKey]?.variant || 'enabled'
+    const remote = resolveEvaluatedDefinition(snapshot.features?.[flagKey], entityContext)
+    const enabled = applyLocalGate(remote, flagKey, this._localGates, this._localGateIndex)
+    snapshot.recordCheck?.(flagKey, enabled ? variant : 'disabled')
+    return enabled
   }
 
   _evaluateFeatureGate = async (
-    gate: string[],
-    requirement = 'all',
-    negate = false,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
-    kind?: string,
+    gate: string[], requirement = 'all', negate = false,
+    context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string,
+    snapshot?: EvaluationSnapshot,
   ) => {
-    await this._featuresLoaded()
-
+    if (!snapshot) { await this._featuresLoaded(); snapshot = this._captureEvaluation() }
+    const captured = snapshot
     const entityContext = normalizeEntityContext(context, kind)
-    return evaluateStoredFeatureKeys(
-      this._features,
-      gate.map(String),
-      requirement === 'any' ? 'any' : 'all',
-      negate,
-      (key) => this._getEffectiveFlagValue(key, entityContext),
-    )
+    return evaluateStoredFeatureKeys(captured.features, gate.map(String),
+      requirement === 'any' ? 'any' : 'all', negate,
+      key => this._getEffectiveFlagValue(key, entityContext, captured))
   }
 
   evaluateFeatureGate = async (
-    featureKeys: string[],
-    requirement = 'all',
-    negate = false,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
-    kind?: string,
+    featureKeys: string[], requirement = 'all', negate = false,
+    context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string,
   ) => {
+    await this._featuresLoaded()
+    const snapshot = this._captureEvaluation()
     if (featureKeys.length > 0) {
-      const dataMap = await this._hookExecutor.executeBeforeEvaluation(featureKeys[0]);
-      const result = await this._evaluateFeatureGate(featureKeys, requirement, negate, context, kind);
-      await this._hookExecutor.executeAfterEvaluation(featureKeys[0], dataMap, result);
-      return result;
+      const dataMap = await this._hookExecutor.executeBeforeEvaluation(featureKeys[0])
+      const result = await this._evaluateFeatureGate(featureKeys, requirement, negate, context, kind, snapshot)
+      await this._hookExecutor.executeAfterEvaluation(featureKeys[0], dataMap, result)
+      return result
     }
-    return await this._evaluateFeatureGate(featureKeys, requirement, negate, context, kind);
+    return this._evaluateFeatureGate(featureKeys, requirement, negate, context, kind, snapshot)
   }
 
   isFeatureOn = async (
-    featureKey: string,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
-    kind?: string,
-  ) => {
-    const dataMap = await this._hookExecutor.executeBeforeEvaluation(featureKey)
-    const result = await this._evaluateFeatureGate([featureKey], 'all', false, context, kind)
-    await this._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)
-    return result
-  }
+    featureKey: string, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string,
+  ) => this.evaluateFeatureGate([featureKey], 'all', false, context, kind)
 
   isFeatureOff = async (
-    featureKey: string,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
-    kind?: string,
-  ) => {
-    const dataMap = await this._hookExecutor.executeBeforeEvaluation(featureKey)
-    const result = await this._evaluateFeatureGate([featureKey], 'all', true, context, kind)
-    await this._hookExecutor.executeAfterEvaluation(featureKey, dataMap, result)
-    return result
-  }
+    featureKey: string, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string,
+  ) => this.evaluateFeatureGate([featureKey], 'all', true, context, kind)
 
   registerContext = <T>(kind: string, mapper: (entity: T) => TogglyEntityContext): void => {
     registerEntityContext(kind, mapper)
@@ -738,24 +843,18 @@ export class Toggly implements TogglyService {
    * Current variant assignment for a feature (requires {@link TogglyOptions.enableVariants} and loaded data).
    */
   getVariant(featureKey: string): VariantResult | null {
-    if (!this._config.enableVariants) {
-      return null
-    }
-    const variants = this._variants
-    if (!variants) {
-      return null
-    }
-    const entry = variants[featureKey]
-    if (!entry || !entry.variant) {
-      return null
-    }
-    if (!applyLocalGate(entry.enabled === true, featureKey, this._localGates, this._localGateIndex)) {
-      return null
-    }
-    return {
-      name: entry.variant,
-      configurationValue: entry.configurationValue,
-    }
+    if (!this._config.enableVariants || !this._variants) return null
+    const snapshot = this._captureEvaluation()
+    const entry = snapshot.variants?.[featureKey]
+    const enabled = this._getEffectiveFlagValue(featureKey, undefined, snapshot)
+    return enabled && entry?.variant ? {name: entry.variant, configurationValue: entry.configurationValue} : null
+  }
+
+  /** @internal Silent projection for cached UI state or an already evaluated component gate. */
+  _getVariantSnapshot(featureKey: string): VariantResult | null {
+    const entry = this._variants?.[featureKey]
+    if (!this._config.enableVariants || !entry?.variant || !applyLocalGate(entry.enabled === true, featureKey, this._localGates, this._localGateIndex)) return null
+    return {name: entry.variant, configurationValue: entry.configurationValue}
   }
 
   /**
@@ -810,7 +909,7 @@ export class Toggly implements TogglyService {
   }
 
   startWebSocket = () => {
-    if (!this._config.appKey) {
+    if (this._disposed || !this._config.appKey) {
       return
     }
 
@@ -827,14 +926,18 @@ export class Toggly implements TogglyService {
     )
 
     const ws = new WebSocket(wsUrl)
+    const generation = this._generation
+    const current = () => !this._disposed && generation === this._generation && this._ws === ws
 
     ws.onopen = () => {
+      if (!current()) return
       this._wsConnected = true
       this._wsReconnectAttempt = 0
       this._lastFallbackRefresh = Date.now()
     }
 
     ws.onmessage = (event) => {
+      if (!current()) return
       const data = event.data
 
       if (typeof data === 'string') {
@@ -862,17 +965,20 @@ export class Toggly implements TogglyService {
     }
 
     ws.onclose = () => {
+      if (!current()) return
       this._wsConnected = false
       this._ws = null
 
       const delay = getNextReconnectDelayMs(this._wsReconnectAttempt)
       this._wsReconnectAttempt += 1
       this._wsReconnectTimer = setTimeout(() => {
+        if (this._disposed || generation !== this._generation) return
         this.startWebSocket()
       }, delay)
     }
 
     ws.onerror = (error) => {
+      if (!current()) return
       console.error('[Toggly] WebSocket error:', error)
     }
 
@@ -907,13 +1013,15 @@ export class Toggly implements TogglyService {
    * Used by WebSocket handlers to pull fresh definitions on update signals.
    */
   private _refreshFeatures = async () => {
+    const generation = this._generation
     await this._loadFeatures(true)
+    if (generation !== this._generation || this._disposed) return
     if (this._features && this._canPersist) {
       writeCachedFlags(
         this._config.appKey ?? '',
         this._config.environment ?? 'Production',
         this._features,
-        this._contextCacheKey(),
+        this._bodyCacheKey(),
         this._config.maxCacheKeys,
       )
     }
@@ -923,6 +1031,7 @@ export class Toggly implements TogglyService {
    * Clear current identity-scoped flags/variants localStorage entries and update the LRU index.
    */
   clearFeatureFlagsCache(): void {
+    this._cachedDefinitionsRevision = null
     if (!this._config.appKey || !this._canPersist) {
       this._features = null
       this._variants = null
@@ -936,6 +1045,42 @@ export class Toggly implements TogglyService {
     )
     this._features = null
     this._variants = null
+  }
+
+  /** Record explicit usage without evaluating a feature. */
+  recordUsage(featureKey: string, variant = 'enabled'): void {
+    this._ensureTelemetry()?.recordUsage(featureKey, variant)
+  }
+
+  /** Record a view without evaluating a feature. */
+  recordView(featureKey: string, variant = 'enabled'): void {
+    this._ensureTelemetry()?.recordView(featureKey, variant)
+  }
+
+  incrementCounter(metricKey: string, value = 1): void {
+    this._ensureTelemetry()?.incrementCounter(metricKey, value)
+  }
+
+  setGauge(metricKey: string, value: number): void {
+    this._ensureTelemetry()?.setGauge(metricKey, value)
+  }
+
+  flushTelemetry(): Promise<void> {
+    return this._telemetry?.flush() ?? Promise.resolve()
+  }
+
+  /** Synchronously release resources and attempt one final telemetry flush. */
+  dispose(): void {
+    this._disposed = true
+    this._generation++
+    this._loadingFeatures = false
+    this._detachTelemetry?.()
+    this._telemetry?.dispose()
+    this._detachTelemetry = undefined
+    this._telemetry = undefined
+    this.stopWebSocket()
+    this._featuresRefreshListeners.clear()
+    this._localGatesChangedListeners.clear()
   }
 
   /**

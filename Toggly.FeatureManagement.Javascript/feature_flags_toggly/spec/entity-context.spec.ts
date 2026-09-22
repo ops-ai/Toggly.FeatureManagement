@@ -41,6 +41,11 @@ describe('entity context evaluation', () => {
     clearRegisteredContexts();
   });
 
+  afterEach(async () => {
+    await Toggly.flushTelemetry();
+    Toggly.cancelRefreshInterval();
+  });
+
   it('fails closed when a gated feature is read without an entity', async () => {
     await initWithDefs({ OrderFeature: orderGate });
 

@@ -1,3 +1,4 @@
+import { evaluate } from './evaluate';
 import { test, expect } from '@playwright/test';
 const definitions = process.env.TOGGLY_HOST_DEFINITIONS!;
 test('packed host binds concurrent contexts, guards actions and hydrates exact signed entity snapshots', async ({
@@ -66,7 +67,7 @@ test('packed host binds concurrent contexts, guards actions and hydrates exact s
   await expect
     .poll(async () => (await (await request.get(definitions + '/state')).json()).active)
     .toBe(1);
-  expect(await page.evaluate(() => (window as any).wrongFlash)).toBe(false);
+  expect(await evaluate(page, () => (window as any).wrongFlash)).toBe(false);
   await page.getByRole('button', { name: 'Local prerequisite' }).click();
   await expectBranch(false);
   await page.getByRole('button', { name: 'Local prerequisite' }).click();
@@ -184,11 +185,11 @@ test('packed host binds concurrent contexts, guards actions and hydrates exact s
     .poll(async () => (await (await request.get(definitions + '/state')).json()).active)
     .toBe(0);
   const state = await (await request.get(definitions + '/state')).json();
-  const fetches = await page.evaluate(() => (window as any).togglyFetches);
+  const fetches = await evaluate(page, () => (window as any).togglyFetches);
   // Deterministic quiet window: advance the browser's installed clock through
   // 25 polling intervals, counting fetch invocation before any network activity.
   await page.clock.runFor(5000);
-  expect(await page.evaluate(() => (window as any).togglyFetches)).toBe(fetches);
+  expect(await evaluate(page, () => (window as any).togglyFetches)).toBe(fetches);
   expect((await (await request.get(definitions + '/state')).json()).requests).toHaveLength(
     state.requests.length,
   );

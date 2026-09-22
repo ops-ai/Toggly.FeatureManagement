@@ -357,3 +357,81 @@ it('restores a fresh browser store when every service request is offline', async
     restarted.dispose();
   }
 });
+
+it('keeps signed token A and B envelopes isolated across A to B to A offline navigation without persisted validators', async () => {
+  vi.stubGlobal('window', {});
+  const records = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => records.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      records.set(key, value);
+    },
+  };
+  const endpoint = 'https://definitions.toggly.io';
+  const gate = {
+    requirement: 'all' as const,
+    rules: [{ property: 'Vip', op: 'eq', value: 'true', type: 'boolean' }],
+  };
+  const persistence = createPersistence(storage, endpoint);
+  persistence.write(
+    `${endpoint}/evaluated-signed/front/Production?i=token-a`,
+    envelope({ on: true, Order: gate }),
+    { keys: [jwk] },
+  );
+  persistence.write(
+    `${endpoint}/evaluated-signed/front/Production?i=token-b`,
+    envelope({ on: false, Order: false }),
+    { keys: [jwk] },
+  );
+  const requests: { url: string; revision: string | null }[] = [];
+  const onError = vi.fn();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input, init) => {
+      requests.push({
+        url: String(input),
+        revision: new Headers(init?.headers).get('If-None-Match'),
+      });
+      throw new Error('offline');
+    }),
+  );
+  const snapshot = (instanceId: string) => ({
+    definitions: {},
+    context: { identity: 'same-user', instanceId },
+    expose: ['on', 'Order'],
+    source: 'defaults' as const,
+  });
+  const t = createToggly(snapshot('token-a'), {
+    appKey: 'front',
+    storage,
+    refreshInterval: 0,
+    enableLiveUpdates: false,
+    onError,
+  });
+  try {
+    await t.start();
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+    expect(t.isEnabled('on')).toBe(true);
+    expect(
+      t.isEnabled('Order', { entity: { kind: 'Order', key: 'vip', attributes: { Vip: true } } }),
+    ).toBe(true);
+    expect(t.isEnabled('Order')).toBe(false);
+    t.update(snapshot('token-b'));
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(2));
+    expect(t.isEnabled('on')).toBe(false);
+    t.update(snapshot('token-a'));
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(3));
+    expect(t.isEnabled('on')).toBe(true);
+    expect(
+      t.isEnabled('Order', { entity: { kind: 'Order', key: 'vip', attributes: { Vip: true } } }),
+    ).toBe(true);
+    expect(requests.map((r) => new URL(r.url).searchParams.get('i'))).toEqual([
+      'token-a',
+      'token-b',
+      'token-a',
+    ]);
+    expect(requests.every((r) => r.revision === null)).toBe(true);
+  } finally {
+    t.dispose();
+  }
+});

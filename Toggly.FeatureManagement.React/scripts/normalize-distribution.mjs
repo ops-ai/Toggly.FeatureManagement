@@ -1,7 +1,8 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 
-const cjsEntryPoint = 'dist/cjs/index.cjs'
-writeFileSync(
-  cjsEntryPoint,
-  readFileSync(cjsEntryPoint, 'utf8').replaceAll('\r\n', '\n'),
-)
+for (const entryPoint of ['dist/cjs/index.cjs', 'dist/esm/index.js']) {
+  writeFileSync(
+    entryPoint,
+    readFileSync(entryPoint, 'utf8').replaceAll('\r\n', '\n').replace(/[ \t]+$/gm, ''),
+  )
+}

@@ -117,11 +117,13 @@ export class HookExecutor {
    * Execute beforeIdentify hooks in registration order (FIFO)
    */
   async executeBeforeIdentify(
-    identity: string
+    identity: string,
+    isCurrent: () => boolean = () => true
   ): Promise<Map<string, IdentitySeriesData | void>> {
     const dataMap = new Map<string, IdentitySeriesData | void>();
 
     for (const hook of this.hooks) {
+      if (!isCurrent()) break;
       if (hook.beforeIdentify) {
         try {
           const data = await hook.beforeIdentify(identity);
@@ -143,9 +145,11 @@ export class HookExecutor {
    */
   async executeAfterIdentify(
     identity: string,
-    dataMap: Map<string, IdentitySeriesData | void>
+    dataMap: Map<string, IdentitySeriesData | void>,
+    isCurrent: () => boolean = () => true
   ): Promise<void> {
     for (let i = this.hooks.length - 1; i >= 0; i--) {
+      if (!isCurrent()) break;
       const hook = this.hooks[i];
       if (hook.afterIdentify) {
         try {
@@ -164,8 +168,9 @@ export class HookExecutor {
   /**
    * Execute afterRefresh hooks in registration order (FIFO)
    */
-  async executeAfterRefresh(flags: { [key: string]: boolean }): Promise<void> {
+  async executeAfterRefresh(flags: { [key: string]: boolean }, isCurrent: () => boolean = () => true): Promise<void> {
     for (const hook of this.hooks) {
+      if (!isCurrent()) break;
       if (hook.afterRefresh) {
         try {
           await hook.afterRefresh(flags);

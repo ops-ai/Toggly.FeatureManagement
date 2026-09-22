@@ -35,3 +35,21 @@ When validating an unpublished browser-safe signed-definitions candidate, set
 that artifact only into its temporary packed consumers and keeps the checked-in
 lock targeting the required published package. This is local integration
 evidence; a normal registry install remains required before release.
+
+Telemetry acceptance uses a second local HTTP origin with real CORS preflight,
+POST, native browser gzip i/u attribution and collector decompression, plus plain
+keepalive with minted i. Definitions with i suppress client targeting; remounts
+restore factory identity without retaining the previous owner token. Assertions cover aggregate
+effective checks, explicit usage/view/counter/gauge payloads, no implicit views,
+pagehide and final provider unmount flush. Completed temporary hosts are deleted
+after each row to keep disk usage bounded. SSR exercises the keyed telemetry API
+and confirms no request. No production metrics endpoint is used.
+
+For intermediate integration before the shared telemetry release is published,
+set `TOGGLY_CLIENT_TELEMETRY_TARBALL` to its actual reviewed `npm pack` artifact.
+The runner regenerates only disposable consumer locks through npm, then uses
+`npm ci`; it prints `LOCAL INTEGRATION ARTIFACT`. Checked-in fixture locks remain
+unchanged. Final acceptance must regenerate the committed locks from the real
+registry and run without the artifact override.
+
+The consumer runner bounds each owned command to three minutes and uses a dedicated process group so failed or hung browser children cannot retain descendants. Cleanup independently closes Chrome and both HTTP listeners, removes the isolated consumers and npm cache, and preserves the original failure alongside cleanup errors. The command runs real child/listener negative controls for launch, assertion, rejected or hung browser shutdown, artifact cleanup, and logging failures before the three registry hosts.

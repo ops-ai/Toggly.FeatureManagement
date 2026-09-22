@@ -21,8 +21,16 @@ export interface TogglyConfig {
 
   appKey?: string;
   environment?: string;
+  /** Frontend telemetry is enabled by default when appKey is set. */
+  enableTelemetry?: boolean;
+  /** Independent metrics endpoint base URL. Defaults to https://metrics.toggly.io. */
+  metricsBaseUrl?: string;
+  /** Base flush interval in milliseconds (30000-60000); defaults to 45000. */
+  telemetryFlushIntervalMs?: number;
   /** Initial user identity. Omit to reuse storage or generate an ID; empty clears it. */
   identity?: TogglyEvaluationContext['identity'];
+  /** Host-minted capability; takes precedence over identity/groups/claims. Never a Backend key. */
+  instanceId?: string;
   /** Initial targeting memberships. Omit to reuse storage; [] clears them. */
   groups?: TogglyEvaluationContext['groups'];
   /** Initial rule attributes. Omit to reuse storage; {} clears them. */

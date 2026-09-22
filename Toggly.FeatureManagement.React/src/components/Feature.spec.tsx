@@ -191,7 +191,7 @@ describe('Feature Component', () => {
       });
 
       const variantService = new Toggly({
-        appKey: 'app',
+        enableTelemetry: false, appKey: 'app',
         environment: 'Production',
         enableVariants: true,
         enableLiveUpdates: false,
@@ -228,7 +228,7 @@ describe('Feature Component', () => {
       });
 
       const variantService = new Toggly({
-        appKey: 'app',
+        enableTelemetry: false, appKey: 'app',
         environment: 'Production',
         enableVariants: true,
         enableLiveUpdates: false,

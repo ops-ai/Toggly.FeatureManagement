@@ -12,6 +12,11 @@ import {
   refreshFlags as storeRefreshFlags,
   setIdentity as storeSetIdentity,
   clearIdentity as storeClearIdentity,
+  recordUsage,
+  recordView,
+  incrementCounter,
+  setGauge,
+  flushTelemetry,
 } from '../client/store.js';
 import type { UseTogglyResult } from '../types/index.js';
 
@@ -58,5 +63,12 @@ export function useToggly(): UseTogglyResult & {
     refreshFlags: storeRefreshFlags,
     setIdentity: storeSetIdentity,
     clearIdentity: storeClearIdentity,
+    telemetry: {
+      recordUsage,
+      recordView,
+      incrementCounter,
+      setGauge,
+      flush: flushTelemetry,
+    },
   };
 }

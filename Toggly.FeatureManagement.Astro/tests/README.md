@@ -33,12 +33,18 @@ hosts use React 19.2.4. Browser checks reject hydration warnings and errors.
 Default flags are false so successful rendering cannot be a fallback false
 positive. Telemetry is explicitly disabled only in the test host.
 
-`SIGNED_DEFS_ARTIFACT=/absolute/path/package.tgz` explicitly installs a local
-shared verifier candidate in the temporary consumer. Such a run is integration
-evidence only, not proof that the dependency is published. Without this
-variable, the host uses the SDK's declared registry dependency. Record the
-exact dependency mode and artifact hash with results. Never commit generated
-consumer manifests or locks containing local tarball paths.
+Packed consumers require public registry dependencies, including reporter 1.1.0.
+Local shared dependency overrides are rejected. The runner cleans each owned
+temporary host, browser process, server child and HTTP listener independently,
+including failed checks and protocol-close failures. `node --test tests/host-cleanup.test.mjs`
+uses real child processes/listeners with leak-detecting negative controls, including
+command descendants after their parent exits and held HTTP headers/bodies. Commands
+own process groups; HTTP deadlines abort the complete header/body operation.
+
+Identity acceptance covers minted targeting suppression, i/u packet labels,
+retained queues, reentrant checks, matching active-memory 304 hydration, and full
+fetches after context/mode retirement. Mixed-island refresh during a pending
+`afterRefresh` hook must publish the latest UI and count nine actual consumers once.
 
 The page fixture uses Markdown `x-feature` frontmatter. Literal `x-feature:`
 in Astro TypeScript frontmatter is stripped by the integration's Vite plugin
