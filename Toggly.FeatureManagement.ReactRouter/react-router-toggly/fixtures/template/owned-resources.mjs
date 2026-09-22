@@ -35,8 +35,7 @@ export async function stopChild(child) {
     child.kill('SIGKILL');
     await bounded(() => exited, 'Owned process exit');
 }
-export async function closeBrowser(browser, timeout = 5000) {
-    const child = browser.process();
+export async function closeBrowser(browser, timeout = 5000, child = browser.process()) {
     let failure;
     try {
         await bounded(() => browser.close(), 'Browser close', timeout);
@@ -45,6 +44,20 @@ export async function closeBrowser(browser, timeout = 5000) {
         failure = error;
     }
     await cleanupOwned([() => stopChild(child)], failure);
+}
+// The supervisor retains both capabilities before a worker can execute. A
+// connected worker owns pages/CDP only; inventories and PID files are evidence,
+// never authority to terminate this browser after observation has failed.
+export async function withOwnedBrowser(puppeteer, launchOptions, work) {
+    const browser = await puppeteer.launch(launchOptions);
+    const child = browser.process();
+    let failure, result;
+    try {
+        if (!child) throw new Error('Supervisor browser has no retained process');
+        result = await work(browser, child);
+    } catch (error) { failure = error; }
+    await cleanupOwned([() => closeBrowser(browser, 5000, child)], failure);
+    return result;
 }
 export async function closeServer(server) {
     if (!server.listening)
@@ -80,8 +93,8 @@ export async function runOwnedCommand(command, args, options, timeout = 180000, 
       }
       return processes;
     };
-    // A timeout can also supervise unmodified workers. Observe descendants while
-    // ancestry exists, including children in independent Chromium process groups.
+    // Supplemental discovery for unmodified workers needs successful observation.
+    // Maintained browser workers instead use the supervisor's retained handles.
     let monitorError;
     let collection;
     const monitor = setInterval(() => {
@@ -126,7 +139,7 @@ export async function runOwnedCommand(command, args, options, timeout = 180000, 
             await new Promise(resolve => setTimeout(resolve, 100));
             if (monitorError) throw monitorError;
         }, async () => {
-            if (child.pid && process.platform !== 'win32') {
+            if (child.pid && process.platform !== 'win32' && child.exitCode === null && child.signalCode === null) {
                 try {
                     process.kill(-child.pid, 'SIGKILL');
                 }

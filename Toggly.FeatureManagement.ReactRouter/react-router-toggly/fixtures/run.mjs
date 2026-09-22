@@ -1,7 +1,8 @@
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { cleanupOwned, runOwnedCommand } from './template/owned-resources.mjs';
-import { fileURLToPath } from 'node:url';
+import { cleanupOwned, runOwnedCommand, withOwnedBrowser } from './template/owned-resources.mjs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = resolve(here, '..');
@@ -78,7 +79,14 @@ for (const row of selected) {
   }
   // These controls must exit naturally and do not share the trusted-server worker's force-exit boundary.
   await command(node, ['--test', 'browser-cleanup.test.mjs'], host, env);
-  await command('npm', ['run', 'test'], host, env);
+  const puppeteerEntry = createRequire(join(host, 'package.json')).resolve('puppeteer-core');
+  const { default: puppeteer } = await import(pathToFileURL(puppeteerEntry).href);
+  await withOwnedBrowser(puppeteer, {
+    executablePath: process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    headless: true, userDataDir: join(host, '.browser-profile'), args: ['--no-sandbox'],
+  }, browser => command('npm', ['run', 'test'], host, {
+    ...env, TOGGLY_BROWSER_ENDPOINT: browser.wsEndpoint(),
+  }));
   writeFileSync(
     join(here, '.runs', `${row.name}-evidence.json`),
     JSON.stringify({ ...row, nodeVersion: version, sdkVersion: manifest.version, reporterVersion: JSON.parse(readFileSync(join(host, 'node_modules/@ops-ai/toggly-client-telemetry/package.json'),'utf8')).version }, null, 2),

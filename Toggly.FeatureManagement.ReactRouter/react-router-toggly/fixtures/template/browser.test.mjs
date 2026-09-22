@@ -1,4 +1,4 @@
-import { bounded, cleanupOwned, closeBrowser, closeServer, registerOwnedBrowser } from './owned-resources.mjs';
+import { bounded, cleanupOwned, closeServer } from './owned-resources.mjs';
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {createServer} from 'node:http';
@@ -35,13 +35,13 @@ test('real packed browser sends compact CORS/gzip and lifecycle telemetry',async
       res.writeHead(result.status,Object.fromEntries(result.headers));res.end(Buffer.from(await bounded(() => result.arrayBuffer(), 'SSR response body', 10000)));
     }catch(error){res.writeHead(500);res.end(String(error));}
   });
-  let browser, failure;
+  let browser, page, failure;
   try{
     await new Promise(resolve=>collector.listen(0,'127.0.0.1',resolve));
     await new Promise(resolve=>app.listen(0,'127.0.0.1',resolve));
-    browser=await puppeteer.launch({executablePath:process.env.CHROME_BIN||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true,args:['--no-sandbox']});
-    await registerOwnedBrowser(browser);
-    const page=await browser.newPage();
+    assert.ok(process.env.TOGGLY_BROWSER_ENDPOINT, 'The supervisor must own the browser');
+    browser=await puppeteer.connect({browserWSEndpoint:process.env.TOGGLY_BROWSER_ENDPOINT});
+    page=await browser.newPage();
     const evaluate = (...args) => bounded(() => page.evaluate(...args), 'Browser evaluation', 10000);const errors=[];page.on('pageerror',error=>errors.push(error.message));
     await bounded(() => page.evaluateOnNewDocument(()=>{window.WebSocket=undefined;}), 'Browser preload', 10000);
     let remote=true;const identities=[];
@@ -86,5 +86,5 @@ test('real packed browser sends compact CORS/gzip and lifecycle telemetry',async
     await evaluate(()=>window.host.unmount());assert.deepEqual(errors,[]);
     console.log(`PACKED_ROUTER_BROWSER_PASS Chromium ${await browser.version()}; minted/client/lifecycle attribution verified`);
   }catch(error){failure=error;}
-  await cleanupOwned([()=>browser&&closeBrowser(browser),()=>closeServer(app),()=>closeServer(collector)],failure);
+  await cleanupOwned([()=>page&&page.close(),()=>browser?.disconnect(),()=>closeServer(app),()=>closeServer(collector)],failure);
 });
