@@ -200,3 +200,18 @@ test('classifies the JavaScript packed browser harness as test code in both scan
     assert.ok(!value.includes('Toggly.FeatureManagement.Javascript'));
   }
 });
+
+test('installs the packed Solid host browser with its own resolved Playwright CLI before verification', () => {
+  const job = workflow.match(/\n  solidstart-host:[\s\S]*?(?=\n  [a-z][\w-]*:|$)/)?.[0] ?? '';
+  assert.match(job, /run: node tests\/install-host\.mjs/);
+  assert.doesNotMatch(job, /npx|cd tests\/host/);
+  assertRequiredHost('SolidJS', 'solidstart-host');
+  const installer = readFileSync(new URL('../../Toggly.FeatureManagement.Solid/tests/install-host.mjs', import.meta.url), 'utf8');
+  const install = installer.indexOf("await run([join(work, 'node_modules/playwright/cli.js'), 'install', '--with-deps', 'chromium'])");
+  const verify = installer.indexOf("await import(pathToFileURL(join(host, 'verify.mjs')).href)");
+  const cleanInstall = installer.indexOf("await run([npm, 'ci'");
+  assert.ok(cleanInstall >= 0, 'retain the genuine host npm ci');
+  assert.ok(install > cleanInstall, 'install browsers after the genuine host npm ci');
+  assert.ok(verify > install, 'install before native cleanup controls or host verification launch Chromium');
+  assert.match(installer, /if \(!process\.env\.CHROMIUM_PATH\)/, 'retain an explicit local system Chromium override');
+});

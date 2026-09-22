@@ -1,6 +1,5 @@
 import type { TogglyClient, EvaluationContext } from '@ops-ai/toggly-node-core';
 import {
-  buildEvaluatedSignedUrl,
   serializeJsonForInlineScript,
   type TogglyEntityContext,
   type TogglyEvaluationContext,
@@ -10,7 +9,13 @@ import {
   fetchEvaluatedSignedDefinitions,
   isEvaluatedDefinitions,
 } from '@ops-ai/toggly-signed-defs';
-import { publicContext, selectDefinitions, type TogglySnapshot } from './snapshot.js';
+import {
+  publicContext,
+  selectDefinitions,
+  frontendDefinitionsUrl,
+  definitionBaseURI,
+  type TogglySnapshot,
+} from './snapshot.js';
 export { createTogglyClient } from '@ops-ai/toggly-node-core';
 export type { TogglyClient, EvaluationContext, TogglyServerConfig } from '@ops-ai/toggly-node-core';
 export type { TogglySnapshot } from './snapshot.js';
@@ -22,7 +27,7 @@ export interface ServerRequestOptions {
   /** Trusted server principal/context. Not copied to browser unless explicitly projected. */
   context?: EvaluationContext;
   /** Explicit public projection only; omitted context remains anonymous. */
-  clientContext?: TogglyEvaluationContext;
+  clientContext?: TogglyEvaluationContext & { instanceId?: string };
   frontend: {
     /** A frontend key, never the backend client's key. */
     appKey?: string;
@@ -89,12 +94,11 @@ export function createTogglyRequest(options: ServerRequestOptions) {
     // Snapshot transport is independent of the backend definition cache and key.
     try {
       const baseURI = frontend.baseURI ?? 'https://definitions.toggly.io';
-      const url = buildEvaluatedSignedUrl(
+      const url = frontendDefinitionsUrl(
         baseURI,
-        encodeURIComponent(frontend.appKey),
-        encodeURIComponent(frontend.environment ?? 'Production'),
+        frontend.appKey,
+        frontend.environment ?? 'Production',
         projected,
-        false,
       );
       const signal = AbortSignal.any([
         controller.signal,
@@ -106,7 +110,7 @@ export function createTogglyRequest(options: ServerRequestOptions) {
         new InMemoryJwksCache(),
         {
           ...frontend,
-          baseURI,
+          baseURI: definitionBaseURI(baseURI),
           verifySignatures: true,
           fetchImpl: (input, init) =>
             (frontend.fetch ?? fetch)(input, { ...init, signal, cache: 'no-store' }),
@@ -116,7 +120,7 @@ export function createTogglyRequest(options: ServerRequestOptions) {
             'User-Agent': context.request?.userAgent ?? '',
             'Accept-Language': context.request?.acceptLanguage ?? '',
             'X-Toggly-Sdk': 'solidstart',
-            'X-Toggly-Sdk-Version': '0.2.0',
+            'X-Toggly-Sdk-Version': '0.3.0',
           },
         },
       );

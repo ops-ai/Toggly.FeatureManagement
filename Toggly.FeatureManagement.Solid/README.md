@@ -75,6 +75,27 @@ function Dashboard() {
 
 For an owner without context, call `createToggly(config)` within a component or `createRoot`. Owner disposal unsubscribes, aborts HTTP and closes timers/sockets automatically. `createClient(config)` is the lower-level non-reactive instance API: explicitly call `refresh`, `start` and `dispose`, and use `subscribe` to observe state. There is no global client.
 
+## Browser telemetry
+
+Browser clients send batched feature checks and explicit business events by default when an application key is configured. Set `enableTelemetry: false` to opt out. Server rendering and the Node server entrypoint do not create a frontend reporter. Each client owns its queue; hooks and components share their provider's client.
+
+```tsx
+const toggly = useToggly();
+toggly.recordUsage('Checkout', 'control');
+toggly.recordView('Checkout', 'control');
+toggly.incrementCounter('orders');
+toggly.setGauge('cartItems', 3);
+await toggly.flushTelemetry();
+```
+
+The same methods are available on `toggly.client` and standalone `createClient` instances. Usage and view are explicit events; rendering a component does not record either. Checks reflect actually evaluated leaves after entity/local gates and before negation, preserving all/any short circuiting. A cached unchanged `useFeatureFlag` accessor does not evaluate its leaves again. Changed reactive inputs and direct `evaluate` calls count; loading/error updates and raw snapshot reads do not. Check variants are `enabled` or `disabled`; explicit usage/view may supply a configured variant label.
+
+`metricsBaseUrl` defaults to `https://metrics.toggly.io` independently of `baseURI`; an explicit base path is preserved. `telemetryFlushIntervalMs` defaults to 45000 and accepts 30000–60000 milliseconds with schedule jitter. Invalid intervals use the default; invalid URLs disable telemetry without affecting evaluation. `onTelemetryDiagnostic` receives bounded payload-free diagnostic codes. `telemetryFetch` optionally supplies an independent metrics transport.
+
+Telemetry contains application/environment, feature counts and application-level counter/gauge values. A host-provided nonblank `instanceId` is sent as `i`; otherwise the current `identity` is sent as `u`. The server's default-off application setting controls acceptance of client-asserted `u`. Claims, groups and entity data are excluded from telemetry, and telemetry is never persisted. Counter deltas are nonnegative integers and gauges finite nonnegative values; metric keys must match configured metrics. Variant labels use 1–64 ASCII letters, digits, underscores or hyphens. Queues and retries are bounded; delivery is best effort. Ordinary sends use native gzip when available; hidden-page/pagehide and disposal flush uncompressed with fetch keepalive.
+
+Solid owner cleanup disposes its reporter synchronously; use `flushTelemetry` before disposal when you need to await a send attempt. Standalone clients require explicit `dispose()`. Remount the provider to change application, environment or telemetry options; this releases the previous queue without relabeling events. SolidStart route snapshots update the existing targeting session while retaining its reporter, and leaving the owning route releases it. Trusted server telemetry retains its separate transport and ownership.
+
 ## Identity and targeting
 
 ```ts
@@ -82,7 +103,7 @@ await toggly.client.setContext({ identity: 'alice', groups: ['staff'], claims: {
 await toggly.client.setContext({ identity: '', groups: [], claims: {} }); // explicit clear
 ```
 
-Omitted fields preserve the current value; empty values clear it. Initial targeting is copied, and each provider owns its session. A change clears previous identity results before fetching; older in-flight responses cannot overwrite newer results. Identity is not generated or persisted automatically. Group, percentage and claim rules are evaluated remotely. Browser country, language and device rules reflect the real network/browser request; a demo cannot impersonate these by changing claims.
+Omitted fields preserve the current value; empty values clear it. `setContext({ instanceId })` rotates a host-minted token, and an explicit identity update clears an omitted token. Tokens take precedence over identity/groups/claims in definition requests. The SDK never mints tokens or uses Backend keys. Initial or route snapshots for a different token are ignored; a matching `snapshot.context.instanceId` can hydrate the current token. Initial targeting is copied, and each provider owns its session. A change clears previous identity results before fetching; older in-flight responses cannot overwrite newer results or validators. Failed changes retain the new context and its verified cache or defaults, without restoring the retired user. Accepted telemetry keeps its original owner through changes, retries and reentrant gates. Identity is not generated or persisted automatically. Group, percentage and claim rules are evaluated remotely. Browser country, language and device rules reflect the real network/browser request; a demo cannot impersonate these by changing claims.
 
 ## Entity and local gates
 
@@ -131,13 +152,13 @@ await client.refresh();
 
 Signed SSR snapshots and values already accepted from the network or verified storage take precedence over persisted records. Restore runs only while the current context has defaults; changing context or hydrating a `source: 'defaults'` snapshot makes its matching cache eligible again. A `source: 'signed'` snapshot remains authoritative during offline refresh.
 
-Cache records are partitioned by endpoint, app, environment and complete targeting URL. Signing-key notifications retire all stored targeting records for that endpoint before refreshing. Corrupt/unsupported records and inaccessible storage cannot enable cached flags or prevent network recovery. If retirement cannot be written, that client stops using persistence for its lifetime; restoring storage access or clearing the affected storage is the application's responsibility before a later restart.
+Cache records are partitioned by endpoint, app, environment and complete targeting URL. Validators stay only in memory beside accepted definitions; no separate validator is persisted. A token ABA transition restores and reverifies that token's signed envelope before fetching. Signing-key notifications retire all stored targeting records for that endpoint before refreshing. Corrupt/unsupported records and inaccessible storage cannot enable cached flags or prevent network recovery. If retirement cannot be written, that client stops using persistence for its lifetime; restoring storage access or clearing the affected storage is the application's responsibility before a later restart.
 
-Storage is application/origin-owned local trust material. A party able to replace both stored keys and envelopes can replace that trust anchor unless you independently configure `allowedKeyIds`. Signature verification is repeated on every restore; a signed timestamp floor rejects rollback within a running context. Detecting rollback of the entire store after process loss requires external protected state. `maxSignatureAgeSeconds` limits how old a persisted envelope may be at restart; unset/nonpositive values disable the age limit. Future timestamps and expired keys are rejected. Storage keys include identity/groups/claims; clear or partition storage according to your application's privacy and logout policy. Caching definitions does not make application HTML, assets or server queries available offline.
+Storage is application/origin-owned local trust material. A party able to replace both stored keys and envelopes can replace that trust anchor unless you independently configure `allowedKeyIds`. Signature verification is repeated on every restore; a signed timestamp floor rejects rollback within a running context. Detecting rollback of the entire store after process loss requires external protected state. `maxSignatureAgeSeconds` limits how old a persisted envelope may be at restart; unset/nonpositive values disable the age limit. Future timestamps and expired keys are rejected. Storage keys include the token or identity/groups/claims; clear or partition storage according to your application's privacy and logout policy. Caching definitions does not make application HTML, assets or server queries available offline.
 
 Set `expose` to restrict browser definitions to an explicit list of public keys. A server snapshot supplies its own allowlist, which also applies to subsequent refreshes. Every fetch uses `cache: 'no-store'`; polling sends its explicit confirmed ETag, while revisionless invalidations omit validators.
 
-On mount, live WebSocket updates are enabled by default and coalesced for 300 ms. Revision notifications trigger a pinned HTTP fetch; revisions are accepted only after HTTP confirmation. Signing-key changes clear JWKS. Connections retry after 5 seconds and polling remains a fallback. Use `enableLiveUpdates: false` to disable sockets, `refreshInterval: 0` to disable polling, or `connectTimeout` to set request timeout (10,000 ms default). Polling defaults to 180,000 ms. `baseURI` defaults to `https://definitions.toggly.io`; `environment` defaults to `Production`. `fetch` can inject a transport for tests. The browser entrypoint exposes no variant assignment, usage metrics or analytics hook API; a boolean fallback is not an experiment assignment.
+On mount, live WebSocket updates are enabled by default and coalesced for 300 ms. Revision notifications trigger a pinned HTTP fetch; revisions are accepted only after HTTP confirmation. Signing-key changes clear JWKS. Connections retry after 5 seconds and polling remains a fallback. Use `enableLiveUpdates: false` to disable sockets, `refreshInterval: 0` to disable polling, or `connectTimeout` to set request timeout (10,000 ms default). Polling defaults to 180,000 ms. `baseURI` defaults to `https://definitions.toggly.io`; `environment` defaults to `Production`. `fetch` can inject a transport for tests. The browser entrypoint exposes no variant assignment or analytics hook API; a boolean fallback is not an experiment assignment.
 
 ## Development
 
@@ -198,6 +219,8 @@ export async function requestScope(request: Request, principal: EvaluationContex
   });
 }
 ```
+
+The explicitly public `clientContext` may include a host-minted `instanceId`. Only the independent frontend-key snapshot request uses that token with `i` precedence; the snapshot carries the token into matching browser hydration. Trusted `context` and backend evaluation are unchanged, and no backend identity is projected automatically.
 
 The wrapper copies context once and passes it to each shared-core evaluation. It never calls `setIdentity` on the shared client. Omitted identity evaluates as an empty identity, preventing inheritance of a process-wide default identity. `request` supplies User-Agent and Accept-Language; trusted server code can supply `context.request.country` explicitly. Do not accept a client-controlled country header as a trusted geolocation assertion. A server snapshot fetch originates from your server, so IP-derived country rules can differ from later browser refreshes.
 

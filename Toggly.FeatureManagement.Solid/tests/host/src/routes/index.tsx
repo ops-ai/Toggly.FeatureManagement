@@ -1,9 +1,146 @@
 import { A, createAsync, useSearchParams } from '@solidjs/router';
-import { Show } from 'solid-js';
-import { Feature, TogglyProvider, useToggly } from '@ops-ai/solid-feature-flags-toggly';
+import { Show, onMount, createRoot } from 'solid-js';
+import {
+  Feature,
+  TogglyProvider,
+  useToggly,
+  createClient,
+  createToggly,
+  type Toggly,
+} from '@ops-ai/solid-feature-flags-toggly';
 import { getFlags } from '../lib/flags';
 function Status() {
   const flags = useToggly();
+  onMount(() => {
+    const mintedConfig = {
+      appKey: 'minted-host',
+      environment: 'Test',
+      instanceId: 'A',
+      identity: 'private',
+      groups: ['private'],
+      claims: { role: 'private' },
+      baseURI: `${import.meta.env.VITE_TOGGLY_BASE_URL}/minted/?i=retired&i=older&keep=ok&u=old&userId=old&g=one&g=two&claim.role=old`,
+      metricsBaseUrl: import.meta.env.VITE_TOGGLY_METRICS_URL,
+      storage: localStorage,
+      enableLiveUpdates: false,
+      refreshInterval: 0,
+    };
+    Object.assign(window, {
+      telemetry: flags,
+      async mintedChecks() {
+        const client = createClient(mintedConfig);
+        const results: boolean[] = [];
+        try {
+          await client.refresh();
+          results.push(client.evaluate(['On']));
+          await client.flushTelemetry();
+          await client.setContext({ instanceId: 'B' });
+          results.push(client.evaluate(['On']));
+          client.recordUsage('B');
+          await client.flushTelemetry();
+          await client.setContext({ instanceId: 'A' });
+          await client.refresh();
+          results.push(client.evaluate(['On']));
+          await client.flushTelemetry();
+          await client.setContext({ identity: 'bob' });
+          client.recordView('Cleared');
+          await client.flushTelemetry();
+          await client.setContext({ instanceId: 'A' });
+          let pending: Promise<void> | undefined;
+          const later = { id: 'later', flagKeys: ['Entity'], isEnabled: () => true };
+          client.setLocalGates([
+            {
+              id: 'first',
+              flagKeys: ['First'],
+              isEnabled: () => {
+                later.isEnabled = () => false;
+                const selected = client.state().definitions.Entity;
+                if (typeof selected !== 'boolean') selected.rules[0].value = 'retired';
+                pending = client.setContext({ instanceId: 'B' });
+                return true;
+              },
+            },
+            later,
+          ]);
+          results.push(
+            client.evaluate(['First', 'Entity'], 'all', false, {
+              kind: 'User',
+              key: 'one',
+              attributes: { role: 'admin' },
+            }),
+          );
+          await pending;
+          client.recordUsage('After');
+          await client.flushTelemetry();
+          return results;
+        } finally {
+          client.dispose();
+        }
+      },
+      async normalizedHydration() {
+        const client = createClient(mintedConfig);
+        const results = [];
+        try {
+          for (const [instanceId, On] of [
+            [' A ', true],
+            ['A', false],
+            [' A ', true],
+          ] as const) {
+            client.hydrate({
+              context: { instanceId },
+              definitions: { On },
+              expose: ['On'],
+              source: 'signed',
+            });
+            results.push([client.context().instanceId, client.evaluate(['On'])]);
+          }
+          await client.flushTelemetry();
+          return results;
+        } finally {
+          client.dispose();
+        }
+      },
+      async constructionRetirement() {
+        const results = [];
+        for (const phase of ['diagnostic', 'fetch']) {
+          let client!: Toggly;
+          let callbacks = 0;
+          createRoot((dispose) => {
+            client = createToggly({
+              ...mintedConfig,
+              storage: undefined,
+              flagDefaults: { On: false },
+              verifySignatures: false,
+              telemetryFlushIntervalMs: phase === 'diagnostic' ? -1 : 45000,
+              onTelemetryDiagnostic: () => {
+                callbacks++;
+                dispose();
+              },
+              fetch: async () => {
+                callbacks++;
+                dispose();
+                return new Response('{"On":true}');
+              },
+            });
+          });
+          client.recordUsage('Retired');
+          await client.flushTelemetry();
+          results.push({ callbacks, flags: client.client.flags() });
+          client.client.dispose();
+        }
+        return results;
+      },
+      async mintedOffline() {
+        const client = createClient({ ...mintedConfig, enableTelemetry: false });
+        try {
+          await client.refresh();
+          return { enabled: client.evaluate(['On']), error: !!client.state().error };
+        } finally {
+          client.dispose();
+        }
+      },
+    });
+  });
   return (
     <>
       <p data-testid="identity">{flags.client.context().identity}</p>
@@ -27,6 +164,7 @@ export default function Home() {
             config={{
               appKey: import.meta.env.VITE_TOGGLY_APP_KEY,
               baseURI: import.meta.env.VITE_TOGGLY_BASE_URL,
+              metricsBaseUrl: import.meta.env.VITE_TOGGLY_METRICS_URL,
               refreshInterval: 0,
             }}
           >
