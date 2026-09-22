@@ -33,6 +33,10 @@ module Toggly
     # @return [Hash<String, FeatureDefinition>] Current definitions
     attr_reader :definitions
 
+    # @return [Hash<String, EvaluatedVariantDef>] Current evaluated variants
+    #   (populated only when `config.enable_variants` is true)
+    attr_reader :variant_defs
+
     # @return [Boolean] Whether the client is ready
     attr_reader :ready
 
@@ -44,6 +48,7 @@ module Toggly
       @config.validate!
 
       @definitions = {}
+      @variant_defs = {}
       # True once a revision (including empty) or durable snapshot was applied.
       @definitions_loaded = false
       @mutex = Mutex.new
@@ -78,10 +83,15 @@ module Toggly
     def enabled?(feature_key, context: nil, default: nil)
       key = feature_key.to_s
 
-      definition = @mutex.synchronize { @definitions[key] }
+      variant_entry, definition = @mutex.synchronize do
+        [(@variant_defs[key] if @config.enable_variants), @definitions[key]]
+      end
 
-      # Check defaults if not found
-      result = if definition.nil?
+      # Dual-rail: a server-evaluated variant assignment (when enabled) wins
+      # over local rule evaluation — the server already picked the outcome.
+      result = if variant_entry
+                 variant_entry.enabled
+               elsif definition.nil?
                  if !default.nil?
                    default
                  elsif @config.defaults.key?(key)
@@ -107,6 +117,54 @@ module Toggly
     # @return [Boolean]
     def disabled?(feature_key, context: nil, default: nil)
       !enabled?(feature_key, context: context, default: default.nil? ? nil : !default)
+    end
+
+    # Get the assigned variant for a feature. Requires `config.enable_variants`;
+    # returns nil when variants are disabled, unknown, or unassigned.
+    #
+    # NOTE: this is the actual A/B assignment. It is unrelated to the
+    # `variant:` telemetry label on `record_usage` / `record_view`, which is
+    # a free-form usage tag (defaults to "enabled"/"disabled") and does not
+    # reflect `evaluated-variants-signed` results.
+    #
+    # @param feature_key [String, Symbol] The feature key
+    # @return [VariantResult, nil]
+    def get_variant(feature_key)
+      return nil unless @config.enable_variants
+
+      key = feature_key.to_s
+      entry = @mutex.synchronize { @variant_defs[key] }
+      return nil if entry.nil? || entry.variant.nil? || entry.variant.to_s.empty?
+
+      VariantResult.new(name: entry.variant, configuration_value: entry.configuration_value)
+    end
+
+    # Get the configuration value for the assigned variant, if any.
+    #
+    # @param feature_key [String, Symbol] The feature key
+    # @return [Object, nil]
+    def get_variant_value(feature_key)
+      get_variant(feature_key)&.configuration_value
+    end
+
+    # Update the `userId` sent to `evaluated-variants-signed` and, when
+    # `config.enable_variants` is true, clear cached variants and refresh.
+    # No-op (besides updating provider state) when variants are disabled.
+    # Named as an action (not `variant_identity=`) because it also triggers
+    # a network refresh — it is not a passive attribute writer.
+    #
+    # @param identity [String, nil]
+    # @return [Boolean] true if the identity changed
+    # rubocop:disable-next Naming/AccessorMethodName
+    def set_variant_identity(identity)
+      changed = @provider.set_variant_identity(identity)
+
+      if changed && @config.enable_variants
+        @mutex.synchronize { @variant_defs = {} }
+        refresh(force: true) unless @config.offline_mode?
+      end
+
+      changed
     end
 
     # Get detailed evaluation result
@@ -161,21 +219,10 @@ module Toggly
       end
 
       begin
-        result = @provider.fetch(force: force)
-        record_refresh_cache_outcome(result.cache_outcome)
-
-        if result.definitions
-          @mutex.synchronize do
-            @definitions = result.definitions
-            @definitions_loaded = true
-            @ready = true
-          end
-
-          save_snapshot
-          log_info("Definitions refreshed (#{result.definitions.size} features)")
-          true
+        if @config.enable_variants
+          refresh_variants(force: force)
         else
-          false
+          refresh_definitions(force: force)
         end
       rescue StandardError => e
         log_error("Failed to refresh definitions: #{e.message}")
@@ -290,6 +337,46 @@ module Toggly
 
     private
 
+    # Definitions rail: `definitions` / `definitions-signed` → local rule eval.
+    def refresh_definitions(force:)
+      result = @provider.fetch(force: force)
+      record_refresh_cache_outcome(result.cache_outcome)
+
+      if result.definitions
+        @mutex.synchronize do
+          @definitions = result.definitions
+          @definitions_loaded = true
+          @ready = true
+        end
+
+        save_snapshot
+        log_info("Definitions refreshed (#{result.definitions.size} features)")
+        true
+      else
+        false
+      end
+    end
+
+    # Variants rail: `evaluated-variants-signed` → server-evaluated assignment.
+    def refresh_variants(force:)
+      result = @provider.fetch_variants(force: force)
+      record_refresh_cache_outcome(result.cache_outcome)
+
+      if result.variants
+        @mutex.synchronize do
+          @variant_defs = result.variants
+          @definitions_loaded = true
+          @ready = true
+        end
+
+        save_snapshot
+        log_info("Evaluated variants refreshed (#{result.variants.size} features)")
+        true
+      else
+        false
+      end
+    end
+
     def initialize_definitions
       # Startup served from durable snapshot before first network — cache hit.
       # Distinct from the subsequent refresh() network outcome (no double-count
@@ -314,7 +401,7 @@ module Toggly
       log_error("Failed to initialize definitions: #{e.message}")
 
       # Use snapshot or defaults as fallback
-      @ready = true if @definitions.any? || @config.defaults.any?
+      @ready = true if @definitions.any? || @variant_defs.any? || @config.defaults.any?
     end
 
     def start_background_refresh

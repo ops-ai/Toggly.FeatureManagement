@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-09-22
+
+### Added
+
+- Server-evaluated feature variants (dual-rail, matching the Python/Go SDK
+  contract). Set `enable_variants: true` on `Config` to additionally fetch
+  `evaluated-variants-signed/{app_key}/{environment}` alongside the existing
+  `definitions` / `definitions-signed` pipeline that still drives `enabled?`
+  when variants are off. New `Config` options: `enable_variants`,
+  `variant_identity`, `variant_groups`, `variant_claims`. New
+  `Client#get_variant` / `Client#get_variant_value` return the assigned
+  variant name and `configuration_value`, or `nil` when unassigned or
+  disabled. New `Client#set_variant_identity` updates the `userId` sent to
+  `evaluated-variants-signed` and refreshes.
+- `SnapshotProviders::Base#save_variants` / `#load_variants` (default no-op)
+  so `Memory` and `File` providers persist evaluated variants across
+  restarts, independent of the `definitions` snapshot.
+
+**Note:** the new `get_variant` assignment is unrelated to the existing
+`variant:` label on `record_usage` / `record_view`, which is a free-form
+usage tag (defaults to `"enabled"`/`"disabled"`) and does not reflect
+`evaluated-variants-signed` results.
+
 ## [0.5.2] - 2026-09-17
 
 ### Fixed
