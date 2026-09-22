@@ -11,7 +11,7 @@
 // This file serves as the main entry point for the TogglyCore module
 
 /// Toggly SDK version
-public let togglyVersion = "1.5.2"
+public let togglyVersion = "1.6.0"
 
 /// Shared Toggly service instance for convenient access.
 /// Initialize with `Toggly.shared.configure(config:)` before use.

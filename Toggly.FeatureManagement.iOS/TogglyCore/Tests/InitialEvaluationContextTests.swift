@@ -149,7 +149,7 @@ final class InitialEvaluationContextTests: XCTestCase {
         let tokenHash = SHA256.hash(data: Data("a".utf8)).map { String(format: "%02x", $0) }.joined()
         let context = String(data: try JSONEncoder().encode([["https://initial-context.invalid", "app", "Production"], ["instanceIdHash", tokenHash]]), encoding: .utf8)!
         let hash = SHA256.hash(data: Data(context.utf8)).map { String(format: "%02x", $0) }.joined()
-        let key = TogglyStorageKeys.featureFlagsCache + "v2:" + hash
+        let key = TogglyStorageKeys.featureFlagsCache + "v3:evaluated:" + hash
         let paused = expectation(description: "old invalid A cache read suspended")
         let storage = DelayedInvalidCacheStorage(key: key, paused: paused)
         let invalid = TogglyFeatureFlagsCache(identity: "alice", flags: "invalid", evaluationContext: context)

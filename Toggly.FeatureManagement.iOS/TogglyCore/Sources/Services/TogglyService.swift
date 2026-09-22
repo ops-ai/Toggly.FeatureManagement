@@ -16,6 +16,8 @@ public actor TogglyService {
 
     private var definitions: EvaluatedDefinitions?
     private var features: FeatureFlags?
+    /// Server-evaluated variant assignments, populated only when `config.enableVariants` is `true`.
+    private var variantDefs: EvaluatedVariantDefs?
     private var featuresLoading = false
     private var contextGeneration = 0
     private var completedFetch: (generation: Int, response: TogglyInitResponse)?
@@ -124,6 +126,7 @@ public actor TogglyService {
         contextGeneration += 1
         features = nil
         definitions = nil
+        variantDefs = nil
         eTag = nil
         let initialGeneration = contextGeneration
         // Handle identity
@@ -175,7 +178,7 @@ public actor TogglyService {
             let generation = contextGeneration
             let cached = await loadCachedDefinitions()
             guard generation == contextGeneration else { return await refresh() }
-            applySnapshot(cached.definitions, flags: cached.flags)
+            applySnapshot(cached.definitions, flags: cached.flags, variantDefs: cached.variantDefs)
             return TogglyInitResponse(status: .cached, flags: cached.flags)
         }
 
@@ -202,6 +205,7 @@ public actor TogglyService {
         stateChangeHandlers.removeAll()
         features = nil
         definitions = nil
+        variantDefs = nil
         inMemoryJwks = nil
         isInitialized = false
     }
@@ -342,6 +346,43 @@ public actor TogglyService {
         TogglyCore.registerContext(kind, mapper: mapper)
     }
 
+    // MARK: - Variants
+
+    /// Returns the server-evaluated variant assignment for `featureKey`.
+    ///
+    /// Returns `nil` when `config.enableVariants` is `false`, the feature has no
+    /// variant entry, the feature is not effectively enabled, or no variant name
+    /// is assigned. Records a telemetry check labeled with the variant name (or
+    /// "enabled"/"disabled") unless `recordCheck` is `false`.
+    @discardableResult
+    public func getVariant(_ featureKey: String, recordCheck: Bool = true) async -> VariantResult? {
+        guard config.enableVariants else { return nil }
+        await ensureFeaturesLoaded()
+        let capturedAttribution = attribution
+
+        func record(_ label: String) async {
+            guard recordCheck else { return }
+            await telemetry?.recordVariantCheck(featureKey, label: label, attribution: capturedAttribution)
+        }
+
+        guard let entry = variantDefs?[featureKey], entry.enabled else {
+            await record("disabled")
+            return nil
+        }
+        guard let variant = entry.variant else {
+            await record("enabled")
+            return nil
+        }
+        await record(variant)
+        return VariantResult(name: variant, configurationValue: entry.configurationValue)
+    }
+
+    /// Returns `VariantResult.configurationValue` for `featureKey`, or `nil` when
+    /// no variant is currently assigned. See `getVariant(_:recordCheck:)`.
+    public func getVariantValue(_ featureKey: String) async -> Any? {
+        await getVariant(featureKey)?.configurationValue
+    }
+
     // MARK: - Identity
 
     /// Set user identity for targeting.
@@ -362,7 +403,7 @@ public actor TogglyService {
         let previousIdentity = self.identity
         self.identity = identity
         self.instanceId = Self.normalizedToken(instanceId)
-        features = nil; definitions = nil; eTag = nil; completedFetch = nil
+        features = nil; definitions = nil; variantDefs = nil; eTag = nil; completedFetch = nil
         if identity == nil {
             var deviceId = await storage.get(TogglyStorageKeys.deviceId)
             guard generation == contextGeneration else { return await refresh() }
@@ -400,6 +441,7 @@ public actor TogglyService {
         contextGeneration += 1
         features = nil
         definitions = nil
+        variantDefs = nil
         eTag = nil
 
         let cacheKey = featureCacheKey
@@ -562,7 +604,7 @@ public actor TogglyService {
                 lastChecked = Date()
                 let cached = await loadCachedDefinitions()
                 guard snapshot.generation == contextGeneration else { return obsolete }
-                applySnapshot(cached.definitions, flags: cached.flags)
+                applySnapshot(cached.definitions, flags: cached.flags, variantDefs: cached.variantDefs)
                 return TogglyInitResponse(status: .cached, flags: cached.flags)
             }
 
@@ -593,7 +635,7 @@ public actor TogglyService {
             }
 
             lastChecked = Date()
-            applySnapshot(parsed.definitions, flags: flags)
+            applySnapshot(parsed.definitions, flags: flags, variantDefs: parsed.variantDefs)
             lastSynced = Date()
             lastError = nil
 
@@ -614,7 +656,7 @@ public actor TogglyService {
             // Fall back to cache or defaults
             let cached = await loadCachedDefinitions()
             guard snapshot.generation == contextGeneration else { return obsolete }
-            applySnapshot(cached.definitions, flags: cached.flags)
+            applySnapshot(cached.definitions, flags: cached.flags, variantDefs: cached.variantDefs)
 
             return TogglyInitResponse(status: .defaults, flags: cached.flags, error: lastError)
         }
@@ -623,15 +665,21 @@ public actor TogglyService {
     private func buildApiUrl() -> URL {
         var components = URLComponents(string: config.baseURI)!
         components.path = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        components.path = "/" + (components.path.isEmpty ? "" : components.path + "/") + "evaluated-signed/\(config.appKey ?? "")/\(config.environment)"
+        let route = config.enableVariants ? "evaluated-variants-signed" : "evaluated-signed"
+        components.path = "/" + (components.path.isEmpty ? "" : components.path + "/") + "\(route)/\(config.appKey ?? "")/\(config.environment)"
         var items = (components.queryItems ?? []).filter {
-            $0.name != "i" && $0.name != "u" && $0.name != "g" && !$0.name.hasPrefix("claim.")
+            $0.name != "i" && $0.name != "u" && $0.name != "g" && !$0.name.hasPrefix("claim.") &&
+                (!config.enableVariants || $0.name != "userId")
         }
         if let instanceId {
             items.removeAll { $0.name == "userId" }
             items.append(URLQueryItem(name: "i", value: instanceId))
         } else {
-            if let identity { items.append(URLQueryItem(name: "u", value: identity)) }
+            // The variants endpoint identifies the client with `userId`; the
+            // boolean evaluated-signed endpoint uses `u`.
+            if let identity {
+                items.append(URLQueryItem(name: config.enableVariants ? "userId" : "u", value: identity))
+            }
             items += groups.map { URLQueryItem(name: "g", value: $0) }
             items += claims
         }
@@ -656,12 +704,19 @@ public actor TogglyService {
         SHA256.hash(data: Data(contextIdentity.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
-    private var featureCacheKey: String { TogglyStorageKeys.featureFlagsCache + "v2:" + contextHash }
-    private var revisionCacheKey: String { TogglyStorageKeys.etag + "v2:" + contextHash }
+    /// Segregates cached bodies by mode: boolean/gate defs and variant defs use the
+    /// same underlying cache struct but are not interchangeable.
+    private var cacheKeyModeSuffix: String { config.enableVariants ? "variants:" : "evaluated:" }
+    private var featureCacheKey: String { TogglyStorageKeys.featureFlagsCache + "v3:" + cacheKeyModeSuffix + contextHash }
+    private var revisionCacheKey: String { TogglyStorageKeys.etag + "v3:" + cacheKeyModeSuffix + contextHash }
 
     /// Parse definitions response. When `verifySignatures` is enabled, verify ES256
     /// against the exact raw defs JSON (Security digest-level double-hash).
     private func parseFeatureFlagsResponse(_ data: Data) async throws -> ParsedFeatureFlags {
+        if config.enableVariants {
+            return try await parseVariantsResponse(data)
+        }
+
         if !config.verifySignatures {
             let definitions = try parseEvaluatedDefinitions(from: data)
             let wrapped: EvaluatedDefinitions
@@ -716,6 +771,63 @@ public actor TogglyService {
             return ParsedFeatureFlags(
                 definitions: definitions,
                 flags: toBooleanDefinitions(definitions),
+                defsRaw: defsRaw,
+                timestamp: envelope.timestamp,
+                signature: envelope.signature,
+                keyId: envelope.kid
+            )
+        } catch let error as SignedDefsVerifyError {
+            throw TogglyError.signatureVerificationFailed(error.localizedDescription)
+        } catch let error as TogglyError {
+            throw error
+        } catch {
+            throw TogglyError.signatureVerificationFailed(error.localizedDescription)
+        }
+    }
+
+    /// Variant twin of the unsigned/signed branches above, used only when
+    /// `config.enableVariants` is `true`. The wire entry per feature key is
+    /// `{ enabled, variant?, configurationValue? }`, already server-evaluated.
+    private func parseVariantsResponse(_ data: Data) async throws -> ParsedFeatureFlags {
+        if !config.verifySignatures {
+            let bodyText = String(data: data, encoding: .utf8) ?? ""
+            let raw = SignedDefsVerify.extractRawJsonProperty(from: bodyText, key: "defs")
+                ?? SignedDefsVerify.extractRawJsonProperty(from: bodyText, key: "data")
+                ?? bodyText
+            let variants = try parseEvaluatedVariantDefs(from: raw)
+            let flags = toBooleanFlags(fromVariantDefs: variants)
+            return ParsedFeatureFlags(
+                definitions: fromBooleanDefaults(flags),
+                flags: flags,
+                variantDefs: variants,
+                defsRaw: raw
+            )
+        }
+
+        guard let bodyText = String(data: data, encoding: .utf8) else {
+            throw TogglyError.invalidResponse
+        }
+
+        do {
+            let (envelope, defsRaw) = try SignedDefsVerify.parseSignedEnvelope(bodyText)
+            try SignedDefsVerify.assertEnvelopeFreshness(
+                timestamp: envelope.timestamp,
+                maxSignatureAgeSeconds: config.maxSignatureAgeSeconds
+            )
+            let jwks = try await fetchJwks()
+            try SignedDefsVerify.verifySignedDefinitions(
+                defsRaw: defsRaw,
+                signature: envelope.signature,
+                timestamp: envelope.timestamp,
+                kid: envelope.kid,
+                jwks: jwks
+            )
+            let variants = try parseEvaluatedVariantDefs(from: defsRaw)
+            let flags = toBooleanFlags(fromVariantDefs: variants)
+            return ParsedFeatureFlags(
+                definitions: fromBooleanDefaults(flags),
+                flags: flags,
+                variantDefs: variants,
                 defsRaw: defsRaw,
                 timestamp: envelope.timestamp,
                 signature: envelope.signature,
@@ -790,19 +902,21 @@ public actor TogglyService {
     private struct CachedDefinitions {
         let definitions: EvaluatedDefinitions
         let flags: FeatureFlags
+        var variantDefs: EvaluatedVariantDefs? = nil
     }
 
-    private func applySnapshot(_ defs: EvaluatedDefinitions, flags: FeatureFlags) {
+    private func applySnapshot(_ defs: EvaluatedDefinitions, flags: FeatureFlags, variantDefs: EvaluatedVariantDefs? = nil) {
         definitions = defs
         features = flags
+        self.variantDefs = variantDefs
     }
 
     private func loadCachedDefinitions() async -> CachedDefinitions {
         if let features, let definitions {
-            return CachedDefinitions(definitions: definitions, flags: features)
+            return CachedDefinitions(definitions: definitions, flags: features, variantDefs: variantDefs)
         }
         if let features {
-            return CachedDefinitions(definitions: fromBooleanDefaults(features), flags: features)
+            return CachedDefinitions(definitions: fromBooleanDefaults(features), flags: features, variantDefs: variantDefs)
         }
 
         let expectedGeneration = contextGeneration
@@ -812,8 +926,9 @@ public actor TogglyService {
         let legacyKey = TogglyStorageKeys.featureFlagsCache + hashIdentity(identity ?? "")
         var cacheKey = featureCacheKey
         var stored = await storage.get(cacheKey)
-        // Only context-free configurations can reuse identity-only entries from older SDKs.
-        if stored == nil && instanceId == nil && groups.isEmpty && claims.isEmpty {
+        // Only context-free boolean configurations can reuse identity-only entries
+        // from older SDKs; that legacy cache never holds variant payloads.
+        if stored == nil && !config.enableVariants && instanceId == nil && groups.isEmpty && claims.isEmpty {
             cacheKey = legacyKey
             stored = await storage.get(cacheKey)
         }
@@ -836,6 +951,10 @@ public actor TogglyService {
         cacheKey: String,
         generation: Int
     ) async -> CachedDefinitions {
+        if config.enableVariants {
+            return await trustOrReverifyCachedVariants(cacheData, cacheKey: cacheKey, generation: generation)
+        }
+
         guard let parsed = try? parseEvaluatedDefinitions(from: cacheData.flags) else {
             await mutateCache(generation: generation) { await self.storage.delete(cacheKey) }
             return CachedDefinitions(
@@ -894,6 +1013,70 @@ public actor TogglyService {
         }
     }
 
+    /// Variant twin of `trustOrReverifyCachedFlags`, used only when `config.enableVariants` is `true`.
+    private func trustOrReverifyCachedVariants(
+        _ cacheData: TogglyFeatureFlagsCache,
+        cacheKey: String,
+        generation: Int
+    ) async -> CachedDefinitions {
+        guard let variants = try? parseEvaluatedVariantDefs(from: cacheData.flags) else {
+            await mutateCache(generation: generation) { await self.storage.delete(cacheKey) }
+            return CachedDefinitions(
+                definitions: fromBooleanDefaults(config.featureDefaults),
+                flags: config.featureDefaults
+            )
+        }
+        let flags = toBooleanFlags(fromVariantDefs: variants)
+
+        guard config.verifySignatures else {
+            return CachedDefinitions(definitions: fromBooleanDefaults(flags), flags: flags, variantDefs: variants)
+        }
+
+        guard let timestamp = cacheData.timestamp,
+              let signature = cacheData.signature, !signature.isEmpty,
+              let keyId = cacheData.keyId, !keyId.isEmpty else {
+            await mutateCache(generation: generation) { await self.storage.delete(cacheKey) }
+            return CachedDefinitions(
+                definitions: fromBooleanDefaults(config.featureDefaults),
+                flags: config.featureDefaults
+            )
+        }
+
+        do {
+            try SignedDefsVerify.assertEnvelopeFreshness(
+                timestamp: timestamp,
+                maxSignatureAgeSeconds: config.maxSignatureAgeSeconds
+            )
+        } catch {
+            await mutateCache(generation: generation) { await self.storage.delete(cacheKey) }
+            return CachedDefinitions(
+                definitions: fromBooleanDefaults(config.featureDefaults),
+                flags: config.featureDefaults
+            )
+        }
+
+        guard let jwks = await resolveJwksForCacheVerify() else {
+            return CachedDefinitions(definitions: fromBooleanDefaults(flags), flags: flags, variantDefs: variants)
+        }
+
+        do {
+            try SignedDefsVerify.verifySignedDefinitions(
+                defsRaw: cacheData.flags,
+                signature: signature,
+                timestamp: timestamp,
+                kid: keyId,
+                jwks: jwks
+            )
+            return CachedDefinitions(definitions: fromBooleanDefaults(flags), flags: flags, variantDefs: variants)
+        } catch {
+            await mutateCache(generation: generation) { await self.storage.delete(cacheKey) }
+            return CachedDefinitions(
+                definitions: fromBooleanDefaults(config.featureDefaults),
+                flags: config.featureDefaults
+            )
+        }
+    }
+
     private func mutateCache(generation: Int, operation: @escaping @Sendable () async -> Void) async {
         let prior = cacheMutation
         let task = Task {
@@ -943,6 +1126,8 @@ public actor TogglyService {
     private struct ParsedFeatureFlags {
         let definitions: EvaluatedDefinitions
         let flags: FeatureFlags
+        /// Populated only when `config.enableVariants` is `true`.
+        let variantDefs: EvaluatedVariantDefs?
         let defsRaw: String?
         let timestamp: Int64?
         let signature: String?
@@ -951,6 +1136,7 @@ public actor TogglyService {
         init(
             definitions: EvaluatedDefinitions,
             flags: FeatureFlags,
+            variantDefs: EvaluatedVariantDefs? = nil,
             defsRaw: String? = nil,
             timestamp: Int64? = nil,
             signature: String? = nil,
@@ -958,6 +1144,7 @@ public actor TogglyService {
         ) {
             self.definitions = definitions
             self.flags = flags
+            self.variantDefs = variantDefs
             self.defsRaw = defsRaw
             self.timestamp = timestamp
             self.signature = signature
@@ -982,7 +1169,7 @@ public actor TogglyService {
             await ensureFeaturesLoaded()
             return
         }
-        applySnapshot(cached.definitions, flags: cached.flags)
+        applySnapshot(cached.definitions, flags: cached.flags, variantDefs: cached.variantDefs)
     }
 
     private func startRefreshTimer() {

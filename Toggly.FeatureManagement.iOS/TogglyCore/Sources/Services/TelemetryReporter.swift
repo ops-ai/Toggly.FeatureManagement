@@ -373,6 +373,13 @@ public actor TelemetryReporter {
         for (key, enabled) in checks { recordCheck(key, variant: enabled ? "enabled" : "disabled") }
     }
 
+    /// Records a feature check with an explicit label (a variant name or "enabled"/"disabled").
+    func recordVariantCheck(_ key: String, label: String, attribution: Attribution) {
+        guard !disposed else { return }
+        useAttribution(attribution)
+        recordCheck(key, variant: label)
+    }
+
     func recordUsage(_ key: String, variant: String, attribution: Attribution) {
         useAttribution(attribution); recordUsage(key, variant: variant)
     }
