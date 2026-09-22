@@ -12,7 +12,7 @@ describe('Smoke test', () => {
       return;
     }
     const service = new Toggly({
-      appKey: appKey!,
+      enableTelemetry: false, appKey: appKey!,
       environment: 'Production',
       baseURI: 'https://definitions.toggly.io',
       enableLiveUpdates: false,

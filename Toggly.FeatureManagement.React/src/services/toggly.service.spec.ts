@@ -45,7 +45,7 @@ describe('Toggly Service', () => {
 
     it('should default environment to Production when appKey provided without env', () => {
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
-      new Toggly({ appKey: 'test-key' });
+      new Toggly({ enableTelemetry: false, appKey: 'test-key' });
 
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Using Production environment')
@@ -54,7 +54,7 @@ describe('Toggly Service', () => {
 
     it('should accept appKey and environment without warning about env', () => {
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
-      new Toggly({ appKey: 'test-key', environment: 'Staging' });
+      new Toggly({ enableTelemetry: false, appKey: 'test-key', environment: 'Staging' });
 
       // Should NOT warn about production environment
       const envWarns = warnSpy.mock.calls.filter((c) =>
@@ -98,7 +98,7 @@ describe('Toggly Service', () => {
 
     it('should merge config with defaults', () => {
       const service = new Toggly({
-        appKey: 'key',
+        enableTelemetry: false, appKey: 'key',
         environment: 'Test',
       });
 
@@ -131,7 +131,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
       });
 
@@ -144,7 +144,8 @@ describe('Toggly Service', () => {
     });
 
     it('should return cached features when API returns 304', async () => {
-      localStorage.setItem('toggly:revision:test-key:Production', 'rev123');
+      localStorage.setItem('toggly:flags:test-key:Production:v3:evaluated:', JSON.stringify({CachedFlag:true}));
+      localStorage.setItem('toggly:revision:test-key:Production:v2:evaluated:', 'rev123');
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 304,
@@ -154,7 +155,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         featureDefaults: { Fallback: true },
       });
@@ -172,7 +173,7 @@ describe('Toggly Service', () => {
 
     it('should preserve cached flags when API returns non-2xx', async () => {
       localStorage.setItem(
-        'toggly:flags:test-key:Production',
+        'toggly:flags:test-key:Production:v3:evaluated:',
         JSON.stringify({ CachedFlag: true }),
       );
       mockFetch.mockResolvedValueOnce({
@@ -185,7 +186,7 @@ describe('Toggly Service', () => {
       const onError = jest.fn();
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         onError,
       });
@@ -206,7 +207,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         featureDefaults: { F1: true },
       });
@@ -216,10 +217,10 @@ describe('Toggly Service', () => {
     });
 
     it('should ignore invalid JSON in localStorage cache', () => {
-      localStorage.setItem('toggly:flags:test-key:Production', 'not-json{{{');
+      localStorage.setItem('toggly:flags:test-key:Production:v3:evaluated:', 'not-json{{{');
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
       });
 
@@ -236,7 +237,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         identity: 'user-123',
       });
@@ -248,7 +249,7 @@ describe('Toggly Service', () => {
       );
     });
 
-    it('restores prior context when setContext fetch fails', async () => {
+    it('rejects failed context refresh while retaining the new user and safe defaults', async () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
@@ -260,9 +261,9 @@ describe('Toggly Service', () => {
         .mockRejectedValueOnce(new Error('refresh failed'))
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
-        identity: 'user-a',
+        identity: 'user-a', instanceId: 'mint-a', featureDefaults: { Safe: true },
       })
 
       await service._loadFeatures()
@@ -272,8 +273,10 @@ describe('Toggly Service', () => {
         service.setContext({ identity: 'user-b' }),
       ).rejects.toThrow('refresh failed')
 
-      expect((service as any)._config.identity).toBe('user-a')
-      expect(await service.isFeatureOn('Gated')).toBe(true)
+      expect((service as any)._config.identity).toBe('user-b')
+      expect((service as any)._config.instanceId).toBeUndefined()
+      expect(await service.isFeatureOn('Safe')).toBe(true)
+      expect(await service.isFeatureOn('Gated')).toBe(false)
     })
 
     it('should include groups and claims in API URL after setContext', async () => {
@@ -286,7 +289,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         identity: 'user-123',
       });
@@ -326,7 +329,7 @@ describe('Toggly Service', () => {
         });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         identity: 'user-123',
       });
@@ -350,7 +353,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         identity: 'user-123',
       });
@@ -362,9 +365,7 @@ describe('Toggly Service', () => {
       });
 
       const cacheKeys = Object.keys(localStorage).filter(k => k.includes('toggly:flags'));
-      expect(cacheKeys.some(k => k.includes('u:user-123'))).toBe(true);
-      expect(cacheKeys.some(k => k.includes('g:beta'))).toBe(true);
-      expect(cacheKeys.some(k => k.includes('c:role=admin'))).toBe(true);
+      expect(cacheKeys).toContain('toggly:flags:test-key:Production:v3:evaluated:v2:' + encodeURIComponent(JSON.stringify(['user-123',['beta'],[['role','admin']]])));
     });
 
     it('setContext should append context to variants URL when enableVariants is true', async () => {
@@ -382,7 +383,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         enableVariants: true,
         enableLiveUpdates: false,
@@ -411,7 +412,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         identity: 'user-123',
       });
@@ -431,7 +432,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         identity: 'user-123',
       });
@@ -453,7 +454,7 @@ describe('Toggly Service', () => {
 
       const service = new Toggly({
         baseURI: 'https://custom.api.com',
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Staging',
       });
 
@@ -469,7 +470,7 @@ describe('Toggly Service', () => {
       const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         featureDefaults: { Fallback: true },
       });
@@ -485,7 +486,7 @@ describe('Toggly Service', () => {
       mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
       });
 
@@ -510,7 +511,7 @@ describe('Toggly Service', () => {
       );
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
       });
 
@@ -539,7 +540,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
       });
 
@@ -569,7 +570,7 @@ describe('Toggly Service', () => {
       };
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         hooks: [hook],
       });
@@ -603,7 +604,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
       });
 
@@ -854,7 +855,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
       });
 
@@ -1052,33 +1053,33 @@ describe('Toggly Service', () => {
     });
 
     it('should not start WebSocket when enableLiveUpdates is false', () => {
-      const service = new Toggly({ appKey: 'key', environment: 'Test', enableLiveUpdates: false });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'key', environment: 'Test', enableLiveUpdates: false });
       service.startWebSocket();
       expect(MockWebSocket.instances).toHaveLength(0);
     });
 
     it('should create WebSocket with wss:// URL', () => {
-      const service = new Toggly({ appKey: 'my-key', environment: 'Production', featureDefaults: {} });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'my-key', environment: 'Production', featureDefaults: {} });
       service.startWebSocket();
       expect(MockWebSocket.instances).toHaveLength(1);
-      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/my-key/ws?sdk=react&sdkVersion=1.6.0');
+      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/my-key/ws?sdk=react&sdkVersion=1.12.0');
     });
 
     it('should create ws:// URL for http:// baseURI', () => {
-      const service = new Toggly({ appKey: 'k', baseURI: 'http://local', featureDefaults: {} });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', baseURI: 'http://local', featureDefaults: {} });
       service.startWebSocket();
-      expect(MockWebSocket.instances[0].url).toBe('ws://local/k/ws?sdk=react&sdkVersion=1.6.0');
+      expect(MockWebSocket.instances[0].url).toBe('ws://local/k/ws?sdk=react&sdkVersion=1.12.0');
     });
 
     it('should set _wsConnected=true on open', () => {
-      const service = new Toggly({ appKey: 'k', featureDefaults: {} });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', featureDefaults: {} });
       service.startWebSocket();
       MockWebSocket.instances[0].onopen?.();
       expect(service._wsConnected).toBe(true);
     });
 
     it('should handle flags-updated JSON message by resetting features', () => {
-      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', featureDefaults: { F1: true } });
       (service as any)._features = { F1: true };
       service.startWebSocket();
       MockWebSocket.instances[0].onmessage?.({ data: JSON.stringify({ type: 'flags-updated' }) });
@@ -1086,8 +1087,8 @@ describe('Toggly Service', () => {
     });
 
     it('should handle flags-updated with new etag by scheduling refresh', async () => {
-      localStorage.setItem('toggly:revision:k:Production', 'old-rev');
-      const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: { F1: true } });
+      localStorage.setItem('toggly:revision:k:Production:v2:evaluated:', 'old-rev');
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', environment: 'Production', featureDefaults: { F1: true } });
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
@@ -1106,7 +1107,7 @@ describe('Toggly Service', () => {
     });
 
     it('should handle update JSON message by resetting features', () => {
-      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', featureDefaults: { F1: true } });
       (service as any)._features = { F1: true };
       service.startWebSocket();
       MockWebSocket.instances[0].onmessage?.({ data: JSON.stringify({ type: 'update' }) });
@@ -1114,7 +1115,7 @@ describe('Toggly Service', () => {
     });
 
     it('should ignore ping JSON message', () => {
-      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', featureDefaults: { F1: true } });
       (service as any)._features = { F1: true };
       service.startWebSocket();
       MockWebSocket.instances[0].onmessage?.({ data: JSON.stringify({ type: 'ping' }) });
@@ -1122,7 +1123,7 @@ describe('Toggly Service', () => {
     });
 
     it('should ignore unknown JSON message type', () => {
-      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', featureDefaults: { F1: true } });
       (service as any)._features = { F1: true };
       service.startWebSocket();
       MockWebSocket.instances[0].onmessage?.({ data: JSON.stringify({ type: 'unknown' }) });
@@ -1130,7 +1131,7 @@ describe('Toggly Service', () => {
     });
 
     it('should handle plain text update message', () => {
-      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', featureDefaults: { F1: true } });
       (service as any)._features = { F1: true };
       service.startWebSocket();
       MockWebSocket.instances[0].onmessage?.({ data: 'update' });
@@ -1138,7 +1139,7 @@ describe('Toggly Service', () => {
     });
 
     it('should handle plain text flags-updated message', () => {
-      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', featureDefaults: { F1: true } });
       (service as any)._features = { F1: true };
       service.startWebSocket();
       MockWebSocket.instances[0].onmessage?.({ data: 'flags-updated' });
@@ -1146,19 +1147,20 @@ describe('Toggly Service', () => {
     });
 
     it('should include rev query param when definitions revision is cached', () => {
-      localStorage.setItem('toggly:revision:k:Production', 'rev123');
-      const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: {} });
+      localStorage.setItem('toggly:flags:k:Production:v3:evaluated:', JSON.stringify({F1:true}));
+      localStorage.setItem('toggly:revision:k:Production:v2:evaluated:', 'rev123');
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', environment: 'Production', featureDefaults: {} });
       service.startWebSocket();
-      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/k/ws?rev=rev123&sdk=react&sdkVersion=1.6.0');
+      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/k/ws?rev=rev123&sdk=react&sdkVersion=1.12.0');
     });
 
     it('should prefer in-memory revision cache over localStorage', () => {
-      localStorage.setItem('toggly:revision:k:Production', 'stored-rev');
-      const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: {} });
+      localStorage.setItem('toggly:revision:k:Production:v2:evaluated:', 'stored-rev');
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', environment: 'Production', featureDefaults: {} });
       (service as any)._cachedDefinitionsRevision = 'memory-rev';
       service.startWebSocket();
       expect(MockWebSocket.instances[0].url).toBe(
-        'wss://definitions.toggly.io/k/ws?rev=memory-rev&sdk=react&sdkVersion=1.6.0',
+        'wss://definitions.toggly.io/k/ws?rev=memory-rev&sdk=react&sdkVersion=1.12.0',
       );
     });
 
@@ -1166,16 +1168,16 @@ describe('Toggly Service', () => {
       const getItem = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
         throw new Error('storage blocked');
       });
-      const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: {} });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', environment: 'Production', featureDefaults: {} });
       service.startWebSocket();
       expect(MockWebSocket.instances).toHaveLength(1);
-      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/k/ws?sdk=react&sdkVersion=1.6.0');
+      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/k/ws?sdk=react&sdkVersion=1.12.0');
       getItem.mockRestore();
     });
 
     it('should handle sync message with unchanged without scheduling refresh', () => {
-      localStorage.setItem('toggly:revision:k:Production', 'rev123');
-      const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: {} });
+      localStorage.setItem('toggly:revision:k:Production:v2:evaluated:', 'rev123');
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', environment: 'Production', featureDefaults: {} });
       (service as any)._features = { F1: true };
       service.startWebSocket();
       mockFetch.mockClear();
@@ -1187,8 +1189,8 @@ describe('Toggly Service', () => {
     });
 
     it('should handle sync message with new etag by scheduling refresh', async () => {
-      localStorage.setItem('toggly:revision:k:Production', 'old-rev');
-      const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: { F1: true } });
+      localStorage.setItem('toggly:revision:k:Production:v2:evaluated:', 'old-rev');
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', environment: 'Production', featureDefaults: { F1: true } });
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
@@ -1207,7 +1209,7 @@ describe('Toggly Service', () => {
     });
 
     it('should handle signing-key-updated by scheduling refresh', async () => {
-      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', featureDefaults: { F1: true } });
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
@@ -1227,8 +1229,8 @@ describe('Toggly Service', () => {
 
 
     it('after flags-updated with etag, next GET must not send If-None-Match for the WS etag', async () => {
-      localStorage.setItem('toggly:revision:k:Production', 'old-rev');
-      const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: { F1: true } });
+      localStorage.setItem('toggly:revision:k:Production:v2:evaluated:', 'old-rev');
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', environment: 'Production', featureDefaults: { F1: true } });
       mockFetch.mockResolvedValue({
         ok: true,
         status: 200,
@@ -1254,8 +1256,9 @@ describe('Toggly Service', () => {
     });
 
     it('should skip refresh when flags-updated etag matches cache', () => {
-      localStorage.setItem('toggly:revision:k:Production', 'same-rev');
-      const service = new Toggly({ appKey: 'k', environment: 'Production', featureDefaults: {} });
+      localStorage.setItem('toggly:flags:k:Production:v3:evaluated:', JSON.stringify({F1:true}));
+      localStorage.setItem('toggly:revision:k:Production:v2:evaluated:', 'same-rev');
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', environment: 'Production', featureDefaults: {} });
       (service as any)._features = { F1: true };
       service.startWebSocket();
       mockFetch.mockClear();
@@ -1267,7 +1270,7 @@ describe('Toggly Service', () => {
     });
 
     it('should ignore unrecognized plain text', () => {
-      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', featureDefaults: { F1: true } });
       (service as any)._features = { F1: true };
       service.startWebSocket();
       MockWebSocket.instances[0].onmessage?.({ data: 'hello' });
@@ -1275,14 +1278,14 @@ describe('Toggly Service', () => {
     });
 
     it('should log error on WebSocket onerror', () => {
-      const service = new Toggly({ appKey: 'k', featureDefaults: {} });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', featureDefaults: {} });
       service.startWebSocket();
       MockWebSocket.instances[0].onerror?.(new Event('error'));
       expect(console.error).toHaveBeenCalledWith('[Toggly] WebSocket error:', expect.anything());
     });
 
     it('should schedule reconnect on close', () => {
-      const service = new Toggly({ appKey: 'k', featureDefaults: {} });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', featureDefaults: {} });
       service.startWebSocket();
       MockWebSocket.instances[0].onclose?.();
       expect(service._wsConnected).toBe(false);
@@ -1292,7 +1295,7 @@ describe('Toggly Service', () => {
     });
 
     it('should stopWebSocket: close ws and clear state', () => {
-      const service = new Toggly({ appKey: 'k', featureDefaults: {} });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', featureDefaults: {} });
       service.startWebSocket();
       const ws = MockWebSocket.instances[0];
       service.stopWebSocket();
@@ -1302,7 +1305,7 @@ describe('Toggly Service', () => {
     });
 
     it('should stopWebSocket: cancel pending reconnect timer', () => {
-      const service = new Toggly({ appKey: 'k', featureDefaults: {} });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', featureDefaults: {} });
       service.startWebSocket();
       MockWebSocket.instances[0].onclose?.(); // sets reconnect timer
       service.stopWebSocket(); // should cancel the timer
@@ -1311,7 +1314,7 @@ describe('Toggly Service', () => {
     });
 
     it('should throttle HTTP when WS connected and refresh was recent', async () => {
-      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', featureDefaults: { F1: true } });
       (service as any)._features = { F1: true };
       service._wsConnected = true;
       service._lastFallbackRefresh = Date.now();
@@ -1323,7 +1326,7 @@ describe('Toggly Service', () => {
     });
 
     it('should update fallback refresh timestamp when WS connected and interval elapsed', async () => {
-      const service = new Toggly({ appKey: 'k', featureDefaults: { F1: true } });
+      const service = new Toggly({ enableTelemetry: false, appKey: 'k', featureDefaults: { F1: true } });
       (service as any)._features = { F1: true };
       service._wsConnected = true;
       service._lastFallbackRefresh =
@@ -1357,7 +1360,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         enableVariants: true,
         enableLiveUpdates: false,
@@ -1382,7 +1385,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'k',
+        enableTelemetry: false, appKey: 'k',
         environment: 'Production',
         enableVariants: true,
         identity: 'user@x',
@@ -1406,7 +1409,7 @@ describe('Toggly Service', () => {
 
     it('getVariant returns null before variants are loaded', () => {
       const service = new Toggly({
-        appKey: 'k',
+        enableTelemetry: false, appKey: 'k',
         enableVariants: true,
         enableLiveUpdates: false,
       });
@@ -1424,7 +1427,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         enableLiveUpdates: false,
       });
@@ -1445,7 +1448,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         enableLiveUpdates: false,
       });
@@ -1464,12 +1467,13 @@ describe('Toggly Service', () => {
       const env = 'Production';
       const defs = { V: { enabled: true, variant: 'cached' } };
       localStorage.setItem(
-        `toggly:variants:${appKey}:${env}`,
+        `toggly:variants:${appKey}:${env}:v3:variants:`,
         JSON.stringify(defs),
       );
       mockFetch.mockRejectedValueOnce(new Error('network'));
 
       const service = new Toggly({
+        enableTelemetry: false,
         appKey,
         environment: env,
         enableVariants: true,
@@ -1493,13 +1497,13 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         enableVariants: true,
         enableLiveUpdates: false,
       });
       localStorage.setItem(
-        'toggly:flags:test-key:Production',
+        'toggly:flags:test-key:Production:v3:variants:',
         JSON.stringify({ F1: true }),
       );
 
@@ -1517,7 +1521,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         enableVariants: true,
         enableLiveUpdates: false,
@@ -1538,7 +1542,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'k',
+        enableTelemetry: false, appKey: 'k',
         environment: 'Production',
         enableVariants: true,
         enableLiveUpdates: false,
@@ -1558,7 +1562,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'k',
+        enableTelemetry: false, appKey: 'k',
         environment: 'Production',
         enableVariants: true,
         enableLiveUpdates: false,
@@ -1583,7 +1587,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 't',
+        enableTelemetry: false, appKey: 't',
         environment: 'Production',
         enableLiveUpdates: false,
       });
@@ -1599,12 +1603,12 @@ describe('Toggly Service', () => {
 
     it('loads cached variant definitions during init', () => {
       localStorage.setItem(
-        'toggly:variants:k:Production',
+        'toggly:variants:k:Production:v3:variants:',
         JSON.stringify({ V: { enabled: true, variant: 'cached', configurationValue: 'x' } }),
       );
 
       const service = new Toggly({
-        appKey: 'k',
+        enableTelemetry: false, appKey: 'k',
         environment: 'Production',
         enableVariants: true,
         enableLiveUpdates: false,
@@ -1617,12 +1621,12 @@ describe('Toggly Service', () => {
     });
 
     it('ignores corrupt cached variants and falls back to cached flags', async () => {
-      localStorage.setItem('toggly:variants:k:Production', '{bad');
-      localStorage.setItem('toggly:flags:k:Production', JSON.stringify({ F1: true }));
+      localStorage.setItem('toggly:variants:k:Production:v3:variants:', '{bad');
+      localStorage.setItem('toggly:flags:k:Production:v3:variants:', JSON.stringify({ F1: true }));
       mockFetch.mockRejectedValueOnce(new Error('network'));
 
       const service = new Toggly({
-        appKey: 'k',
+        enableTelemetry: false, appKey: 'k',
         environment: 'Production',
         enableVariants: true,
         enableLiveUpdates: false,
@@ -1642,7 +1646,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'k',
+        enableTelemetry: false, appKey: 'k',
         environment: 'Production',
         enableVariants: true,
         enableLiveUpdates: false,
@@ -1664,7 +1668,7 @@ describe('Toggly Service', () => {
         .mockRejectedValueOnce(new Error('network'));
 
       const service = new Toggly({
-        appKey: 'k',
+        enableTelemetry: false, appKey: 'k',
         environment: 'Production',
         enableVariants: true,
         enableLiveUpdates: false,
@@ -1688,7 +1692,7 @@ describe('Toggly Service', () => {
       });
 
       const service = new Toggly({
-        appKey: 'k',
+        enableTelemetry: false, appKey: 'k',
         environment: 'Production',
         enableLiveUpdates: false,
       });
@@ -1713,7 +1717,7 @@ describe('Toggly Service', () => {
 
       let gateEnabled = false;
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         enableLiveUpdates: false,
         localGates: [{
@@ -1741,7 +1745,7 @@ describe('Toggly Service', () => {
       let gateEnabled = true;
       const listener = jest.fn();
       const service = new Toggly({
-        appKey: 'test-key',
+        enableTelemetry: false, appKey: 'test-key',
         environment: 'Production',
         enableLiveUpdates: false,
         localGates: [{
