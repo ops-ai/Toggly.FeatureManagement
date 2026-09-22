@@ -1,3 +1,4 @@
+import type { TelemetryDiagnostic } from '@ops-ai/toggly-client-telemetry';
 import type { Hook, EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 import type { LocalGate } from '@ops-ai/toggly-local-gates';
 
@@ -93,6 +94,15 @@ export interface AppStateProvider {
  * Configuration options for Toggly SDK
  */
 export interface TogglyConfig {
+  /** Aggregate frontend telemetry defaults on for keyed native clients. */
+  enableTelemetry?: boolean;
+  /** Independent metrics collector base URL (default https://metrics.toggly.io). */
+  metricsBaseUrl?: string;
+  /** Base interval 30000–60000ms; invalid intervals use 45000ms. */
+  telemetryFlushIntervalMs?: number;
+  /** Bounded payload-free diagnostics; observer errors are contained. */
+  onTelemetryDiagnostic?: (code: TelemetryDiagnostic) => void;
+
   /**
    * Base URI for Toggly API
    * @default 'https://definitions.toggly.io'
@@ -114,6 +124,9 @@ export interface TogglyConfig {
    * Unique user identifier for targeting and rollouts
    */
   identity?: string;
+
+  /** Host-minted frontend token; takes precedence over client identity targeting. */
+  instanceId?: string;
 
   /**
    * User groups for group-based targeting rules

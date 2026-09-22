@@ -374,3 +374,81 @@ Pass a domain object per `<Feature>` or `isFeatureOn` call (list rows, detail pa
 ## Find out more about Toggly.io
 
 Visit [our official website](https://toggly.io) or [check out a video overview of our product](https://docs.toggly.io/).
+## Minted identity and context changes
+
+Supply `instanceId` from your trusted backend in provider options or
+`service.setContext({ instanceId })`. The browser SDK never mints tokens or uses
+Backend keys. Definitions with `i` omit client `u`, `userId`, `g` and `claim.*`;
+without a token, existing identity/group/claim targeting remains supported.
+
+`setContext` accepts partial updates. Omitted fields retain their values, except
+an explicit identity update clears an omitted token. Pass `instanceId: ''` to
+return to the current client identity; `identity: ''` clears identity and token.
+A failed refresh still rejects its Promise, but keeps the new context's scoped
+cache or defaults, never the previous user's flags or token. Cached bodies and revision validators are scoped by response mode; ambiguous legacy cache entries are refreshed. Cache eviction removes the matching validator, while disabled or unavailable storage still retains the active variant snapshot. Definitions,
+revisions and pending responses are isolated by context. Queued telemetry and
+retries retain their original attribution while all contexts share one bounded
+queue. Hooks ignore superseded results after context or owner replacement.
+
+Client-generated `u` acceptance is controlled by the server application's setting,
+which is **off by default**. HTTP 202 does not prove that identity was accepted.
+
+## Browser telemetry
+
+Telemetry is enabled by default for browser clients with an application key.
+Each `Toggly` service owns one bounded in-memory reporter, started on the first
+recorded event. Hooks and components share that reporter. Set
+`enableTelemetry: false` in the service or `createTogglyProvider` configuration
+to opt out. Server rendering and keyless clients start no frontend telemetry.
+
+```typescript
+const toggly = new Toggly({
+  appKey: 'your-app-key',
+  environment: 'Production',
+  enableTelemetry: true,
+  metricsBaseUrl: 'https://metrics.toggly.io',
+  telemetryFlushIntervalMs: 45000,
+})
+
+toggly.recordUsage('checkout')
+toggly.recordView('checkout', 'control')
+toggly.incrementCounter('orders', 1)
+toggly.setGauge('cart-value', 29.95)
+await toggly.flushTelemetry()
+// For a directly owned service, call this when its lifetime ends:
+toggly.dispose()
+```
+
+The same methods are available on the service from `useContext(context)`.
+Automatic checks count each evaluated feature after entity and local gates,
+before aggregate negation, preserving gate short circuiting. Enabled assigned
+variants retain their name; other outcomes use `enabled` or `disabled`.
+Variant value lookups count once. Recomputed UI evaluations count again,
+including evaluations repeated by development StrictMode. Rendering never
+records a view or usage event. Internal refresh and cache projection are silent;
+usage and views are explicit and do not evaluate features.
+
+`createTogglyProvider` retains its shared service while any instance of that
+returned provider is mounted. StrictMode effect replay retains the same owner;
+final unmount disposes it in a microtask, and later remount creates a fresh owner.
+Separate provider factories own separate services. Raw context providers leave
+service disposal to the application. Disposal remains synchronous, detaches
+lifecycle listeners, closes live updates and initiates one best-effort final flush.
+Pending definitions requests cannot restart live updates after disposal.
+
+Telemetry includes application key, environment, aggregate feature counts and
+application metrics, plus optional host-provided `instanceId` as `i`, or the
+current client `identity` as `u`. A nonblank `i` takes precedence. It excludes
+groups, claims and entity context and
+is never persisted. The metrics endpoint is independent from definitions requests
+and carries no authentication or cookies. The SDK appends `/api/frontend/telemetry`
+to an HTTP(S) base path without credentials, query or fragment. Invalid endpoints
+disable telemetry; invalid intervals fall back to 45 seconds. Supported intervals
+are 30–60 seconds with scheduling jitter.
+
+Delivery uses bounded batches, a five-second timeout and at most two retries for
+HTTP 429/503. Page hiding and teardown trigger best-effort flushes; delivery is
+not guaranteed and never controls feature availability. Counter deltas must be
+nonnegative integers, gauges finite nonnegative numbers, and each supplied value
+at most 1,000,000. Variant names accept 1–64 ASCII letters, digits, underscores and
+hyphens. Do not reuse a buffered metric name for both counters and gauges.

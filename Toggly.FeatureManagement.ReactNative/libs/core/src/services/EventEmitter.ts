@@ -52,7 +52,7 @@ export class EventEmitter {
    * @param eventType Event type
    * @param data Optional event data
    */
-  emit(eventType: TogglyEventType, data?: unknown): void {
+  emit(eventType: TogglyEventType, data?: unknown, isCurrent: () => boolean = () => true): void {
     const event: TogglyEvent = {
       type: eventType,
       timestamp: new Date(),
@@ -61,6 +61,7 @@ export class EventEmitter {
 
     // Notify specific event listeners
     this.listeners.get(eventType)?.forEach((listener) => {
+      if (!isCurrent()) return;
       try {
         listener(event);
       } catch (error) {
@@ -70,6 +71,7 @@ export class EventEmitter {
 
     // Notify all-event listeners
     this.allListeners.forEach((listener) => {
+      if (!isCurrent()) return;
       try {
         listener(event);
       } catch (error) {

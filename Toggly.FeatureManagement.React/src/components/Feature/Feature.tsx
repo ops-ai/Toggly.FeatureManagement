@@ -1,6 +1,7 @@
 import React from 'react'
 import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
 import { context } from '../../contexts'
+import type { TogglyService } from '../../services'
 
 type FeatureProps = {
   featureKey?: string
@@ -26,6 +27,9 @@ type FeatureProps = {
 class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
   static contextType = context
   context!: React.ContextType<typeof context>
+  private subscribedService?: TogglyService
+  private mounted = false
+  private evaluation = 0
   private unsubscribeRefresh: (() => void) | undefined
   private unsubscribeLocalGates: (() => void) | undefined
 
@@ -53,7 +57,10 @@ class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
     if (!featureKey) {
       return false
     }
-    const assigned = this.context.toggly?.getVariant(featureKey)
+    const toggly = this.context.toggly
+    const assigned = toggly?._getVariantSnapshot
+      ? toggly._getVariantSnapshot(featureKey)
+      : toggly?.getVariant(featureKey)
     return assigned?.name === variant
   }
 
@@ -62,7 +69,9 @@ class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
     if (gate.length === 0 || !this.context.toggly) {
       return
     }
-    this.context.toggly
+    const service = this.context.toggly
+    const evaluation = ++this.evaluation
+    service
       .evaluateFeatureGate(
         gate,
         this.props.requirement ?? 'all',
@@ -70,23 +79,35 @@ class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
         this.props.context,
         this.props.contextKind,
       )
-      .then((isEnabled) => this.setState({ shouldShow: this.applyVariantFilter(isEnabled) }))
+      .then((isEnabled) => {
+        if (this.mounted && this.evaluation === evaluation && this.context.toggly === service) {
+          this.setState({ shouldShow: this.applyVariantFilter(isEnabled) })
+        }
+      })
+  }
+
+  private bindService() {
+    if (this.subscribedService === this.context.toggly) return
+    this.unsubscribeRefresh?.()
+    this.unsubscribeLocalGates?.()
+    this.subscribedService = this.context.toggly
+    this.unsubscribeRefresh = this.subscribedService?.subscribeFeaturesRefresh(this.runGate)
+    this.unsubscribeLocalGates = this.subscribedService?.subscribeLocalGatesChanged(this.runGate)
   }
 
   componentDidMount() {
-    const gate = this.buildGate()
-    if (gate.length === 0) {
+    this.mounted = true
+    this.bindService()
+    if (this.buildGate().length === 0) {
       this.setState({ shouldShow: !(this.props.negate ?? false) })
       return
     }
-    if (this.context.toggly) {
-      this.runGate()
-      this.unsubscribeRefresh = this.context.toggly.subscribeFeaturesRefresh(this.runGate)
-      this.unsubscribeLocalGates = this.context.toggly.subscribeLocalGatesChanged(this.runGate)
-    }
+    this.runGate()
   }
 
   componentDidUpdate(prevProps: FeatureProps) {
+    const serviceChanged = this.subscribedService !== this.context.toggly
+    this.bindService()
     const gateChanged =
       prevProps.featureKey !== this.props.featureKey ||
       prevProps.featureKeys !== this.props.featureKeys
@@ -94,6 +115,7 @@ class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
       prevProps.context !== this.props.context ||
       prevProps.contextKind !== this.props.contextKind
     if (
+      serviceChanged ||
       gateChanged ||
       contextChanged ||
       prevProps.requirement !== this.props.requirement ||
@@ -105,6 +127,9 @@ class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
   }
 
   componentWillUnmount() {
+    this.mounted = false
+    this.evaluation++
+    this.subscribedService = undefined
     this.unsubscribeRefresh?.()
     this.unsubscribeLocalGates?.()
     this.unsubscribeRefresh = undefined

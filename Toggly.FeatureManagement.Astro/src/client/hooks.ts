@@ -137,8 +137,12 @@ export class HookExecutor {
   /**
    * Execute afterRefresh hooks in registration order (FIFO)
    */
-  async executeAfterRefresh(flags: { [key: string]: boolean }): Promise<void> {
+  async executeAfterRefresh(
+    flags: { [key: string]: boolean },
+    isCurrent: () => boolean = () => true,
+  ): Promise<void> {
     for (const hook of this.hooks) {
+      if (!isCurrent()) return;
       if (hook.afterRefresh) {
         try {
           await hook.afterRefresh(flags);

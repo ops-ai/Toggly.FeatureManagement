@@ -2,6 +2,20 @@
 
 All notable changes to the Toggly iOS SDK are documented in this file.
 
+## 1.5.2
+
+2026-09-21
+
+### Fixed
+- Install all four Swift products directly from the Git repository root using an exact `ios-sdk-v` release reference. The nested package and existing platform requirements remain supported.
+
+## 1.5.1
+
+2026-09-21
+
+### Fixed
+- Remove inherited `userId` query parameters from definitions requests when a minted `instanceId` is active, including repeated and percent-encoded parameter names. Requests without a token retain their existing query behavior.
+
 ## 1.5.0
 
 2026-09-19

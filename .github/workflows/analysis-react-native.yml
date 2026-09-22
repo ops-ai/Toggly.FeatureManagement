@@ -83,6 +83,11 @@ jobs:
         working-directory: ${{ matrix.path }}
         run: ${{ matrix.test-cmd }}
 
+      - name: Test packed native consumers
+        if: matrix.sdk == 'React-Native'
+        working-directory: ${{ matrix.path }}
+        run: npm run test:packed
+
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
         if: always()
@@ -163,12 +168,12 @@ jobs:
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - React Native"
             -Dsonar.sources=Toggly.FeatureManagement.ReactNative/libs
-            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/example-expo/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js
-            -Dsonar.coverage.exclusions=**/example/**,**/example-expo/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js
+            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/example-expo/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/tests/fixtures/packed-host/verify.test.js,**/coverage/**,**/*.config.js
+            -Dsonar.coverage.exclusions=**/example/**,**/example-expo/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/tests/fixtures/packed-host/verify.test.js,**/*.config.js
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=Toggly.FeatureManagement.ReactNative/libs
-            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx
+            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/tests/fixtures/packed-host/verify.test.js
         continue-on-error: true
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -188,12 +193,12 @@ jobs:
             -Dsonar.projectKey=toggly-sdks-react-native
             -Dsonar.projectName="Toggly SDKs - React Native"
             -Dsonar.sources=Toggly.FeatureManagement.ReactNative/libs
-            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/example-expo/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js
-            -Dsonar.coverage.exclusions=**/example/**,**/example-expo/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js
+            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/example-expo/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/tests/fixtures/packed-host/verify.test.js,**/coverage/**,**/*.config.js
+            -Dsonar.coverage.exclusions=**/example/**,**/example-expo/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/tests/fixtures/packed-host/verify.test.js,**/*.config.js
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=Toggly.FeatureManagement.ReactNative/libs
-            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx
+            -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/tests/fixtures/packed-host/verify.test.js
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
 

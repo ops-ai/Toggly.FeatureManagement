@@ -738,8 +738,14 @@ class TogglyService(
         val token = instanceId
         url.removeAllQueryParameters("i")
         if (token != null) {
-            url.build().queryParameterNames.filter { it == "u" || it == "g" || it.startsWith("claim.") }
-                .forEach(url::removeAllQueryParameters)
+            val configured = url.build()
+            url.query(null)
+            for (index in 0 until configured.querySize) {
+                val name = configured.queryParameterName(index)
+                if (name != "i" && name != "u" && name != "userId" && name != "g" && !name.startsWith("claim.")) {
+                    url.addQueryParameter(name, configured.queryParameterValue(index))
+                }
+            }
             url.addQueryParameter("i", token)
         } else {
             identity?.let { url.addQueryParameter("u", it) }

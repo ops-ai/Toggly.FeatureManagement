@@ -56,7 +56,7 @@ function buildGate(featureKey?: string, featureKeys?: string[]): string[] {
  */
 export function useFeatureFlag(
   featureKey: string,
-  options: { negate?: boolean; toggly?: Toggly } = {},
+  options: Omit<UseFeatureGateOptions, 'featureKey' | 'featureKeys' | 'requirement'> = {},
 ): UseFeatureGateReturn {
   return useFeatureGate({ featureKey, ...options })
 }
@@ -70,11 +70,21 @@ export function useFeatureGate(
   options: MaybeRef<UseFeatureGateOptions> = {},
 ): UseFeatureGateReturn {
   const resolvedOptions = computed(() => unref(options))
-  const toggly = computed(() => resolveToggly(resolvedOptions.value.toggly))
+  const injected = resolveToggly()
+  const toggly = computed(() => resolvedOptions.value.toggly ?? injected)
   const isEnabled = ref(false)
   const isLoading = ref(true)
+  let active = true
+  let request = 0
+  let generation = -1
+  let waitingForFeatures = false
+  let unsubscribe = () => {}
 
   const refresh = async () => {
+    if (!active) return
+    const current = ++request
+    const owner = toggly.value
+    generation = owner._ownerGeneration
     const {
       featureKey,
       featureKeys,
@@ -90,39 +100,47 @@ export function useFeatureGate(
         isEnabled.value = !negate
         return
       }
-      isEnabled.value = await toggly.value.evaluateFeatureGate(
+      // Initial hydration belongs to this evaluation. Once loaded, a later
+      // definitions notification must supersede even a still-pending hook.
+      waitingForFeatures = true
+      await owner._featuresLoaded()
+      if (!active || current !== request || owner !== toggly.value) return
+      waitingForFeatures = false
+      const enabled = await owner.evaluateFeatureGate(
         gate,
         requirement,
         negate,
         context,
         contextKind,
       )
+      if (active && current === request && owner === toggly.value) isEnabled.value = enabled
     } finally {
-      isLoading.value = false
+      if (active && current === request) {
+        waitingForFeatures = false
+        isLoading.value = false
+      }
     }
   }
 
-  watch(
-    resolvedOptions,
-    () => {
-      void refresh()
-    },
-    { deep: true },
-  )
+  const bindOwner = () => {
+    unsubscribe()
+    const onChange = () => { if (!waitingForFeatures || generation !== toggly.value._ownerGeneration) void refresh() }
+    const unrefresh = toggly.value.subscribeFeaturesRefresh(onChange)
+    const unlocal = toggly.value.subscribeLocalGatesChanged(() => { void refresh() })
+    unsubscribe = () => { unrefresh(); unlocal() }
+  }
+
+  watch(resolvedOptions, () => {
+    bindOwner()
+    isEnabled.value = false
+    void refresh()
+  }, { deep: true })
 
   onMounted(() => {
+    bindOwner()
     void refresh()
-    const unsubRefresh = toggly.value.subscribeFeaturesRefresh(() => {
-      void refresh()
-    })
-    const unsubLocalGates = toggly.value.subscribeLocalGatesChanged(() => {
-      void refresh()
-    })
-    onUnmounted(() => {
-      unsubRefresh()
-      unsubLocalGates()
-    })
   })
+  onUnmounted(() => { active = false; request++; unsubscribe() })
 
   return { isEnabled, isLoading, refresh }
 }

@@ -36,6 +36,10 @@ export default defineComponent({
   data() {
     return {
       shouldShow: false,
+      active: true,
+      evaluationId: 0,
+      ownerGeneration: -1,
+      waitingForFeatures: false,
       isLoading: false,
       _unsubLocalGates: null as (() => void) | null,
       _unsubFeaturesRefresh: null as (() => void) | null
@@ -44,11 +48,13 @@ export default defineComponent({
 
   mounted() {
     this.checkIfShouldShow()
-    this._unsubLocalGates = this.$toggly.subscribeLocalGatesChanged(this.checkIfShouldShow)
-    this._unsubFeaturesRefresh = this.$toggly.subscribeFeaturesRefresh(this.checkIfShouldShow)
+    this._unsubLocalGates = this.$toggly.subscribeLocalGatesChanged(() => { void this.checkIfShouldShow() })
+    this._unsubFeaturesRefresh = this.$toggly.subscribeFeaturesRefresh(() => { if (!this.waitingForFeatures || this.ownerGeneration !== this.$toggly._ownerGeneration) void this.checkIfShouldShow() })
   },
 
   beforeUnmount() {
+    this.active = false
+    this.evaluationId++
     if (this._unsubLocalGates) {
       this._unsubLocalGates()
       this._unsubLocalGates = null
@@ -70,6 +76,9 @@ export default defineComponent({
 
   methods: {
     async checkIfShouldShow() {
+      if (!this.active) return
+      const evaluationId = ++this.evaluationId
+      this.ownerGeneration = this.$toggly._ownerGeneration
       this.isLoading = true
 
       // Check if we should show the feature during the evaluation of a feature flag
@@ -85,7 +94,15 @@ export default defineComponent({
         gate = gate.concat(this.featureKeys as string[])
       }
 
-      this.shouldShow = gate.length > 0
+      // Ignore our own hydration notification, but never discard an update
+      // arriving after definitions load while an evaluation hook is pending.
+      if (gate.length > 0) {
+        this.waitingForFeatures = true
+        await this.$toggly._featuresLoaded()
+        if (!this.active || evaluationId !== this.evaluationId) return
+        this.waitingForFeatures = false
+      }
+      const enabled = gate.length > 0
         ? await this.$toggly.evaluateFeatureGate(
           gate,
           this.requirement,
@@ -95,7 +112,10 @@ export default defineComponent({
         )
         : true
 
-      this.isLoading = false
+      if (this.active && evaluationId === this.evaluationId) {
+        this.shouldShow = enabled
+        this.isLoading = false
+      }
     }
   }
 })

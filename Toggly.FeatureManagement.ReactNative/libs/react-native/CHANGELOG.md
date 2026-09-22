@@ -1,3 +1,17 @@
+## 1.4.0 — 2026-09-21
+
+### Added
+- Forward token, identity, group, and claim changes through provider props and `useToggly().setContext`, including while initialization is pending.
+- Frontend telemetry options on `TogglyProvider` and usage, view, counter, gauge, and flush methods on `useToggly`, using the owning Core client reporter.
+- Best-effort AppState background/inactive flush and one bounded final flush on owner disposal.
+
+### Fixed
+- Synchronize early-mounted public state when initialization completes; count manual hook refreshes once while retaining reactive and offline evaluations.
+- Cancel queued delivery when replacing the app/environment/collector owner while preserving normal final-unmount flush.
+- Preserve the provider owner across ordinary rerenders; retire it when app, environment, or collector configuration changes.
+- Keep feature hook results and metadata isolated from retired owners and late asynchronous completions.
+- Dispose the preinitialized provider owner after its last mounted consumer, and create a fresh owner on later remounts.
+
 ## 1.3.0
 
 2026-09-03

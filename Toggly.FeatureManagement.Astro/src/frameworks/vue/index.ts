@@ -17,3 +17,5 @@ export interface FeatureProps {
 export interface FeatureGateBuilderProps extends FeatureProps {}
 
 
+
+export {recordUsage, recordView, incrementCounter, setGauge, flushTelemetry} from '../../client/store.js';

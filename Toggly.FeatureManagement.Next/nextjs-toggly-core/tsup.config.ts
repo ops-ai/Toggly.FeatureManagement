@@ -3,6 +3,7 @@ import { defineConfig } from 'tsup'
 export default defineConfig({
   entry: {
     index: 'src/index.ts',
+    browser: 'src/browser.ts',
     'telemetry/grpc': 'src/telemetry/grpc-clients.ts',
   },
   format: ['cjs', 'esm'],

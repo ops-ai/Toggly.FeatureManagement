@@ -10,7 +10,7 @@ export function useVariant(featureKey: string): VariantResult | null {
   const { toggly } = useContext(context)
 
   const [variant, setVariant] = useState<VariantResult | null>(() =>
-    toggly?.getVariant(featureKey) ?? null,
+    toggly?._getVariantSnapshot ? toggly._getVariantSnapshot(featureKey) : toggly?.getVariant(featureKey) ?? null,
   )
 
   useEffect(() => {
@@ -19,14 +19,17 @@ export function useVariant(featureKey: string): VariantResult | null {
       return undefined
     }
 
+    let generation = 0
     const sync = () => {
-      setVariant(toggly.getVariant(featureKey))
+      const current = ++generation
+      const next = toggly.getVariant(featureKey)
+      if (current === generation) setVariant(next)
     }
-
-    sync()
     const unsubRefresh = toggly.subscribeFeaturesRefresh(sync)
     const unsubLocalGates = toggly.subscribeLocalGatesChanged(sync)
+    sync()
     return () => {
+      generation++
       unsubRefresh()
       unsubLocalGates()
     }

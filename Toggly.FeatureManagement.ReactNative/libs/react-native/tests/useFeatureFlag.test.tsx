@@ -366,3 +366,21 @@ describe('useFeatureGate', () => {
   // Note: Event subscription and refresh tests for useFeatureGate are covered by useFeatureFlag tests
   // since they share the same underlying logic.
 });
+
+it.each(['flag', 'gate'])('ignores a late %s evaluation from a replaced owner', async mode => {
+  let finishOld!: (value: boolean) => void;
+  const old = createMockService({ evaluateFeatureGate: jest.fn(() => new Promise(resolve => { finishOld = resolve; })) });
+  const next = createMockService({ evaluateFeatureGate: jest.fn().mockResolvedValue(false) });
+  const keys = ['on'];
+  function Child() {
+    const value = mode === 'flag' ? useFeatureFlag('on') : useFeatureGate(keys);
+    return <div>{value.isEnabled ? 'ON' : 'OFF'}</div>;
+  }
+  const owner = (service: any) => <TogglyContext.Provider value={{ toggly: service, isReady: true, isLoading: false, error: null }}><Child /></TogglyContext.Provider>;
+  const view = render(owner(old));
+  await waitFor(() => expect(finishOld).toBeDefined());
+  view.rerender(owner(next));
+  await waitFor(() => expect(next.evaluateFeatureGate).toHaveBeenCalled());
+  await act(async () => { finishOld(true); });
+  expect(view.queryByText('ON')).toBeNull();
+});

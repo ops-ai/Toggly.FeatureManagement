@@ -33,7 +33,7 @@ import {
 /**
  * Server config type with required properties except identity and hooks
  */
-type ServerConfig = Required<Omit<TogglyPluginOptions, 'identity' | 'groups' | 'claims' | 'hooks' | 'localGates' | 'onError' | 'allowedKeyIds' | 'maxSignatureAgeSeconds' | 'enableLiveUpdates'>> & {
+type ServerConfig = Required<Omit<TogglyPluginOptions, 'instanceId' | 'identity' | 'groups' | 'claims' | 'hooks' | 'localGates' | 'onError' | 'allowedKeyIds' | 'maxSignatureAgeSeconds' | 'enableLiveUpdates' | 'enableTelemetry' | 'enableUsageTracking' | 'enableMetrics' | 'metricsBaseUrl' | 'telemetryFlushIntervalMs'>> & {
   identity?: string;
   groups?: string[];
   claims?: Record<string, string>;

@@ -8,7 +8,7 @@
 
 import { useMemo, useSyncExternalStore } from 'react';
 import { useStore } from '@nanostores/react';
-import { $flag, $gate, $isReady, $variants } from '../../client/store.js';
+import { $flag, $gate, $isReady, $variant } from '../../client/store.js';
 import type { VariantResult } from '../../types/index.js';
 import type { ReactNode } from 'react';
 import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
@@ -147,15 +147,8 @@ export function useFeatureGate(
  * Hook for the current variant assignment of a feature (requires enableVariants in config).
  */
 export function useVariant(featureKey: string): VariantResult | null {
-  const variants = useStore($variants);
-  const entry = variants[featureKey];
-  if (!entry?.variant) {
-    return null;
-  }
-  return {
-    name: entry.variant,
-    configurationValue: entry.configurationValue,
-  };
+  const variant = useMemo(() => $variant(featureKey), [featureKey]);
+  return useStore(variant);
 }
 
 export default Feature;

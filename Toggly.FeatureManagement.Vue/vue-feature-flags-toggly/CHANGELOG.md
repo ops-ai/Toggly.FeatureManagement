@@ -1,3 +1,52 @@
+## 1.10.0
+
+2026-09-20
+
+### Fixed
+
+- Preserve configured definitions URL paths and unrelated query parameters while using only the current context token, including when a token is cleared.
+
+- Make locale-independent UTF-16 group ordering explicit while preserving existing cache keys.
+
+- Apply definitions updates that arrive while a component's evaluation hook is
+  pending, without duplicating checks during initial hydration.
+- Keep browser imports and in-memory evaluation available when storage access is denied.
+
+- Keep evaluated and variant cache bodies separate, invalidate ambiguous legacy
+  validators, and remove paired validators when bounded cache entries are evicted.
+  Cached 304 results retain the correct flags and assigned variant in either mode.
+- Report the current SDK version in definitions and live-update requests.
+
+### Added
+
+- Optional host-provided `instanceId` for definitions and telemetry; `i` takes
+  precedence over client `u`. Client identity acceptance is default-off on the
+  server, and HTTP 202 does not establish identity acceptance.
+
+- Aggregate browser feature checks after entity and local gates, with explicit
+  usage, view, counter, gauge, and flush APIs. Telemetry defaults on with an app
+  key and supports opt-out, a separate collector URL, and a bounded flush interval.
+- Flush on page hiding and teardown; keep SSR, keyless, and opted-out clients silent.
+
+### Changed
+
+- Keep queued checks, gauges and retries attributed to their original context.
+  Identity updates clear the previous token unless a replacement is supplied.
+  Token-scoped caches and revisions prevent previous-user definitions from
+  returning during overlapping refreshes or cached HTTP 304 responses.
+- Failed context refreshes still reject, but retain the new context and its cache
+  or defaults instead of restoring the previous identity, token and definitions.
+- Reinitialization cancels pending telemetry before replacing its transport.
+  Use `flushTelemetry()` first to await sending pending events.
+
+- Give each plugin app its own service and dispose it on app unmount. The exported
+  singleton remains independent for standalone callers. Reinitialization replaces
+  configuration and definitions without mixing app/environment telemetry.
+- Count variant composable refreshes once and discard superseded reactive results
+  and late initialization completions. Initial hydration does not duplicate checks.
+- Verify real browser CORS/gzip, aggregation, and app unmount/remount in packed
+  Vue 3.2.45 and 3.5.42 hosts; emit declarations using the minimum Vue compiler.
+
 ## 1.9.7
 
 2026-09-13

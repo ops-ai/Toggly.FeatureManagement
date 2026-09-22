@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import {
   createHash,
   generateKeyPairSync,
@@ -427,42 +428,19 @@ describe('signed-defs-verify', () => {
     });
   });
 
-  it('throws when WebCrypto is unavailable outside Node', async () => {
-    const originalNode = process.versions.node;
-    const originalCrypto = globalThis.crypto;
-    Object.defineProperty(process.versions, 'node', {
-      value: undefined,
-      configurable: true,
-      enumerable: true,
-      writable: true,
-    });
-    Object.defineProperty(globalThis, 'crypto', {
-      value: undefined,
-      configurable: true,
-    });
-    try {
-      const { jwk } = makeSignedKey();
-      await expect(
-        verifySignedDefinitions(
-          '{"a":1}',
-          { signature: Buffer.alloc(64).toString('base64'), timestamp: 1, kid: jwk.kid },
-          { keys: [jwk] }
-        )
-      ).rejects.toThrow(/WebCrypto is required/);
-    } finally {
-      Object.defineProperty(globalThis, 'crypto', {
-        value: originalCrypto,
-        configurable: true,
-      });
-      Object.defineProperty(process.versions, 'node', {
-        value: originalNode,
-        configurable: true,
-        enumerable: true,
-        writable: true,
-      });
-    }
+  it('rejects invalid signatures through the Node entry without global WebCrypto', () => {
+    const { jwk } = makeSignedKey();
+    // A real Node process avoids Jest's jsdom browser export condition.
+    execFileSync(process.execPath, ['-e', `
+      const assert = require('node:assert/strict');
+      const { verifySignedDefinitions } = require('@ops-ai/toggly-signed-defs');
+      Object.defineProperty(globalThis, 'crypto', { value: undefined, configurable: true });
+      const jwk = JSON.parse(process.argv[1]);
+      assert.rejects(verifySignedDefinitions('{"a":1}',
+        { signature: Buffer.alloc(64).toString('base64'), timestamp: 1, kid: jwk.kid },
+        { keys: [jwk] }), /invalid signature/).catch(error => { console.error(error); process.exitCode = 1; });
+    `, JSON.stringify(jwk)], { cwd: process.cwd(), timeout: 10000 });
   });
-
   it('decodes base64 via atob when Buffer is unavailable', () => {
     const originalBuffer = globalThis.Buffer;
     Object.defineProperty(globalThis, 'Buffer', {

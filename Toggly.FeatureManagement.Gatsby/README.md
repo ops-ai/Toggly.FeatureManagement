@@ -115,14 +115,70 @@ During build, the plugin generates a `toggly-page-features.json` manifest that m
 |--------|------|---------|-------------|
 | `appKey` | `string` | **required** | Your Toggly application key |
 | `environment` | `string` | `'Production'` | Environment name (e.g., 'Staging', 'Dev') |
-| `baseURI` | `string` | `'https://client.toggly.io'` | Toggly API base URL |
+| `baseURI` | `string` | `'https://definitions.toggly.io'` | Toggly definitions API base URL |
 | `flagDefaults` | `object` | `{}` | Default flag values when API unavailable |
 | `featureFlagsRefreshInterval` | `number` | `180000` | Client refresh interval (ms); rare fallback while WebSocket is connected |
 | `enableLiveUpdates` | `boolean` | `true` | Browser WebSocket live updates for definitions |
 | `allFeaturesEnabledDuringBuild` | `boolean` | `false` | Enable all features during build |
+| `instanceId` | `string` | `undefined` | Host-minted browser token; takes precedence over client targeting |
 | `identity` | `string` | `undefined` | User identity for targeting |
 | `isDebug` | `boolean` | `false` | Enable debug logging |
-| `connectTimeout` | `number` | `5000` | API connection timeout (ms) |
+| `connectTimeout` | `number` | `5000` | Request timeout including response body (ms) |
+| `enableTelemetry` | `boolean` | `true` | Enable bounded browser telemetry when an app key is present |
+| `enableUsageTracking` | `boolean` | `true` | Enable automatic checks and explicit usage/view events |
+| `enableMetrics` | `boolean` | `true` | Enable explicit counters and gauges |
+| `metricsBaseUrl` | `string` | `'https://metrics.toggly.io'` | Absolute HTTP(S) telemetry base URL |
+| `telemetryFlushIntervalMs` | `number` | `45000` | Flush interval from 30000 through 60000 ms |
+
+### Browser telemetry
+
+The browser store owns one reporter for the active application and environment.
+It records each effective feature leaf after entity and device-local gates are
+applied and before a gate result is negated. `any` and `all` gates preserve
+short-circuit evaluation, so skipped leaves are not counted. Definition fetch,
+hydration projection, SSR, builds, keyless configuration, and opted-out
+categories stay silent. Rendering does not create automatic view events.
+
+Explicit APIs never evaluate a feature:
+
+```ts
+import {
+  recordUsage,
+  recordView,
+  incrementCounter,
+  setGauge,
+  flushTelemetry,
+} from '@ops-ai/gatsby-feature-flags-toggly';
+
+recordUsage('checkout', 'experiment-a');
+recordView('pricing');
+incrementCounter('orders');
+setGauge('cartValue', 19.5);
+await flushTelemetry();
+```
+
+The same functions are available under `useToggly().telemetry`. The reporter
+flushes on hidden/pagehide and is disposed when its provider owner unmounts or
+when a different app, environment, or telemetry endpoint replaces it. Payloads
+contain the app key, environment, aggregate feature variants and metrics, plus
+optional host-minted `i` or client-asserted `u`. A supplied `instanceId` takes
+precedence over identity and suppresses `u`, groups and claims on browser
+definitions requests. Without it, existing identity/groups/claims targeting
+continues. The server setting `AcceptClientGeneratedIdentitiesForMetrics` is off
+by default; HTTP 202 acknowledges ingestion, not identity acceptance.
+
+Change tokens or targeting through `initTogglyClient(updatedConfig)` or updated
+provider configuration. `setIdentity` and `clearIdentity` keep their existing
+synchronous signatures. `clearIdentity` clears the client-asserted identity;
+remove `instanceId` in updated configuration to clear a minted token. Context
+transitions retain queued events with their
+original attribution in one bounded reporter. A failed new-context refresh uses
+its defaults, never retired user definitions. Transport-owner replacement
+cancels/discards the retired reporter; ordinary provider disposal flushes.
+Gatsby keeps definitions and their validator together in memory. Context changes
+and cold starts fetch fresh definitions, ignoring legacy persisted validators
+that have no body. No token history or definitions are persisted. Mint tokens in
+your trusted host; never expose Backend keys in browser configuration.
 
 ## API Reference
 

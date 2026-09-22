@@ -5,7 +5,7 @@
  */
 
 import { derived, get } from 'svelte/store';
-import { $flag, $gate, $isReady, $variants, $flags, $localGatesRevision } from '../../client/store.js';
+import { $flag, $gate, $isReady, $variants, $variant, $flags, $localGatesRevision } from '../../client/store.js';
 import type { VariantResult } from '../../types/index.js';
 
 /**
@@ -37,16 +37,7 @@ export function featureGate(
  * Derived store for the current variant assignment of a feature (requires enableVariants in config).
  */
 export function featureVariant(featureKey: string) {
-  return derived($variants, ($variants): VariantResult | null => {
-    const entry = $variants[featureKey];
-    if (!entry?.variant) {
-      return null;
-    }
-    return {
-      name: entry.variant,
-      configurationValue: entry.configurationValue,
-    };
-  });
+  return derived($variant(featureKey), value => value);
 }
 
 /**

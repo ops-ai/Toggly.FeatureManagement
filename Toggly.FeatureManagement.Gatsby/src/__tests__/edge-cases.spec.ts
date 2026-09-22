@@ -14,6 +14,7 @@ describe('Edge Cases & Error Handling', () => {
   });
 
   afterEach(() => {
+    store.disposeTogglyClient();
     vi.restoreAllMocks();
   });
 
@@ -195,11 +196,12 @@ describe('Edge Cases & Error Handling', () => {
       expect(store.$isReady.get()).toBe(true);
     });
 
-    it('should warn on double initialization', async () => {
+    it('should deduplicate repeated initialization of the same owner', async () => {
       vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('no net'));
-      await store.initTogglyClient({ flagDefaults: { F1: true } });
-      await store.initTogglyClient({ flagDefaults: { F2: true } });
-      expect(console.warn).toHaveBeenCalled();
+      await store.initTogglyClient({ appKey: '', flagDefaults: { F1: true } });
+      await store.initTogglyClient({ appKey: '', flagDefaults: { F2: true } });
+      expect(store.$flags.get()).toEqual({ F1: true });
+      expect(globalThis.fetch).not.toHaveBeenCalled();
     });
   });
 

@@ -1,3 +1,13 @@
+## 0.5.1
+
+2026-09-20
+
+### Fixed
+- Keep each automatic feature check attributed to the same context as its
+  evaluated flags when entity callbacks or pending refreshes change identity.
+- Stop captured checks after their client is disposed without changing the
+  returned feature result.
+
 ## 0.5.0
 
 2026-09-20

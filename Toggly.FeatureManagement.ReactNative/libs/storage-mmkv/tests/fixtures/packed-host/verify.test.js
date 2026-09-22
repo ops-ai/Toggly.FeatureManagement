@@ -27,3 +27,5 @@ test('uses the retained constructor and delete APIs', async () => {
   expect(instance.set).toHaveBeenCalledWith('toggly:definitions', '{}');
   expect(instance.delete).toHaveBeenCalledWith('toggly:definitions');
 });
+
+require('./telemetry-consumer.cjs')(() => createMMKVStorageAdapter());

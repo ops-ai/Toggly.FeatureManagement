@@ -84,8 +84,7 @@ describe('Client Store', () => {
   });
 
   afterEach(() => {
-    store.stopRefreshInterval();
-    store.stopWebSocket();
+    store.disposeTogglyClient();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -216,19 +215,15 @@ describe('Client Store', () => {
       expect(store.$isReady.get()).toBe(true);
     });
 
-    it('should warn if already initialized', async () => {
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ F1: true }),
-      } as Response);
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    it('should replace an initialized owner when its app key changes', async () => {
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(mockOkResponse({ F1: true }))
+        .mockResolvedValueOnce(mockOkResponse({ F2: true }));
 
-      await store.initTogglyClient({ appKey: 'test-key' });
-      await store.initTogglyClient({ appKey: 'test-key-2' });
+      await store.initTogglyClient({ appKey: 'test-key', enableLiveUpdates: false });
+      await store.initTogglyClient({ appKey: 'test-key-2', enableLiveUpdates: false });
 
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('already initialized')
-      );
+      expect(store.$flags.get()).toEqual({ F2: true });
     });
 
     it('should handle fetch error and set error atom', async () => {

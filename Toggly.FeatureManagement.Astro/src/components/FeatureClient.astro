@@ -43,6 +43,7 @@ const { flag, client = 'load', requirement = 'all', negate = false, contextKind 
   data-toggly-requirement={requirement}
   data-toggly-negate={negate}
   data-toggly-context-kind={contextKind}
+  data-toggly-context={Astro.props.context ? JSON.stringify(Astro.props.context) : undefined}
   data-toggly-hydrate={client}
   class="toggly-feature-client"
 >
@@ -52,70 +53,14 @@ const { flag, client = 'load', requirement = 'all', negate = false, contextKind 
 </div>
 
 <script>
-  import { $gate, $isReady } from '@ops-ai/astro-feature-flags-toggly/client/store';
-
-  // Hydrate all FeatureClient components
-  function hydrateFeatureClients() {
-    const elements = document.querySelectorAll<HTMLElement>('.toggly-feature-client');
-
-    elements.forEach((element) => {
-      const flag = element.dataset.togglyFeature;
-      const requirement = (element.dataset.togglyRequirement as 'all' | 'any') || 'all';
-      const negate = element.dataset.togglyNegate === 'true';
-      const contextKind = element.dataset.togglyContextKind || undefined;
-
-      if (!flag) return;
-
-      const content = element.querySelector<HTMLElement>('[data-toggly-content]');
-
-      if (!content) return;
-
-      const flagKeys = flag.split(',').map((k) => k.trim());
-      const gateAtom = $gate(flagKeys, requirement, negate, null, contextKind);
-
-      const updateDisplay = (isEnabled: boolean) => {
-        if (!$isReady.get()) return;
-        content.style.display = isEnabled ? '' : 'none';
-      };
-
-      const unsubscribeGate = gateAtom.subscribe((isEnabled) => {
-        updateDisplay(isEnabled);
-      });
-      const unsubscribeReady = $isReady.subscribe((ready) => {
-        if (ready) {
-          updateDisplay(gateAtom.get());
-        }
-      });
-
-      const unsubscribe = () => {
-        unsubscribeGate();
-        unsubscribeReady();
-      };
-
-      // Store unsubscribe function for cleanup
-      (element as any).__togglyUnsubscribe = unsubscribe;
-    });
-  }
-
-  // Hydrate on page load
+  import {hydrateFeatureClients, cleanupFeatureClients} from '../client/feature-clients.js';
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', hydrateFeatureClients);
+    document.addEventListener('DOMContentLoaded', hydrateFeatureClients, {once: true});
   } else {
     hydrateFeatureClients();
   }
-
-  // Re-hydrate on navigation (for view transitions)
   document.addEventListener('astro:page-load', hydrateFeatureClients);
-
-  // Cleanup on navigation
-  document.addEventListener('astro:before-swap', () => {
-    document.querySelectorAll('.toggly-feature-client').forEach((element) => {
-      const unsubscribe = (element as any).__togglyUnsubscribe;
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    });
-  });
+  document.addEventListener('astro:before-swap', cleanupFeatureClients);
 </script>
 
 <style>
