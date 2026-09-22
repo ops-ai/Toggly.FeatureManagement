@@ -395,21 +395,30 @@ export function createTogglyClientCore(
     };
   };
 
-  const getFlags = async (): Promise<Flags> => {
-    if (disposed) return cache ? { ...cache.flags } : { ...flagDefaults };
+  // Select flags and attribution together, before returning across an await boundary.
+  // A superseded request may return the current cache/defaults, not its original context.
+  const getFlagsSnapshot = async (captureCheck = false): Promise<{
+    flags: Flags;
+    recordCheck?: ReturnType<TelemetryReporter['captureCheck']>;
+  }> => {
+    const snapshot = (flags: Flags) => {
+      let recordCheck: ReturnType<TelemetryReporter['captureCheck']> | undefined;
+      if (captureCheck && usageEnabled) {
+        recordTelemetry((reporter) => { recordCheck = reporter.captureCheck(); });
+      }
+      return { flags: { ...flags }, recordCheck };
+    };
+    if (disposed) return snapshot(cache?.flags ?? flagDefaults);
 
-    // If no appKey, return flagDefaults immediately
-    if (!appKey) {
-      return { ...flagDefaults };
-    }
-
-    if (isCacheValid() && cache) {
-      return { ...cache.flags };
-    }
+    // If no appKey, return flagDefaults immediately.
+    if (!appKey) return snapshot(flagDefaults);
+    if (isCacheValid() && cache) return snapshot(cache.flags);
 
     await refreshFlags();
-    return cache ? { ...cache.flags } : { ...flagDefaults };
+    return snapshot(cache?.flags ?? flagDefaults);
   };
+
+  const getFlags = async (): Promise<Flags> => (await getFlagsSnapshot()).flags;
 
   const getFlag = async (
     key: string,
@@ -417,7 +426,7 @@ export function createTogglyClientCore(
     entity?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
   ): Promise<boolean> => {
-    const flags = await getFlags();
+    const { flags, recordCheck } = await getFlagsSnapshot(true);
     const value = flags[key];
     const entityContext = normalizeEntityContext(entity, kind);
 
@@ -430,8 +439,10 @@ export function createTogglyClientCore(
       result = flagDefaults[key] ?? false;
     }
 
-    if (usageEnabled) {
-      recordTelemetry((reporter) => reporter.recordCheck(key, result ? 'enabled' : 'disabled'));
+    try {
+      recordCheck?.(key, result ? 'enabled' : 'disabled');
+    } catch {
+      // Captured telemetry remains best effort and never changes evaluation results.
     }
     return result;
   };

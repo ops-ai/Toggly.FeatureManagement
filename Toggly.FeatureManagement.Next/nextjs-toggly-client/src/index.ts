@@ -31,6 +31,8 @@ export type {
 
 // Re-export core types
 export type {
+  FrontendTelemetry,
+  BrowserTogglyClient,
   TogglyConfig,
   TogglyClient,
   TogglyState,
