@@ -6,6 +6,8 @@ export default defineNuxtConfig({
     appKey: '',
     baseUri: 'http://127.0.0.1',
     ssr: true,
+    serverEnableUsageTracking: false,
+    serverEnableMetrics: false,
     featureDefaults: { Enabled: true, Disabled: false },
     identity: 'anonymous',
     groups: ['fixture'],

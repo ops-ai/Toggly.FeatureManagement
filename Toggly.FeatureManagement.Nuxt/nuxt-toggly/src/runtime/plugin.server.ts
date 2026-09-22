@@ -24,6 +24,8 @@ export default defineNitroPlugin(async (nitroApp) => {
       featureDefaults: config.featureDefaults,
       refreshInterval: 0, // Disable HTTP polling; live updates use WebSocket
       enableLiveUpdates: config.enableLiveUpdates,
+      enableUsageTracking: config.serverEnableUsageTracking,
+      enableMetrics: config.serverEnableMetrics,
       cache: config.serverCache,
       cacheTtl: config.serverCacheTtl,
       hooks: config.hooks,
