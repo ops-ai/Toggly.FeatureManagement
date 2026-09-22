@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.0 — 2026-09-22
+
+### Added
+- Module config accepts `enableVariants`, forwarded to both the client and server plugins. When enabled, `useVariant()` (client) and `getServerVariant()` / `getServerVariantValue()` (server, auto-imported) resolve assigned variants instead of plain booleans.
+
 ## 1.3.0 — 2026-09-18
 
 ### Added

@@ -22,6 +22,7 @@ export default defineNitroPlugin(async (nitroApp) => {
       groups: config.groups ? [...config.groups] : config.groups,
       claims: config.claims ? { ...config.claims } : config.claims,
       featureDefaults: config.featureDefaults,
+      enableVariants: config.enableVariants,
       refreshInterval: 0, // Disable HTTP polling; live updates use WebSocket
       enableLiveUpdates: config.enableLiveUpdates,
       cache: config.serverCache,

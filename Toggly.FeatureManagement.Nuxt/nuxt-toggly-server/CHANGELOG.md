@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.8.0
+
+2026-09-22
+
+### Added
+- `getServerVariant(featureKey)` and `getServerVariantValue(featureKey)` reading from the shared server client's assigned variants.
+
+### Changed
+- Setting `enableVariants: true` switches the server client's `evaluationMode` from `local` to `remote`, since variant assignment happens worker-side and cannot be replicated by local rule evaluation. Server evaluation remains `local` (definitions-signed) by default.
+
 ## 1.7.0
 
 2026-09-10

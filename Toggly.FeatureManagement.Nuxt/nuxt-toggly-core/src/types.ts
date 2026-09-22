@@ -27,6 +27,23 @@ export type EvalContextOverrides = {
 /** Last arg to isFeatureOn / Off / evaluateFeatureGate: string identity or full overrides. */
 export type EvalContextArg = string | EvalContextOverrides
 
+/**
+ * Assigned variant for a feature (aligned with @ops-ai/feature-flags-toggly).
+ */
+export interface VariantResult {
+  name: string
+  configurationValue?: unknown
+}
+
+/**
+ * Raw evaluated entry from /evaluated-variants-signed `defs`.
+ */
+export interface EvaluatedVariantDef {
+  enabled: boolean
+  variant?: string
+  configurationValue?: unknown
+}
+
 /** Browser-only compact telemetry runtime injected by the client adapter. */
 export interface FrontendTelemetryRuntime {
   readonly usageEnabled: boolean
@@ -94,6 +111,12 @@ export interface TogglyConfig {
   featureDefaults?: Record<string, boolean>
   /** Show content while evaluating features (default: false) */
   showFeatureDuringEvaluation?: boolean
+  /**
+   * Use /evaluated-variants-signed and expose {@link TogglyClient.getVariant} /
+   * {@link TogglyClient.getVariantValue}. Only applies in `'remote'` evaluationMode;
+   * server packages that force `'local'` evaluation override to remote when set.
+   */
+  enableVariants?: boolean
   /** Refresh interval in milliseconds (0 to disable, default: 180000 - 3 minutes) */
   refreshInterval?: number
   /** Initial hooks to register */
@@ -296,6 +319,11 @@ export interface TogglyState {
    * Empty in remote mode.
    */
   definitions: Map<string, FeatureDefinitionModel>
+  /**
+   * Evaluated variant assignments from `/evaluated-variants-signed`.
+   * Null unless {@link TogglyConfig.enableVariants} is set and remote data has loaded.
+   */
+  variants: Record<string, EvaluatedVariantDef> | null
   /** Last error (if any) */
   error: Error | null
   /** Last refresh timestamp */
@@ -352,6 +380,16 @@ export interface TogglyClient {
     kind: string,
     mapper: (entity: T) => TogglyEntityContext,
   ): void
+
+  /**
+   * Current variant assignment for a feature (requires {@link TogglyConfig.enableVariants} and loaded data).
+   */
+  getVariant(featureKey: string): VariantResult | null
+
+  /**
+   * Configuration payload for the assigned variant, if any.
+   */
+  getVariantValue(featureKey: string): unknown | null
 
   /** Set user identity */
   setIdentity(identity: string): Promise<void>

@@ -1,4 +1,4 @@
-import type { TogglyConfig, TogglyClient, FeatureRequirement } from '@ops-ai/nuxt-toggly-core/browser'
+import type { TogglyConfig, TogglyClient, FeatureRequirement, VariantResult } from '@ops-ai/nuxt-toggly-core/browser'
 import type { ComputedRef, Ref, InjectionKey } from 'vue'
 
 export interface BrowserTelemetry {
@@ -68,6 +68,24 @@ export interface UseTogglyReturn {
     context?: import('@ops-ai/nuxt-toggly-core/browser').TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
   ) => Promise<boolean>
+  /** Current variant assignment for a feature (requires `enableVariants`) */
+  getVariant: (featureKey: string) => VariantResult | null
+  /** Configuration payload for the assigned variant, if any */
+  getVariantValue: (featureKey: string) => unknown | null
+}
+
+/**
+ * Return type for useVariant composable
+ */
+export interface UseVariantReturn {
+  /** Current variant assignment for the feature, or null when disabled/unassigned */
+  variant: Ref<VariantResult | null>
+  /** Configuration payload for the assigned variant, if any */
+  variantValue: Ref<unknown | null>
+  /** Whether the variant assignment is loading */
+  isLoading: Ref<boolean>
+  /** Refresh the variant assignment */
+  refresh: () => Promise<void>
 }
 
 /**

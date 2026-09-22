@@ -54,6 +54,8 @@ export {
   refreshServerToggly,
   isServerFeatureOn,
   isServerFeatureOff,
+  getServerVariant,
+  getServerVariantValue,
   resetServerToggly,
   closeServerToggly,
   setServerStorage,

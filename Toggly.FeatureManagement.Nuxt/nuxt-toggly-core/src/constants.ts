@@ -25,6 +25,8 @@ export const STORAGE_KEYS = {
 export const API_ENDPOINTS = {
   evaluatedSigned: (baseUri: string, appKey: string, environment: string) =>
     `${baseUri}/evaluated-signed/${appKey}/${environment}`,
+  evaluatedVariantsSigned: (baseUri: string, appKey: string, environment: string) =>
+    `${baseUri}/evaluated-variants-signed/${appKey}/${environment}`,
   definitionsSigned: (baseUri: string, appKey: string, environment: string) =>
     `${baseUri}/definitions-signed/${appKey}/${environment}`,
   /** @deprecated use evaluatedSigned — kept for back-compat */

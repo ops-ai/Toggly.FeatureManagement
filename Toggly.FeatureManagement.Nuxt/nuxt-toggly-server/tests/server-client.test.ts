@@ -7,6 +7,8 @@ import {
   refreshServerToggly,
   isServerFeatureOn,
   isServerFeatureOff,
+  getServerVariant,
+  getServerVariantValue,
   resetServerToggly,
   setServerStorage,
   getServerStorage,
@@ -444,6 +446,62 @@ describe('Server Client', () => {
       await storage.removeItem('key')
 
       expect(await storage.getItem('key')).toBeNull()
+    })
+  })
+
+  describe('enableVariants', () => {
+    it('overrides evaluationMode to remote and fetches evaluated-variants-signed', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          defs: { Checkout: { enabled: true, variant: 'treatment', configurationValue: { color: 'blue' } } },
+        }),
+      )
+
+      const client = await initServerToggly({
+        appKey: 'test-key',
+        enableVariants: true,
+        enableLiveUpdates: false,
+      })
+
+      expect(client.config.evaluationMode).toBe('remote')
+      const url = String(mockFetch.mock.calls[0]?.[0])
+      expect(url).toContain('/evaluated-variants-signed/test-key/')
+      expect(url).not.toContain('/definitions-signed/')
+
+      expect(client.state.features).toEqual({ Checkout: true })
+      expect(getServerVariant('Checkout')).toEqual({ name: 'treatment', configurationValue: { color: 'blue' } })
+      expect(getServerVariantValue('Checkout')).toEqual({ color: 'blue' })
+    })
+
+    it('getServerVariant returns null for a disabled/unassigned variant', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({ defs: { Off: { enabled: false, variant: 'control' } } }),
+      )
+
+      await initServerToggly({
+        appKey: 'test-key',
+        enableVariants: true,
+        enableLiveUpdates: false,
+      })
+
+      expect(getServerVariant('Off')).toBeNull()
+      expect(getServerVariantValue('Off')).toBeNull()
+    })
+
+    it('getServerVariant returns null when the server client is not initialized', () => {
+      expect(getServerVariant('Anything')).toBeNull()
+      expect(getServerVariantValue('Anything')).toBeNull()
+    })
+
+    it('keeps local definitions-signed evaluation when enableVariants is unset', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse(featureDefs({ 'feature-a': true })))
+
+      const client = await initServerToggly({ appKey: 'test-key', enableLiveUpdates: false })
+
+      expect(client.config.evaluationMode).toBe('local')
+      const url = String(mockFetch.mock.calls[0]?.[0])
+      expect(url).toContain('/definitions-signed/test-key/')
+      expect(getServerVariant('feature-a')).toBeNull()
     })
   })
 })

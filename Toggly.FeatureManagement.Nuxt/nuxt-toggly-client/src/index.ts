@@ -8,6 +8,8 @@ export type {
   FeatureDefinitions,
   Hook,
   HookMetadata,
+  VariantResult,
+  EvaluatedVariantDef,
 } from '@ops-ai/nuxt-toggly-core/browser'
 
 export {
@@ -23,6 +25,7 @@ export type {
   UseTogglyReturn,
   UseFeatureFlagReturn,
   UseFeatureGateReturn,
+  UseVariantReturn,
   FeatureProps,
   BrowserTelemetry,
 } from './types'
@@ -42,6 +45,8 @@ export {
 export { useFeatureFlag, useFeatureOff } from './composables/useFeatureFlag'
 
 export { useFeatureGate, useFeatureProps } from './composables/useFeatureGate'
+
+export { useVariant } from './composables/useVariant'
 
 // Components
 export { Feature, FeatureEnabled, FeatureDisabled } from './components/Feature'

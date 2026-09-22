@@ -1,3 +1,12 @@
+## 1.14.0 — 2026-09-22
+
+### Added
+- `enableVariants` config option, `getVariant(featureKey)` and `getVariantValue(featureKey)` on the shared client. When enabled, definitions are fetched from `evaluated-variants-signed` instead of the boolean `evaluated-signed` endpoint; local gates and telemetry still apply on top of the assigned variant.
+- `VariantResult` and `EvaluatedVariantDef` types, plus `parseVariantDefsPayload` / `variantDefsToFlags` helpers exported for downstream Nuxt packages.
+
+### Changed
+- Bumped `@ops-ai/toggly-signed-defs` to `^1.2.9` for error-envelope rejection in `unwrapDefsPayload` / `asVariantDefsRecord`.
+
 ## 1.13.0 — 2026-09-18
 
 ### Added

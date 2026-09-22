@@ -1,3 +1,9 @@
+## 1.4.0 — 2026-09-22
+
+### Added
+- `useVariant(featureKey)` composable returning reactive `variant`, `variantValue`, `isLoading`, and `refresh`.
+- `getVariant` / `getVariantValue` added to `useToggly()`'s return value.
+
 ## 1.3.0 — 2026-09-18
 
 ### Added
