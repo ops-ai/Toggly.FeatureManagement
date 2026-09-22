@@ -1,6 +1,6 @@
 import type { TelemetryOptions } from '@ops-ai/toggly-client-telemetry'
-import type { Hook } from '@ops-ai/toggly-hooks-types'
 import type {
+  Hook,
   EvaluatedDefinitions,
   TogglyEntityContext,
 } from '@ops-ai/toggly-hooks-types'

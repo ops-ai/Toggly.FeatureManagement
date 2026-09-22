@@ -53,6 +53,14 @@ const DEFAULT_CONNECT_TIMEOUT = 5000
 const DEFAULT_REFRESH_INTERVAL = 3 * 60 * 1000
 const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000
 
+function snapshotContextInput(input: SetContextInput): SetContextInput {
+  return { ...input, groups: input.groups && [...input.groups], claims: input.claims && { ...input.claims } }
+}
+
+function assertSuccessfulResponse(response: Response): void {
+  if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`)
+}
+
 class HookExecutor {
   private hooks: Hook[] = []
 
@@ -509,6 +517,60 @@ export class ElectronTogglyClient {
     this.notifyEvaluationsChanged()
   }
 
+  private definitionsParseOptions(headers: Record<string, string>, controller: AbortController): NonNullable<Parameters<typeof parseEvaluatedResponseBody>[1]> {
+    return {
+      verifySignatures: this.config.verifySignatures,
+      baseURI: this.transportBaseURI,
+      allowedKeyIds: this.config.allowedKeyIds,
+      maxSignatureAgeSeconds: this.config.maxSignatureAgeSeconds ?? undefined,
+      headers,
+      fetchImpl: (url, init) => this.fetchImpl(url, { ...init, signal: controller.signal }),
+      getJwks: this.config.verifySignatures
+        ? () =>
+            this.jwksCache.get({
+              verifySignatures: true,
+              baseURI: this.transportBaseURI,
+              allowedKeyIds: this.config.allowedKeyIds,
+              maxSignatureAgeSeconds:
+                this.config.maxSignatureAgeSeconds ?? undefined,
+              headers,
+              fetchImpl: (url, init) => this.fetchImpl(url, { ...init, signal: controller.signal }),
+            })
+        : undefined,
+    }
+  }
+
+  private evaluatedDefinitions(parsed: unknown): EvaluatedDefinitions {
+    return (this.config.verifySignatures
+      ? parsed as EvaluatedDefinitions
+      : unwrapDefsPayload(parsed) as EvaluatedDefinitions) ?? {}
+  }
+
+  private acceptNotModified(response: Response): void {
+    if (!this.hasLoadedFlags) throw new Error('Definitions returned 304 without matching cached flags')
+    this.applyRevision(response)
+  }
+
+  private acceptDefinitions(defs: EvaluatedDefinitions, response: Response): void {
+    if (!isValidDefinitions(defs)) throw new Error('Invalid evaluated definitions body')
+    this.features = defs
+    this.hasLoadedFlags = true
+    this.cachedDefinitionsRevision = null
+    this.applyRevision(response)
+  }
+
+  private reportCurrentRefreshError(error: unknown, current: () => boolean): boolean {
+    if (!current()) return false
+    this.reportError('Failed to refresh feature flags', error)
+    return current()
+  }
+
+  private applyFallbackIfMissing(loaded: boolean): void {
+    if (loaded) return
+    this.features = this.getFallbackFlags()
+    this.hasLoadedFlags = true
+  }
+
   async refresh(): Promise<FeatureFlagsSnapshot> {
     if (this.disposed) {
       return this.getBooleanFlags()
@@ -522,6 +584,7 @@ export class ElectronTogglyClient {
     }
 
     const generation = ++this.generation
+    const current = () => !this.disposed && generation === this.generation
     const controller = new AbortController()
     const timeoutId = setTimeout(
       () => controller.abort(),
@@ -539,72 +602,37 @@ export class ElectronTogglyClient {
         headers,
         signal: controller.signal,
       })
-      if (this.disposed || generation !== this.generation)
+      if (!current())
         return this.getBooleanFlags()
 
       if (response.status === 304) {
-        if (!this.hasLoadedFlags) throw new Error('Definitions returned 304 without matching cached flags')
-        this.applyRevision(response)
+        this.acceptNotModified(response)
         await this.persistCache(true)
         return this.getBooleanFlags()
       }
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status} ${response.statusText}`)
-      }
+      assertSuccessfulResponse(response)
 
       const bodyText = await readResponseBody(response)
-      const parsed = await parseEvaluatedResponseBody(bodyText, {
-        verifySignatures: this.config.verifySignatures,
-        baseURI: this.transportBaseURI,
-        allowedKeyIds: this.config.allowedKeyIds,
-        maxSignatureAgeSeconds: this.config.maxSignatureAgeSeconds ?? undefined,
-        headers,
-        fetchImpl: (url, init) => this.fetchImpl(url, { ...init, signal: controller.signal }),
-        getJwks: this.config.verifySignatures
-          ? () =>
-              this.jwksCache.get({
-                verifySignatures: true,
-                baseURI: this.transportBaseURI,
-                allowedKeyIds: this.config.allowedKeyIds,
-                maxSignatureAgeSeconds:
-                  this.config.maxSignatureAgeSeconds ?? undefined,
-                headers,
-                fetchImpl: (url, init) => this.fetchImpl(url, { ...init, signal: controller.signal }),
-              })
-          : undefined,
-      })
+      const parsed = await parseEvaluatedResponseBody(
+        bodyText, this.definitionsParseOptions(headers, controller),
+      )
 
-      const defs =
-        (this.config.verifySignatures
-          ? (parsed as EvaluatedDefinitions)
-          : (unwrapDefsPayload(parsed) as EvaluatedDefinitions)) ?? {}
+      const defs = this.evaluatedDefinitions(parsed)
 
-      if (this.disposed || generation !== this.generation)
-        return this.getBooleanFlags()
-      if (!isValidDefinitions(defs)) throw new Error('Invalid evaluated definitions body')
-      this.features = defs
-      this.hasLoadedFlags = true
-      this.cachedDefinitionsRevision = null
-      this.applyRevision(response)
+      if (!current()) return this.getBooleanFlags()
+      this.acceptDefinitions(defs, response)
       await this.persistCache()
-      const current = () => !this.disposed && generation === this.generation
       if (!current()) return this.getBooleanFlags()
       await this.hookExecutor.executeAfterRefresh(this.getBooleanFlags(), current)
       if (current()) this.notifyFlagsUpdated()
       return this.getBooleanFlags()
     } catch (error) {
-      if (this.disposed || generation !== this.generation)
-        return this.getBooleanFlags()
-      this.reportError('Failed to refresh feature flags', error)
-      if (this.disposed || generation !== this.generation) return this.getBooleanFlags()
+      if (!this.reportCurrentRefreshError(error, current)) return this.getBooleanFlags()
       if (!this.hasLoadedFlags) {
         const loaded = await this.loadDiskCache()
-        if (this.disposed || generation !== this.generation) return this.getBooleanFlags()
-        if (!loaded) {
-          this.features = this.getFallbackFlags()
-          this.hasLoadedFlags = true
-        }
+        if (!current()) return this.getBooleanFlags()
+        this.applyFallbackIfMissing(loaded)
       }
       this.notifyFlagsUpdated()
       return this.getBooleanFlags()
@@ -637,7 +665,7 @@ export class ElectronTogglyClient {
 
   async setContext(input: SetContextInput): Promise<FeatureFlagsSnapshot> {
     if (this.disposed) return this.getBooleanFlags()
-    input = { ...input, groups: input.groups && [...input.groups], claims: input.claims && { ...input.claims } }
+    input = snapshotContextInput(input)
     const transaction = ++this.contextGeneration
     ++this.generation
     for (const [controller, timer] of this.requests) {

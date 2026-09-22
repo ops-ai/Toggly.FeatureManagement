@@ -17,7 +17,7 @@ export type IpcMainLike = {
     listener: (
       event: unknown,
       ...args: unknown[]
-    ) => unknown | Promise<unknown>,
+    ) => unknown,
   ) => void
   removeHandler?: (channel: string) => void
   removeAllListeners?: (channel: string) => void
@@ -247,6 +247,25 @@ function validKey(value: unknown): value is string {
     typeof value === 'string' && value.trim().length > 0 && value.length <= 1024
   )
 }
+function enqueueContextProperties(
+  item: object,
+  depth: number,
+  entries: number,
+  pending: Array<[unknown, number]>,
+): number | null {
+  const keys = Object.keys(item)
+  if (keys.length + entries + pending.length > 2000) return null
+  let bytes = 0
+  for (const key of keys) {
+    bytes += key.length * 3
+    pending.push([(item as Record<string, unknown>)[key], depth + 1])
+  }
+  return bytes
+}
+function validContextPrimitive(item: unknown): boolean {
+  return item === null || item === undefined || typeof item === 'boolean' ||
+    (typeof item === 'number' && Number.isFinite(item))
+}
 function validContext(value: unknown): boolean {
   if (value == null) return true
   if (typeof value !== 'object' || Array.isArray(value)) return false
@@ -258,18 +277,10 @@ function validContext(value: unknown): boolean {
     if (++entries > 2000 || depth > 8) return false
     if (typeof item === 'string') bytes += item.length * 3
     else if (item && typeof item === 'object') {
-      const keys = Object.keys(item)
-      if (keys.length + entries + pending.length > 2000) return false
-      for (const key of keys) {
-        bytes += key.length * 3
-        pending.push([(item as Record<string, unknown>)[key], depth + 1])
-      }
-    } else if (
-      item !== null &&
-      item !== undefined &&
-      typeof item !== 'boolean' &&
-      (typeof item !== 'number' || !Number.isFinite(item))
-    )
+      const keyBytes = enqueueContextProperties(item, depth, entries, pending)
+      if (keyBytes === null) return false
+      bytes += keyBytes
+    } else if (!validContextPrimitive(item))
       return false
     if (bytes > 16384) return false
   }

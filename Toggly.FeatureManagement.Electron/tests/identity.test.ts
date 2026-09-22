@@ -103,6 +103,26 @@ it('drops stale remaining refresh hooks and publishes the newest same-context sn
   expect(seen).toEqual([true])
   expect(client.getFlags()).toEqual({ On: true })
 })
+it('stops a failed refresh when its synchronous diagnostic replaces the context', async () => {
+  let reenter: (() => void) | undefined
+  const { client } = await create({ flagDefaults: { On: false }, onError: () => reenter?.() })
+  const snapshots: boolean[] = []
+  client.onFlagsUpdated(flags => { snapshots.push(flags.On) })
+  const disk = vi.spyOn(client as any, 'loadDiskCache')
+  let transition: Promise<unknown> | undefined
+  reenter = () => {
+    reenter = undefined
+    ;(client as any).fetchImpl = async () => new Response('{"defs":{"On":true}}')
+    transition = client.setContext({ identity: 'bob' })
+  }
+  ;(client as any).fetchImpl = async () => { throw new Error('offline') }
+  expect(await client.refresh()).toEqual({ On: false })
+  await transition
+  expect(client.getFlags()).toEqual({ On: true })
+  expect(snapshots).toEqual([false, true])
+  expect(disk).toHaveBeenCalledTimes(1)
+})
+
 it('retires old context flags immediately and never restores them on a failed next-context request', async () => {
   const { client, packets } = await create({ flagDefaults: { On: false } })
   let release!: () => void

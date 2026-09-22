@@ -110,7 +110,7 @@ export type {
   FeatureFlagsSnapshot,
   FeatureRequirement,
   SetContextInput,
-}
+} from '../types.js'
 
 export function recordUsage(key: string, variant = 'enabled'): void {
   tryBridge()?.recordUsage(key, variant)
