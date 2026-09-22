@@ -10,7 +10,11 @@ export function captureEvaluatedResponse(fetchImpl: typeof fetch) {
   let body: string | undefined;
   const capturedFetch: typeof fetch = async (input, init) => {
     const response = await fetchImpl(input, init);
-    if (requestUrl(input).includes('/evaluated-signed/') && response.ok) {
+    const url = requestUrl(input);
+    if (
+      (url.includes('/evaluated-signed/') || url.includes('/evaluated-variants-signed/')) &&
+      response.ok
+    ) {
       body = await response.clone().text();
     }
     return response;

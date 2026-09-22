@@ -374,6 +374,85 @@ describe('verified persistent storage', () => {
   });
 });
 
+describe('variant envelope persistence', () => {
+  const variantDefs = () => ({
+    On: { enabled: true, variant: 'blue', configurationValue: 42 },
+    Off: { enabled: false, variant: 'red' },
+  });
+
+  it('verifies and selects variant defs, keeping boolean-mode strict validation separate', async () => {
+    const keys = { keys: [{ ...jwks.keys[0], use: 'sig', key_ops: ['verify'] }] };
+    const verified = await verifyEnvelope(envelope(variantDefs()), keys, {}, 0, true);
+    expect(verified.definitions).toEqual(variantDefs());
+    await expect(verifyEnvelope(envelope(variantDefs()), keys, {}, 0, false)).rejects.toThrow(
+      'Invalid evaluated definitions',
+    );
+  });
+
+  it('restores a verified variant envelope into a fresh offline client', async () => {
+    const storage = memoryStorage();
+    const options = {
+      appKey: 'front',
+      identity: 'alice',
+      storage,
+      enableVariants: true,
+      fetch: async (input: any) =>
+        new Response(
+          String(input).includes('.well-known') ? JSON.stringify(jwks) : envelope(variantDefs()),
+        ),
+    };
+    const initial = createClient(options);
+    await initial.refresh();
+    expect(initial.getVariant('On')).toEqual({ name: 'blue', configurationValue: 42 });
+    initial.dispose();
+
+    const offline = createClient({
+      ...options,
+      fetch: async () => {
+        throw new Error('Every network request disabled');
+      },
+    });
+    try {
+      await offline.refresh();
+      expect(offline.flags()).toEqual({ On: true, Off: false });
+      expect(offline.getVariant('On')).toEqual({ name: 'blue', configurationValue: 42 });
+      expect(offline.getVariant('Off')).toBeNull();
+    } finally {
+      offline.dispose();
+    }
+  });
+
+  it('keeps boolean and variant caches isolated by their distinct endpoint scope', async () => {
+    const storage = memoryStorage();
+    const boolean = createClient({
+      appKey: 'front',
+      storage,
+      fetch: async (input: any) =>
+        new Response(
+          String(input).includes('.well-known') ? JSON.stringify(jwks) : envelope({ on: true }),
+        ),
+    });
+    await boolean.refresh();
+    boolean.dispose();
+    const variantClient = createClient({
+      appKey: 'front',
+      storage,
+      enableVariants: true,
+      fetch: async () => {
+        throw new Error('Every network request disabled');
+      },
+    });
+    try {
+      await variantClient.refresh();
+      // A distinct endpoint scope means the boolean-mode envelope cannot restore variants.
+      expect(variantClient.flags()).toEqual({});
+      expect(variantClient.getVariant('on')).toBeNull();
+    } finally {
+      variantClient.dispose();
+    }
+  });
+});
+
 describe('restored key and envelope validation', () => {
   it.each([
     { kty: 'RSA' },

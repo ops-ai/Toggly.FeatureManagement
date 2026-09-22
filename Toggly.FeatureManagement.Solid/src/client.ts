@@ -8,6 +8,12 @@ import {
   type TogglySnapshot,
 } from './snapshot.js';
 import {
+  selectVariantDefinitions,
+  variantDefsToFlags,
+  type EvaluatedVariantDef,
+  type VariantResult,
+} from './variant.js';
+import {
   evaluateResolvedKeys,
   resolveEvaluatedDefinition,
   type EvaluatedDefinitions,
@@ -20,6 +26,7 @@ import { createTelemetryReporter, type TelemetryOptions } from '@ops-ai/toggly-c
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
 
 export type { TogglyEntityContext, TogglyEvaluationContext, EvaluatedDefinitions, LocalGate };
+export type { EvaluatedVariantDef, VariantResult } from './variant.js';
 export interface TogglyOptions extends TogglyEvaluationContext {
   /** Host-minted browser token; takes precedence over user targeting and telemetry. */
   instanceId?: string;
@@ -48,6 +55,12 @@ export interface TogglyOptions extends TogglyEvaluationContext {
    */
   storage?: Pick<Storage, 'getItem' | 'setItem'>;
   localGates?: LocalGate[];
+  /**
+   * Opt-in variant-aware evaluation. Uses `/evaluated-variants-signed` instead
+   * of `/evaluated-signed` and enables {@link getVariant} / {@link getVariantValue}.
+   * Default false.
+   */
+  enableVariants?: boolean;
   enableTelemetry?: boolean;
   metricsBaseUrl?: string;
   telemetryFlushIntervalMs?: number;
@@ -92,6 +105,8 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
   };
   // Signed SSR and accepted cache/network values are authoritative for this context.
   let hasAcceptedState = acceptedSnapshot?.source === 'signed';
+  // Raw variant defs, kept apart from booleanized state.definitions; only set when enableVariants.
+  let variants: Record<string, EvaluatedVariantDef> | null = null;
   let gates = options.localGates ?? [];
   let gateIndex = buildFlagGateIndex(gates);
   const listeners = new Set<(state: ClientState) => void>();
@@ -139,20 +154,42 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
     }
   };
   const flags = () => ({ ...state.definitions });
-  const headers = { 'X-Toggly-Sdk': 'solidjs', 'X-Toggly-Sdk-Version': '0.3.0' };
+  const headers = { 'X-Toggly-Sdk': 'solidjs', 'X-Toggly-Sdk-Version': '0.4.0' };
+
+  /**
+   * Current variant assignment for a feature (requires {@link TogglyOptions.enableVariants}
+   * and loaded data). Null when variants are disabled, the feature is off, or no variant
+   * is assigned.
+   */
+  function getVariant(featureKey: string): VariantResult | null {
+    if (!config.enableVariants) return null;
+    const entry = variants?.[featureKey];
+    const variant = entry?.variant || 'enabled';
+    const enabled = applyLocalGate(entry?.enabled === true, featureKey, gates, gateIndex);
+    const check = reporter?.captureCheck();
+    check?.(featureKey, enabled ? variant : 'disabled');
+    if (!enabled || !entry?.variant) return null;
+    return { name: entry.variant, configurationValue: entry.configurationValue };
+  }
 
   const isCurrent = (current: number) => current === generation && !disposed;
 
   function restoreCached(scope: string, current: number): Promise<void> | undefined {
     if (!config.verifySignatures || hasAcceptedState) return;
     return persistence
-      .read(scope, config, timestamps.get(scope) ?? 0)
+      .read(scope, config, timestamps.get(scope) ?? 0, config.enableVariants)
       ?.then((verified) => {
         if (!isCurrent(current)) return;
         timestamps.set(scope, verified.timestamp);
-        const definitions = selectDefinitions(verified.definitions, expose);
         hasAcceptedState = true;
-        emit({ definitions });
+        if (config.enableVariants) {
+          const projected = selectVariantDefinitions(verified.definitions, expose);
+          variants = projected;
+          emit({ definitions: variantDefsToFlags(projected) });
+        } else {
+          const definitions = selectDefinitions(verified.definitions, expose);
+          emit({ definitions });
+        }
       })
       .catch(() => {
         /* Invalid or expired storage cannot block network recovery. */
@@ -181,7 +218,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
     if (!isCurrent(current)) return;
     const { result, body } = remote;
     if (!result.notModified) {
-      let definitions = result.defs;
+      let definitions: unknown = result.defs;
       if (config.verifySignatures) {
         if (!body) throw new Error('Missing signed envelope');
         const keys = await jwks.get({
@@ -189,18 +226,30 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
           baseURI: definitionBaseURI(config.baseURI),
           fetchImpl,
         });
-        const verified = await verifyEnvelope(body, keys, config, timestamps.get(scope) ?? 0);
+        const verified = await verifyEnvelope(
+          body,
+          keys,
+          config,
+          timestamps.get(scope) ?? 0,
+          config.enableVariants,
+        );
         if (!isCurrent(current)) return;
         definitions = verified.definitions;
         timestamps.set(scope, verified.timestamp);
         persistence.write(scope, body, verified.keys);
       }
       // Complete validation and storage callbacks precede atomic body/revision adoption.
-      const projected = selectDefinitions(definitions, expose);
       if (!isCurrent(current)) return;
       hasAcceptedState = true;
       revision = result.revision ?? null;
-      emit({ definitions: projected });
+      if (config.enableVariants) {
+        const projected = selectVariantDefinitions(definitions, expose);
+        variants = projected;
+        emit({ definitions: variantDefsToFlags(projected) });
+      } else {
+        const projected = selectDefinitions(definitions, expose);
+        emit({ definitions: projected });
+      }
     } else {
       if (!hasAcceptedState)
         throw new Error('304 Not Modified without matching accepted definitions');
@@ -231,6 +280,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
         config.appKey,
         config.environment,
         context,
+        config.enableVariants,
       );
       const cached = restoreCached(url, current);
       if (cached) await cached;
@@ -260,7 +310,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
     );
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     url.searchParams.set('sdk', 'solidjs');
-    url.searchParams.set('sdkVersion', '0.3.0');
+    url.searchParams.set('sdkVersion', '0.4.0');
     if (revision) url.searchParams.set('rev', revision);
     try {
       socket = new WebSocket(url);
@@ -346,6 +396,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
       generation++;
       controller?.abort();
       revision = null;
+      variants = null;
       stopSocket();
       const current = generation;
       expose = [...snapshot.expose];
@@ -395,6 +446,10 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
         return enabled;
       });
     },
+    getVariant,
+    getVariantValue(featureKey: string): unknown | null {
+      return getVariant(featureKey)?.configurationValue ?? null;
+    },
     async setContext(next: TogglyEvaluationContext & { instanceId?: string }) {
       if (disposed) return;
       generation++;
@@ -411,6 +466,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
       hasAcceptedState = false;
       // Never display the previous user's flags while a new user's request is pending.
       revision = null;
+      variants = null;
       emit({ definitions: selectDefinitions(config.flagDefaults ?? {}, expose), error: undefined });
       if (isCurrent(current)) await refresh();
       if (!disposed && context === installed && liveStarted) startSocket();

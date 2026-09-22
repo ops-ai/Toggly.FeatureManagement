@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 — 2026-09-22
+
+### Added
+
+- Opt-in `enableVariants` on `createClient`/`createToggly`. When set, the client fetches `/evaluated-variants-signed` instead of `/evaluated-signed` and exposes `getVariant`/`getVariantValue` on the low-level client and the `Toggly` facade, plus a reactive `useVariant` hook. Matches the JS/Vue SDKs: null when variants are disabled, the feature is off, or no variant is assigned; local gates can suppress an assigned variant but never invent one.
+- Signed/persisted variant envelopes reuse the existing verify-and-cache pipeline: `/evaluated-variants-signed` and `/evaluated-signed` responses are validated and cached under their own distinct scope, so switching `enableVariants` never resurrects the other mode's cached body. Identity/context changes refetch from the active endpoint the same way boolean mode already does.
+
 ## 0.3.0 — 2026-09-18
 
 ### Added

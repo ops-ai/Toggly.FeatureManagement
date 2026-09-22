@@ -25,6 +25,7 @@ import {
   type TogglyClient,
   type TogglyEntityContext,
   type TogglyOptions,
+  type VariantResult,
 } from './client';
 export * from './client';
 
@@ -46,6 +47,9 @@ export interface Toggly {
     negate?: boolean,
     entity?: TogglyEntityContext,
   ) => boolean;
+  /** Requires {@link TogglyOptions.enableVariants}. Null when off/disabled/missing. */
+  getVariant: (featureKey: string) => VariantResult | null;
+  getVariantValue: (featureKey: string) => unknown | null;
 }
 
 const retiredClients = new WeakSet<TogglyClient>();
@@ -124,6 +128,14 @@ export function createToggly(
       definitions();
       return created.evaluate(keys, requirement, negate, entity);
     },
+    getVariant(featureKey) {
+      definitions();
+      return created.getVariant(featureKey);
+    },
+    getVariantValue(featureKey) {
+      definitions();
+      return created.getVariantValue(featureKey);
+    },
   };
 }
 const Context = createContext<Toggly>();
@@ -165,6 +177,15 @@ export function useFeatureFlag(
 /** Observe the current public evaluated definitions without flattening entity rules. */
 export function useFeatureFlags(): Accessor<EvaluatedDefinitions> {
   return useToggly().flags;
+}
+/**
+ * Reactive variant assignment for a feature (requires `enableVariants` in
+ * {@link TogglyOptions}). Null when variants are disabled, the feature is off,
+ * or no variant is assigned.
+ */
+export function useVariant(key: string | Accessor<string>): Accessor<VariantResult | null> {
+  const toggly = useToggly();
+  return createMemo(() => toggly.getVariant(typeof key === 'function' ? key() : key));
 }
 export interface FeatureProps {
   feature: string | readonly string[];
