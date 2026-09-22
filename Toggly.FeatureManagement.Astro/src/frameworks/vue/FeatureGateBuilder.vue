@@ -50,14 +50,12 @@ const flagKeys = computed(() => {
   return keys;
 });
 
-const gateAtom = computed(() => $gate(flagKeys.value, props.requirement, props.negate, props.context, props.contextKind));
-
 const enabled = computed(() => {
   if (!isReady.value) {
     return false;
   }
   void flags.value;
   void localGatesRevision.value;
-  return gateAtom.value.get();
+  return $gate(flagKeys.value, props.requirement, props.negate, props.context, props.contextKind).get();
 });
 </script>

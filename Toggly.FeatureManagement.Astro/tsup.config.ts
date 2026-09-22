@@ -7,6 +7,7 @@ export default defineConfig({
     'server/toggly-server': 'src/server/toggly-server.ts',
     'server/utils': 'src/server/utils.ts',
     'client/store': 'src/client/store.ts',
+    'client/feature-clients': 'src/client/feature-clients.ts',
     'client/setup': 'src/client/setup.ts',
     'frameworks/react/index': 'src/frameworks/react/index.ts',
     'frameworks/react/Feature': 'src/frameworks/react/Feature.tsx',

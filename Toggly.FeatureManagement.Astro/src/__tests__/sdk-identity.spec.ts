@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import {readFileSync} from 'node:fs';
 import {
   buildDefinitionFetchHeaders,
   sdkUserAgent,
@@ -8,6 +9,9 @@ import {
 } from '../sdk-identity.js';
 
 describe('sdk-identity', () => {
+  it('reports the publishable manifest version', () => {
+    expect(SDK_VERSION).toBe(JSON.parse(readFileSync('package.json', 'utf8')).version);
+  });
   afterEach(() => {
     // jsdom restores window/document between tests; no cleanup needed
   });
