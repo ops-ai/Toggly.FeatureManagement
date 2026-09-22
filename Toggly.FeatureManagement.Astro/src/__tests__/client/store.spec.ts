@@ -335,6 +335,7 @@ describe('Client Store', () => {
         appKey: 'test-key',
         environment: 'Production',
         featureFlagsRefreshInterval: 5000,
+        enableTelemetry: false, // This test drains only definition-refresh timers.
       });
 
       expect(mockFetch).toHaveBeenCalledTimes(1);

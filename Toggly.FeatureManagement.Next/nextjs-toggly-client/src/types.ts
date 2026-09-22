@@ -1,4 +1,4 @@
-import type { TogglyConfig, TogglyClient, FeatureRequirement } from '@ops-ai/nextjs-toggly-core'
+import type { TogglyConfig, BrowserTogglyClient, FrontendTelemetry, FeatureRequirement } from '@ops-ai/nextjs-toggly-core'
 import type { ReactNode } from 'react'
 
 /**
@@ -20,7 +20,9 @@ export interface TogglyClientConfig extends TogglyConfig {
  */
 export interface TogglyContextValue {
   /** Toggly client instance */
-  client: TogglyClient
+  client: BrowserTogglyClient
+  /** Compact browser-only events and app-level metrics. */
+  telemetry: FrontendTelemetry
   /** Whether the client is ready */
   isReady: boolean
   /** Whether the client is loading */
@@ -41,6 +43,7 @@ export interface TogglyContextValue {
    * Update identity and/or targeting groups/claims on the shared client config.
    */
   setContext: (context: {
+    instanceId?: string
     identity?: string
     groups?: string[]
     claims?: Record<string, string>

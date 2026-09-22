@@ -48,6 +48,12 @@ export type {
 // Client-side
 export {
   initTogglyClient,
+  destroyTogglyClient,
+  recordUsage,
+  recordView,
+  incrementCounter,
+  setGauge,
+  flushTelemetry,
   refreshFlags,
   setIdentity,
   clearIdentity,

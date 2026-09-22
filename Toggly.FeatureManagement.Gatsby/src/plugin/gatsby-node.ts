@@ -138,6 +138,9 @@ export const pluginOptionsSchema: GatsbyNode['pluginOptionsSchema'] = ({ Joi }) 
     allFeaturesEnabledDuringBuild: Joi.boolean()
       .default(false)
       .description('Enable all features during build'),
+    instanceId: Joi.string()
+      .optional()
+      .description('Host-minted browser instance token'),
     identity: Joi.string()
       .optional()
       .description('User identity for targeting'),
@@ -157,5 +160,21 @@ export const pluginOptionsSchema: GatsbyNode['pluginOptionsSchema'] = ({ Joi }) 
       .min(0)
       .default(5000)
       .description('Connection timeout in milliseconds'),
+    enableTelemetry: Joi.boolean()
+      .default(true)
+      .description('Enable compact browser telemetry'),
+    enableUsageTracking: Joi.boolean()
+      .default(true)
+      .description('Enable automatic checks and explicit usage/view telemetry'),
+    enableMetrics: Joi.boolean()
+      .default(true)
+      .description('Enable explicit counter and gauge telemetry'),
+    metricsBaseUrl: Joi.string()
+      .optional()
+      .description('Base URL for compact telemetry ingestion'),
+    telemetryFlushIntervalMs: Joi.number()
+      .integer()
+      .optional()
+      .description('Telemetry flush interval in milliseconds'),
   });
 };

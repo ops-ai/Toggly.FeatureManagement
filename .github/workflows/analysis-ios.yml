@@ -7,6 +7,8 @@ on:
       - main
     paths:
       - 'Toggly.FeatureManagement.iOS/**'
+      - 'Package.swift'
+      - '.github/scripts/verify-swift-distribution*'
       - '.github/workflows/analysis-ios.yml'
   workflow_dispatch:
   workflow_call:
@@ -42,6 +44,12 @@ jobs:
 
       - name: Show Swift version
         run: swift --version
+
+      - name: Verify root Swift distribution
+        timeout-minutes: 10
+        run: |
+          python3 .github/scripts/verify-swift-distribution.test.py
+          python3 .github/scripts/verify-swift-distribution.py --repository "https://github.com/${{ github.repository }}.git" --revision "$(git rev-parse HEAD)" --consumer-target arm64-apple-ios14.0-simulator --consumer-sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"
 
       - name: Resolve package dependencies
         working-directory: ${{ env.SDK_ROOT }}

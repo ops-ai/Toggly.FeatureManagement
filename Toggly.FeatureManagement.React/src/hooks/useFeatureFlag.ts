@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { context } from '../contexts'
 import type { TogglyService } from '../services'
 
@@ -30,8 +30,7 @@ export function useFeatureFlag(
   featureKey: string,
   options: UseFeatureFlagOptions = {},
 ): UseFeatureFlagResult {
-  const { negate = false } = options
-  return useFeatureGate(featureKey ? [featureKey] : [], { requirement: 'all', negate })
+  return useFeatureGate(featureKey ? [featureKey] : [], { ...options, requirement: 'all' })
 }
 
 /**
@@ -43,12 +42,14 @@ export function useFeatureGate(
 ): UseFeatureFlagResult {
   const { requirement = 'all', negate = false, defaultValue = false, context, contextKind } = options
   const toggly = useTogglyService()
+  const evaluation = useRef(0)
   const [isEnabled, setIsEnabled] = useState(defaultValue)
   const [isLoading, setIsLoading] = useState(true)
   const keysKey = useMemo(() => featureKeys.join('\0'), [featureKeys])
   const stableKeys = useMemo(() => [...featureKeys], [keysKey])
 
   const evaluate = useCallback(async () => {
+    const current = ++evaluation.current
     if (!toggly) {
       setIsEnabled(defaultValue)
       setIsLoading(false)
@@ -64,16 +65,17 @@ export function useFeatureGate(
     setIsLoading(true)
     try {
       const result = await toggly.evaluateFeatureGate(stableKeys, requirement, negate, context, contextKind)
-      setIsEnabled(result)
+      if (current === evaluation.current) setIsEnabled(result)
     } catch {
-      setIsEnabled(defaultValue)
+      if (current === evaluation.current) setIsEnabled(defaultValue)
     } finally {
-      setIsLoading(false)
+      if (current === evaluation.current) setIsLoading(false)
     }
   }, [toggly, stableKeys, keysKey, requirement, negate, defaultValue, context, contextKind])
 
   useEffect(() => {
     void evaluate()
+    return () => { evaluation.current++ }
   }, [evaluate])
 
   useEffect(() => {

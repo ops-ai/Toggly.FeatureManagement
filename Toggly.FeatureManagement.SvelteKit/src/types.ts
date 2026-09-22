@@ -1,3 +1,4 @@
+import type { TelemetryDiagnostic } from '@ops-ai/toggly-client-telemetry';
 import type { Jwk } from '@ops-ai/toggly-signed-defs';
 import type {
   EvaluatedDefinitions,
@@ -14,7 +15,7 @@ export interface TogglySnapshot {
   signedTimestamp?: number;
   signingKey?: Jwk;
   /** Explicitly public targeting data. Never put secrets or authentication claims here. */
-  context: TogglyEvaluationContext;
+  context: TogglyEvaluationContext & { instanceId?: string };
   expose: string[];
 }
 export interface GateOptions {
@@ -27,6 +28,16 @@ export interface BrowserOptions {
   /** Front-end App Key only. Backend keys belong in hooks.server.ts. */
   appKey?: string;
   environment?: string;
+  /** Initial host token convenience; subsequent snapshots own rotation and clearing. */
+  instanceId?: string;
+  /** Browser telemetry defaults on for a configured frontend App Key. */
+  enableTelemetry?: boolean;
+  /** Independent metrics service base URL; no targeting context is attached. */
+  metricsBaseUrl?: string;
+  /** Base flush interval, 30000–60000 ms (default 45000), with jitter. */
+  telemetryFlushIntervalMs?: number;
+  /** Bounded payload-free diagnostics; observer errors do not affect evaluation. */
+  onTelemetryDiagnostic?: (code: TelemetryDiagnostic) => void;
   baseURI?: string;
   /** Origin-owned persistence for exact signed envelopes and verified public keys. */
   storage?: Pick<Storage, 'getItem' | 'setItem'>;

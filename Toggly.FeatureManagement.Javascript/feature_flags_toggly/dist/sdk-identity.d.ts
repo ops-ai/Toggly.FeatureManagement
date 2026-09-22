@@ -1,5 +1,5 @@
 export declare const SDK_ID = "javascript";
-export declare const SDK_VERSION = "1.3.1";
+export declare const SDK_VERSION = "1.9.0";
 export declare const SDK_HEADER_ID = "X-Toggly-Sdk";
 export declare const SDK_HEADER_VERSION = "X-Toggly-Sdk-Version";
 export declare function sdkUserAgent(): string;

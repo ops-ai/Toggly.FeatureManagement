@@ -11,7 +11,7 @@ describe('startup evaluation context', () => {
   afterEach(() => service?.dispose());
 
   it('ignores synchronous subscription refreshes until initialization', async () => {
-    service = new TogglyService({ appKey: 'app', identity: 'user&123',
+    service = new TogglyService({ enableTelemetry: false, appKey: 'app', identity: 'user&123',
       groups: ['beta', 'team a'], claims: { plan: 'pro' }, refreshInterval: 0,
       networkInfo: { getState: async () => ({ isConnected: true }), subscribe: listener => {
         listener({ isConnected: false }); listener({ isConnected: true }); return () => {};
@@ -36,7 +36,7 @@ describe('startup evaluation context', () => {
     let app!: (state: AppStateType) => void;
     let network!: (state: NetworkState) => void;
     const groups = ['beta']; const claims = { plan: 'pro' };
-    service = new TogglyService({ appKey: 'app', storage, groups, claims, refreshInterval: 0,
+    service = new TogglyService({ enableTelemetry: false, appKey: 'app', storage, groups, claims, refreshInterval: 0,
       appState: { getCurrentState: () => 'active', subscribe: listener => { app = listener; return () => {}; } },
       networkInfo: { getState: async () => ({ isConnected: true }), subscribe: listener => { network = listener; return () => {}; } } });
     const init = service.init();
@@ -59,10 +59,10 @@ describe('startup evaluation context', () => {
 
   it('does not reuse a revision or cached flags for delimiter-colliding contexts', async () => {
     const storage = new MemoryStorage();
-    service = new TogglyService({ appKey: 'app', identity: 'user', groups: ['a,b'], storage, refreshInterval: 0 });
+    service = new TogglyService({ enableTelemetry: false, appKey: 'app', identity: 'user', groups: ['a,b'], storage, refreshInterval: 0 });
     await service.init(); service.dispose();
     (fetch as jest.Mock).mockRejectedValue(new Error('offline'));
-    service = new TogglyService({ appKey: 'app', identity: 'user', groups: ['a', 'b'], storage, refreshInterval: 0 });
+    service = new TogglyService({ enableTelemetry: false, appKey: 'app', identity: 'user', groups: ['a', 'b'], storage, refreshInterval: 0 });
     const response = await service.init();
     expect((fetch as jest.Mock).mock.calls[1][1].headers['If-None-Match']).toBeUndefined();
     expect(response.flags).toEqual({});
@@ -85,7 +85,7 @@ describe('startup evaluation context', () => {
   it('orders cache tuples by ordinal key then value and reuses reordered context', async () => {
     const storage = new MemoryStorage();
     const config = { appKey: 'app', identity: 'user', storage, refreshInterval: 0 };
-    service = new TogglyService({ ...config, groups: ['z', 'A'], claims: { 'a!': 'first', a: 'last' } });
+    service = new TogglyService({ enableTelemetry: false, ...config, groups: ['z', 'A'], claims: { 'a!': 'first', a: 'last' } });
     await service.init();
     const record = JSON.parse((await storage.get('@toggly:etag'))!);
     expect(JSON.parse(record.context)[2]).toEqual([
@@ -93,7 +93,7 @@ describe('startup evaluation context', () => {
     ]);
     service.dispose();
     (fetch as jest.Mock).mockRejectedValue(new Error('offline'));
-    service = new TogglyService({ ...config, groups: ['A', 'z'], claims: { a: 'last', 'a!': 'first' } });
+    service = new TogglyService({ enableTelemetry: false, ...config, groups: ['A', 'z'], claims: { a: 'last', 'a!': 'first' } });
     const response = await service.init();
     expect((fetch as jest.Mock).mock.calls[1][1].headers['If-None-Match']).toBe('revision-1');
     expect(response.flags).toEqual({ enabled: true });
@@ -102,7 +102,7 @@ describe('startup evaluation context', () => {
   it.each([undefined, ''])('preserves device fallback for identity %s with empty collections', async identity => {
     const storage = new MemoryStorage();
     await storage.set('@toggly:deviceId', 'device');
-    service = new TogglyService({ appKey: 'app', identity, groups: [], claims: {}, storage, refreshInterval: 0 });
+    service = new TogglyService({ enableTelemetry: false, appKey: 'app', identity, groups: [], claims: {}, storage, refreshInterval: 0 });
     await service.init();
     const url = new URL((fetch as jest.Mock).mock.calls[0][0]);
     expect(url.searchParams.get('u')).toBe('device');
@@ -114,7 +114,7 @@ describe('startup evaluation context', () => {
     const storage = new MemoryStorage();
     await storage.set('@toggly:deviceId', 'other-user');
     const claims = Object.fromEntries(Array.from({ length: 25 }, (_, index) => [`type${index}`, 'value&=']));
-    service = new TogglyService({ appKey: 'app', identity: 'user&123', groups: [' team a ', ''], claims, storage, refreshInterval: 0 });
+    service = new TogglyService({ enableTelemetry: false, appKey: 'app', identity: 'user&123', groups: [' team a ', ''], claims, storage, refreshInterval: 0 });
     await service.init();
     const url = new URL((fetch as jest.Mock).mock.calls[0][0]);
     expect(url.searchParams.get('u')).toBe('user&123');
@@ -126,7 +126,7 @@ describe('startup evaluation context', () => {
   it('allows retry after storage initialization rejects', async () => {
     const storage = new MemoryStorage();
     jest.spyOn(storage, 'get').mockRejectedValueOnce(new Error('storage failed'));
-    service = new TogglyService({ appKey: 'app', storage, refreshInterval: 0 });
+    service = new TogglyService({ enableTelemetry: false, appKey: 'app', storage, refreshInterval: 0 });
     await expect(service.init()).rejects.toThrow('storage failed');
     expect(fetch).not.toHaveBeenCalled();
     await service.init();
@@ -137,7 +137,7 @@ describe('startup evaluation context', () => {
     let release!: (value: string) => void;
     const storage = new MemoryStorage();
     jest.spyOn(storage, 'get').mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
-    service = new TogglyService({ appKey: 'app', storage, refreshInterval: 1, enableLiveUpdates: true });
+    service = new TogglyService({ enableTelemetry: false, appKey: 'app', storage, refreshInterval: 1, enableLiveUpdates: true });
     const init = service.init();
     service.dispose(); release('device');
     await init;

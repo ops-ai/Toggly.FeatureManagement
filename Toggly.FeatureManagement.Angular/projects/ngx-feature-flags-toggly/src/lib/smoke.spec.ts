@@ -19,6 +19,7 @@ describe('Smoke test', () => {
 
     TestBed.configureTestingModule({
       imports: [NgxFeatureFlagsTogglyModule.forRoot({
+        enableTelemetry: false,
         appKey,
         environment: 'Production',
         // Same-origin Karma proxy avoids browser CORS in CI (see karma.conf.js)

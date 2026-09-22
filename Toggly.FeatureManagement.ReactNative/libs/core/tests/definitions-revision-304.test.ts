@@ -7,7 +7,7 @@ describe('304 definitions revision persistence', () => {
   afterEach(() => services.splice(0).forEach(service => service.dispose()));
 
   function create(storage: MemoryStorage, groups = ['beta']): TogglyService {
-    const service = new TogglyService({ appKey: 'app', identity: 'user', groups,
+    const service = new TogglyService({ enableTelemetry: false, appKey: 'app', identity: 'user', groups,
       claims: { plan: 'pro' }, storage, refreshInterval: 0, enableLiveUpdates: false });
     services.push(service);
     return service;
@@ -24,7 +24,7 @@ describe('304 definitions revision persistence', () => {
       headers: new Map(updated ? [['ETag', `"${updated}"`]] : []) });
     expect((await first.refresh()).flags).toEqual({ enabled: true });
     expect(JSON.parse((await storage.get('@toggly:etag'))!)).toEqual({
-      context: originalRecord.context, revision: updated ?? 'revision-1',
+      context: originalRecord.context, revision: updated ?? 'revision-1', writeId: originalRecord.writeId,
     });
     first.dispose();
 

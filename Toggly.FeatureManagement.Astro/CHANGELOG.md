@@ -1,3 +1,26 @@
+## [1.16.0] - 2026-09-21
+
+### Added
+- Shared browser telemetry across React, Vue, Svelte and native Astro client components, enabled by default with an app key and configurable collector/interval/opt-out.
+- Explicit usage, view, counter, latest-value gauge and awaitable flush methods; synchronous browser client disposal with bounded final flushing.
+
+### Fixed
+- Preserve explicit Node definitions initialization while frontend telemetry, polling, WebSocket and lifecycle resources remain browser-only.
+- Remove inherited instance tokens when a context starts without a token or explicitly clears it, keeping definitions and telemetry attribution aligned.
+- Append definitions endpoints to the configured URL pathname and suppress all pre-existing client targeting query fields when a minted token is supplied.
+- Snapshot nested entity rules before callbacks and stop superseded refresh hooks before they publish retired results.
+- Count effective checks and assigned variants once through the shared evaluator, preserving local/entity gates and short circuit.
+- Avoid telemetry from unobserved computed-store maintenance or duplicate native component hydration subscriptions.
+- Apply local gates to framework variant helpers and forward native component entity context.
+- Isolate app/environment replacement and prevent delayed initialization or refresh from restoring disposed resources.
+
+### Changed
+- Forward host-provided `instanceId` as `i`, otherwise `identity` as `u`, using public shared reporter 1.1.0. Minted definitions targeting suppresses user/groups/claims; server/build telemetry ownership remains unchanged.
+- Compatible browser initialization and existing identity methods preserve admitted event/retry attribution in one bounded reporter. Transport replacement cancels/discards old unsent events; final disposal retains bounded flushing.
+- Count each Vue gate refresh once even while Nano Stores retains unobserved projections; mixed-island refresh remains current during pending hooks.
+- Capture owner, assigned variant and local gates before host callbacks. Fence reentrant publication and stale context responses.
+- Retain validators only with the active matching in-memory definitions body; remove legacy persisted orphan revisions. Context/mode transitions and cold starts fetch full bodies, and failed transitions cannot restore retired-user flags.
+
 ## 1.15.1
 
 2026-09-17

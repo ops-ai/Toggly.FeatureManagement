@@ -14,11 +14,12 @@ function flagsCacheKeyForContext(
   appKey: string,
   environment: string,
   identity: string = DEFAULT_TEST_IDENTITY,
+  enableVariants = false,
 ): string {
   return StorageKeys.flagsCacheKey(
     appKey,
     environment,
-    evaluationContextCacheKey({ identity }),
+    `v3:${enableVariants ? 'variants' : 'evaluated'}:${evaluationContextCacheKey({ identity })}`,
   );
 }
 
@@ -1136,7 +1137,7 @@ describe('Toggly Core', () => {
     });
 
     it('should use cached flags on 304 with enableVariants', async () => {
-      const flagsKey = flagsCacheKeyForContext(appKey, env);
+      const flagsKey = flagsCacheKeyForContext(appKey, env, DEFAULT_TEST_IDENTITY, true);
       const varKey = variantsCacheKeyForContext(appKey, env);
       localStorage.setItem(flagsKey, JSON.stringify({ V: true }));
       localStorage.setItem(varKey, JSON.stringify({ V: { enabled: true, variant: 'A' } }));
@@ -2124,7 +2125,7 @@ describe('Toggly Core', () => {
   // ───────────────────────────────────────────────
   describe('Variants', () => {
     const variantsKey = variantsCacheKeyForContext('test-app-key', 'Production');
-    const flagsKey = flagsCacheKeyForContext('test-app-key', 'Production');
+    const flagsKey = flagsCacheKeyForContext('test-app-key', 'Production', DEFAULT_TEST_IDENTITY, true);
 
     it('should fetch variants and cache both flags and variants when enableVariants is true', async () => {
       mockFetch.mockResolvedValueOnce({
@@ -2341,7 +2342,7 @@ describe('Toggly Core', () => {
       });
     });
 
-    it('cacheVariants should be a no-op when persistCache is false', async () => {
+    it('cacheVariants should avoid storage when persistCache is false', async () => {
       mockFetch.mockRejectedValueOnce(new Error('network'));
       await Toggly.init({
         appKey: 'test-app-key',
@@ -2745,7 +2746,7 @@ describe('Toggly Core', () => {
       expect(flags).toEqual({ Fallback: true });
     });
 
-    it('variantsValue returns null when persistCache is disabled', async () => {
+    it('variantsValue retains the active assignment when persistCache is disabled', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -2762,7 +2763,7 @@ describe('Toggly Core', () => {
         featureFlagsRefreshInterval: 0,
       });
 
-      expect(Toggly.variantsValue).toBeNull();
+      expect(Toggly.variantsValue).toEqual({ V: { enabled: true, variant: 'A' } });
     });
   });
 });

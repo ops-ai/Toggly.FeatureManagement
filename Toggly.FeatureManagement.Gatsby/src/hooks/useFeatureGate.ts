@@ -4,8 +4,11 @@
  * Hook to check if multiple feature flags are enabled with gate logic
  */
 
+import { useMemo } from 'react';
 import { useStore } from '@nanostores/react';
-import { $flags, $isReady, $error } from '../client/store.js';
+import { useConsumerStore } from '../hooks/useConsumerStore.js';
+import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
+import { createConsumerGate, $isReady, $error } from '../client/store.js';
 import type { UseFeatureGateResult, GateRequirement } from '../types/index.js';
 
 /**
@@ -35,29 +38,20 @@ import type { UseFeatureGateResult, GateRequirement } from '../types/index.js';
 export function useFeatureGate(
   flagKeys: string[],
   requirement: GateRequirement = 'all',
-  negate: boolean = false
+  negate = false,
+  entity?: TogglyEntityContext | Record<string, unknown> | null,
+  kind?: string,
 ): UseFeatureGateResult {
-  const flags = useStore($flags);
+  const stableKeys = flagKeys.join('\u0000');
+  const gate = useMemo(
+    () => createConsumerGate(flagKeys, requirement, negate, entity, kind),
+    // The joined keys preserve caller order, including short-circuit order.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [stableKeys, requirement, negate, entity, kind],
+  );
+  const isEnabled = useConsumerStore(gate);
   const isReady = useStore($isReady);
   const error = useStore($error);
-
-  if (flagKeys.length === 0) {
-    return { isEnabled: !negate, isReady, error };
-  }
-
-  let isEnabled: boolean;
-
-  if (requirement === 'any') {
-    // At least one flag must be true
-    isEnabled = flagKeys.some((key) => flags[key] === true);
-  } else {
-    // All flags must be true
-    isEnabled = flagKeys.every((key) => flags[key] === true);
-  }
-
-  if (negate) {
-    isEnabled = !isEnabled;
-  }
 
   return { isEnabled, isReady, error };
 }

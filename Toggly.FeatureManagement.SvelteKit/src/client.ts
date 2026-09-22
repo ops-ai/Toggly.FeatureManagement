@@ -1,4 +1,3 @@
-import { buildEvaluatedSignedUrl } from '@ops-ai/toggly-hooks-types';
 import {
   InMemoryJwksCache,
   fetchEvaluatedSignedDefinitions,
@@ -6,7 +5,7 @@ import {
 } from '@ops-ai/toggly-signed-defs';
 import { validateEvaluatedDefinitions } from './validation.js';
 import { createPersistence, verifyEnvelope } from './persistence.js';
-import { captureEvaluatedResponse } from './transport.js';
+import { buildBrowserDefinitionsUrl, captureEvaluatedResponse } from './transport.js';
 import type { BrowserOptions, TogglySnapshot, EvaluatedDefinitions } from './types.js';
 
 /** Trusted keys, timestamps and persistence retirement survive reconnects within one layout. */
@@ -30,12 +29,11 @@ export function connectBrowser(
   const baseURI = options.baseURI ?? 'https://definitions.toggly.io';
   const appKey = options.appKey;
   const { timestamps, keys: observedKeys } = session;
-  const url = buildEvaluatedSignedUrl(
+  const url = buildBrowserDefinitionsUrl(
     baseURI,
     appKey,
     options.environment ?? 'Production',
     snapshot.context,
-    false,
   );
   let jwks = new InMemoryJwksCache();
   const endpoint = baseURI.replace(/\/$/, '');

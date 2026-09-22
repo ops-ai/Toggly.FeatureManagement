@@ -1,3 +1,44 @@
+## 1.9.0
+
+2026-09-19
+
+### Added
+- Send batched frontend feature checks and explicit usage, view,
+  counter, and gauge events when an application key is configured. Use
+  `enableTelemetry: false` to opt out, and `flushTelemetry()` to await a flush.
+- Support an independent `metricsBaseUrl` and a configurable telemetry flush
+  interval while preserving feature evaluation when telemetry is unavailable.
+
+### Changed
+- Keep the active context authoritative over configured URL tokens, including
+  initialization without a token and explicit token clearing.
+- Accept a host-minted `instanceId` for definitions and compact telemetry, with
+  client identity fallback and no client groups/claims when a token is present.
+- Isolate definitions, revisions and pending responses when identity or token changes.
+- Record each evaluated feature's effective value, including local and entity
+  gates and assigned variants, before aggregate gate negation.
+
+### Fixed
+- Build configured definitions URL paths correctly and remove client targeting
+  query parameters when a minted instance ID is used in either response mode.
+- Remove scoped revision validators with evicted cached definitions without
+  counting validators as additional cache entries.
+- Apply multi-field context updates and clears together, reconnecting live updates
+  once with the final context while preserving identity hooks.
+- Keep boolean and variant response bodies isolated when switching modes and
+  returning to a cached HTTP 304 response.
+- Retain active variant assignments and their check counts when persistence is
+  disabled or browser storage is unavailable; clear assignments with their context.
+- Restore the matching persisted definitions for evaluation after a token rotation
+  or reinitialization receives HTTP 304, including assigned variants.
+- Keep queued and in-flight telemetry attribution immutable across identity and
+  token changes, with one shared bounded queue and ordered gauges.
+- Preserve evaluation attribution and assigned variants when user callbacks
+  change context; cancel old transport before incompatible reinitialization.
+- Ignore responses and retained callbacks from disposed or replaced initialization,
+  preventing old feature state and events from reaching the new application.
+- Preserve telemetry ownership when restarting the definitions refresh interval.
+
 ## 1.8.0
 
 2026-09-08
@@ -156,4 +197,3 @@
 * Feature evaluation methods unit tests
 * Documentation
 * License
-

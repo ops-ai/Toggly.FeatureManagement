@@ -30,27 +30,36 @@ export function useVariant(featureKey: string, togglyOverride?: Toggly): UseVari
   const variant = ref<VariantResult | null>(null) as Ref<VariantResult | null>
   const variantValue = ref<unknown | null>(null) as Ref<unknown | null>
   const isLoading = ref(true)
+  let active = true
+  let request = 0
+  let generation = -1
 
   const refresh = async () => {
+    if (!active) return
+    const current = ++request
+    generation = toggly._ownerGeneration
     isLoading.value = true
     try {
       await toggly._featuresLoaded()
-      variant.value = toggly.getVariant(featureKey)
-      variantValue.value = toggly.getVariantValue(featureKey)
+      if (!active || current !== request) return
+      const next = toggly.getVariant(featureKey)
+      if (!active || current !== request) return
+      variant.value = next
+      variantValue.value = variant.value?.configurationValue ?? null
     } finally {
-      isLoading.value = false
+      if (active && current === request) isLoading.value = false
     }
   }
 
   onMounted(() => {
     void refresh()
     const unsubRefresh = toggly.subscribeFeaturesRefresh(() => {
-      void refresh()
+      if (!isLoading.value || generation !== toggly._ownerGeneration) void refresh()
     })
-    const unsubLocalGates = toggly.subscribeLocalGatesChanged(() => {
-      void refresh()
-    })
+    const unsubLocalGates = toggly.subscribeLocalGatesChanged(() => { void refresh() })
     onUnmounted(() => {
+      active = false
+      request++
       unsubRefresh()
       unsubLocalGates()
     })

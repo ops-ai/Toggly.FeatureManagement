@@ -74,6 +74,58 @@ final class InitialEvaluationContextTests: XCTestCase {
         await service.dispose()
     }
 
+    func testMintedRequestsRemoveInheritedUserIdsAcrossRotationAndRestoreLegacyOnClear() async throws {
+        let service = makeInheritedUserIdService(instanceId: "mint-one")
+        let initial = await service.initialize()
+        XCTAssertEqual(initial.flags["targeted"], true)
+        assertInheritedUserIdRequest(instanceId: "mint-one")
+        let rotated = await service.setInstanceId("mint+two&three")
+        XCTAssertEqual(rotated.flags["targeted"], true)
+        assertInheritedUserIdRequest(instanceId: "mint+two&three")
+        XCTAssertNil(InitialContextURLProtocol.requests.last?.value(forHTTPHeaderField: "If-None-Match"))
+        let cleared = await service.setInstanceId(nil)
+        XCTAssertEqual(cleared.flags["targeted"], true)
+        assertInheritedUserIdRequest(instanceId: nil)
+        XCTAssertEqual(InitialContextURLProtocol.requests.count, 3)
+        await service.dispose()
+    }
+
+    func testLegacyInitializationPreservesInheritedUserIdsForOmittedAndBlankTokens() async throws {
+        for token: String? in [nil, " "] {
+            let service = makeInheritedUserIdService(instanceId: token)
+            let initial = await service.initialize()
+            XCTAssertEqual(initial.flags["targeted"], true)
+            assertInheritedUserIdRequest(instanceId: nil)
+            await service.dispose()
+        }
+        XCTAssertEqual(InitialContextURLProtocol.requests.count, 2)
+    }
+
+    private func makeInheritedUserIdService(instanceId: String?) -> TogglyService {
+        TogglyService(config: TogglyConfig(
+            appKey: "synthetic", baseURI: "https://initial-context.invalid/prefix/nested?userId=private-one&user%49d=private%2Btwo%26three&userId=&u=stale&g=one&g=two&claim.plan=private&claim%2Erole=private&i=retired&keep=one&keep=two",
+            identity: "alice", refreshInterval: 0, useSignedDefinitions: true, enableLiveUpdates: false,
+            groups: ["beta"], claims: ["plan": "pro"], enableTelemetry: false, instanceId: instanceId))
+    }
+
+    private func assertInheritedUserIdRequest(instanceId: String?, file: StaticString = #filePath, line: UInt = #line) {
+        let request = InitialContextURLProtocol.requests.last!
+        XCTAssertEqual(request.url!.path, "/prefix/nested/evaluated-signed/synthetic/Production", file: file, line: line)
+        let items = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)!.queryItems!
+        let unrelated = [URLQueryItem(name: "keep", value: "one"), URLQueryItem(name: "keep", value: "two")]
+        let expected: [URLQueryItem]
+        if let instanceId {
+            expected = unrelated + [URLQueryItem(name: "i", value: instanceId)]
+        } else {
+            expected = [URLQueryItem(name: "userId", value: "private-one"),
+                        URLQueryItem(name: "userId", value: "private+two&three"),
+                        URLQueryItem(name: "userId", value: "")] + unrelated + [
+                        URLQueryItem(name: "u", value: "alice"), URLQueryItem(name: "g", value: "beta"),
+                        URLQueryItem(name: "claim.plan", value: "pro")]
+        }
+        XCTAssertEqual(items, expected, file: file, line: line)
+    }
+
     func testMintedPersistentCacheCannotCrossTokensOrClientMode() async throws {
         let storage = MemoryStorage()
         func make(_ token: String?) -> TogglyService {

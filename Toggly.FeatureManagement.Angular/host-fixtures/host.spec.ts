@@ -37,6 +37,9 @@ export class AppComponent {
         service.notifyLocalGatesChanged();
       }),
       setContext: (identity: string) => zone.run(() => service.setContext({ identity, groups: ['fixture'], claims: { role: 'test' } })),
+      setInstance: (instanceId: string) => zone.run(() => service.setContext({ instanceId })),
+      flushTelemetry: () => service.flushTelemetry(),
+      recordTelemetry: () => { service.recordUsage('Checkout', 'control'); service.recordView('Checkout'); service.incrementCounter('orders', 2); service.setGauge('cart', 3); },
       navigate: (url: string) => zone.run(() => router.navigateByUrl(url)),
     });
   }
@@ -48,5 +51,5 @@ export const providers = [
     { path: 'class', component: ProtectedComponent, canActivate: [FeatureFlagGuard], data: { featureFlag: 'Checkout', featureFlagRedirect: '/denied' } },
     { path: 'denied', component: DeniedComponent },
   ]),
-  provideToggly({ baseURI: window.location.origin, appKey: 'fixture', environment: 'Test', enableVariants: true, persistCache: false }),
+  provideToggly({ metricsBaseUrl: new URLSearchParams(window.location.search).get('metrics') ?? window.location.origin, baseURI: window.location.origin, appKey: 'fixture', environment: 'Test', enableVariants: true, persistCache: false }),
 ];

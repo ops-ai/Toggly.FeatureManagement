@@ -1,3 +1,25 @@
+## 0.10.0
+
+- Keep hook and Feature rendering on the authoritative snapshot when callers mutate public flag copies; retain one reporter through diagnostic callback re-entry and dispose all owned resources on unmount.
+
+2026-09-18
+
+### Added
+- Accept optional host-minted `instanceId` for browser definitions and telemetry, with client identity fallback. Preserve queued attribution across provider targeting changes.
+- Keep static snapshots and asynchronous results scoped to their original target; discard queues when the transport is replaced.
+- Browser telemetry defaults on with a public application key, with independent endpoint, interval and opt-out options.
+- `recordUsage`, `recordView`, `incrementCounter`, `setGauge` and awaitable `flushTelemetry` on the React context. Explicit events never evaluate flags or infer views from rendering.
+- Effective checks for cached hooks, direct reads, static browser gates and navbar evaluations, with pagehide and final owner cleanup flushing.
+
+### Fixed
+- Match hook and Feature rendering to direct evaluation for missing flags, preserving explicit fallbacks before configured defaults in runtime and static modes.
+- Preserve minted-token query filtering through Docusaurus browser transpilation.
+- Remove incremental build metadata during clean so the next build restores every public artifact.
+- Capture selected flag values before telemetry diagnostics, preserve signing-key and WebSocket paths with configured URL queries, and keep connection deadlines active through response-body verification.
+- Preserve owner isolation on application/environment changes, release pending requests and avoid duplicate checks or abandoned resources during React StrictMode replay.
+- Re-evaluate navbar links after Docusaurus client-side navigation and dispose their temporary client.
+- Emit React-qualified JSX declaration types for React 19 consumers.
+
 ## 0.9.0
 
 2026-09-08

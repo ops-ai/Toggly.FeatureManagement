@@ -291,10 +291,10 @@ describe('useToggly', () => {
     expect(unsub).toBe(unsubscribe);
   });
 
-  it('subscribes to refreshed events and updates features', async () => {
+  it('subscribes to effective flags and updates features', async () => {
     let refreshedCallback: (event: any) => void;
     mockService.on.mockImplementation((event: string, callback: (event: any) => void) => {
-      if (event === 'refreshed') {
+      if (event === 'effectiveFlagsChanged') {
         refreshedCallback = callback;
       }
       return () => {};
@@ -315,6 +315,7 @@ describe('useToggly', () => {
     // Trigger refresh event with new features
     const newFeatures = { feature1: false, feature2: true };
     await act(async () => {
+      mockService.currentFeatures = newFeatures;
       refreshedCallback({ data: newFeatures });
     });
 
@@ -370,7 +371,7 @@ describe('useToggly', () => {
     });
 
     // Should not have subscribed to refreshed or identityChanged
-    expect(mockService.on).not.toHaveBeenCalledWith('refreshed', expect.any(Function));
+    expect(mockService.on).not.toHaveBeenCalledWith('effectiveFlagsChanged', expect.any(Function));
     expect(mockService.on).not.toHaveBeenCalledWith('identityChanged', expect.any(Function));
   });
 
@@ -379,7 +380,7 @@ describe('useToggly', () => {
     const unsubscribeIdentity = jest.fn();
 
     mockService.on.mockImplementation((event: string) => {
-      if (event === 'refreshed') return unsubscribeRefreshed;
+      if (event === 'effectiveFlagsChanged') return unsubscribeRefreshed;
       if (event === 'identityChanged') return unsubscribeIdentity;
       return () => {};
     });
@@ -398,4 +399,23 @@ describe('useToggly', () => {
     expect(unsubscribeRefreshed).toHaveBeenCalled();
     expect(unsubscribeIdentity).toHaveBeenCalled();
   });
+});
+
+it('keeps features, identity and delayed operations scoped to the current owner', async () => {
+  let finish!: () => void;
+  const old = createMockService({ refresh: jest.fn(() => new Promise<void>(resolve => { finish = resolve; })) });
+  const next = createMockService({ currentIdentity: 'next-user', currentFeatures: { feature1: false } });
+  let result: ReturnType<typeof useToggly>;
+  function Child() { result = useToggly(); return null; }
+  const value = (toggly: any) => ({ toggly, isReady: true, isLoading: false, error: null });
+  const host = render(<TogglyContext.Provider value={value(old)}><Child /></TogglyContext.Provider>);
+  let pending!: Promise<void>;
+  act(() => { pending = result.refresh(); });
+  host.rerender(<TogglyContext.Provider value={value(next)}><Child /></TogglyContext.Provider>);
+  expect(result!.features).toEqual({ feature1: false });
+  expect(result!.identity).toBe('next-user');
+  expect(result!.isRefreshing).toBe(false);
+  await act(async () => { finish(); await pending; });
+  expect(result!.features).toEqual({ feature1: false });
+  expect(result!.identity).toBe('next-user');
 });

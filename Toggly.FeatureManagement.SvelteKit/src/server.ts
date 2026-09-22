@@ -1,14 +1,8 @@
 import { error, type Handle, type RequestEvent } from '@sveltejs/kit';
 import type { TogglyClient, EvaluationContext } from '@ops-ai/toggly-node-core';
-import { buildEvaluatedSignedUrl } from '@ops-ai/toggly-hooks-types';
-import {
-  selectDefinitions,
-  type GateOptions,
-  type TogglySnapshot,
-  type TogglyEvaluationContext,
-} from './types.js';
+import { selectDefinitions, type GateOptions, type TogglySnapshot } from './types.js';
 import { verifyEnvelope } from './persistence.js';
-import { captureEvaluatedResponse } from './transport.js';
+import { buildBrowserDefinitionsUrl, captureEvaluatedResponse } from './transport.js';
 import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions } from '@ops-ai/toggly-signed-defs';
 export { createTogglyClient } from '@ops-ai/toggly-node-core';
 export type { TogglyClient, TogglyServerConfig, EvaluationContext } from '@ops-ai/toggly-node-core';
@@ -21,7 +15,7 @@ export interface ServerOptions {
   clientContext?: (
     event: RequestEvent,
     context: Readonly<EvaluationContext>,
-  ) => TogglyEvaluationContext;
+  ) => TogglySnapshot['context'];
   frontend: {
     appKey?: string;
     environment?: string;
@@ -63,6 +57,8 @@ export function createTogglyHandle(options: ServerOptions): Handle {
     const publicContext = structuredClone(
       options.clientContext?.(event, structuredClone(context)) ?? {},
     );
+    if (publicContext.instanceId !== undefined)
+      publicContext.instanceId = publicContext.instanceId.trim() || undefined;
     let pending: Promise<TogglySnapshot> | undefined;
     const snapshot = async (): Promise<TogglySnapshot> => {
       const definitions = selectDefinitions(frontend.featureDefaults ?? {}, frontend.expose);
@@ -75,12 +71,11 @@ export function createTogglyHandle(options: ServerOptions): Handle {
         };
       try {
         const baseURI = frontend.baseURI ?? 'https://definitions.toggly.io';
-        const url = buildEvaluatedSignedUrl(
+        const url = buildBrowserDefinitionsUrl(
           baseURI,
           frontend.appKey,
           frontend.environment ?? 'Production',
           publicContext,
-          false,
         );
         const fetchImpl: typeof fetch = (input, init) =>
           fetch(input, { ...init, signal: AbortSignal.timeout(frontend.timeout ?? 5000) });
