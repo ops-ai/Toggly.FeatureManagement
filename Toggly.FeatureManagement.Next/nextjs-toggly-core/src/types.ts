@@ -27,13 +27,35 @@ export type EvalContextOverrides = {
 /** Last arg to isFeatureOn / Off / evaluateFeatureGate: string identity or full overrides. */
 export type EvalContextArg = string | EvalContextOverrides
 
+export interface FrontendTelemetry {
+  recordUsage(featureKey: string, variant?: string): void
+  recordView(featureKey: string, variant?: string): void
+  incrementCounter(metricKey: string, value?: number): void
+  setGauge(metricKey: string, value: number): void
+  flushTelemetry(): Promise<void>
+}
+
+export interface BrowserTogglyClient extends TogglyClient {
+  readonly telemetry: FrontendTelemetry
+}
+
 export interface TogglyConfig {
+  /** Browser compact telemetry defaults on with an app key. */
+  enableTelemetry?: boolean
+  /** Browser compact flush interval: 30000-60000 ms, default 45000. */
+  telemetryFlushIntervalMs?: number
   /** Your Toggly application key */
   appKey?: string
   /** Environment name (default: 'Production') */
   environment?: string
   /** Base URI for the Toggly API (default: 'https://definitions.toggly.io') */
   baseUri?: string
+  /** Host-minted capability for evaluated definitions and browser telemetry. */
+  instanceId?: string
+  /** Persist browser evaluated definitions with their targeting scope (default: false). */
+  persistFeatures?: boolean
+  /** Prefix for scoped browser definitions (default: toggly:features). */
+  featuresStorageKey?: string
   /** User identity for targeting and rollouts */
   identity?: string
   /** User groups for targeting */
@@ -86,17 +108,17 @@ export interface TogglyConfig {
   metricsBaseUrl?: string
   /**
    * Enable feature usage tracking (Usage.SendStats / api/usage/stats).
-   * Defaults to false in core; server/edge packages enable when appKey is set.
+   * Defaults on in browsers with an app key. Trusted core defaults off; server/edge wrappers enable with an app key.
    */
   enableUsageTracking?: boolean
   /**
    * Enable business metrics (Metrics.SendMetrics / api/metrics).
-   * Defaults to false in core; server/edge packages enable when appKey is set.
+   * Defaults on in browsers with an app key. Trusted core defaults off; server/edge wrappers enable with an app key.
    */
   enableMetrics?: boolean
-  /** Usage flush interval in ms (default: 60000). 0 disables the timer. */
+  /** Trusted server/edge usage flush interval in ms (default: 60000). 0 disables the timer. */
   usageFlushInterval?: number
-  /** Metrics flush interval in ms (default: 60000). 0 disables the timer. */
+  /** Trusted server/edge metrics flush interval in ms (default: 60000). 0 disables the timer. */
   metricsFlushInterval?: number
   /** Hostname/instance name reported with usage/metrics payloads. */
   instanceName?: string
@@ -255,6 +277,8 @@ export interface TogglyState {
  * Toggly client interface
  */
 export interface TogglyClient {
+  /** Compact companion on browser clients; legacy usage identity arguments are unchanged. */
+  readonly telemetry?: FrontendTelemetry
   /** Current state */
   readonly state: TogglyState
   /** Current configuration */
@@ -312,6 +336,7 @@ export interface TogglyClient {
    * In local mode this is eval-time only; remote mode refreshes when identity changes.
    */
   setContext(context: {
+    instanceId?: string
     identity?: string
     groups?: string[]
     claims?: Record<string, string>
@@ -346,13 +371,13 @@ export interface TogglyClient {
   /** Subscribe to feature refreshes */
   subscribeFeaturesRefresh(listener: () => void): () => void
 
-  /** Record a feature "used" interaction (usage telemetry). */
+  /** Record usage. Browser forwarding ignores identity and uses only the third variant. */
   recordUsage(featureKey: string, identity?: string, variant?: string): void
 
-  /** Record a feature "viewed" event (usage telemetry). */
+  /** Record a view. Browser forwarding ignores identity and uses only the third variant. */
   recordView(featureKey: string, identity?: string, variant?: string): void
 
-  /** Aggregate a measure metric (trip odometer). */
+  /** Trusted accumulating measure. Browser calls are unsupported with bounded diagnostics. */
   measure(
     metricKey: string,
     value: number,
@@ -366,7 +391,7 @@ export interface TogglyClient {
     options?: { feature?: string; variant?: string },
   ): void
 
-  /** Record a point-in-time observation (gauge). */
+  /** Trusted timestamped observation. Browser calls are unsupported; use telemetry.setGauge for latest value. */
   observe(
     metricKey: string,
     value: number,

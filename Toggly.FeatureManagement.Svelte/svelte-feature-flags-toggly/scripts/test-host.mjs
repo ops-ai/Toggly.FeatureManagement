@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
+const telemetryArchive = process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL;
 const temporary = await mkdtemp(join(tmpdir(), 'toggly-svelte-host-'));
 const run = (command, args, cwd) =>
   new Promise((resolve, reject) => {
@@ -30,11 +31,9 @@ try {
   for (const fixture of hosts) {
     const host = join(temporary, fixture.directory);
     await cp(join(root, 'tests', 'host', fixture.directory), host, { recursive: true });
-    await run(
-      'npm',
-      ['install', '--no-save', '--package-lock=false', join(temporary, archive)],
-      host,
-    );
+    const packages = [join(temporary, archive)];
+    if (telemetryArchive) packages.push(telemetryArchive);
+    await run('npm', ['install', '--no-save', '--package-lock=false', ...packages], host);
     await run('npm', ['run', 'check'], host);
     await run('npm', ['run', 'build'], host);
     const installed = JSON.parse(
@@ -42,6 +41,7 @@ try {
     );
     if (installed.version !== fixture.version)
       throw new Error(`Expected Svelte ${fixture.version}, received ${installed.version}`);
+    await rm(host, { recursive: true, force: true });
   }
 } finally {
   await rm(temporary, { recursive: true, force: true });

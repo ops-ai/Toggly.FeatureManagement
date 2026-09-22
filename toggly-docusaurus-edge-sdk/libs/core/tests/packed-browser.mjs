@@ -16,6 +16,7 @@ function run(command, args, options = {}) {
   return execFileSync(command, args, {
     cwd: options.cwd ?? packageDirectory,
     encoding: 'utf8',
+    timeout: 180_000,
     stdio: options.stdio ?? 'pipe',
     env: {
       ...process.env,
@@ -50,7 +51,8 @@ function listen(server) {
 }
 
 async function close(server) {
-  if (!server.listening) return;
+  if (!server?.listening) return;
+  server.closeAllConnections();
   await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 }
 
@@ -61,6 +63,16 @@ async function waitFor(predicate, message, timeoutMs = 7000) {
     await delay(25);
   }
   throw new Error(message);
+}
+
+async function evaluate(page, callback, argument) {
+  let timer;
+  try {
+    return await Promise.race([
+      page.evaluate(callback, argument),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Packed client evaluation exceeded 10 seconds')), 10_000); }),
+    ]);
+  } finally { clearTimeout(timer); }
 }
 
 async function requestBody(request) {
@@ -103,6 +115,7 @@ try {
     'typescript@5.3.3',
   ];
   run('npm', install, { cwd: host, stdio: 'inherit' });
+  const installedVersion = name => JSON.parse(readFileSync(join(host, 'node_modules', name, 'package.json'), 'utf8')).version;
 
   const packedFiles = run('tar', ['-tzf', packageTarball]);
   for (const expected of [
@@ -190,8 +203,10 @@ client.setGauge('missing');
     if (request.url?.startsWith('/evaluated-signed/')) {
       definitionUrls.push(request.url);
       response.setHeader('content-type', 'application/json');
+      const query = new URL(request.url, 'http://localhost').searchParams;
+      const changed = request.url.includes('/snapshot-') && (query.get('u') === 'bob' || query.get('i') === 'token-b');
       response.end(JSON.stringify({
-        On: true,
+        On: !changed,
         Off: false,
         Gated: {
           requirement: 'all',
@@ -269,6 +284,54 @@ globalThis.runInvalidTelemetryClient = async (origin) => {
   return { enabled, diagnostics };
 };
 
+globalThis.runAttributionClients = async (origin) => {
+  const options = {baseURI: origin, metricsBaseUrl: origin, identity: 'alice', featureFlagsRefreshInterval: 60_000};
+  const results = [];
+  for (const field of ['identity', 'instanceId']) {
+    const client = createTogglyClient({...options, appKey: 'snapshot-' + field, ...(field === 'instanceId' ? {instanceId: 'token-a'} : {})});
+    try {
+      await client.getFlags();
+      let switched;
+      client.registerContext('snapshot-' + field, () => {
+        switched = client.setContext({[field]: field === 'identity' ? 'bob' : 'token-b'});
+        return {kind: 'Account', key: 'a-1', attributes: {Plan: 'pro'}};
+      });
+      const oldValue = await client.getFlag('On', false, {}, 'snapshot-' + field);
+      await switched;
+      const newValue = await client.getFlag('On');
+      await client.flushTelemetry(); results.push([oldValue, newValue]);
+    } finally { client.dispose({flush: false}); }
+  }
+  const cached = createTogglyClient({...options, appKey: 'snapshot-cached'});
+  try {
+    await cached.getFlags();
+    const oldValue = cached.getFlag('On');
+    const switched = cached.setContext({identity: 'bob'});
+    const resolved = await oldValue; await switched;
+    const current = await cached.getFlag('On');
+    await cached.flushTelemetry();results.push([resolved, current]);
+  } finally { cached.dispose({flush: false}); }
+  let finishOld;
+  let first = true;
+  const inflight = createTogglyClient({...options, appKey: 'snapshot-inflight', fetch: (url, init) => {
+    if (first) {first = false;return new Promise(resolve => {finishOld = resolve})}
+    return fetch(url, init);
+  }});
+  try {
+    const pending = inflight.getFlag('On');
+    await inflight.setContext({identity: 'bob'});
+    finishOld(new Response(JSON.stringify({On: true})));
+    results.push([await pending]);await inflight.flushTelemetry();
+  } finally { inflight.dispose({flush: false}); }
+  const disposed = createTogglyClient({...options, appKey: 'snapshot-disposed'});
+  try {
+    await disposed.getFlags();
+    disposed.registerContext('snapshot-disposed', () => {disposed.dispose({flush: false});return {kind: 'Account',key: 'a-1'}});
+    results.push([await disposed.getFlag('On', false, {}, 'snapshot-disposed')]);
+  } finally { disposed.dispose({flush: false}); }
+  return results;
+};
+
 globalThis.disposeClientCore = async () => {
   const client = globalThis.clientCoreMain;
   client.dispose();
@@ -317,11 +380,11 @@ globalThis.disposeClientCore = async () => {
     if (!request.url().startsWith(collectorOrigin)) browserErrors.push(`request failed: ${request.url()}`);
   });
   await page.goto(hostOrigin, { waitUntil: 'networkidle' });
-  await page.evaluate((origin) => globalThis.runClientCoreAcceptance(origin), collectorOrigin);
+  await evaluate(page, (origin) => globalThis.runClientCoreAcceptance(origin), collectorOrigin);
   await waitFor(() => telemetryRequests.length >= 2, 'browser telemetry and pagehide envelopes were not received');
 
-  assert.deepEqual(await page.evaluate(() => globalThis.clientCoreValues), [true, true, false, false]);
-  assert.deepEqual(await page.evaluate(() => globalThis.clientCoreDiagnostics), []);
+  assert.deepEqual(await evaluate(page, () => globalThis.clientCoreValues), [true, true, false, false]);
+  assert.deepEqual(await evaluate(page, () => globalThis.clientCoreDiagnostics), []);
   const mainRequests = telemetryRequests.filter((request) => request.body.k === 'browser-app');
   assert.equal(mainRequests.length, 2);
   const ordinary = mainRequests.find((request) => request.encoding === 'gzip');
@@ -357,7 +420,7 @@ globalThis.disposeClientCore = async () => {
   }
   assert.ok(preflights.includes('/api/frontend/telemetry'), 'collector observed telemetry CORS preflight');
 
-  await page.evaluate((origin) => globalThis.runSecondClient(origin), collectorOrigin);
+  await evaluate(page, (origin) => globalThis.runSecondClient(origin), collectorOrigin);
   await waitFor(() => telemetryRequests.some((request) => request.body.k === 'second-app'), 'second client envelope was not received');
   const second = telemetryRequests.find((request) => request.body.k === 'second-app');
   assert.deepEqual(second.body, {
@@ -366,7 +429,7 @@ globalThis.disposeClientCore = async () => {
     f: { secondOnly: { enabled: [0, 0, 1] } },
   });
 
-  const invalidResult = await page.evaluate(
+  const invalidResult = await evaluate(page,
     (origin) => globalThis.runInvalidTelemetryClient(origin),
     collectorOrigin,
   );
@@ -377,13 +440,26 @@ globalThis.disposeClientCore = async () => {
     false,
   );
 
+  const attributionResults = await evaluate(page, (origin) => globalThis.runAttributionClients(origin), collectorOrigin);
+  assert.deepEqual(attributionResults, [[true, false], [true, false], [true, false], [false], [true]]);
+  const attributed = telemetryRequests.filter(request => request.body.k.startsWith('snapshot-'));
+  assert.equal(attributed.length, 7);
+  const check = (app, attribution, enabled) => ({k: app, e: 'Production', ...attribution, f: {On: {[enabled ? 'enabled' : 'disabled']: [1]}}});
+  assert.deepEqual(attributed.map(request => request.body), [
+    check('snapshot-identity', {u: 'alice'}, true), check('snapshot-identity', {u: 'bob'}, false),
+    check('snapshot-instanceId', {i: 'token-a'}, true), check('snapshot-instanceId', {i: 'token-b'}, false),
+    check('snapshot-cached', {u: 'alice'}, true), check('snapshot-cached', {u: 'bob'}, false),
+    check('snapshot-inflight', {u: 'bob'}, false),
+  ]);
+  assert.ok(attributed.every(request => request.encoding === 'gzip' && request.origin === hostOrigin && request.authorization === undefined && request.cookie === undefined));
+
   const beforeDispose = telemetryRequests.length;
-  await page.evaluate(() => globalThis.disposeClientCore());
+  await evaluate(page, () => globalThis.disposeClientCore());
   await delay(250);
   assert.equal(telemetryRequests.length, beforeDispose, 'disposed owner emitted no later telemetry');
   assert.deepEqual(browserErrors, []);
   console.log('PACKED_CLIENT_CORE_BROWSER_TELEMETRY_PASS');
-  console.log(`PACKED_CLIENT_CORE_HOST_PASS ${JSON.stringify({ node: process.version })}`);
+  console.log(`PACKED_CLIENT_CORE_HOST_PASS ${JSON.stringify({sdk: installedVersion('@ops-ai/toggly-client-core'), reporter: installedVersion('@ops-ai/toggly-client-telemetry'), reporterSource: reporterTarball ? 'local-tarball' : 'registry', node: process.version, typescript: installedVersion('typescript'), playwright: installedVersion('playwright'), chromium: browser.version(), envelopes: telemetryRequests.length})}`);
 } finally {
   await browser?.close().catch(() => undefined);
   await close(staticServer);

@@ -70,3 +70,14 @@ test('Client-Core runs coverage and its packed browser host from the standalone 
   }]);
   assert.ok(result.requiredJobs.split(',').includes('test'));
 });
+
+test('JavaScript requires coverage and the packed browser telemetry host', () => {
+  const result = filterAnalysisJs('JavaScript');
+  assert.deepEqual(result.testMatrix, [{
+    sdk: 'JavaScript',
+    path: 'Toggly.FeatureManagement.Javascript/feature_flags_toggly',
+    'test-cmd': 'npm test -- --coverage && npm run test:browser-host',
+    'has-lint': false,
+  }]);
+  assert.ok(result.requiredJobs.split(',').includes('test'));
+});

@@ -86,7 +86,7 @@ const FULL_TEST_MATRIX = [
   {
     sdk: 'JavaScript',
     path: 'Toggly.FeatureManagement.Javascript/feature_flags_toggly',
-    'test-cmd': 'npm test -- --coverage',
+    'test-cmd': 'npm test -- --coverage && npm run test:browser-host',
     'has-lint': false,
   },
   {

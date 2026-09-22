@@ -4,6 +4,7 @@ import type { EntityGate } from '@ops-ai/toggly-hooks-types';
 const telemetry = vi.hoisted(() => {
   const reporter = {
     recordCheck: vi.fn(),
+    captureCheck: vi.fn(),
     recordUsage: vi.fn(),
     recordView: vi.fn(),
     incrementCounter: vi.fn(),
@@ -58,6 +59,7 @@ describe('frontend telemetry ownership', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     telemetry.reporter.flush.mockResolvedValue(undefined);
+    telemetry.reporter.captureCheck.mockReturnValue(telemetry.reporter.recordCheck);
     telemetry.createTelemetryReporter.mockReturnValue(telemetry.reporter);
     telemetry.attachBrowserLifecycle.mockReturnValue(telemetry.detach);
   });
@@ -187,6 +189,15 @@ describe('frontend telemetry ownership', () => {
       fetch: vi.fn().mockResolvedValue(response({ Enabled: true })),
     });
     await expect(second.getFlag('Enabled')).resolves.toBe(true);
+  });
+
+  it('contains capture failures without changing or duplicating evaluation', async () => {
+    installBrowserGlobals();
+    telemetry.reporter.captureCheck.mockImplementationOnce(() => { throw new Error('capture failed'); });
+    const client = createBrowserClient({ appKey: 'app', fetch: vi.fn().mockResolvedValue(response({ Enabled: true })) });
+    await expect(client.getFlag('Enabled')).resolves.toBe(true);
+    expect(telemetry.reporter.recordCheck).not.toHaveBeenCalled();
+    client.dispose({ flush: false });
   });
 
   it('disposes a reporter when browser lifecycle attachment fails', async () => {
