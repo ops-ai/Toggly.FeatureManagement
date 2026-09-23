@@ -1,0 +1,45 @@
+name: Flutter public telemetry acceptance
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'Toggly.FeatureManagement.Flutter/acceptance/public-telemetry-host/**'
+      - '.github/workflows/flutter-public-telemetry-acceptance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios-and-tests:
+    name: Public Flutter iOS and telemetry tests
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: Toggly.FeatureManagement.Flutter/acceptance/public-telemetry-host
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.4'
+          channel: stable
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter build ios --simulator --no-codesign
+
+  android:
+    name: Public Flutter Android build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Toggly.FeatureManagement.Flutter/acceptance/public-telemetry-host
+    steps:
+      - uses: actions/checkout@v7
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.4'
+          channel: stable
+      - run: flutter pub get --enforce-lockfile
+      - run: flutter build apk --debug
