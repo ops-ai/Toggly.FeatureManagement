@@ -1,5 +1,5 @@
 {
-  "name": "toggly-native-storage-2.2.0-GCHD7y",
+  "name": "toggly-native-storage-2.2.0-69YCQx",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
@@ -2016,7 +2016,7 @@
     "node_modules/@ops-ai/react-native-toggly-core": {
       "version": "1.9.1",
       "resolved": "file:core.tgz",
-      "integrity": "sha512-SiNdtYbmUQ0hAYbSWWLWibbZuUo5kyjo8UlTp770PMEscZIBMJJePaXdodPiBtpdWYaUz4nfzmViik1FInizWw==",
+      "integrity": "sha512-iLUrSfJZIt9XldO7aDzjXbMIlDEjT8BXMYSn1AFsn9OJvc1Qx6NvJasY1QFsJK8eP6fEDWV0uk0QVugl4BA01w==",
       "license": "MIT",
       "dependencies": {
         "@ops-ai/toggly-client-telemetry": "^1.1.1",
