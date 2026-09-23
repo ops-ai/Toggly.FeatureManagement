@@ -1,14 +1,14 @@
 PATH
   remote: ../toggly
   specs:
-    toggly (0.6.0)
+    toggly (1.0.0)
 
 PATH
   remote: .
   specs:
     toggly-cache (0.1.1)
       redis (>= 4.0)
-      toggly (~> 0.1)
+      toggly (>= 0.1, < 2.0)
 
 GEM
   remote: https://rubygems.org/

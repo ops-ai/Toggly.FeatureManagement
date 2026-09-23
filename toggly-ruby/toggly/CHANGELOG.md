@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-09-23
+
+### Changed (Breaking)
+
+- **Catalog-local, MF-parity feature variants**, replacing the
+  `enable_variants` / `evaluated-variants-signed` dual-rail from 0.6.0.
+  `Client#get_variant` / `#get_variant_value` now assign variants **locally**
+  from the same `variants` / `allocation` payload on the `definitions` /
+  `definitions-signed` catalog that drives `enabled?` — there is no separate
+  network call. Assignment matches `Microsoft.FeatureManagement` 4.7.0's
+  `IVariantFeatureManager` bit-for-bit (user → group → percentile → default,
+  `StatusOverride`, percentile SHA-256 hashing) and is verified against the
+  shared `variant-allocator-corpus/cases.json` gold corpus (100% pass).
+  - `get_variant(feature_key, context: nil)` / `get_variant_value(feature_key,
+    context: nil)` now take the same `context:` (`userId` + `groups`) used by
+    `enabled?`, instead of a client-wide `variant_identity`.
+  - `VariantResult` gains `enabled` (effective enabled after the assigned
+    variant's `StatusOverride` — `enabled?` itself stays filter-based only)
+    and `reason` (`"User"` | `"Group"` | `"Percentile"` |
+    `"DefaultWhenEnabled"` | `"DefaultWhenDisabled"`).
+  - New `FeatureDefinition#variants` / `#allocation` (`FeatureVariant`,
+    `FeatureVariantAllocation`), parsed from the `definitions` wire.
+- **Removed**: `Config#enable_variants` / `#variant_identity` /
+  `#variant_groups` / `#variant_claims` / `#variants_endpoint`,
+  `Client#variant_defs` / `#set_variant_identity`, `EvaluatedVariantDef`,
+  and the `evaluated-variants-signed` fetch/cache rail (including the
+  `SnapshotProviders` `save_variants` / `load_variants` hooks — variants are
+  now part of the ordinary definitions snapshot via `FeatureDefinition`).
+
+**Migration**: drop `enable_variants` / `variant_identity` /
+`set_variant_identity` from your config. Pass targeting via
+`get_variant(key, context: Toggly::Context.new(identity: ..., groups: ...))`.
+
 ## [0.6.0] - 2026-09-22
 
 ### Added

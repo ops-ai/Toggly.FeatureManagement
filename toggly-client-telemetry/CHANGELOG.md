@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.1 — 2026-09-23
+
+### Fixed
+- Construct the complete telemetry endpoint URL before parsing it, so React Native Hermes sends to `/api/frontend/telemetry` even when its native `URL.pathname` setter is inert. Browser and Node URL validation and credential omission remain unchanged.
+
 ## 1.1.0 — 2026-09-19
 
 ### Added

@@ -193,6 +193,35 @@ config.context_builder = ->(request, user) do
 end
 ```
 
+## Feature Variants
+
+Variants (A/B testing, progressive rollout) are assigned **locally** from the
+definitions catalog — the same `variants` / `allocation` payload that drives
+`enabled?`, matching `Microsoft.FeatureManagement`'s `IVariantFeatureManager`
+bit-for-bit (user → group → percentile → default). There is no separate
+variants network call.
+
+```ruby
+variant = client.get_variant('checkout-flow', context: context)
+
+if variant
+  puts variant.name               # e.g. "treatment"
+  puts variant.configuration_value # untyped payload configured for that variant
+end
+
+# Shortcut for just the configuration payload
+config = client.get_variant_value('checkout-flow', context: context)
+```
+
+`client.enabled?` always stays filter-based. `variant.enabled` reflects the
+variant's `StatusOverride` (`None` | `Enabled` | `Disabled`) when you need
+MF-identical effective-enabled semantics for that assignment.
+
+> **Migrating from 0.x:** the `enable_variants` / `evaluated-variants-signed`
+> dual-rail (server-evaluated variants, `set_variant_identity`) was removed in
+> 1.0. Pass targeting via `context:` on `get_variant` instead — see
+> [`toggly/CHANGELOG.md`](toggly/CHANGELOG.md).
+
 ## Offline Mode
 
 Use feature flags without connecting to Toggly.io:

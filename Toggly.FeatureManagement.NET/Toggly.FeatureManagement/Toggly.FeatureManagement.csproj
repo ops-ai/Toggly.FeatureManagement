@@ -34,7 +34,7 @@
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
 		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="3.1.0" />
-		<PackageReference Include="Microsoft.FeatureManagement" Version="*" />
+		<PackageReference Include="Microsoft.FeatureManagement" Version="4.7.0" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
 		<PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="*">
 			<PrivateAssets>all</PrivateAssets>

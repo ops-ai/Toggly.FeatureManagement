@@ -6,5 +6,5 @@ import UIKit
 import TogglyCore
 
 /// Toggly SDK version for UIKit package
-public let togglyUIKitVersion = "1.6.0"
+public let togglyUIKitVersion = "1.6.1"
 #endif
