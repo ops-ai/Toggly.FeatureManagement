@@ -335,40 +335,6 @@ func TestProvider_SignedEqualTimestamp_IsHit(t *testing.T) {
 	}
 }
 
-func TestProvider_EvaluatedVariantsEqualTimestamp_IsHit(t *testing.T) {
-	const ts int64 = 1_700_000_000
-	body := `{"defs":{"f1":{"enabled":true,"variant":"A","configurationValue":null}},"signature":"unused","timestamp":1700000000,"kid":"k1"}`
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("ETag", `"replay"`)
-		_, _ = w.Write([]byte(body))
-	}))
-	defer srv.Close()
-
-	rec := &countingCacheRecorder{}
-	p := newDefinitionsProvider(Config{
-		AppKey:          "app",
-		Environment:     "env",
-		DefinitionsURL:  srv.URL + "/",
-		HTTPTimeout:     2 * time.Second,
-		RefreshInterval: time.Hour,
-		EnableVariants:  true,
-	}, nil)
-	p.hc = srv.Client()
-	p.setDefinitionCacheRecorder(rec)
-	p.mu.Lock()
-	p.variantLastTS = ts
-	p.variantEtag = `"prior"`
-	p.mu.Unlock()
-
-	if err := p.refresh(context.Background(), 2*time.Second, false); err != nil {
-		t.Fatal(err)
-	}
-	hits, misses := rec.snapshot()
-	if hits != 1 || misses != 0 {
-		t.Fatalf("equal variant TS: hits=%d misses=%d, want hit", hits, misses)
-	}
-}
-
 func TestProvider_Signed_304IsHit(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotModified)
@@ -672,125 +638,6 @@ func TestProvider_Unsigned_HTTPErrorIsHit(t *testing.T) {
 	}
 }
 
-func TestProvider_Variants_MatchingETagIsHit(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("ETag", `"v1"`)
-		_, _ = w.Write([]byte(`{"defs":{"f1":{"enabled":true,"variant":"A","configurationValue":null}},"signature":"","timestamp":99,"kid":""}`))
-	}))
-	defer srv.Close()
-
-	rec := &countingCacheRecorder{}
-	p := variantsProvider(t, srv, rec)
-	p.mu.Lock()
-	p.variantEtag = `"v1"`
-	p.mu.Unlock()
-
-	if err := p.refresh(context.Background(), 2*time.Second, false); err != nil {
-		t.Fatal(err)
-	}
-	hits, misses := rec.snapshot()
-	if hits != 1 || misses != 0 {
-		t.Fatalf("variants etag match: hits=%d misses=%d", hits, misses)
-	}
-}
-
-func TestProvider_Variants_HTTPErrorIsHit(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "fail", http.StatusServiceUnavailable)
-	}))
-	defer srv.Close()
-
-	rec := &countingCacheRecorder{}
-	p := variantsProvider(t, srv, rec)
-	err := p.refresh(context.Background(), 2*time.Second, false)
-	if err == nil {
-		t.Fatal("expected HTTP error")
-	}
-	hits, misses := rec.snapshot()
-	if hits != 1 || misses != 0 {
-		t.Fatalf("variants HTTP error: hits=%d misses=%d", hits, misses)
-	}
-}
-
-func TestProvider_Variants_NewRevisionIsMiss(t *testing.T) {
-	body := `{"defs":{"f1":{"enabled":true,"variant":"A","configurationValue":null}},"signature":"","timestamp":1700000300,"kid":""}`
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Empty etag still stores the new variant timestamp.
-		_, _ = w.Write([]byte(body))
-	}))
-	defer srv.Close()
-
-	rec := &countingCacheRecorder{}
-	snap := &memorySnap{}
-	p := variantsProvider(t, srv, rec)
-	p.snap = snap
-
-	if err := p.refresh(context.Background(), 2*time.Second, false); err != nil {
-		t.Fatal(err)
-	}
-	hits, misses := rec.snapshot()
-	if hits != 0 || misses != 1 {
-		t.Fatalf("variants miss: hits=%d misses=%d", hits, misses)
-	}
-	if p.getVariant("f1") == nil {
-		t.Fatal("expected variant applied")
-	}
-	if snap.defs.VariantTimestamp != 1_700_000_300 {
-		t.Fatalf("variant snapshot ts = %d", snap.defs.VariantTimestamp)
-	}
-}
-
-func TestProvider_Variants_DecodeErrorIsHit(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("ETag", `"x"`)
-		_, _ = w.Write([]byte(`{bad`))
-	}))
-	defer srv.Close()
-
-	rec := &countingCacheRecorder{}
-	p := variantsProvider(t, srv, rec)
-	err := p.refresh(context.Background(), 2*time.Second, false)
-	if err == nil {
-		t.Fatal("expected decode error")
-	}
-	hits, misses := rec.snapshot()
-	if hits != 1 || misses != 0 {
-		t.Fatalf("variants decode error: hits=%d misses=%d", hits, misses)
-	}
-}
-
-func TestProvider_Variants_SignedVerifyErrorIsHit(t *testing.T) {
-	body := `{"defs":{"f1":{"enabled":true,"variant":"A","configurationValue":null}},"signature":"AAAA","timestamp":1700000400,"kid":"missing"}`
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("ETag", `"v2"`)
-		_, _ = w.Write([]byte(body))
-	}))
-	defer srv.Close()
-
-	rec := &countingCacheRecorder{}
-	p := newDefinitionsProvider(Config{
-		AppKey:               "app",
-		Environment:          "env",
-		DefinitionsURL:       srv.URL + "/",
-		HTTPTimeout:          2 * time.Second,
-		RefreshInterval:      time.Hour,
-		EnableVariants:       true,
-		UseSignedDefinitions: true,
-	}, nil)
-	p.hc = srv.Client()
-	p.setDefinitionCacheRecorder(rec)
-	seedEmptyJWKS(p)
-
-	err := p.refresh(context.Background(), 2*time.Second, false)
-	if err == nil {
-		t.Fatal("expected verify error")
-	}
-	hits, misses := rec.snapshot()
-	if hits != 1 || misses != 0 {
-		t.Fatalf("variants signed verify: hits=%d misses=%d", hits, misses)
-	}
-}
-
 func TestNormalizeETag_WeakTag(t *testing.T) {
 	if !etagsMatch(`W/"1"`, `"1"`) {
 		t.Fatal("weak etag should match strong")
@@ -809,21 +656,6 @@ func signedProvider(t *testing.T, srv *httptest.Server, rec *countingCacheRecord
 		HTTPTimeout:          2 * time.Second,
 		RefreshInterval:      time.Hour,
 		UseSignedDefinitions: true,
-	}, nil)
-	p.hc = srv.Client()
-	p.setDefinitionCacheRecorder(rec)
-	return p
-}
-
-func variantsProvider(t *testing.T, srv *httptest.Server, rec *countingCacheRecorder) *definitionsProvider {
-	t.Helper()
-	p := newDefinitionsProvider(Config{
-		AppKey:          "app",
-		Environment:     "env",
-		DefinitionsURL:  srv.URL + "/",
-		HTTPTimeout:     2 * time.Second,
-		RefreshInterval: time.Hour,
-		EnableVariants:  true,
 	}, nil)
 	p.hc = srv.Client()
 	p.setDefinitionCacheRecorder(rec)

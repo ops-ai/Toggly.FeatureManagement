@@ -2,13 +2,10 @@ package toggly
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"net/url"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -45,13 +42,6 @@ type definitionsProvider struct {
 	lastTS    int64
 	secure    map[string]struct{}
 
-	// Evaluated variants (evaluated-variants-signed); separate ETag / timestamp from definitions.
-	variantsByKey     map[string]definitions.EvaluatedVariantDef
-	variantEtag       string
-	variantLastTS     int64
-	variantID         string
-	variantGeneration uint64
-
 	lastErr     string
 	lastErrTime *time.Time
 	lastRefresh *time.Time
@@ -77,36 +67,12 @@ type definitionsProvider struct {
 
 func newDefinitionsProvider(cfg Config, snap snapshot.Provider) *definitionsProvider {
 	cfg.applyDefaults()
-	// Normalize into owned collections before storage or background work can run.
-	groups := make([]string, 0, len(cfg.VariantGroups))
-	for _, group := range cfg.VariantGroups {
-		if group = strings.TrimSpace(group); group != "" {
-			groups = append(groups, group)
-		}
-	}
-	keys := make([]string, 0, len(cfg.VariantClaims))
-	for key, value := range cfg.VariantClaims {
-		if key != "" && value != "" {
-			keys = append(keys, key)
-		}
-	}
-	sort.Strings(keys)
-	if len(keys) > 20 {
-		keys = keys[:20]
-	}
-	claims := make(map[string]string, len(keys))
-	for _, key := range keys {
-		claims[key] = cfg.VariantClaims[key]
-	}
-	cfg.VariantGroups, cfg.VariantClaims = groups, claims
 	return &definitionsProvider{
 		cfg:              cfg,
 		hc:               &http.Client{Timeout: cfg.HTTPTimeout},
 		snap:             snap,
 		defsByKey:        map[string]definitions.FeatureDefinitionModel{},
 		secure:           map[string]struct{}{},
-		variantsByKey:    map[string]definitions.EvaluatedVariantDef{},
-		variantID:        cfg.VariantIdentity,
 		stop:             make(chan struct{}),
 		fallbackInterval: 20 * time.Minute,
 	}
@@ -230,28 +196,9 @@ func (p *definitionsProvider) isSecure(featureKey string) bool {
 	return ok
 }
 
-func (p *definitionsProvider) setVariantIdentity(identity string) {
-	p.mu.Lock()
-	if p.variantID != identity {
-		p.variantID = identity
-		p.variantGeneration++
-		p.variantEtag = ""
-		p.variantLastTS = 0
-		if p.cfg.EnableVariants {
-			p.variantsByKey = map[string]definitions.EvaluatedVariantDef{}
-			p.defsByKey = map[string]definitions.FeatureDefinitionModel{}
-			p.secure = map[string]struct{}{}
-		}
-	}
-	p.mu.Unlock()
-}
-
 func (p *definitionsProvider) getDefinitionsRevision() string {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	if p.cfg.EnableVariants {
-		return p.variantEtag
-	}
 	return p.etag
 }
 
@@ -263,18 +210,7 @@ func (p *definitionsProvider) clearJWKS() {
 
 	p.mu.Lock()
 	p.etag = ""
-	p.variantEtag = ""
 	p.mu.Unlock()
-}
-
-func (p *definitionsProvider) getVariant(featureKey string) *VariantResult {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	e, ok := p.variantsByKey[featureKey]
-	if !ok || e.Variant == "" {
-		return nil
-	}
-	return &VariantResult{Name: e.Variant, ConfigurationValue: e.ConfigurationValue}
 }
 
 func (p *definitionsProvider) refresh(ctx context.Context, timeout time.Duration, fromWebSocket bool) error {
@@ -311,8 +247,6 @@ func (p *definitionsProvider) refresh(ctx context.Context, timeout time.Duration
 		err     error
 	)
 	switch {
-	case p.cfg.EnableVariants:
-		outcome, err = p.refreshEvaluatedVariants(ctx)
 	case p.cfg.UseSignedDefinitions:
 		outcome, err = p.refreshSigned(ctx)
 	default:
@@ -350,37 +284,9 @@ func (p *definitionsProvider) loadSnapshot(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 
-	p.mu.RLock()
-	contextKey, generation := p.variantContextKeyLocked(), p.variantGeneration
-	p.mu.RUnlock()
 	snapDefs, err := p.snap.LoadDefinitions(ctx)
 	if err != nil || snapDefs == nil {
 		return false, err
-	}
-
-	if p.cfg.EnableVariants {
-		// Legacy snapshots cannot prove which evaluation context owns their payload.
-		if snapDefs.VariantContext != contextKey {
-			return false, nil
-		}
-		if p.cfg.UseSignedDefinitions {
-			if err := p.verifySnapshotRawDefs(ctx, snapDefs.VariantRawDefs, snapDefs.VariantSignature, snapDefs.VariantKid, snapDefs.VariantTimestamp); err != nil {
-				return false, err
-			}
-		}
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		if p.variantGeneration != generation {
-			return false, nil
-		}
-		p.applyVariantDefinitionsLocked(snapDefs.VariantDefs)
-		p.variantLastTS = snapDefs.VariantTimestamp
-		p.variantEtag = snapDefs.ETag
-		return true, nil
-	}
-	// Evaluated snapshots must never become global local-evaluation definitions.
-	if snapDefs.VariantDefs != nil || snapDefs.VariantContext != "" {
-		return false, nil
 	}
 
 	if len(snapDefs.Defs) > 0 {
@@ -467,89 +373,6 @@ func (p *definitionsProvider) refreshUnsigned(ctx context.Context) (refreshCache
 	return refreshCacheMiss, nil
 }
 
-func (p *definitionsProvider) refreshEvaluatedVariants(ctx context.Context) (refreshCacheOutcome, error) {
-	p.mu.RLock()
-	reqURL := p.variantURLLocked()
-	contextKey, generation := p.variantContextKeyLocked(), p.variantGeneration
-	etag := p.variantEtag
-	currentTS := p.variantLastTS
-	p.mu.RUnlock()
-
-	req, err := newRefreshGET(ctx, reqURL, etag)
-	if err != nil {
-		return refreshCacheHit, err
-	}
-
-	resp, err := p.hc.Do(req)
-	if err != nil {
-		return refreshCacheHit, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	newETag, body, outcome, stop, err := evaluateRefreshHTTP(resp, etag, "evaluated-variants-signed refresh")
-	if stop {
-		return outcome, err
-	}
-
-	env, err := definitions.DecodeSignedDefinitions(body)
-	if err != nil {
-		return refreshCacheHit, err
-	}
-
-	if isCachedRevision(currentTS, env.Timestamp) {
-		return refreshCacheHit, nil
-	}
-
-	if p.cfg.UseSignedDefinitions && env.Signature != "" && env.Kid != "" {
-		jwks, err := p.loadOrFetchJWKS(ctx)
-		if err != nil {
-			return refreshCacheHit, err
-		}
-		if err := crypto.VerifySignedDefinitions(env, jwks, p.cfg.AllowedKeyIDs); err != nil {
-			return refreshCacheHit, err
-		}
-	}
-
-	variantMap, err := definitions.DecodeEvaluatedVariantDefsMap(env.Defs)
-	if err != nil {
-		return refreshCacheHit, err
-	}
-
-	p.mu.Lock()
-	if p.variantGeneration != generation {
-		p.mu.Unlock()
-		return refreshCacheHit, nil
-	}
-	p.applyVariantDefinitionsLocked(variantMap)
-	p.variantEtag, p.variantLastTS = newETag, env.Timestamp
-
-	defsSlice := make([]definitions.FeatureDefinitionModel, 0, len(variantMap))
-	for k := range variantMap {
-		if def, ok := p.defsByKey[k]; ok {
-			defsSlice = append(defsSlice, def)
-		}
-	}
-	p.mu.Unlock()
-
-	if p.snap != nil {
-		_ = p.snap.SaveDefinitions(ctx, snapshot.DefinitionsSnapshot{
-			Defs:             defsSlice,
-			Signature:        env.Signature,
-			Kid:              env.Kid,
-			Timestamp:        env.Timestamp,
-			RawDefs:          env.Defs,
-			ETag:             newETag,
-			VariantContext:   contextKey,
-			VariantDefs:      variantMap,
-			VariantSignature: env.Signature,
-			VariantKid:       env.Kid,
-			VariantTimestamp: env.Timestamp,
-			VariantRawDefs:   env.Defs,
-		})
-	}
-	return refreshCacheMiss, nil
-}
-
 func (p *definitionsProvider) refreshSigned(ctx context.Context) (refreshCacheOutcome, error) {
 	url := fmt.Sprintf("%sdefinitions-signed/%s/%s", p.cfg.DefinitionsURL, p.cfg.AppKey, p.cfg.Environment)
 	p.mu.RLock()
@@ -622,8 +445,8 @@ func newRefreshGET(ctx context.Context, reqURL, etag string) (*http.Request, err
 }
 
 // evaluateRefreshHTTP shares 304 / non-OK / matching-etag / body-read handling
-// across unsigned, signed, and evaluated-variants refresh paths. When stop is
-// true, callers must return (outcome, err) immediately.
+// across the unsigned and signed refresh paths. When stop is true, callers
+// must return (outcome, err) immediately.
 func evaluateRefreshHTTP(resp *http.Response, existingETag, failLabel string) (newETag string, body []byte, outcome refreshCacheOutcome, stop bool, err error) {
 	if resp.StatusCode == http.StatusNotModified {
 		return "", nil, refreshCacheHit, true, nil
@@ -768,55 +591,5 @@ func (p *definitionsProvider) applyDefinitions(defs []definitions.FeatureDefinit
 	p.mu.Lock()
 	p.defsByKey = byKey
 	p.secure = secure
-	p.variantsByKey = map[string]definitions.EvaluatedVariantDef{}
 	p.mu.Unlock()
-}
-
-func (p *definitionsProvider) applyVariantDefinitionsLocked(variants map[string]definitions.EvaluatedVariantDef) {
-	byKey := make(map[string]definitions.EvaluatedVariantDef, len(variants))
-	defsByKey := make(map[string]definitions.FeatureDefinitionModel, len(variants))
-	secure := make(map[string]struct{})
-
-	for key, row := range variants {
-		byKey[key] = row
-		var filters []definitions.FeatureFilter
-		if row.Enabled {
-			filters = []definitions.FeatureFilter{{Name: "AlwaysOn", Parameters: map[string]any{}}}
-		} else {
-			filters = []definitions.FeatureFilter{{Name: "AlwaysOff", Parameters: map[string]any{}}}
-		}
-		defsByKey[key] = definitions.FeatureDefinitionModel{
-			FeatureKey:      key,
-			Filters:         filters,
-			RequirementType: definitions.RequirementAny,
-		}
-	}
-
-	p.variantsByKey = byKey
-	p.defsByKey = defsByKey
-	p.secure = secure
-}
-
-// Standard query encoding prevents delimiters in values from colliding in cache keys.
-// Caller holds mu; groups and claims are immutable provider-owned startup copies.
-func (p *definitionsProvider) variantURLLocked() string {
-	q := url.Values{}
-	if p.variantID != "" {
-		q.Set("userId", p.variantID)
-	}
-	for _, group := range p.cfg.VariantGroups {
-		q.Add("g", group)
-	}
-	for key, value := range p.cfg.VariantClaims {
-		q.Set("claim."+key, value)
-	}
-	endpoint := fmt.Sprintf("%sevaluated-variants-signed/%s/%s", p.cfg.DefinitionsURL, url.PathEscape(p.cfg.AppKey), url.PathEscape(p.cfg.Environment))
-	if len(q) > 0 {
-		endpoint += "?" + q.Encode()
-	}
-	return endpoint
-}
-
-func (p *definitionsProvider) variantContextKeyLocked() string {
-	return fmt.Sprintf("v1:%x", sha256.Sum256([]byte(p.variantURLLocked())))
 }

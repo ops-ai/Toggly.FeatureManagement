@@ -4,21 +4,29 @@ import (
 	"context"
 	"errors"
 
-	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/eval"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/metrics"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/usage"
+	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/variant"
 )
 
-// VariantResult is the assigned variant for a feature from evaluated-variants-signed.
+// VariantResult is the outcome of catalog-local, Microsoft.FeatureManagement
+// 4.7.0-parity variant assignment for a feature.
 type VariantResult struct {
-	Name               string
-	ConfigurationValue interface{}
-}
+	// Name is the assigned variant's name.
+	Name string
 
-// EvaluatedVariantDef is the raw evaluated entry from evaluated-variants-signed `defs`
-// (alias of definitions.EvaluatedVariantDef).
-type EvaluatedVariantDef = definitions.EvaluatedVariantDef
+	// ConfigurationValue is the assigned variant's untyped wire configuration
+	// payload (object, array, scalar, or null).
+	ConfigurationValue interface{}
+
+	// Enabled is the effective enabled state after the assigned variant's
+	// StatusOverride is applied (matches Microsoft.FeatureManagement's
+	// GetVariantAsync semantics). IsEnabled remains purely filter-based and
+	// does not apply StatusOverride; use this field when you need
+	// MF-identical effective-enabled behavior for a variant feature.
+	Enabled bool
+}
 
 // Client is the main entrypoint for evaluating feature flags.
 //
@@ -80,33 +88,59 @@ func NewClient(cfg Config) (*Client, error) {
 	return c, nil
 }
 
-// SetVariantIdentity updates the userId query parameter for evaluated-variants-signed
-// refreshes when Config.EnableVariants is true. Changing identity clears the cached
-// payload and revision so the next refresh fetches fresh data. Do not call this for
-// individual HTTP requests on a shared client; use one variants client per context.
-func (c *Client) SetVariantIdentity(identity string) {
-	if c == nil || c.provider == nil {
-		return
+// GetVariant assigns a feature variant locally from the cached definitions
+// catalog, replaying the Microsoft.FeatureManagement 4.7.0 allocator
+// (disabled → DefaultWhenDisabled only; enabled → User → Group → Percentile →
+// DefaultWhenEnabled). Returns nil when the feature is unknown or has no
+// Variants configured.
+//
+// When ctx carries ambient evaluation context (via WithEvalContext /
+// togglyctx.With), empty or nil per-call evalCtx fields are filled from
+// ambient; non-empty per-call fields win. Pass a non-empty evalCtx.Identity /
+// evalCtx.Groups explicitly for per-request targeting.
+func (c *Client) GetVariant(ctx context.Context, featureKey string, evalCtx Context) (*VariantResult, error) {
+	if featureKey == "" {
+		return nil, errors.New("toggly: featureKey is required")
 	}
-	c.provider.setVariantIdentity(identity)
+	if c == nil || c.provider == nil {
+		return nil, nil
+	}
+
+	evalCtx = ResolveEvalContext(ctx, evalCtx)
+
+	def, ok := c.provider.get(featureKey)
+	if !ok || len(def.Variants) == 0 {
+		return nil, nil
+	}
+
+	baseEnabled, err := c.engine.Evaluate(def, toEvalContext(evalCtx))
+	if err != nil {
+		return nil, err
+	}
+
+	assignment := variant.Assign(def, baseEnabled, variant.TargetingContext{
+		UserID: evalCtx.Identity,
+		Groups: evalCtx.Groups,
+	}, c.cfg.VariantIgnoreCase)
+
+	if assignment.Variant == nil {
+		return nil, nil
+	}
+	return &VariantResult{
+		Name:               assignment.Variant.Name,
+		ConfigurationValue: assignment.Variant.ConfigurationValue,
+		Enabled:            assignment.Enabled,
+	}, nil
 }
 
-// GetVariant returns the assigned variant for a feature, or nil if none or unknown key.
-// Requires Config.EnableVariants and a non-empty variant name in the server response.
-func (c *Client) GetVariant(featureKey string) *VariantResult {
-	if c == nil || c.provider == nil {
-		return nil
+// GetVariantValue returns the configuration payload for the assigned variant,
+// or nil when no variant was assigned. See GetVariant.
+func (c *Client) GetVariantValue(ctx context.Context, featureKey string, evalCtx Context) (interface{}, error) {
+	v, err := c.GetVariant(ctx, featureKey, evalCtx)
+	if err != nil || v == nil {
+		return nil, err
 	}
-	return c.provider.getVariant(featureKey)
-}
-
-// GetVariantValue returns the configuration value for the assigned variant, or nil.
-func (c *Client) GetVariantValue(featureKey string) interface{} {
-	v := c.GetVariant(featureKey)
-	if v == nil {
-		return nil
-	}
-	return v.ConfigurationValue
+	return v.ConfigurationValue, nil
 }
 
 // Close stops background refresh (if enabled) and closes optional gRPC clients.
@@ -149,27 +183,7 @@ func (c *Client) IsEnabled(ctx context.Context, featureKey string, evalCtx Conte
 		}
 	}
 
-	inner := eval.Context{
-		Identity: evalCtx.Identity,
-		Groups:   evalCtx.Groups,
-		Traits:   evalCtx.Traits,
-		Claims:   evalCtx.Claims,
-	}
-	if evalCtx.Request != nil {
-		inner.Request = &eval.RequestContext{
-			UserAgent:      evalCtx.Request.UserAgent,
-			AcceptLanguage: evalCtx.Request.AcceptLanguage,
-			Country:        evalCtx.Request.Country,
-		}
-	}
-	if evalCtx.Entity != nil {
-		inner.Entity = &eval.EntityContext{
-			Kind:       evalCtx.Entity.Kind,
-			Key:        evalCtx.Entity.Key,
-			Attributes: evalCtx.Entity.Attributes,
-		}
-	}
-	res, err := c.engine.Evaluate(def, inner)
+	res, err := c.engine.Evaluate(def, toEvalContext(evalCtx))
 	if err != nil {
 		return false, err
 	}
@@ -194,6 +208,32 @@ func (c *Client) IsEnabled(ctx context.Context, featureKey string, evalCtx Conte
 	}
 
 	return res, nil
+}
+
+// toEvalContext maps the public Context to the internal eval.Context used by
+// the filter engine, shared by IsEnabled and GetVariant.
+func toEvalContext(evalCtx Context) eval.Context {
+	inner := eval.Context{
+		Identity: evalCtx.Identity,
+		Groups:   evalCtx.Groups,
+		Traits:   evalCtx.Traits,
+		Claims:   evalCtx.Claims,
+	}
+	if evalCtx.Request != nil {
+		inner.Request = &eval.RequestContext{
+			UserAgent:      evalCtx.Request.UserAgent,
+			AcceptLanguage: evalCtx.Request.AcceptLanguage,
+			Country:        evalCtx.Request.Country,
+		}
+	}
+	if evalCtx.Entity != nil {
+		inner.Entity = &eval.EntityContext{
+			Kind:       evalCtx.Entity.Kind,
+			Key:        evalCtx.Entity.Key,
+			Attributes: evalCtx.Entity.Attributes,
+		}
+	}
+	return inner
 }
 
 // Requirement controls how a feature gate of multiple features is evaluated.
