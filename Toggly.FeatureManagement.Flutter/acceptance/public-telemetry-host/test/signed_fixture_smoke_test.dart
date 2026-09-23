@@ -49,5 +49,6 @@ void main() {
         await process.exitCode;
       }
     },
+    timeout: const Timeout(Duration(minutes: 2)),
   );
 }
