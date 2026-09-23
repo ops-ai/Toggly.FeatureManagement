@@ -43,6 +43,27 @@ reevaluations; unchanged memoized reads and internal snapshots remain silent.
 Hydration does not add synthetic checks, usage or views. Usage and views are
 explicit application events.
 
+### Separate browser and server categories
+
+The integration accepts `browserEnableUsageTracking` and `browserEnableMetrics`
+for its injected browser store. Omitted values inherit `enableUsageTracking`
+and `enableMetrics`; explicit `true` or `false` overrides only the corresponding
+browser category. Internal dev/build clients retain the shared server settings.
+For example:
+
+```ts
+toggly({
+  appKey: 'your-public-app-key',
+  enableUsageTracking: false, // Trusted server usage stays disabled.
+  browserEnableUsageTracking: true,
+  browserEnableMetrics: true,
+})
+```
+
+These two options belong to the Astro integration. Direct browser initialization
+continues to use `enableUsageTracking` and `enableMetrics`. Request middleware
+and independently created server clients keep their own configuration.
+
 Set `enableTelemetry: false` to disable the browser reporter.
 `enableUsageTracking: false` disables checks/usage/views; `enableMetrics: false`
 disables app-level business metrics. Invalid intervals use the default. Invalid

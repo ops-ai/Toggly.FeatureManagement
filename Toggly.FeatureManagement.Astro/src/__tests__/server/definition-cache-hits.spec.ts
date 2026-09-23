@@ -188,7 +188,7 @@ describe('Astro server definition cache hit telemetry', () => {
       'User-Agent': sdkUserAgent(),
     })
     expect(sdkUserAgent()).toBe(`toggly-astro/${SDK_VERSION}`)
-    expect(SDK_VERSION).toBe('1.16.0')
+    expect(SDK_VERSION).toBe('1.17.0')
 
     const body = JSON.parse(String((init as RequestInit).body))
     expect(body.definitionCacheMisses).toBe(1)
