@@ -7,3 +7,5 @@ export type {
 
 export { useToggly } from './useToggly';
 export type { UseTogglyResult } from './useToggly';
+
+export { useVariant } from './useVariant';

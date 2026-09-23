@@ -1,3 +1,12 @@
+## 1.5.0 — 2026-09-22
+
+### Added
+- `useVariant(featureKey)` hook and `getVariant` / `getVariantValue` on `useToggly()`, surfacing Core's new `enableVariants` support. Re-renders after feature refresh or local gate changes.
+- Re-exported `VariantResult` and `EvaluatedVariantDef` types from Core.
+
+### Changed
+- Depends on `@ops-ai/react-native-toggly-core` `^1.9.0`.
+
 ## 1.4.0 — 2026-09-21
 
 ### Added
