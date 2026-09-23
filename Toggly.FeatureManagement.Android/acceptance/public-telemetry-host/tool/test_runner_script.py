@@ -28,6 +28,25 @@ def action_command(workflow):
 
 
 class RunnerScriptTest(unittest.TestCase):
+    def test_both_emulator_jobs_require_hardware_acceleration(self):
+        for workflow in WORKFLOWS:
+            with self.subTest(workflow=workflow.name):
+                before_action, action = workflow.read_text().split(
+                    "uses: reactivecircus/android-emulator-runner@v2", 1
+                )
+                job_starts = list(re.finditer(r"(?m)^  [\w-]+:$", before_action))
+                self.assertTrue(job_starts)
+                job_preflight = before_action[job_starts[-1].start():]
+                self.assertIn("- name: Enable KVM for Android emulator", job_preflight)
+                self.assertIn('KERNEL=="kvm", GROUP="kvm", MODE="0666"', job_preflight)
+                self.assertIn("sudo udevadm control --reload-rules", job_preflight)
+                self.assertIn("sudo udevadm trigger --name-match=kvm", job_preflight)
+                self.assertIn("test -r /dev/kvm && test -w /dev/kvm", job_preflight)
+                action = action.split("      - name:", 1)[0]
+                self.assertIn("api-level: 35", action)
+                self.assertIn("arch: x86_64", action)
+                self.assertIn("disable-linux-hw-accel: false", action)
+
     def test_action_invokes_one_script_and_preserves_gradle_result(self):
         for workflow in WORKFLOWS:
             command = action_command(workflow)

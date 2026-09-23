@@ -2,7 +2,7 @@
 
 result=0
 ./gradlew :app:createDebugAndroidTestCoverageReport --no-daemon || result=$?
-if [ "$result" -ne 0 ]; then
+if [[ "$result" -ne 0 ]]; then
   mkdir -p app/build/reports/androidTests/connected
   {
     echo '--- device ABI ---'
