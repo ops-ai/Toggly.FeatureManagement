@@ -4,7 +4,9 @@ import base64
 import gzip
 import hashlib
 import json
+import os
 import socket
+import stat
 import subprocess
 import tempfile
 import threading
@@ -47,10 +49,25 @@ def signed_fixture(key_path, kid, defs):
     )
 
 
+def append_packet(output, record):
+    descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_APPEND | os.O_NOFOLLOW, 0o600)
+    try:
+        file_info = os.fstat(descriptor)
+        if not stat.S_ISREG(file_info.st_mode) or file_info.st_uid != os.getuid():
+            raise PermissionError("Packet output must be an owned regular file")
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "a", encoding="utf-8") as stream:
+            descriptor = -1
+            stream.write(json.dumps(record, separators=(",", ":")) + "\n")
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=18765)
-    parser.add_argument("--output", default="/private/tmp/ops1388-native-packets.jsonl")
+    parser.add_argument("--output", type=Path, default=Path(__file__).resolve().parent / "packets.jsonl")
     parser.add_argument("--ambiguous-first", action="store_true",
                         help="Read and record the first POST, then close without an HTTP response")
     args = parser.parse_args()
@@ -120,8 +137,7 @@ def main():
                     "authorization": self.headers.get("Authorization"),
                     "packet": packet
                 }
-                with open(args.output, "a", encoding="utf-8") as stream:
-                    stream.write(json.dumps(record, separators=(",", ":")) + "\n")
+                append_packet(args.output, record)
                 with Handler.first_lock:
                     ambiguous = args.ambiguous_first and not Handler.ambiguous_sent
                     if ambiguous:

@@ -2,6 +2,7 @@
 import gzip
 import http.client
 import json
+import stat
 import tempfile
 import threading
 import time
@@ -106,3 +107,19 @@ class CollectorTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             collector.raw_signature(b"invalid")
         self.assertEqual(collector.compact({"a": 1}), b'{"a":1}')
+
+    def test_packet_output_is_private_and_rejects_symlink(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "packets.jsonl"
+            record = {"packet": {"k": "fixture"}}
+            collector.append_packet(output, record)
+            self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o600)
+            self.assertEqual(json.loads(output.read_text()), record)
+
+            target = Path(directory) / "target.jsonl"
+            target.write_text("unchanged\n")
+            link = Path(directory) / "link.jsonl"
+            link.symlink_to(target)
+            with self.assertRaises(OSError):
+                collector.append_packet(link, record)
+            self.assertEqual(target.read_text(), "unchanged\n")
