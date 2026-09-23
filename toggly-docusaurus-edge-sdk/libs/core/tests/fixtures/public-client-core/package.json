@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc --noEmit && vite build",
-    "test": "node --test tests/portable.test.cjs && node tests/browser.cjs"
+    "test": "node --test tests/portable.test.cjs tests/startup.test.cjs && node tests/browser.cjs"
   },
   "dependencies": {
     "@ops-ai/toggly-client-core": "0.5.1"

@@ -7,6 +7,39 @@ const root = require('node:path').resolve(__dirname, '..');
 const port = 15382;
 const origin = `http://127.0.0.1:${port}`;
 
+async function waitForHost(server, output, spawnError) {
+  const deadline = Date.now() + 45_000;
+  while (Date.now() < deadline) {
+    if (spawnError()) throw new Error(`Vite could not start: ${spawnError()}.\n${output()}`);
+    if (server.exitCode !== null || server.signalCode !== null) {
+      throw new Error(`Vite exited before serving ${origin} (code ${server.exitCode}, signal ${server.signalCode}).\n${output()}`);
+    }
+    try {
+      const response = await fetch(origin, { signal: AbortSignal.timeout(1_000) });
+      if (response.ok && (await response.text()).includes('Toggly client-core public acceptance')) {
+        if (server.exitCode === null && server.signalCode === null) return;
+      }
+    } catch {
+      // Vite may still be starting; surface its output if the deadline expires.
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  throw new Error(`Vite did not serve ${origin} within 45 seconds.\n${output()}`);
+}
+
+async function stopHost(server) {
+  if (server.exitCode !== null || server.signalCode !== null) return;
+  const exited = new Promise(resolve => server.once('exit', resolve));
+  server.kill('SIGTERM');
+  await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 2_000))]);
+  if (server.exitCode !== null || server.signalCode !== null) return;
+  server.kill('SIGKILL');
+  await Promise.race([exited, new Promise(resolve => setTimeout(resolve, 2_000))]);
+  if (server.exitCode === null && server.signalCode === null) {
+    throw new Error(`Vite process ${server.pid} did not exit after SIGKILL`);
+  }
+}
+
 async function openHost(browser, mode = 'enabled', plain = false, responses = []) {
   const page = await browser.newPage();
   await page.context().addCookies([{ name: 'existing-session', value: 'do-not-send', url: 'https://metrics.toggly.io', sameSite: 'None', secure: true }]);
@@ -42,13 +75,16 @@ async function openHost(browser, mode = 'enabled', plain = false, responses = []
     cwd: root, stdio: 'pipe',
     env: { ...process.env, VITE_TOGGLY_APP_KEY: 'placeholder-core-key', VITE_TOGGLY_SECOND_APP_KEY: 'second-placeholder-key' },
   });
+  let hostOutput = '';
+  let hostError;
+  for (const stream of [server.stdout, server.stderr]) {
+    stream.on('data', chunk => { hostOutput = (hostOutput + chunk.toString()).slice(-8_000); });
+  }
+  server.on('error', error => { hostError = error; hostOutput = (hostOutput + String(error)).slice(-8_000); });
   let browser;
+  let primaryError;
   try {
-    await new Promise((resolve, reject) => {
-      const deadline = setTimeout(() => reject(new Error('Vite did not start')), 20_000);
-      server.stdout.on('data', chunk => { if (chunk.toString().includes('Local:')) { clearTimeout(deadline); resolve(); } });
-      server.on('exit', code => reject(new Error(`Vite exited ${code}`)));
-    });
+    await waitForHost(server, () => hostOutput, () => hostError);
     browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}) });
     const { page, packets, definitions } = await openHost(browser);
     await expect(page.locator('#status')).toHaveText('ready');
@@ -203,8 +239,14 @@ async function openHost(browser, mode = 'enabled', plain = false, responses = []
       await silent.page.close();
     }
     console.log('Chromium public client-core acceptance: direct, gates, entity, variants, context, two clients, lifecycle, gzip/plain, retry/drop, opt-out/keyless passed');
+  } catch (error) {
+    primaryError = error;
   } finally {
-    await browser?.close();
-    server.kill();
+    const cleanupErrors = [];
+    try { await browser?.close(); } catch (error) { cleanupErrors.push(error); }
+    try { await stopHost(server); } catch (error) { cleanupErrors.push(error); }
+    if (primaryError || cleanupErrors.length) {
+      throw new AggregateError([primaryError, ...cleanupErrors].filter(Boolean), 'Public client-core browser check failed');
+    }
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });
