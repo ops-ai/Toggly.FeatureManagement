@@ -159,14 +159,19 @@ jobs:
 
       # NestJS depends on unpublished @ops-ai/toggly-node-core from this PR.
       # Build core from source and install via file: so CI does not wait for npm publish.
+      # Pack a tarball for test:packed (TOGGLY_TEST_CORE_TARBALL) so the packed
+      # consumer gate does not require registry 0.10.0 before this PR merges.
       - name: Install NestJS with in-repo toggly-node-core
         if: matrix.sdk == 'NestJS'
         run: |
           set -euo pipefail
           (cd toggly-eval && (npm ci || npm install) && npm run build)
-          (cd Toggly.FeatureManagement.Node/toggly-node-core && (npm ci || npm install) && npm run build)
+          CORE_DIR="$GITHUB_WORKSPACE/Toggly.FeatureManagement.Node/toggly-node-core"
+          (cd "$CORE_DIR" && (npm ci || npm install) && npm run build)
+          CORE_TGZ="$(cd "$CORE_DIR" && npm pack --pack-destination "$RUNNER_TEMP")"
+          echo "TOGGLY_TEST_CORE_TARBALL=$RUNNER_TEMP/$CORE_TGZ" >> "$GITHUB_ENV"
           cd Toggly.FeatureManagement.NestJS
-          npm install "file:$GITHUB_WORKSPACE/Toggly.FeatureManagement.Node/toggly-node-core"
+          npm install "file:$CORE_DIR"
 
       - name: Overlay shared JS deps into node_modules
         if: >
