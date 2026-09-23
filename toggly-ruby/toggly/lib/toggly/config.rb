@@ -55,6 +55,25 @@ module Toggly
     # @return [Array<String>] Allowed key IDs for signed definitions
     attr_accessor :allowed_key_ids
 
+    # @return [Boolean] When true, additionally fetch server-evaluated variants
+    #   from `evaluated-variants-signed` on their own rail (dual-rail).
+    #   `definitions` / `definitions-signed` remain the sole source of truth
+    #   for `enabled?` regardless of this setting — evaluated variants are
+    #   additive and only feed `Client#get_variant` / `#get_variant_value`.
+    attr_accessor :enable_variants
+
+    # @return [String, nil] `userId` sent to `evaluated-variants-signed` for targeting.
+    #   Separate from the per-call `Context#identity` used for local rule evaluation.
+    attr_accessor :variant_identity
+
+    # @return [Array<String>] Application-wide group memberships sent to
+    #   `evaluated-variants-signed` (not request-local booleans).
+    attr_accessor :variant_groups
+
+    # @return [Hash<String, String>] Application-wide string claims sent to
+    #   `evaluated-variants-signed` (at most 20 on the wire).
+    attr_accessor :variant_claims
+
     # @return [Logger, nil] Logger instance
     attr_accessor :logger
 
@@ -104,6 +123,10 @@ module Toggly
       @snapshot_provider = options[:snapshot_provider]
       @use_signed_definitions = options[:use_signed_definitions] || false
       @allowed_key_ids = options[:allowed_key_ids] || []
+      @enable_variants = options[:enable_variants] || false
+      @variant_identity = options[:variant_identity]
+      @variant_groups = Array(options[:variant_groups])
+      @variant_claims = options[:variant_claims] || {}
       @logger = options[:logger]
 
       @usage_tracking_explicit = options.key?(:enable_usage_tracking)
@@ -125,6 +148,16 @@ module Toggly
       base = @definitions_url || @base_url
       endpoint = @use_signed_definitions ? "definitions-signed" : "definitions"
       "#{normalize_url(base)}#{endpoint}/#{@app_key}/#{@environment}"
+    end
+
+    # Get the evaluated-variants-signed endpoint URL. Always signed; query
+    # params (userId/groups/claims) are added by the provider since they can
+    # change at runtime (see `Client#set_variant_identity`).
+    #
+    # @return [String]
+    def variants_endpoint
+      base = @definitions_url || @base_url
+      "#{normalize_url(base)}evaluated-variants-signed/#{@app_key}/#{@environment}"
     end
 
     # Validate the configuration
@@ -186,6 +219,7 @@ module Toggly
         enable_undefined_in_dev: @enable_undefined_in_dev,
         disable_background_refresh: @disable_background_refresh,
         enable_live_updates: @enable_live_updates,
+        enable_variants: @enable_variants,
         app_version: @app_version,
         instance_name: @instance_name,
         use_signed_definitions: @use_signed_definitions,

@@ -65,6 +65,27 @@ module TestHelpers
         .to_return(status: status, body: "", headers: response_headers)
     end
   end
+
+  def build_variants_response(defs, signature: "sig", kid: "key-1", timestamp: 1)
+    { "defs" => defs, "signature" => signature, "kid" => kid, "timestamp" => timestamp }.to_json
+  end
+
+  def stub_variants_api(app_key:, environment:, defs:, status: 200, etag: nil, headers: {}, timestamp: 1)
+    url = "https://definitions.toggly.io/evaluated-variants-signed/#{app_key}/#{environment}"
+    response_headers = { "Content-Type" => "application/json" }.merge(headers)
+    response_headers["ETag"] = etag if etag
+
+    stub = stub_request(:get, url)
+    if status == 200
+      stub.to_return(
+        status: 200,
+        body: build_variants_response(defs, timestamp: timestamp),
+        headers: response_headers
+      )
+    else
+      stub.to_return(status: status, body: "", headers: response_headers)
+    end
+  end
 end
 
 RSpec.configure do |config|

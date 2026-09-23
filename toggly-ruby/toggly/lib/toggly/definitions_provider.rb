@@ -17,6 +17,12 @@ module Toggly
     # Result of one HTTP definitions fetch with cache telemetry outcome.
     FetchResult = Struct.new(:definitions, :cache_outcome, keyword_init: true)
 
+    # Result of one HTTP evaluated-variants fetch with cache telemetry outcome.
+    VariantFetchResult = Struct.new(:variants, :cache_outcome, keyword_init: true)
+
+    # Maximum number of string claims sent on the evaluated-variants-signed wire.
+    MAX_VARIANT_CLAIMS = 20
+
     # Fallback HTTP refresh interval when WebSocket is connected (20 minutes)
     FALLBACK_REFRESH_INTERVAL = 20 * 60
 
@@ -36,6 +42,13 @@ module Toggly
       @etag = nil
       @last_modified = nil
       @last_ts = 0
+
+      # Evaluated-variants rail state — separate ETag/Last-Modified/timestamp
+      # namespace from definitions so the two rails never cross-invalidate.
+      @variant_etag = nil
+      @variant_last_modified = nil
+      @variant_last_ts = 0
+      @variant_identity = config.variant_identity
 
       # WebSocket state
       @ws = nil
@@ -75,6 +88,56 @@ module Toggly
       @etag = nil
       @last_modified = nil
       @last_ts = 0
+    end
+
+    # Fetch server-evaluated variants from `evaluated-variants-signed`.
+    # Independent ETag/timestamp cache from {#fetch} (separate rail).
+    #
+    # @param force [Boolean] Force fetch even if cached
+    # @return [VariantFetchResult] variants (Hash or nil) plus :hit / :miss outcome
+    # @raise [NetworkError] On network failures
+    # @raise [DefinitionsError] On API errors
+    def fetch_variants(force: false)
+      return VariantFetchResult.new(variants: nil, cache_outcome: :hit) if @config.offline_mode?
+
+      uri = URI.parse(build_variant_request_url)
+      http = build_http(uri)
+      request = build_variant_request(uri, force)
+
+      response = http.request(request)
+      handle_variant_response(response)
+    rescue Net::OpenTimeout, Net::ReadTimeout => e
+      raise NetworkError, "Request timeout: #{e.message}"
+    rescue SocketError, Errno::ECONNREFUSED => e
+      raise NetworkError, "Connection failed: #{e.message}"
+    rescue NetworkError, DefinitionsError
+      raise
+    rescue StandardError => e
+      raise NetworkError, "Request failed: #{e.message}"
+    end
+
+    # Update the `userId` sent to `evaluated-variants-signed`. Distinct from
+    # any per-call `Context#identity` used for local rule evaluation. Named
+    # as an action (not `variant_identity=`) because it also invalidates the
+    # variants cache — it is not a passive attribute writer.
+    #
+    # @param identity [String, nil]
+    # @return [Boolean] true if the identity changed (cache invalidated)
+    # rubocop:disable-next Naming/AccessorMethodName
+    def set_variant_identity(identity)
+      normalized = identity&.to_s
+      return false if normalized == @variant_identity
+
+      @variant_identity = normalized
+      reset_variant_cache
+      true
+    end
+
+    # Reset cached variant headers/timestamp (force full fetch next time)
+    def reset_variant_cache
+      @variant_etag = nil
+      @variant_last_modified = nil
+      @variant_last_ts = 0
     end
 
     # Check whether the periodic refresh should be skipped because the
@@ -195,7 +258,7 @@ module Toggly
       when :new_content
         handle_new_content(response, response_etag, response_lm)
       when :error_status
-        handle_error_status(status, response)
+        handle_error_status(status, response, resource: "definitions")
       end
     end
 
@@ -216,12 +279,12 @@ module Toggly
       raise DefinitionsError, "Failed to parse definitions: #{e.message}"
     end
 
-    def handle_error_status(status, response)
+    def handle_error_status(status, response, resource: "definitions")
       case status
       when 401, 403
         raise DefinitionsError, "Authentication failed: #{status}"
       when 404
-        raise DefinitionsError, "Definitions not found (check app_key and environment)"
+        raise DefinitionsError, "#{resource.capitalize} not found (check app_key and environment)"
       else
         raise NetworkError.new(
           "API error: #{status}",
@@ -234,6 +297,110 @@ module Toggly
     def store_revision_headers(etag, last_modified)
       @etag = etag if etag && !etag.empty?
       @last_modified = last_modified if last_modified && !last_modified.empty?
+    end
+
+    def build_variant_request_url
+      pairs = variant_query_pairs
+      base = @config.variants_endpoint
+      pairs.empty? ? base : "#{base}?#{URI.encode_www_form(pairs)}"
+    end
+
+    def variant_query_pairs
+      pairs = []
+      pairs << ["userId", @variant_identity] if @variant_identity && !@variant_identity.empty?
+
+      Array(@config.variant_groups).each do |group|
+        next unless group.is_a?(String)
+
+        trimmed = group.strip
+        pairs << ["g", trimmed] unless trimmed.empty?
+      end
+
+      normalized_claims = {}
+      (@config.variant_claims || {}).each do |key, value|
+        next unless key.is_a?(String) && value.is_a?(String)
+        next if key.empty? || value.empty?
+
+        normalized_claims[key] = value
+      end
+      normalized_claims.keys.sort.first(MAX_VARIANT_CLAIMS).each do |key|
+        pairs << ["claim.#{key}", normalized_claims[key]]
+      end
+
+      pairs
+    end
+
+    def build_variant_request(uri, force)
+      request = Net::HTTP::Get.new(uri)
+      request["Accept"] = "application/json"
+      request["User-Agent"] = "toggly-ruby/#{Toggly::VERSION}"
+      request["X-App-Version"] = @config.app_version if @config.app_version
+      request["X-Instance-Name"] = @config.instance_name if @config.instance_name
+
+      unless force
+        request["If-None-Match"] = @variant_etag if @variant_etag
+        request["If-Modified-Since"] = @variant_last_modified if @variant_last_modified
+      end
+
+      request
+    end
+
+    def handle_variant_response(response)
+      status = response.code.to_i
+      response_etag = response["ETag"]
+      response_lm = response["Last-Modified"]
+      kind = DefinitionCache.classify_http(
+        status,
+        @variant_etag,
+        response_etag,
+        existing_last_modified: @variant_last_modified,
+        response_last_modified: response_lm
+      )
+
+      case kind
+      when :not_modified
+        log_debug("Evaluated variants not modified")
+        VariantFetchResult.new(variants: nil, cache_outcome: :hit)
+      when :same_revision
+        log_debug("Evaluated variants revision matches existing (ETag or Last-Modified)")
+        store_variant_revision_headers(response_etag, response_lm)
+        VariantFetchResult.new(variants: nil, cache_outcome: :hit)
+      when :new_content
+        handle_new_variant_content(response, response_etag, response_lm)
+      when :error_status
+        handle_error_status(status, response, resource: "evaluated variants")
+      end
+    end
+
+    def handle_new_variant_content(response, response_etag, response_lm)
+      data = JSON.parse(response.body)
+      signed_ts = extract_signed_timestamp(data)
+      if DefinitionCache.cached_signed_timestamp?(@variant_last_ts, signed_ts)
+        log_debug("Evaluated variants signed timestamp is not newer than cached revision")
+        store_variant_revision_headers(response_etag, response_lm)
+        return VariantFetchResult.new(variants: nil, cache_outcome: :hit)
+      end
+
+      variants = parse_variant_defs(data)
+      store_variant_revision_headers(response_etag, response_lm)
+      @variant_last_ts = signed_ts if signed_ts&.positive?
+      VariantFetchResult.new(variants: variants, cache_outcome: :miss)
+    rescue JSON::ParserError => e
+      raise DefinitionsError, "Failed to parse evaluated variants: #{e.message}"
+    end
+
+    def store_variant_revision_headers(etag, last_modified)
+      @variant_etag = etag if etag && !etag.empty?
+      @variant_last_modified = last_modified if last_modified && !last_modified.empty?
+    end
+
+    def parse_variant_defs(data)
+      raw = data.is_a?(Hash) ? data["defs"] : nil
+      return {} unless raw.is_a?(Hash)
+
+      raw.each_with_object({}) do |(key, value), hash|
+        hash[key] = EvaluatedVariantDef.from_hash(value) if value.is_a?(Hash)
+      end
     end
 
     def extract_signed_timestamp(data)

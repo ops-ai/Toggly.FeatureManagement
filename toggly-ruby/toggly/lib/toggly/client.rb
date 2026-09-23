@@ -33,6 +33,10 @@ module Toggly
     # @return [Hash<String, FeatureDefinition>] Current definitions
     attr_reader :definitions
 
+    # @return [Hash<String, EvaluatedVariantDef>] Current evaluated variants
+    #   (populated only when `config.enable_variants` is true)
+    attr_reader :variant_defs
+
     # @return [Boolean] Whether the client is ready
     attr_reader :ready
 
@@ -44,6 +48,7 @@ module Toggly
       @config.validate!
 
       @definitions = {}
+      @variant_defs = {}
       # True once a revision (including empty) or durable snapshot was applied.
       @definitions_loaded = false
       @mutex = Mutex.new
@@ -80,7 +85,10 @@ module Toggly
 
       definition = @mutex.synchronize { @definitions[key] }
 
-      # Check defaults if not found
+      # Dual-rail: definitions/definitions-signed are the sole source of
+      # truth for enabled? — this holds even when config.enable_variants is
+      # true. Evaluated variants (@variant_defs) are an additive rail read
+      # only by get_variant / get_variant_value and never override this.
       result = if definition.nil?
                  if !default.nil?
                    default
@@ -107,6 +115,54 @@ module Toggly
     # @return [Boolean]
     def disabled?(feature_key, context: nil, default: nil)
       !enabled?(feature_key, context: context, default: default.nil? ? nil : !default)
+    end
+
+    # Get the assigned variant for a feature. Requires `config.enable_variants`;
+    # returns nil when variants are disabled, unknown, or unassigned.
+    #
+    # NOTE: this is the actual A/B assignment. It is unrelated to the
+    # `variant:` telemetry label on `record_usage` / `record_view`, which is
+    # a free-form usage tag (defaults to "enabled"/"disabled") and does not
+    # reflect `evaluated-variants-signed` results.
+    #
+    # @param feature_key [String, Symbol] The feature key
+    # @return [VariantResult, nil]
+    def get_variant(feature_key)
+      return nil unless @config.enable_variants
+
+      key = feature_key.to_s
+      entry = @mutex.synchronize { @variant_defs[key] }
+      return nil if entry.nil? || entry.variant.nil? || entry.variant.to_s.empty?
+
+      VariantResult.new(name: entry.variant, configuration_value: entry.configuration_value)
+    end
+
+    # Get the configuration value for the assigned variant, if any.
+    #
+    # @param feature_key [String, Symbol] The feature key
+    # @return [Object, nil]
+    def get_variant_value(feature_key)
+      get_variant(feature_key)&.configuration_value
+    end
+
+    # Update the `userId` sent to `evaluated-variants-signed` and, when
+    # `config.enable_variants` is true, clear cached variants and refresh.
+    # No-op (besides updating provider state) when variants are disabled.
+    # Named as an action (not `variant_identity=`) because it also triggers
+    # a network refresh — it is not a passive attribute writer.
+    #
+    # @param identity [String, nil]
+    # @return [Boolean] true if the identity changed
+    # rubocop:disable-next Naming/AccessorMethodName
+    def set_variant_identity(identity)
+      changed = @provider.set_variant_identity(identity)
+
+      if changed && @config.enable_variants
+        @mutex.synchronize { @variant_defs = {} }
+        refresh(force: true) unless @config.offline_mode?
+      end
+
+      changed
     end
 
     # Get detailed evaluation result
@@ -161,27 +217,15 @@ module Toggly
       end
 
       begin
-        result = @provider.fetch(force: force)
-        record_refresh_cache_outcome(result.cache_outcome)
+        # Dual-rail: definitions/definitions-signed are always refreshed —
+        # the sole source of truth for enabled?. When config.enable_variants
+        # is true, evaluated-variants-signed is ALSO fetched on its own rail,
+        # additive only for get_variant / get_variant_value. A failure on
+        # either rail must never affect the other.
+        definitions_updated = refresh_definitions_rail(force: force)
+        variants_updated = @config.enable_variants ? refresh_variants_rail(force: force) : false
 
-        if result.definitions
-          @mutex.synchronize do
-            @definitions = result.definitions
-            @definitions_loaded = true
-            @ready = true
-          end
-
-          save_snapshot
-          log_info("Definitions refreshed (#{result.definitions.size} features)")
-          true
-        else
-          false
-        end
-      rescue StandardError => e
-        log_error("Failed to refresh definitions: #{e.message}")
-        # Network error / timeout keeping last-good revision (incl. empty) — hit.
-        record_definition_cache_hit if definitions_cached?
-        false
+        definitions_updated || variants_updated
       ensure
         drain_pending = false
         @mutex.synchronize do
@@ -290,6 +334,67 @@ module Toggly
 
     private
 
+    # Definitions rail: `definitions` / `definitions-signed` → local rule eval.
+    # Always runs (dual-rail): the sole source of truth for `enabled?`,
+    # regardless of `config.enable_variants`.
+    def refresh_definitions_rail(force:)
+      refresh_definitions(force: force)
+    rescue StandardError => e
+      log_error("Failed to refresh definitions: #{e.message}")
+      # Network error / timeout keeping last-good revision (incl. empty) — hit.
+      record_definition_cache_hit if definitions_cached?
+      false
+    end
+
+    def refresh_definitions(force:)
+      result = @provider.fetch(force: force)
+      record_refresh_cache_outcome(result.cache_outcome)
+
+      if result.definitions
+        @mutex.synchronize do
+          @definitions = result.definitions
+          @definitions_loaded = true
+          @ready = true
+        end
+
+        save_definitions_snapshot
+        log_info("Definitions refreshed (#{result.definitions.size} features)")
+        true
+      else
+        false
+      end
+    end
+
+    # Variants rail: `evaluated-variants-signed` → server-evaluated assignment.
+    # Additive only (used by get_variant / get_variant_value); runs only when
+    # `config.enable_variants` is true and never influences `enabled?`. A
+    # failure here must never affect the definitions rail above, and is not
+    # counted in definition cache-hit/miss telemetry (that metric is scoped
+    # to the definitions rail).
+    def refresh_variants_rail(force:)
+      refresh_variants(force: force)
+    rescue StandardError => e
+      log_error("Failed to refresh evaluated variants: #{e.message}")
+      false
+    end
+
+    def refresh_variants(force:)
+      result = @provider.fetch_variants(force: force)
+
+      if result.variants
+        @mutex.synchronize do
+          @variant_defs = result.variants
+          @ready = true
+        end
+
+        save_variants_snapshot
+        log_info("Evaluated variants refreshed (#{result.variants.size} features)")
+        true
+      else
+        false
+      end
+    end
+
     def initialize_definitions
       # Startup served from durable snapshot before first network — cache hit.
       # Distinct from the subsequent refresh() network outcome (no double-count
@@ -314,7 +419,7 @@ module Toggly
       log_error("Failed to initialize definitions: #{e.message}")
 
       # Use snapshot or defaults as fallback
-      @ready = true if @definitions.any? || @config.defaults.any?
+      @ready = true if @definitions.any? || @variant_defs.any? || @config.defaults.any?
     end
 
     def start_background_refresh
