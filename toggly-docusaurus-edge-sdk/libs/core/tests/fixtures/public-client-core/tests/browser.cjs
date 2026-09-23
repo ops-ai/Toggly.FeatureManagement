@@ -1,13 +1,14 @@
 const assert = require('node:assert/strict');
 const { chromium, expect } = require('@playwright/test');
 const { spawn } = require('node:child_process');
+const { randomBytes } = require('node:crypto');
 const { gunzipSync } = require('node:zlib');
 
 const root = require('node:path').resolve(__dirname, '..');
 const port = 15382;
 const origin = `http://127.0.0.1:${port}`;
 
-async function waitForHost(server, output, spawnError) {
+async function waitForHost(server, output, spawnError, hostToken) {
   const deadline = Date.now() + 45_000;
   while (Date.now() < deadline) {
     if (spawnError()) throw new Error(`Vite could not start: ${spawnError()}.\n${output()}`);
@@ -16,7 +17,8 @@ async function waitForHost(server, output, spawnError) {
     }
     try {
       const response = await fetch(origin, { signal: AbortSignal.timeout(1_000) });
-      if (response.ok && (await response.text()).includes('Toggly client-core public acceptance')) {
+      if (response.ok && response.headers.get('x-toggly-host-token') === hostToken &&
+          (await response.text()).includes('Toggly client-core public acceptance')) {
         if (server.exitCode === null && server.signalCode === null) return;
       }
     } catch {
@@ -71,9 +73,10 @@ async function openHost(browser, mode = 'enabled', plain = false, responses = []
 }
 
 (async () => {
+  const hostToken = randomBytes(16).toString('hex');
   const server = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], {
     cwd: root, stdio: 'pipe',
-    env: { ...process.env, VITE_TOGGLY_APP_KEY: 'placeholder-core-key', VITE_TOGGLY_SECOND_APP_KEY: 'second-placeholder-key' },
+    env: { ...process.env, TOGGLY_FIXTURE_HOST_TOKEN: hostToken, VITE_TOGGLY_APP_KEY: 'placeholder-core-key', VITE_TOGGLY_SECOND_APP_KEY: 'second-placeholder-key' },
   });
   let hostOutput = '';
   let hostError;
@@ -84,7 +87,7 @@ async function openHost(browser, mode = 'enabled', plain = false, responses = []
   let browser;
   let primaryError;
   try {
-    await waitForHost(server, () => hostOutput, () => hostError);
+    await waitForHost(server, () => hostOutput, () => hostError, hostToken);
     browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}) });
     const { page, packets, definitions } = await openHost(browser);
     await expect(page.locator('#status')).toHaveText('ready');
