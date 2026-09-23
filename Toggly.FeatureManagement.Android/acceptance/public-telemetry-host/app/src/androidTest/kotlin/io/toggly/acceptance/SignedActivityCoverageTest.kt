@@ -2,6 +2,9 @@ package io.toggly.acceptance
 
 import android.content.Intent
 import android.os.SystemClock
+import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -12,6 +15,7 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.json.JSONObject
 import org.junit.Assert.*
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.math.BigInteger
@@ -27,6 +31,46 @@ import java.util.zip.GZIPInputStream
 /** Exercises the signed app Activity itself, complementing direct SDK API tests. */
 @RunWith(AndroidJUnit4::class)
 class SignedActivityCoverageTest {
+    @get:Rule val compose = createEmptyComposeRule()
+
+    @Test fun missingOrUnsafeEndpointKeepsHostInertAcrossLifecycle() {
+        for (endpoint in listOf<String?>(null, "https://metrics.toggly.io")) {
+            val intent = Intent(ApplicationProvider.getApplicationContext(), AcceptanceActivity::class.java)
+                .putExtra("runProbe", true)
+            if (endpoint != null) intent.putExtra("endpoint", endpoint)
+            ActivityScenario.launch<AcceptanceActivity>(intent).use { activity ->
+                compose.onNodeWithText("Idle: supply local endpoint and runProbe extra").assertExists()
+                activity.moveToState(Lifecycle.State.STARTED)
+                activity.moveToState(Lifecycle.State.RESUMED)
+            }
+        }
+    }
+
+    @Test fun unsignedDefinitionsReportFailureInUi() {
+        MockWebServer().use { server ->
+            val paths = CopyOnWriteArrayList<String>()
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    paths += request.path.orEmpty()
+                    return MockResponse().setResponseCode(404)
+                }
+            }
+            server.start()
+            val intent = Intent(ApplicationProvider.getApplicationContext(), AcceptanceActivity::class.java)
+                .putExtra("endpoint", "http://127.0.0.1:${server.port}")
+                .putExtra("runProbe", true)
+            ActivityScenario.launch<AcceptanceActivity>(intent).use {
+                compose.waitUntil(15_000) {
+                    compose.onAllNodesWithText("PUBLIC_ANDROID_API_PROBE_FAIL:", substring = true)
+                        .fetchSemanticsNodes().isNotEmpty()
+                }
+                compose.onNodeWithText("PUBLIC_ANDROID_API_PROBE_FAIL:", substring = true).assertExists()
+            }
+            assertTrue("signed initialization should request local definitions",
+                paths.any { it.contains("/evaluated-signed/") })
+        }
+    }
+
     @Test fun signedActivityLifecycleDeliversBeforeAndAfterReplacement() {
         val pair = KeyPairGenerator.getInstance("EC").apply {
             initialize(ECGenParameterSpec("secp256r1"))
@@ -81,6 +125,13 @@ class SignedActivityCoverageTest {
                 waitForPacket(packets) { it.has("i") && it.optJSONObject("f")?.has("after-replacement") == true }
                 assertTrue(packets.any { it.optString("u") == "native-a" })
                 assertTrue(packets.any { it.optString("i") == "local-minted-fixture" })
+                compose.waitUntil(15_000) {
+                    listOf("Compose checkout enabled", "Compose negated off", "Compose any gate")
+                        .all { compose.onAllNodesWithText(it).fetchSemanticsNodes().isNotEmpty() }
+                }
+                compose.onNodeWithText("Compose checkout enabled").assertExists()
+                compose.onNodeWithText("Compose negated off").assertExists()
+                compose.onNodeWithText("Compose any gate").assertExists()
                 activity.moveToState(Lifecycle.State.STARTED)
                 activity.moveToState(Lifecycle.State.RESUMED)
             }

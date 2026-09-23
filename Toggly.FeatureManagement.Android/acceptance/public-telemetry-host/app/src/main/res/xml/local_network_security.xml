@@ -4,5 +4,6 @@
     <domain-config cleartextTrafficPermitted="true">
         <domain>10.0.2.2</domain>
         <domain>127.0.0.1</domain>
+        <domain>localhost</domain>
     </domain-config>
 </network-security-config>
