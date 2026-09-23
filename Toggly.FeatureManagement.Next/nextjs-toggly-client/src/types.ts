@@ -1,4 +1,4 @@
-import type { TogglyConfig, BrowserTogglyClient, FrontendTelemetry, FeatureRequirement } from '@ops-ai/nextjs-toggly-core'
+import type { TogglyConfig, BrowserTogglyClient, FrontendTelemetry, FeatureRequirement, VariantResult } from '@ops-ai/nextjs-toggly-core'
 import type { ReactNode } from 'react'
 
 /**
@@ -68,6 +68,14 @@ export interface TogglyContextValue {
     context?: import('@ops-ai/nextjs-toggly-core').TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
   ) => Promise<boolean>
+  /**
+   * Current variant assignment for a feature (requires `enableVariants` in the
+   * provider config). Returns null when variants are disabled, unassigned, or
+   * the effective flag is off.
+   */
+  getVariant: (featureKey: string) => VariantResult | null
+  /** Configuration payload for the assigned variant, if any. */
+  getVariantValue: (featureKey: string) => unknown | null
 }
 
 /**
@@ -95,6 +103,20 @@ export interface UseFeatureFlagReturn {
   /** Whether the feature is loading */
   isLoading: boolean
   /** Refresh the feature state */
+  refresh: () => Promise<void>
+}
+
+/**
+ * Return type for useVariant hook
+ */
+export interface UseVariantReturn {
+  /** Assigned variant (name + optional configurationValue), or null */
+  variant: VariantResult | null
+  /** Shortcut for `variant?.configurationValue ?? null` */
+  variantValue: unknown | null
+  /** Whether the variant assignment is loading */
+  isLoading: boolean
+  /** Refresh the variant state */
   refresh: () => Promise<void>
 }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
-import { useFeatureFlag, useFeatureOff, useFeatureGate, useFeatures, useIdentity } from '../src/hooks'
+import { useFeatureFlag, useFeatureOff, useFeatureGate, useFeatures, useIdentity, useVariant } from '../src/hooks'
 import { TogglyProvider } from '../src/context'
 import type { ReactNode } from 'react'
 
@@ -358,5 +358,120 @@ describe('useIdentity setContext', () => {
     await waitFor(() => {
       expect(result.current.flag.isEnabled).toBe(true)
     })
+  })
+})
+
+describe('useVariant', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('returns null when enableVariants is not configured', async () => {
+    mockFetch.mockResolvedValueOnce(
+      createMockResponse({ defs: { 'checkout-flow': true } })
+    )
+
+    const { result } = renderHook(() => useVariant('checkout-flow'), {
+      wrapper: createWrapper({ appKey: 'test-key' }),
+    })
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(result.current.variant).toBeNull()
+    expect(result.current.variantValue).toBeNull()
+  })
+
+  it('returns the assigned variant when enableVariants is true', async () => {
+    mockFetch.mockResolvedValueOnce(
+      createMockResponse({
+        defs: {
+          'checkout-flow': {
+            enabled: true,
+            variant: 'treatment',
+            configurationValue: { theme: 'dark' },
+          },
+        },
+      })
+    )
+
+    const { result } = renderHook(() => useVariant('checkout-flow'), {
+      wrapper: createWrapper({ appKey: 'test-key', enableVariants: true } as { appKey: string }),
+    })
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(result.current.variant).toEqual({
+      name: 'treatment',
+      configurationValue: { theme: 'dark' },
+    })
+    expect(result.current.variantValue).toEqual({ theme: 'dark' })
+  })
+
+  it('returns null for a disabled feature even with a variant name present', async () => {
+    mockFetch.mockResolvedValueOnce(
+      createMockResponse({
+        defs: {
+          'checkout-flow': { enabled: false, variant: 'treatment' },
+        },
+      })
+    )
+
+    const { result } = renderHook(() => useVariant('checkout-flow'), {
+      wrapper: createWrapper({ appKey: 'test-key', enableVariants: true } as { appKey: string }),
+    })
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(result.current.variant).toBeNull()
+  })
+
+  it('re-evaluates after refresh', async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        createMockResponse({
+          defs: { 'checkout-flow': { enabled: true, variant: 'control' } },
+        })
+      )
+      .mockResolvedValueOnce(
+        createMockResponse({
+          defs: {
+            'checkout-flow': {
+              enabled: true,
+              variant: 'treatment',
+              configurationValue: 'v2',
+            },
+          },
+        })
+      )
+
+    const { result } = renderHook(() => useVariant('checkout-flow'), {
+      wrapper: createWrapper({ appKey: 'test-key', enableVariants: true } as { appKey: string }),
+    })
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false)
+    })
+
+    expect(result.current.variant?.name).toBe('control')
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    await waitFor(() => {
+      expect(result.current.variant?.name).toBe('treatment')
+    })
+    expect(result.current.variantValue).toBe('v2')
   })
 })

@@ -8,6 +8,8 @@ import type {
   EvaluationSeriesData,
   EvalContextArg,
   EvalContextOverrides,
+  EvaluatedVariantDef,
+  VariantResult,
 } from './types'
 import { HookExecutor } from './hooks'
 import { DEFAULT_CONFIG, API_ENDPOINTS } from './constants'
@@ -43,7 +45,11 @@ import {
   resolveEvaluatedDefinition,
 } from '@ops-ai/toggly-hooks-types'
 import { buildDefinitionFetchHeaders } from './sdk-identity'
-import { parseRemoteEvaluatedPayload } from './parse-evaluated-payload'
+import {
+  parseRemoteEvaluatedPayload,
+  parseRemoteEvaluatedVariantsPayload,
+  variantDefsToFlags,
+} from './parse-evaluated-payload'
 import { parseEvaluatedResponseBody, readResponseBody } from './signed-response'
 import {
   evaluateDefinitions,
@@ -103,6 +109,7 @@ export function createClient(
     loading: false,
     features: { ...config.featureDefaults },
     definitions: new Map(),
+    variants: null,
     error: null,
     lastRefresh: null,
     wsConnected: false,
@@ -121,7 +128,12 @@ export function createClient(
   const featuresRefreshListeners = new Set<() => void>()
 
   // Revisions are usable only with the matching response mode and targeting snapshot.
-  const snapshots = new Map<string, {features: FeatureDefinitions; revision: string | null}>()
+  type Snapshot = {
+    features: FeatureDefinitions
+    revision: string | null
+    variants?: Record<string, EvaluatedVariantDef> | null
+  }
+  const snapshots = new Map<string, Snapshot>()
   const scopeKey = () => JSON.stringify([
     config.baseUri, config.appKey, config.environment, config.evaluationMode ?? 'remote',
     config.instanceId?.trim() ? ['i', config.instanceId.trim()] : ['u', config.identity ?? '', [...(config.groups ?? [])].sort((a, b) => {
@@ -130,11 +142,24 @@ export function createClient(
       if (a > b) return 1
       return 0
     }), Object.entries(config.claims ?? {}).sort(([a], [b]) => a.localeCompare(b))],
+    // Appended (not interleaved) so existing index-based scope/identity tuple positions are unchanged.
+    config.enableVariants ? 'variants' : 'evaluated',
   ])
   const storageKey = () => `${config.featuresStorageKey ?? 'toggly:features'}:v3:${encodeURIComponent(JSON.stringify([
     config.baseUri, config.appKey, config.environment, config.evaluationMode ?? 'remote',
+    config.enableVariants ? 'variants' : 'evaluated',
   ]))}`
-  type Snapshot = {features: FeatureDefinitions; revision: string | null}
+  function isValidVariantEntry(entry: unknown): entry is EvaluatedVariantDef {
+    if (entry === null || typeof entry !== 'object') return false
+    const value = entry as { enabled?: unknown; variant?: unknown }
+    if (typeof value.enabled !== 'boolean') return false
+    return value.variant === undefined || typeof value.variant === 'string'
+  }
+  function isValidVariantsRecord(value: unknown): value is Record<string, EvaluatedVariantDef> | null {
+    if (value === null || value === undefined) return true
+    if (typeof value !== 'object' || Array.isArray(value)) return false
+    return Object.values(value).every(isValidVariantEntry)
+  }
   function persistedSnapshots(): Map<string, Snapshot> {
     const entries = new Map<string, Snapshot>()
     if (!config.persistFeatures || typeof localStorage === 'undefined') return entries
@@ -149,7 +174,8 @@ export function createClient(
             && value.rules.every(rule => rule !== null && typeof rule === 'object'
               && typeof rule.property === 'string' && typeof rule.op === 'string' && typeof rule.value === 'string'
               && (rule.type === undefined || ['datetime', 'number', 'boolean', 'string', 'string[]'].includes(rule.type)))))
-          && (snapshot.revision === null || typeof snapshot.revision === 'string')) entries.set(entry[0], snapshot)
+          && (snapshot.revision === null || typeof snapshot.revision === 'string')
+          && isValidVariantsRecord(snapshot.variants)) entries.set(entry[0], snapshot)
       }
     } catch { /* Unavailable or corrupt storage is not a definition snapshot. */ }
     return entries
@@ -161,11 +187,13 @@ export function createClient(
     cachedDefinitionsRevision = null
     pendingDefinitionsPin = null
     state.features = {...config.featureDefaults}
+    state.variants = null
     if (isLocalMode()) return
     state.definitions = new Map()
     const snapshot = snapshots.get(scopeKey()) ?? persistedSnapshots().get(scopeKey())
     if (snapshot) {
       state.features = {...config.featureDefaults, ...snapshot.features}
+      state.variants = snapshot.variants ?? null
       cachedDefinitionsRevision = snapshot.revision
       hasRemoteSnapshot = true
     }
@@ -173,7 +201,11 @@ export function createClient(
   function saveSnapshot(): void {
     if (!policy.frontend || isLocalMode()) return
     hasRemoteSnapshot = true
-    const snapshot = {features: {...state.features}, revision: cachedDefinitionsRevision}
+    const snapshot: Snapshot = {
+      features: {...state.features},
+      revision: cachedDefinitionsRevision,
+      variants: state.variants ? {...state.variants} : null,
+    }
     snapshots.delete(scopeKey()); snapshots.set(scopeKey(), snapshot)
     if (snapshots.size > 8) snapshots.delete(snapshots.keys().next().value!)
     if (config.persistFeatures && typeof localStorage !== 'undefined') {
@@ -503,7 +535,7 @@ export function createClient(
     })
   }
 
-  function frontendDefinitionsUrl(mode: 'evaluated' | 'definitions'): URL {
+  function frontendDefinitionsUrl(mode: 'evaluated' | 'definitions' | 'evaluated-variants'): URL {
     const url = new URL(config.baseUri)
     url.pathname = `${url.pathname.replace(/\/+$/, '')}/${mode}-signed/${config.appKey}/${config.environment}`
     url.searchParams.delete('i')
@@ -524,19 +556,28 @@ export function createClient(
   async function fetchRemoteEvaluated(): Promise<{
     defs: FeatureDefinitions
     outcome: 'hit' | 'miss'
+    /** Present (possibly null) only when `enableVariants` is set. */
+    variants?: Record<string, EvaluatedVariantDef> | null
   }> {
     if (!config.appKey) {
       console.warn('[Toggly] No appKey provided, using defaults only')
-      return { defs: { ...config.featureDefaults }, outcome: 'hit' }
+      return { defs: { ...config.featureDefaults }, outcome: 'hit', variants: null }
     }
 
+    const useVariants = !!config.enableVariants
     const expected = generation
-    const fetchUrl = policy.frontend ? frontendDefinitionsUrl('evaluated') : new URL(
-      API_ENDPOINTS.evaluatedSigned(
-        config.baseUri,
-        config.appKey,
-        config.environment
-      )
+    const fetchUrl = policy.frontend ? frontendDefinitionsUrl(useVariants ? 'evaluated-variants' : 'evaluated') : new URL(
+      useVariants
+        ? API_ENDPOINTS.evaluatedVariantsSigned(
+            config.baseUri,
+            config.appKey,
+            config.environment
+          )
+        : API_ENDPOINTS.evaluatedSigned(
+            config.baseUri,
+            config.appKey,
+            config.environment
+          )
     )
     if (config.instanceId?.trim()) fetchUrl.searchParams.set('i', config.instanceId.trim())
     else appendEvaluationContext(
@@ -546,7 +587,7 @@ export function createClient(
         groups: config.groups,
         claims: config.claims,
       },
-      'evaluated',
+      useVariants ? 'variants' : 'evaluated',
     )
     const pin = pendingDefinitionsPin
     pendingDefinitionsPin = null
@@ -570,7 +611,7 @@ export function createClient(
         if (responseRevision) {
           cacheDefinitionsRevision(responseRevision)
         }
-        return { defs: { ...state.features }, outcome: 'hit' }
+        return { defs: { ...state.features }, outcome: 'hit', variants: useVariants ? state.variants : null }
       }
 
       if (!response.ok) {
@@ -582,7 +623,7 @@ export function createClient(
         if (responseRevision) {
           cacheDefinitionsRevision(responseRevision)
         }
-        return { defs: { ...state.features }, outcome: 'hit' }
+        return { defs: { ...state.features }, outcome: 'hit', variants: useVariants ? state.variants : null }
       }
 
       const bodyText = await readResponseBody(response)
@@ -597,13 +638,20 @@ export function createClient(
       })
 
       assertCurrent(expected)
+      if (useVariants) {
+        const variantDefs = parseRemoteEvaluatedVariantsPayload(parsed)
+        if (responseRevision) {
+          cacheDefinitionsRevision(responseRevision)
+        }
+        return { defs: variantDefsToFlags(variantDefs), outcome: 'miss', variants: variantDefs }
+      }
       const defs = parseRemoteEvaluatedPayload(parsed, {
         verifySignatures: config.verifySignatures,
       })
       if (responseRevision) {
         cacheDefinitionsRevision(responseRevision)
       }
-      return { defs, outcome: 'miss' }
+      return { defs, outcome: 'miss', variants: null }
     } catch (error) {
       assertCurrent(expected)
       console.error('[Toggly] Failed to fetch feature definitions:', error)
@@ -701,7 +749,7 @@ export function createClient(
       return outcome
     }
 
-    const { defs, outcome } = await fetchRemoteEvaluated()
+    const { defs, outcome, variants } = await fetchRemoteEvaluated()
     assertCurrent(expected)
     if (outcome === 'miss') {
       state.definitions = new Map()
@@ -709,6 +757,7 @@ export function createClient(
         ...config.featureDefaults,
         ...defs,
       }
+      state.variants = config.enableVariants ? (variants ?? null) : null
       saveSnapshot()
     }
     return outcome
@@ -1353,6 +1402,28 @@ export function createClient(
         recordDefinitionCacheHit()
       }
       return features
+    },
+
+    getVariant(featureKey: string): VariantResult | null {
+      if (destroyed || !config.enableVariants) {
+        return null
+      }
+      const entry = state.variants?.[featureKey]
+      const variantName = entry?.variant || 'enabled'
+      const remoteEnabled = entry?.enabled === true
+      const enabled = applyLocalGate(remoteEnabled, featureKey, localGates, localGateIndex)
+      if (policy.frontend) ensureTelemetry()
+      if (telemetry?.usageEnabled) {
+        telemetry.recordCheck(featureKey, enabled, config.identity, enabled ? variantName : 'disabled')
+      }
+      if (!enabled || !entry?.variant) {
+        return null
+      }
+      return { name: entry.variant, configurationValue: entry.configurationValue }
+    },
+
+    getVariantValue(featureKey: string): unknown | null {
+      return client.getVariant(featureKey)?.configurationValue ?? null
     },
 
     addHook(hook: Hook): void {

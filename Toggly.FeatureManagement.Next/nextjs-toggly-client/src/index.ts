@@ -10,6 +10,7 @@ export {
   useFeatureGate,
   useFeatures,
   useIdentity,
+  useVariant,
 } from './hooks'
 
 // Components
@@ -26,6 +27,7 @@ export type {
   TogglyContextValue,
   TogglyProviderProps,
   UseFeatureFlagReturn,
+  UseVariantReturn,
   FeatureProps,
 } from './types'
 
@@ -40,4 +42,6 @@ export type {
   FeatureRequirement,
   Hook,
   HookMetadata,
+  VariantResult,
+  EvaluatedVariantDef,
 } from '@ops-ai/nextjs-toggly-core'

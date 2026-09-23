@@ -39,7 +39,7 @@ function browserTelemetry(config: TogglyConfig): ClientTelemetry | null {
       return (key, enabled) => record?.(key, enabled ? 'enabled' : 'disabled')
     },
     async flushAll() {await reporter?.flush()},
-    recordCheck(key, enabled) {if (usage) getReporter().recordCheck(key, enabled ? 'enabled' : 'disabled')},
+    recordCheck(key, enabled, _identity, variant) {if (usage) getReporter().recordCheck(key, variant ?? (enabled ? 'enabled' : 'disabled'))},
     recordUsage(key, _identity, variant = 'enabled') {if (usage) getReporter().recordUsage(key, variant)},
     recordView(key, _identity, variant = 'enabled') {if (usage) getReporter().recordView(key, variant)},
     recordDefinitionCacheHit() {},

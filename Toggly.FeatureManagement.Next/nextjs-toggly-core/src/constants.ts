@@ -14,6 +14,9 @@ export const DEFAULT_CONFIG = {
 export const API_ENDPOINTS = {
   evaluatedSigned: (baseUri: string, appKey: string, environment: string) =>
     `${baseUri}/evaluated-signed/${appKey}/${environment}`,
+  /** Variant-aware evaluated flags (requires `enableVariants`). Remote rail only. */
+  evaluatedVariantsSigned: (baseUri: string, appKey: string, environment: string) =>
+    `${baseUri}/evaluated-variants-signed/${appKey}/${environment}`,
   definitionsSigned: (baseUri: string, appKey: string, environment: string) =>
     `${baseUri}/definitions-signed/${appKey}/${environment}`,
   /** @deprecated use evaluatedSigned — kept for back-compat */

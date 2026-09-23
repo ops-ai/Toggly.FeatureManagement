@@ -64,4 +64,6 @@ export type {
   EvaluationMode,
   EvalContextOverrides,
   EvalContextArg,
+  VariantResult,
+  EvaluatedVariantDef,
 } from './types'
