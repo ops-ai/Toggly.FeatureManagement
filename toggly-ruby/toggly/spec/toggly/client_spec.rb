@@ -238,77 +238,81 @@ RSpec.describe Toggly::Client do
     end
   end
 
-  describe "evaluated variants (dual-rail)" do
+  describe "catalog-local feature variants (MF-parity)" do
     let(:client) do
       described_class.new(
         app_key: app_key,
         environment: environment,
-        enable_variants: true,
         disable_background_refresh: true
       )
     end
 
     before do
-      # Local definitions rail — remains the sole source of truth for
-      # enabled?, even with enable_variants: true.
+      # Variants / allocation travel on the same `definitions` wire as
+      # `filters` — there is no separate variants fetch/cache rail.
       stub_definitions_api(
         app_key: app_key,
         environment: environment,
         features: [
-          { "featureKey" => "checkout-flow", "enabled" => true },
-          { "featureKey" => "disabled-experiment", "enabled" => false },
-          { "featureKey" => "no-variant-assigned", "enabled" => true },
-          { "featureKey" => "variant-disagrees-with-definition", "enabled" => true }
+          { "featureKey" => "enabled-feature", "enabled" => true },
+          { "featureKey" => "disabled-feature", "enabled" => false },
+          {
+            "featureKey" => "checkout-flow",
+            "enabled" => true,
+            "variants" => [
+              { "name" => "A", "configurationValue" => { "cta" => "Buy now" }, "statusOverride" => "None" },
+              { "name" => "B", "configurationValue" => { "cta" => "Purchase" }, "statusOverride" => "None" }
+            ],
+            "allocation" => {
+              "defaultWhenEnabled" => "B",
+              "user" => [{ "variant" => "A", "users" => ["alice"] }]
+            }
+          },
+          {
+            "featureKey" => "no-variants-feature",
+            "enabled" => true
+          },
+          {
+            "featureKey" => "killswitch-feature",
+            "enabled" => false,
+            "variants" => [
+              { "name" => "Off", "configurationValue" => { "killSwitch" => true }, "statusOverride" => "Enabled" }
+            ],
+            "allocation" => { "defaultWhenDisabled" => "Off" }
+          }
         ]
-      )
-      # Additive evaluated-variants rail — only feeds get_variant /
-      # get_variant_value, never enabled?.
-      stub_variants_api(
-        app_key: app_key,
-        environment: environment,
-        defs: {
-          "checkout-flow" => { "enabled" => true, "variant" => "treatment", "configurationValue" => { "cta" => "Buy now" } },
-          "disabled-experiment" => { "enabled" => false, "variant" => "control" },
-          "no-variant-assigned" => { "enabled" => true },
-          # Server-evaluated assignment disagrees with the local definition
-          # (enabled: false vs. the definition's enabled: true) — enabled?
-          # must still follow the definition.
-          "variant-disagrees-with-definition" => { "enabled" => false, "variant" => "treatment" }
-        }
       )
     end
 
     describe "#enabled?" do
-      it "evaluates from local definitions, not the evaluated-variant enabled flag" do
+      it "stays filter-based and is not affected by variant allocation" do
         expect(client.enabled?("checkout-flow")).to be true
-        expect(client.enabled?("disabled-experiment")).to be false
-      end
-
-      it "is not overridden by a conflicting evaluated-variant assignment (regression)" do
-        # The evaluated-variants-signed rail says this feature is OFF for the
-        # assigned variant, but the definitions rail says it is ON.
-        # Definitions must remain authoritative for enabled? even when
-        # enable_variants is true.
-        expect(client.enabled?("variant-disagrees-with-definition")).to be true
-      end
-
-      it "falls through to defaults for unknown features" do
-        expect(client.enabled?("unknown-feature")).to be false
-        expect(client.enabled?("unknown-feature", default: true)).to be true
+        expect(client.enabled?("disabled-feature")).to be false
       end
     end
 
     describe "#get_variant" do
-      it "returns the assigned variant name and configuration value" do
-        variant = client.get_variant("checkout-flow")
+      it "assigns the user-matched variant locally, with no network call" do
+        WebMock.reset_executed_requests!
+
+        variant = client.get_variant("checkout-flow", context: Toggly::Context.new(identity: "alice"))
 
         expect(variant).to be_a(Toggly::VariantResult)
-        expect(variant.name).to eq("treatment")
+        expect(variant.name).to eq("A")
         expect(variant.configuration_value).to eq({ "cta" => "Buy now" })
+        expect(variant.reason).to eq("User")
+        expect(WebMock).not_to have_requested(:get, /evaluated-variants-signed/)
       end
 
-      it "returns nil when the feature has no assigned variant" do
-        expect(client.get_variant("no-variant-assigned")).to be_nil
+      it "falls back to defaultWhenEnabled when no allocation rule matches" do
+        variant = client.get_variant("checkout-flow", context: Toggly::Context.new(identity: "carol"))
+
+        expect(variant.name).to eq("B")
+        expect(variant.reason).to eq("DefaultWhenEnabled")
+      end
+
+      it "returns nil when the feature has no variants configured" do
+        expect(client.get_variant("no-variants-feature")).to be_nil
       end
 
       it "returns nil for an unknown feature key" do
@@ -316,64 +320,30 @@ RSpec.describe Toggly::Client do
       end
 
       it "accepts symbol keys" do
-        expect(client.get_variant(:"checkout-flow")&.name).to eq("treatment")
+        expect(client.get_variant(:"checkout-flow", context: Toggly::Context.new(identity: "alice"))&.name).to eq("A")
+      end
+
+      it "applies StatusOverride to the returned enabled flag (MF-identical effective enabled)" do
+        # Feature is globally disabled, but its DefaultWhenDisabled variant
+        # carries StatusOverride: Enabled, so the effective enabled flips —
+        # `Client#enabled?` (filter-based) still reports the feature as off.
+        variant = client.get_variant("killswitch-feature")
+
+        expect(variant.name).to eq("Off")
+        expect(variant.enabled).to be true
+        expect(variant.reason).to eq("DefaultWhenDisabled")
+        expect(client.enabled?("killswitch-feature")).to be false
       end
     end
 
     describe "#get_variant_value" do
       it "returns the configuration value for the assigned variant" do
-        expect(client.get_variant_value("checkout-flow")).to eq({ "cta" => "Buy now" })
+        expect(client.get_variant_value("checkout-flow", context: Toggly::Context.new(identity: "alice")))
+          .to eq({ "cta" => "Buy now" })
       end
 
       it "returns nil when there is no assigned variant" do
-        expect(client.get_variant_value("no-variant-assigned")).to be_nil
-      end
-    end
-
-    context "when enable_variants is false (default)" do
-      let(:default_client) do
-        described_class.new(
-          app_key: app_key,
-          environment: environment,
-          disable_background_refresh: true
-        )
-      end
-
-      it "get_variant always returns nil" do
-        expect(default_client.get_variant("enabled-feature")).to be_nil
-      end
-
-      it "get_variant_value always returns nil" do
-        expect(default_client.get_variant_value("enabled-feature")).to be_nil
-      end
-
-      it "does not call evaluated-variants-signed" do
-        default_client
-        expect(WebMock).not_to have_requested(:get, "https://definitions.toggly.io/evaluated-variants-signed/#{app_key}/#{environment}")
-      end
-    end
-
-    describe "#set_variant_identity" do
-      it "clears cached variants and refreshes with the new userId" do
-        client # trigger initial load
-
-        stub_request(:get, "https://definitions.toggly.io/evaluated-variants-signed/#{app_key}/#{environment}")
-          .with(query: { "userId" => "user-42" })
-          .to_return(
-            status: 200,
-            body: build_variants_response({ "checkout-flow" => { "enabled" => false, "variant" => "control" } }, timestamp: 2),
-            headers: { "Content-Type" => "application/json" }
-          )
-
-        changed = client.set_variant_identity("user-42")
-
-        expect(changed).to be true
-        expect(client.get_variant("checkout-flow").name).to eq("control")
-      end
-
-      it "returns false when identity is unchanged" do
-        client
-        expect(client.set_variant_identity(nil)).to be false
+        expect(client.get_variant_value("no-variants-feature")).to be_nil
       end
     end
   end
@@ -404,37 +374,39 @@ RSpec.describe Toggly::Client do
       expect(client2.feature_keys).to include("enabled-feature")
     end
 
-    it "persists and restores evaluated variants independently (dual-rail)" do
-      stub_variants_api(
+    it "persists variants/allocation as part of the definitions snapshot" do
+      stub_definitions_api(
         app_key: app_key,
         environment: environment,
-        defs: { "checkout-flow" => { "enabled" => true, "variant" => "treatment" } }
+        features: [
+          {
+            "featureKey" => "checkout-flow",
+            "enabled" => true,
+            "variants" => [{ "name" => "A", "configurationValue" => { "cta" => "Buy" }, "statusOverride" => "None" }],
+            "allocation" => { "defaultWhenEnabled" => "A" }
+          }
+        ]
       )
       memory_provider = Toggly::SnapshotProviders::Memory.new
 
       _client = described_class.new(
         app_key: app_key,
         environment: environment,
-        enable_variants: true,
         disable_background_refresh: true,
         snapshot_provider: memory_provider
       )
 
-      expect(memory_provider.load_variants).not_to be_nil
-
-      # New client falls back to the variants snapshot when the network fails.
-      stub_request(:get, "https://definitions.toggly.io/evaluated-variants-signed/#{app_key}/#{environment}")
-        .to_return(status: 500)
+      # New client falls back to the definitions snapshot (with variants) when the network fails.
+      stub_definitions_api(app_key: app_key, environment: environment, features: [], status: 500)
 
       client2 = described_class.new(
         app_key: app_key,
         environment: environment,
-        enable_variants: true,
         disable_background_refresh: true,
         snapshot_provider: memory_provider
       )
 
-      expect(client2.get_variant("checkout-flow")&.name).to eq("treatment")
+      expect(client2.get_variant("checkout-flow")&.name).to eq("A")
     end
   end
 end

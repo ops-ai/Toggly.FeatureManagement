@@ -35,6 +35,12 @@ module Toggly
     # @return [String, nil] Feature description
     attr_reader :description
 
+    # @return [Array<FeatureVariant>] Named variants for MF-parity assignment
+    attr_reader :variants
+
+    # @return [FeatureVariantAllocation, nil] Allocation rules for variant assignment
+    attr_reader :allocation
+
     # Feature types
     TYPES = %w[Release Experiment Ops Permission].freeze
 
@@ -50,7 +56,9 @@ module Toggly
       updated_at: nil,
       requirement_type: "Any",
       context_kind: nil,
-      context_requirement_type: nil
+      context_requirement_type: nil,
+      variants: [],
+      allocation: nil
     )
       @feature_key = feature_key.to_s
       @feature_type = validate_type(feature_type)
@@ -63,6 +71,8 @@ module Toggly
       @requirement_type = requirement_type || "Any"
       @context_kind = context_kind
       @context_requirement_type = context_requirement_type
+      @variants = Array(variants)
+      @allocation = allocation
     end
 
     # Create from a hash (e.g., from JSON)
@@ -83,6 +93,9 @@ module Toggly
                   !rules.empty?
                 end
 
+      variants = Array(hash[:variants]).map { |v| FeatureVariant.from_hash(v) }
+      allocation = FeatureVariantAllocation.from_hash(hash[:allocation])
+
       new(
         feature_key: hash[:featureKey] || hash[:feature_key],
         feature_type: hash[:featureType] || hash[:feature_type] || "Release",
@@ -94,7 +107,9 @@ module Toggly
         updated_at: hash[:updatedAt] || hash[:updated_at],
         requirement_type: hash[:requirementType] || hash[:requirement_type] || "Any",
         context_kind: hash[:contextKind] || hash[:context_kind],
-        context_requirement_type: hash[:contextRequirementType] || hash[:context_requirement_type]
+        context_requirement_type: hash[:contextRequirementType] || hash[:context_requirement_type],
+        variants: variants,
+        allocation: allocation
       )
     end
 
@@ -110,7 +125,9 @@ module Toggly
         metadata: @metadata,
         description: @description,
         created_at: @created_at&.iso8601,
-        updated_at: @updated_at&.iso8601
+        updated_at: @updated_at&.iso8601,
+        variants: @variants.map(&:to_h),
+        allocation: @allocation&.to_h
       }
     end
 
