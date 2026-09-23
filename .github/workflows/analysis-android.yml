@@ -141,7 +141,22 @@ jobs:
           arch: x86_64
           disable-animations: true
           working-directory: Toggly.FeatureManagement.Android/acceptance/public-telemetry-host
-          script: ./gradlew :app:createDebugAndroidTestCoverageReport --no-daemon
+          script: |
+            result=0
+            ./gradlew :app:createDebugAndroidTestCoverageReport --no-daemon || result=$?
+            if [ "$result" -ne 0 ]; then
+              mkdir -p app/build/reports/androidTests/connected
+              {
+                echo '--- device ABI ---'
+                adb shell getprop ro.product.cpu.abi
+                echo '--- installed instrumentation ---'
+                adb shell pm list instrumentation
+                echo '--- main and crash buffers ---'
+                adb logcat -d -b main -b crash -v threadtime
+              } > app/build/reports/androidTests/connected/device-diagnostics.txt 2>&1 || true
+              tail -n 200 app/build/reports/androidTests/connected/device-diagnostics.txt
+            fi
+            exit "$result"
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
@@ -160,6 +175,7 @@ jobs:
           path: |
             ${{ env.SDK_ROOT }}/**/build/reports/kover/report.xml
             ${{ env.SDK_ROOT }}/acceptance/public-telemetry-host/app/build/reports/coverage/androidTest/debug/connected/report.xml
+            ${{ env.SDK_ROOT }}/acceptance/public-telemetry-host/app/build/reports/androidTests/connected/device-diagnostics.txt
             ${{ env.SDK_ROOT }}/acceptance/public-telemetry-host/coverage.xml
           retention-days: 7
           if-no-files-found: ignore
