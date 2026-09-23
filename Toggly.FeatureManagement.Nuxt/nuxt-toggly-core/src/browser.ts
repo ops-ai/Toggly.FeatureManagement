@@ -12,6 +12,8 @@ export type {
   TogglyEntityContext,
   EvalContextOverrides,
   EvalContextArg,
+  VariantResult,
+  EvaluatedVariantDef,
   FrontendTelemetryRuntime,
   FrontendTelemetryFactory,
 } from './types'

@@ -25,6 +25,7 @@ export default defineNuxtPlugin(async (nuxtApp) => {
     groups: config.groups ? [...config.groups] : config.groups,
     claims: config.claims ? { ...config.claims } : config.claims,
     featureDefaults: config.featureDefaults,
+    enableVariants: config.enableVariants,
     showFeatureDuringEvaluation: config.showFeatureDuringEvaluation,
     refreshInterval: config.refreshInterval,
     enableLiveUpdates: config.enableLiveUpdates,

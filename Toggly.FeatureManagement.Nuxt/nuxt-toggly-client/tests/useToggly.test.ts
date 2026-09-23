@@ -152,7 +152,7 @@ describe('useToggly', () => {
       const key = Object.keys(mockLocalStorage).find(key => key.startsWith('toggly:features:v2:'))!
       const entries = JSON.parse(mockLocalStorage[key])
       expect(entries).toHaveLength(1)
-      expect(entries[0][1]).toEqual({features:{'feature-a':true},definitions:[],revision:null})
+      expect(entries[0][1]).toEqual({features:{'feature-a':true},definitions:[],variants:null,revision:null})
       expect(entries[0][0]).toContain(toggly.identity.value)
       expect(mockLocalStorage['toggly:features']).toBeUndefined()
     })
@@ -224,7 +224,7 @@ describe('useToggly', () => {
       const key = Object.keys(mockLocalStorage).find(key => key.startsWith('toggly:features:v2:'))!
       const entries = JSON.parse(mockLocalStorage[key])
       expect(entries).toHaveLength(1)
-      expect(entries[0][1]).toEqual({features:{'feature-a':true},definitions:[],revision:null})
+      expect(entries[0][1]).toEqual({features:{'feature-a':true},definitions:[],variants:null,revision:null})
       expect(entries[0][0]).toContain(toggly.identity.value)
       expect(mockLocalStorage['toggly:features']).toBeUndefined()
     })

@@ -7,6 +7,7 @@ import type {
   TogglyEventType,
   TogglyEventListener,
   FeatureStateChangeHandler,
+  VariantResult,
 } from '@ops-ai/react-native-toggly-core';
 import { useTogglyContext } from '../contexts/TogglyContext';
 
@@ -51,6 +52,18 @@ export interface UseTogglyResult extends Pick<TogglyService, 'recordUsage' | 're
     context?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
   ) => Promise<boolean>;
+
+  /**
+   * Current variant assignment for a feature (requires `enableVariants: true` on the
+   * owning TogglyService). Returns `null` when variants are disabled, the feature is
+   * off, or no data has loaded yet.
+   */
+  getVariant: (featureKey: string) => VariantResult | null;
+
+  /**
+   * Configuration payload for the assigned variant, if any.
+   */
+  getVariantValue: (featureKey: string) => unknown | null;
 
   /**
    * Refresh feature flags from the server
@@ -169,6 +182,16 @@ export function useToggly(): UseTogglyResult {
     [toggly]
   );
 
+  const getVariant = useCallback(
+    (featureKey: string): VariantResult | null => toggly.getVariant(featureKey),
+    [toggly]
+  );
+
+  const getVariantValue = useCallback(
+    (featureKey: string): unknown | null => toggly.getVariantValue(featureKey),
+    [toggly]
+  );
+
   const refresh = useCallback(async (): Promise<void> => {
     const intent = ++refreshIntent.current;
     update({ isRefreshing: true });
@@ -228,6 +251,8 @@ export function useToggly(): UseTogglyResult {
     features: visible.features,
     isFeatureOn,
     isFeatureOff,
+    getVariant,
+    getVariantValue,
     refresh,
     setIdentity,
     setContext,

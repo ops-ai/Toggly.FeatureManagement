@@ -1,4 +1,5 @@
-import type { FeatureDefinitions, FeatureDefinitionsResponse } from './types'
+import { asVariantDefsRecord, unwrapDefsPayload } from '@ops-ai/toggly-signed-defs'
+import type { EvaluatedVariantDef, FeatureDefinitions, FeatureDefinitionsResponse } from './types'
 
 function isBooleanFeatureMap(data: object): data is FeatureDefinitions {
   return Object.values(data).every((value) => typeof value === 'boolean')
@@ -91,4 +92,26 @@ export function parseRemoteEvaluatedPayload(
   throw new Error(
     '[Toggly] Unsupported evaluated-signed response: expected defs, features, or a boolean map',
   )
+}
+
+/**
+ * Parse an evaluated-variants-signed HTTP body into a variant defs record.
+ * Unwraps a `{ defs }` envelope (unverified path) or accepts an already-unwrapped
+ * verified payload; rejects error envelopes; coerces non-map shapes to `{}`.
+ */
+export function parseVariantDefsPayload(
+  parsed: unknown,
+): Record<string, EvaluatedVariantDef> {
+  return asVariantDefsRecord<EvaluatedVariantDef>(unwrapDefsPayload(parsed))
+}
+
+/** Derive a boolean feature map from evaluated variant defs. */
+export function variantDefsToFlags(
+  defs: Record<string, EvaluatedVariantDef>,
+): FeatureDefinitions {
+  const out: FeatureDefinitions = {}
+  for (const key of Object.keys(defs)) {
+    out[key] = defs[key]?.enabled === true
+  }
+  return out
 }

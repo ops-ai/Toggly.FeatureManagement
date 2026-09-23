@@ -31,4 +31,6 @@ it('registers Nitro imports separately and supplies a Vue server provider on bot
   expect((module as any).meta.compatibility.nuxt).toContain('^4.0.0')
   expect(kit.addPlugin).toHaveBeenCalledWith(expect.objectContaining({ mode: 'server' }))
   expect(kit.addServerImports).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ name: 'useEventToggly' })]))
+  expect(kit.addServerImports).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ name: 'getServerVariant' })]))
+  expect(kit.addImports).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ name: 'useVariant' })]))
 })

@@ -95,7 +95,13 @@ data class TogglyConfig(
     /** Bounded status codes only, never app keys, identities or event payloads. */
     val onTelemetryDiagnostic: ((String) -> Unit)? = null,
     /** Opaque minted instance id for telemetry and definitions `?i=`. */
-    val instanceId: String? = null
+    val instanceId: String? = null,
+    /**
+     * When true, fetch signed variant assignments from `evaluated-variants-signed`
+     * (instead of `evaluated-signed`) and enable [TogglyService.getVariant] /
+     * [TogglyService.getVariantValue].
+     */
+    val enableVariants: Boolean = false
 )
 
 /**
@@ -105,6 +111,16 @@ data class TogglyInitResponse(
     val status: TogglyLoadStatus,
     val flags: FeatureFlags,
     val error: String? = null
+)
+
+/**
+ * Assigned variant for a feature key, returned by [TogglyService.getVariant].
+ * Requires [TogglyConfig.enableVariants]; null when the feature is disabled,
+ * has no variant assignment, or variants are not enabled.
+ */
+data class VariantResult(
+    val name: String,
+    val configurationValue: Any? = null
 )
 
 /**
@@ -123,7 +139,8 @@ data class TogglyDebugInfo(
     val eTag: String?,
     val lastError: String?,
     val networkState: NetworkState?,
-    val appState: AppStateType
+    val appState: AppStateType,
+    val enableVariants: Boolean = false
 )
 
 /**

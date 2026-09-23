@@ -70,6 +70,8 @@ async function replaceTelemetryOwner() {
   await newOwner.telemetry.flushTelemetry()
 }
 onMounted(() => {
+  ;(window as any).runtimePolicyTelemetry = emitTelemetry
+  ;(window as any).runtimePolicyFlush = flushTelemetry
   ;(window as any).finishMountedUi = async () => {
     const client = getTogglyClient()
     owningApp.unmount()

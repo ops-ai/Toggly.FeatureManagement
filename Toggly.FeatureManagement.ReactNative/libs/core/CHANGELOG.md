@@ -1,3 +1,10 @@
+## 1.9.0 — 2026-09-22
+
+### Added
+- `enableVariants` configuration option: fetches `/evaluated-variants-signed` instead of `/evaluated-signed` and exposes `getVariant(featureKey)` / `getVariantValue(featureKey)` for reading the assigned variant name and configuration payload. Matches the `@ops-ai/feature-flags-toggly` (JS) and Vue SDK contract.
+- Variant assignments persist in the offline cache alongside flags and are restored after a conditional (304) refresh, a failed refresh (last-known-good), or a cold app start.
+- Feature checks (`isFeatureOn`, `isFeatureOff`, `evaluateFeatureGate`, `getVariant`) record the assigned variant name in telemetry instead of always recording `enabled`.
+
 ## 1.8.0 — 2026-09-21
 
 ### Added

@@ -93,3 +93,34 @@ With `ssr: false`, server definition fetching is disabled; Vue SSR receives only
 server-rendered conditional content. Browser identity/features persistence keeps
 its existing options and storage keys. Server-created Vue instances are never
 exposed through the client package's process-global helper.
+
+
+## Browser and Nitro telemetry policy
+
+From module 1.4.0, configure browser and trusted Nitro collection separately:
+
+```ts
+export default defineNuxtConfig({
+  modules: ['@ops-ai/nuxt-toggly'],
+  toggly: {
+    appKey: 'your-app-key',
+    enableTelemetry: true,       // Browser reporter master switch.
+    enableUsageTracking: true,   // Browser checks, usage and view events.
+    enableMetrics: true,         // Browser counters and gauges.
+    serverEnableUsageTracking: false,
+    serverEnableMetrics: false,
+  },
+})
+```
+
+The two `serverEnable*` options reach only the Nitro server initializer. Omit
+one to preserve the server SDK's existing default for that category (enabled
+when an app key is configured); set it to `false` to disable that server
+category. Existing browser category flags keep their current meaning. Setting
+`enableTelemetry: false` disables the browser reporter independently.
+
+These controls do not disable SSR feature evaluation or request context.
+The SSR Vue provider remains a keyless projection and emits no browser
+telemetry. The browser uses its existing client owner; a browser check does
+not create a trusted server usage event. Metrics endpoints configured for the
+browser are not forwarded to the Nitro telemetry transport.

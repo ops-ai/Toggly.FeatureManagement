@@ -1,3 +1,11 @@
+## [1.17.0] - 2026-09-22
+
+### Added
+- Integration-only `browserEnableUsageTracking` and `browserEnableMetrics`
+  options let applications enable or disable browser categories independently
+  of trusted server usage. Omitted overrides inherit the existing shared
+  settings; `enableTelemetry` remains the browser master opt-out.
+
 ## [1.16.0] - 2026-09-21
 
 ### Added

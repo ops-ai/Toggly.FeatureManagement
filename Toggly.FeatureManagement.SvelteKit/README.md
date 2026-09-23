@@ -91,6 +91,7 @@ Synchronous initialization selects the same SSR and hydration branch. `update(sn
 | `createToggly(snapshot, options)`                                 | Creates a synchronous Svelte readable store and evaluation methods              |
 | `isEnabled(key, { entity, defaultValue })`                        | Browser boolean; missing default false; entity gate without entity fails closed |
 | `gate(keys, { requirement, negate, entity, defaultValue })`       | all/any, optional negation; empty gate true before negation                     |
+| `getVariant(key)` / `getVariantValue(key)`                        | Assigned `{ name, configurationValue? }` \| `null`; requires `enableVariants`   |
 | `start()` / `update(snapshot)` / `dispose()`                      | Browser refresh lifecycle, context replacement, cleanup                         |
 | `notifyLocalGatesChanged()`                                       | Notify reactive readers after a local prerequisite changes                      |
 | `event.locals.toggly.isEnabled(key, { entity })`                  | Async request-bound Node evaluation using configured defaults                   |
@@ -98,7 +99,23 @@ Synchronous initialization selects the same SSR and hydration branch. `update(sn
 | `loadToggly(event)`                                               | One verified, allowlisted frontend fetch per request                            |
 | `requireFeature(event, keys, options)`                            | Throws HTTP404 on a failed server gate; suitable for loads/actions              |
 
-Pass explicit entities: `{ kind: 'Order', key: 'ord-vip', attributes: { Vip: true } }`. The Node core owns rule evaluation; shared entity/local-gate packages own browser gate evaluation. No evaluator is duplicated here. Boolean branches are not A/B experiment assignment; variant assignment is not exposed.
+Pass explicit entities: `{ kind: 'Order', key: 'ord-vip', attributes: { Vip: true } }`. The Node core owns rule evaluation; shared entity/local-gate packages own browser gate evaluation. No evaluator is duplicated here.
+
+## Variants
+
+Set `enableVariants: true` on both `ServerOptions.frontend` and the browser `createToggly(snapshot, options)` call to opt into A/B variant assignment. When enabled, the frontend snapshot fetch uses `/evaluated-variants-signed` instead of `/evaluated-signed`, and the browser store exposes:
+
+```ts
+const toggly = createToggly(data.toggly, {
+  appKey: data.publicKey,
+  environment: data.environment,
+  enableVariants: true,
+});
+const variant = toggly.getVariant('checkout-flow'); // { name, configurationValue? } | null
+const configurationValue = toggly.getVariantValue('checkout-flow'); // unknown | null
+```
+
+`getVariant(key)` returns `null` when variants are disabled, the flag is off (including via local gates), or no variant name was assigned; otherwise it returns `{ name, configurationValue? }`. `getVariantValue(key)` returns `configurationValue ?? null`. `isEnabled` / `gate` / `Feature.svelte` keep evaluating the boolean `enabled` value regardless of `enableVariants`, so existing gating code is unaffected. Both server and browser must set `enableVariants` consistently to keep SSR and hydration on the same branch.
 
 ## Browser telemetry
 

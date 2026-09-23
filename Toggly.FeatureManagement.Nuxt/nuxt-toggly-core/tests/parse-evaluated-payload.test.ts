@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { parseRemoteEvaluatedPayload } from '../src/parse-evaluated-payload'
+import {
+  parseRemoteEvaluatedPayload,
+  parseVariantDefsPayload,
+  variantDefsToFlags,
+} from '../src/parse-evaluated-payload'
 
 describe('parseRemoteEvaluatedPayload', () => {
   it('parses features[] envelopes', () => {
@@ -45,5 +49,48 @@ describe('parseRemoteEvaluatedPayload', () => {
     expect(() =>
       parseRemoteEvaluatedPayload({ nested: { still: 'bad' } }),
     ).toThrow(/Unsupported/i)
+  })
+})
+
+describe('parseVariantDefsPayload', () => {
+  it('unwraps a { defs } envelope (unverified path)', () => {
+    expect(
+      parseVariantDefsPayload({
+        defs: { a: { enabled: true, variant: 'treatment' } },
+      }),
+    ).toEqual({ a: { enabled: true, variant: 'treatment' } })
+  })
+
+  it('accepts an already-unwrapped defs map (verified path)', () => {
+    expect(
+      parseVariantDefsPayload({ a: { enabled: false } }),
+    ).toEqual({ a: { enabled: false } })
+  })
+
+  it('coerces arrays and primitives to an empty map', () => {
+    expect(parseVariantDefsPayload([1, 2, 3])).toEqual({})
+    expect(parseVariantDefsPayload('nope')).toEqual({})
+    expect(parseVariantDefsPayload(null)).toEqual({})
+  })
+
+  it('throws on error envelopes without defs/features', () => {
+    expect(() => parseVariantDefsPayload({ error: 'boom' })).toThrow(
+      /error envelope/i,
+    )
+  })
+})
+
+describe('variantDefsToFlags', () => {
+  it('derives a boolean map from variant defs', () => {
+    expect(
+      variantDefsToFlags({
+        On: { enabled: true, variant: 'treatment' },
+        Off: { enabled: false, variant: 'control' },
+      }),
+    ).toEqual({ On: true, Off: false })
+  })
+
+  it('treats missing/non-true enabled as false', () => {
+    expect(variantDefsToFlags({})).toEqual({})
   })
 })

@@ -10,6 +10,7 @@ import { createServer as createHttpServer } from 'node:http'
 import { gunzipSync } from 'node:zlib'
 import assert from 'node:assert/strict'
 import { verifyAutomaticStartup } from './automatic-startup.test.mjs'
+import { verifyRuntimePolicy } from './runtime-policy.test.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const version = process.argv[2] || '4.5.2'
@@ -345,4 +346,5 @@ await withResources(async ownHost => {
   console.log(`PASS Nuxt ${version}: packed install, types, build, SSR gates, request isolation, hydration, initialization, identity, refresh, directives`)
 })
 await verifyAutomaticStartup(work, chromium)
+await verifyRuntimePolicy(work, chromium, telemetryRequests)
 })

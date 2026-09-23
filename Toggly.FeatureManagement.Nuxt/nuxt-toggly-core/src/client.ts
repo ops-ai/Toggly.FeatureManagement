@@ -9,6 +9,8 @@ import type {
   EvaluationSeriesData,
   EvalContextArg,
   EvalContextOverrides,
+  EvaluatedVariantDef,
+  VariantResult,
   FrontendTelemetryRuntime,
   TrustedTelemetryRuntime,
 } from './types'
@@ -48,7 +50,11 @@ import {
   type FeatureDefinitionModel,
 } from '@ops-ai/toggly-eval'
 import { buildDefinitionFetchHeaders } from './sdk-identity'
-import { parseRemoteEvaluatedPayload } from './parse-evaluated-payload'
+import {
+  parseRemoteEvaluatedPayload,
+  parseVariantDefsPayload,
+  variantDefsToFlags,
+} from './parse-evaluated-payload'
 import { parseEvaluatedResponseBody, readResponseBody } from './signed-response'
 
 /**
@@ -112,6 +118,7 @@ export function createTogglyClient(
     loading: false,
     features: { ...config.featureDefaults },
     definitions: new Map(),
+    variants: null,
     error: null,
     lastRefresh: null,
     wsConnected: false,
@@ -139,10 +146,12 @@ export function createTogglyClient(
     pendingDefinitionsPin = null
     state.features = {...config.featureDefaults}
     state.definitions = new Map()
+    state.variants = null
     const cached = snapshots.restore()
     if (cached) {
       state.features = {...cached.features}
       state.definitions = indexDefinitions(cached.definitions)
+      state.variants = cached.variants ? {...cached.variants} : null
       cachedDefinitionsRevision = cached.revision
       hasSnapshot = true
     }
@@ -150,7 +159,12 @@ export function createTogglyClient(
   function saveSnapshot() {
     if (!frontend) return
     hasSnapshot = true
-    snapshots.save({features:{...state.features}, definitions:[...state.definitions.values()], revision:cachedDefinitionsRevision})
+    snapshots.save({
+      features: {...state.features},
+      definitions: [...state.definitions.values()],
+      variants: state.variants ? {...state.variants} : null,
+      revision: cachedDefinitionsRevision,
+    })
   }
   function transitionContext(loading = false) {
     generation++
@@ -276,6 +290,7 @@ export function createTogglyClient(
   function discardHydratedSnapshotForIdentity(identity: string | undefined): void {
     if (hasHydratedEvaluatedSnapshot && identity !== config.identity) {
       state.features = { ...config.featureDefaults }
+      state.variants = null
       hasHydratedEvaluatedSnapshot = false
       notifyFeaturesRefresh()
     }
@@ -392,6 +407,28 @@ export function createTogglyClient(
     return result
   }
 
+  /**
+   * Current variant assignment for a feature (requires `enableVariants`; local
+   * gates apply as a read-time AND on the worker-assigned `enabled` flag).
+   */
+  function resolveVariant(featureKey: string): VariantResult | null {
+    if (!config.enableVariants) {
+      return null
+    }
+    const entry = state.variants?.[featureKey]
+    const variant = entry?.variant || 'enabled'
+    const enabled = applyLocalGate(entry?.enabled === true, featureKey, localGates, localGateIndex)
+    if (frontendTelemetry?.usageEnabled) {
+      frontendTelemetry.recordCheck(featureKey, enabled ? variant : 'disabled')
+    } else if (telemetry?.usageEnabled) {
+      telemetry.recordCheck(featureKey, enabled, config.identity)
+    }
+    if (!enabled || !entry?.variant) {
+      return null
+    }
+    return { name: entry.variant, configurationValue: entry.configurationValue }
+  }
+
   function startTelemetry(): void {
     if (config.frontendTelemetryFactory) {
       const signature = JSON.stringify([
@@ -438,9 +475,12 @@ export function createTogglyClient(
     }
 
     const local = isLocalEvaluation()
+    const useVariants = !local && config.enableVariants === true
     const endpoint = local
       ? API_ENDPOINTS.definitionsSigned
-      : API_ENDPOINTS.evaluatedSigned
+      : useVariants
+        ? API_ENDPOINTS.evaluatedVariantsSigned
+        : API_ENDPOINTS.evaluatedSigned
     // Frontend base queries are independent of the definitions pathname.
     // Keep trusted endpoint construction on its existing compatibility path.
     const fetchUrl = frontend ? new URL(config.baseUri) : new URL(
@@ -449,7 +489,8 @@ export function createTogglyClient(
     if (frontend) {
       // Only the current context owns the token; a configured URL cannot revive it.
       fetchUrl.searchParams.delete('i')
-      fetchUrl.pathname = `${fetchUrl.pathname.replace(/\/$/, '')}/${local ? 'definitions-signed' : 'evaluated-signed'}/${config.appKey}/${config.environment}`
+      const path = local ? 'definitions-signed' : useVariants ? 'evaluated-variants-signed' : 'evaluated-signed'
+      fetchUrl.pathname = `${fetchUrl.pathname.replace(/\/$/, '')}/${path}/${config.appKey}/${config.environment}`
     }
     if (frontend && config.instanceId?.trim()) {
       for (const key of [...fetchUrl.searchParams.keys()]) {
@@ -465,7 +506,7 @@ export function createTogglyClient(
           groups: config.groups,
           claims: config.claims,
         },
-        'evaluated',
+        useVariants ? 'variants' : 'evaluated',
       )
     }
     const pin = pendingDefinitionsPin
@@ -519,9 +560,19 @@ export function createTogglyClient(
 
       assertCurrent(expected)
       if (local) {
+        state.variants = null
         applyLocalDefinitions(parseDefinitionsPayload(parsed))
+      } else if (useVariants) {
+        state.definitions = new Map()
+        const variantDefs = parseVariantDefsPayload(parsed)
+        state.variants = variantDefs
+        state.features = {
+          ...config.featureDefaults,
+          ...variantDefsToFlags(variantDefs),
+        }
       } else {
         state.definitions = new Map()
+        state.variants = null
         state.features = {
           ...config.featureDefaults,
           ...parseRemoteEvaluatedPayload(parsed, {
@@ -1018,6 +1069,17 @@ export function createTogglyClient(
       registerEntityContext(kind, mapper)
     },
 
+    getVariant(featureKey: string): VariantResult | null {
+      if (destroyed) {
+        return null
+      }
+      return resolveVariant(featureKey)
+    },
+
+    getVariantValue(featureKey: string): unknown | null {
+      return client.getVariant(featureKey)?.configurationValue ?? null
+    },
+
     async setIdentity(identity: string): Promise<void> {
       if (frontend) return client.setContext({identity})
       if (destroyed) {
@@ -1108,6 +1170,9 @@ export function createTogglyClient(
       }
       // Current state only: never promote another identity's snapshot to defaults.
       state.features = { ...features }
+      // Boolean-only hydration cannot carry variant assignment; clear any prior
+      // variant data so getVariant does not return a mismatched stale entry.
+      state.variants = null
       hasHydratedEvaluatedSnapshot = true
       if (frontend) {cachedDefinitionsRevision = null; saveSnapshot()}
       notifyFeaturesRefresh()

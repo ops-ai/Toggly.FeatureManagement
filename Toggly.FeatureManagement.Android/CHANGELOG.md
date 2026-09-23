@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.8.0
+
+2026-09-22
+
+### Added
+- `enableVariants` config option: when set, definitions are fetched from
+  `evaluated-variants-signed` instead of `evaluated-signed` and each feature's
+  signed variant assignment (name and optional configuration value) is
+  parsed and cached alongside the existing boolean flags.
+- `getVariant(featureKey)` and `getVariantValue(featureKey)` on Core and the
+  global facade, plus a `currentVariants` snapshot, returning the assigned
+  variant name and configuration value or `null` when the feature is
+  disabled, unassigned, or variants are not enabled. Matches the Flutter and
+  JS SDK contract.
+
 ## 1.7.1
 
 2026-09-21

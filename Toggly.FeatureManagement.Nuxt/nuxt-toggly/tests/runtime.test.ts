@@ -35,6 +35,14 @@ describe('startup context forwarding', () => {
     expect(mocks.server).toHaveBeenCalledTimes(1)
   })
 
+  it('forwards enableVariants to both the client and server owners', async () => {
+    Object.assign(mocks.config, { enableVariants: true })
+    await (clientPlugin as any)(app())
+    await (serverPlugin as any)({ hooks: { hook: vi.fn() } })
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ enableVariants: true }))
+    expect(mocks.server).toHaveBeenCalledWith(expect.objectContaining({ enableVariants: true }))
+  })
+
   it('forwards browser telemetry configuration only to the client owner', async () => {
     Object.assign(mocks.config, {
       enableTelemetry: false,
@@ -55,6 +63,24 @@ describe('startup context forwarding', () => {
     expect(mocks.server).not.toHaveBeenCalledWith(expect.objectContaining({
       metricsBaseUrl: 'https://collector.example',
     }))
+  })
+
+  it.each([
+    { serverEnableUsageTracking: false, serverEnableMetrics: false },
+    { serverEnableUsageTracking: true, serverEnableMetrics: false },
+    { serverEnableUsageTracking: false, serverEnableMetrics: true },
+    { serverEnableUsageTracking: undefined, serverEnableMetrics: undefined },
+  ])('keeps Nitro policy independent of browser categories: %j', async policy => {
+    Object.assign(mocks.config, { enableUsageTracking: true, enableMetrics: true, ...policy })
+    await (clientPlugin as any)(app())
+    await (serverPlugin as any)({ hooks: { hook: vi.fn() } })
+    expect(mocks.server.mock.calls[0][0]).toMatchObject({
+      enableUsageTracking: policy.serverEnableUsageTracking,
+      enableMetrics: policy.serverEnableMetrics,
+    })
+    expect(mocks.create.mock.calls[0][0]).toMatchObject({ enableUsageTracking: true, enableMetrics: true })
+    expect(mocks.create.mock.calls[0][0]).not.toHaveProperty('serverEnableUsageTracking')
+    expect(mocks.create.mock.calls[0][0]).not.toHaveProperty('serverEnableMetrics')
   })
 
   it('forwards minted context and withholds an unrelated SSR identity snapshot', async () => {
