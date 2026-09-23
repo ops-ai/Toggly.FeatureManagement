@@ -124,8 +124,8 @@ jobs:
             /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
             /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
             /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
-            /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**" \
-            /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**" \
+            /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**" \
+            /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**" \
             /d:sonar.test.inclusions="**/*Tests*.cs,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,Toggly.FeatureManagement.Blazor/tests/**"
 
       - name: Build solution
@@ -298,8 +298,8 @@ jobs:
               /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
               /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
               /d:sonar.dependencyCheck.reportPath="${GITHUB_WORKSPACE}/dependency-check-reports/dependency-check-report.xml" \
-              /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**" \
-              /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**" \
+              /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**" \
+              /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**" \
               /d:sonar.test.inclusions="**/*Tests*.cs,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,Toggly.FeatureManagement.Blazor/tests/**"; then
               break
             fi

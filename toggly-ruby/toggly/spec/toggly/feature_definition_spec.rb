@@ -65,6 +65,44 @@ RSpec.describe Toggly::FeatureDefinition do
       expect(definition.feature_key).to eq("my-feature")
       expect(definition.feature_type).to eq("Ops")
     end
+
+    it "parses variants and allocation from the catalog wire" do
+      hash = {
+        "featureKey" => "checkout-flow",
+        "enabled" => true,
+        "variants" => [
+          { "name" => "A", "configurationValue" => { "cta" => "Buy" }, "statusOverride" => "None" },
+          { "name" => "Off", "statusOverride" => "Disabled" }
+        ],
+        "allocation" => {
+          "defaultWhenEnabled" => "A",
+          "defaultWhenDisabled" => "Off",
+          "seed" => "campaign-1",
+          "user" => [{ "variant" => "A", "users" => ["alice"] }],
+          "group" => [{ "variant" => "Off", "groups" => ["beta"] }],
+          "percentile" => [{ "variant" => "A", "from" => 0, "to" => 100 }]
+        }
+      }
+
+      definition = described_class.from_hash(hash)
+
+      expect(definition.variants.map(&:name)).to eq(%w[A Off])
+      expect(definition.variants.first.configuration_value).to eq({ "cta" => "Buy" })
+      expect(definition.variants.last.status_override).to eq("Disabled")
+      expect(definition.allocation.default_when_enabled).to eq("A")
+      expect(definition.allocation.default_when_disabled).to eq("Off")
+      expect(definition.allocation.seed).to eq("campaign-1")
+      expect(definition.allocation.user).to eq([{ variant: "A", users: ["alice"] }])
+      expect(definition.allocation.group).to eq([{ variant: "Off", groups: ["beta"] }])
+      expect(definition.allocation.percentile).to eq([{ variant: "A", from: 0.0, to: 100.0 }])
+    end
+
+    it "defaults variants to [] and allocation to nil when absent" do
+      definition = described_class.from_hash("featureKey" => "no-variants", "enabled" => true)
+
+      expect(definition.variants).to eq([])
+      expect(definition.allocation).to be_nil
+    end
   end
 
   describe "#to_h" do
