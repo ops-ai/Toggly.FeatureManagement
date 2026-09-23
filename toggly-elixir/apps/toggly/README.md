@@ -6,11 +6,11 @@ A feature flag is a named decision in your application. The environment's defini
 
 ## Install and supervise
 
-Requires Elixir **1.20+** and Erlang/OTP **29+**. Verified on Elixir 1.20.4 / OTP 29. Use `toggly` **0.2.0+**; the compatible `toggly_phoenix` and `toggly_live_view` adapters start at **0.1.0**.
+Requires Elixir **1.20+** and Erlang/OTP **29+**. Verified on Elixir 1.20.4 / OTP 29. Use `toggly` **0.3.0+** for feature variants; the compatible `toggly_phoenix` and `toggly_live_view` adapters start at **0.1.0**.
 
 ```elixir
 # mix.exs
-{:toggly, "~> 0.2.0"}
+{:toggly, "~> 0.3.0"}
 
 # Application.start/2 child list; create one named client per application/environment.
 {Toggly,
@@ -35,7 +35,28 @@ Toggly.enabled?(MyApp.Flags, ["new-dashboard", "api-v2"], context, requirement: 
 Toggly.enabled?(MyApp.Flags, "maintenance", context, negate: true, default: false)
 ```
 
-Multiple keys default to `:all`; an empty key list is false before negation. Missing keys use the configured defaults, then the call's `default:` (false). These are boolean branches; the SDK does not assign multivariate experiments or expose a variant API. Do not infer an experiment assignment from a boolean result.
+Multiple keys default to `:all`; an empty key list is false before negation. Missing keys use the configured defaults, then the call's `default:` (false).
+
+## Feature variants
+
+`Toggly.get_variant/4` assigns a variant **locally from the same cached definitions catalog** `enabled?/4` reads (the definition's `"variants"` + `"allocation"` maps) — no separate network call, no `evaluated-variants-signed` dual-rail. Assignment matches `Microsoft.FeatureManagement` (`IVariantFeatureManager`) bit-for-bit for the same definition, enabled state, and targeting context: user → group → percentile → `DefaultWhenEnabled`/`DefaultWhenDisabled`, verified against the shared `variant-allocator-corpus` gold corpus.
+
+```elixir
+assignment = Toggly.get_variant(MyApp.Flags, "checkout-flow", context)
+# %Toggly.Variant.Assignment{
+#   variant_name: "B",
+#   configuration_value: %{"color" => "green"},
+#   enabled: true,
+#   assignment_reason: "DefaultWhenEnabled"
+# }
+
+Toggly.get_variant_value(MyApp.Flags, "checkout-flow", context)
+# %{"color" => "green"}
+```
+
+`assignment.enabled` is the feature's effective enabled state after applying the assigned variant's `statusOverride` (`"Enabled"` / `"Disabled"`), if any — it can differ from a plain `enabled?/4` call. `assignment_reason` is one of `"None"`, `"User"`, `"Group"`, `"Percentile"`, `"DefaultWhenEnabled"`, `"DefaultWhenDisabled"`.
+
+User/group matching is case-sensitive by default; pass `ignore_case: true` to mirror `Microsoft.FeatureManagement`'s `TargetingEvaluationOptions.IgnoreCase`. Pass `track: false` to skip the usage check for that call, same as `enabled?/4`.
 
 ## Explicit context and filters
 
@@ -118,7 +139,7 @@ Each subscription is monitored; process death removes it. Definitions are immuta
 
 Evaluations emit `[:toggly, :evaluation, :start | :stop | :exception]` via `:telemetry.span/3`. Stop metadata contains the boolean result. Metadata includes client and feature keys, never identity or claims. Set `track: false` for an evaluation that should not count toward usage.
 
-Checks and explicit `Toggly.record_usage(client, key, enabled)` / `record_view` calls batch `variantStats` counters (`enabled` / `disabled`) to **POST /api/usage/stats**. Definition-refresh outcomes add `definitionCacheHits` / `definitionCacheMisses` when greater than zero; cache counters alone still flush. Batches retry after errors and never include identity/claims or unique-user hashes. Unknown keys are excluded to bound cardinality. `Toggly.flush/1` explicitly uploads a batch; flush before graceful shutdown if final counts matter. Counters are memory-only; a process crash can lose an unsent batch.
+Checks (including `get_variant/4`), and explicit `Toggly.record_usage(client, key, enabled, variant \\ nil)` / `record_view` calls, batch `variantStats` counters to **POST /api/usage/stats**. The counter key is the assigned variant name when known (e.g. from `get_variant/4`, or passed explicitly to `record_usage`/`record_view`), otherwise the boolean `enabled` / `disabled` label. Definition-refresh outcomes add `definitionCacheHits` / `definitionCacheMisses` when greater than zero; cache counters alone still flush. Batches retry after errors and never include identity/claims or unique-user hashes. Unknown keys are excluded to bound cardinality. `Toggly.flush/1` explicitly uploads a batch; flush before graceful shutdown if final counts matter. Counters are memory-only; a process crash can lose an unsent batch.
 
 `Toggly.metric(client, :counter | :measurement | :observation, key, value, metadata)` emits `[:toggly, :metric, kind]`. Attach your own Telemetry exporter. This version does **not** upload custom metrics through Toggly's gRPC metric service. Use metadata without personal data. Ecto/cache-specific adapters and automatic gRPC metrics export are separate integration extensions; built-in ETS reads/file snapshots need neither Ecto nor a cache service.
 

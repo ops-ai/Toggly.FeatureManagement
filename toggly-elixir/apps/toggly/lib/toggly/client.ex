@@ -75,8 +75,9 @@ defmodule Toggly.Client do
   end
 
   @impl true
-  def handle_cast({:usage, key, enabled, kind}, state) do
-    bucket = {key, if(enabled, do: "enabled", else: "disabled"), kind}
+  def handle_cast({:usage, key, enabled, kind, variant}, state) do
+    label = variant || if(enabled, do: "enabled", else: "disabled")
+    bucket = {key, label, kind}
 
     # Bound cardinality to configured features/defaults; never retain identity.
     usage =
@@ -210,12 +211,19 @@ defmodule Toggly.Client do
     end
   end
 
-  defp valid_definition?(%{"featureKey" => key, "filters" => filters})
-       when is_binary(key) and key != "" and is_list(filters) do
-    Enum.all?(filters, fn filter ->
-      is_map(filter) and is_binary(filter["name"]) and
-        (is_nil(filter["parameters"]) or is_map(filter["parameters"]))
-    end)
+  defp valid_definition?(%{"featureKey" => key} = definition)
+       when is_binary(key) and key != "" do
+    filters =
+      case Map.get(definition, "filters") do
+        nil -> []
+        other -> other
+      end
+
+    is_list(filters) and
+      Enum.all?(filters, fn filter ->
+        is_map(filter) and is_binary(filter["name"]) and
+          (is_nil(filter["parameters"]) or is_map(filter["parameters"]))
+      end)
   end
 
   defp valid_definition?(_), do: false
@@ -223,14 +231,19 @@ defmodule Toggly.Client do
   defp normalize_parameters(definition) do
     # The service may serialize absent optional parameters as null. Normalize the
     # verified evaluation model only; persistence retains the original signed body.
-    Map.update!(definition, "filters", fn filters ->
+    # Absent or null `filters` is treated as an empty list (same as the Rust SDK).
+    filters = Map.get(definition, "filters") || []
+
+    Map.put(
+      definition,
+      "filters",
       Enum.map(filters, fn filter ->
         Map.update(filter, "parameters", %{}, fn
           nil -> %{}
           parameters -> parameters
         end)
       end)
-    end)
+    )
   end
 
   defp publish(state) do

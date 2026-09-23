@@ -21,6 +21,7 @@ High-performance Rust SDK for [Toggly](https://toggly.io) feature flags and expe
 - **In-memory caching**: Built-in caching with configurable TTL
 - **WebAssembly support**: Works in browser environments
 - **Entity ContextProperty filters**: Evaluate `{kind, key, attributes}` against `ContextProperty` filters (fail closed)
+- **Feature variants**: Catalog-local variant assignment (`get_variant` / `get_variant_value`), matching `Microsoft.FeatureManagement` bit-for-bit — no dual-rail network call
 - **Optional Toggly telemetry**: Cargo feature `telemetry` for batched `Usage.SendStats` / `Metrics.SendMetrics` (distinct from the Prometheus `metrics` feature)
 
 ## Crates
@@ -136,6 +137,48 @@ async fn check_access(client: &TogglyClient) -> bool {
         .unwrap_or(false)
 }
 ```
+
+### Feature Variants
+
+Variants are assigned **locally from the cached definitions catalog**
+(`variants` + `allocation`), matching `Microsoft.FeatureManagement`
+(`IVariantFeatureManager`) bit-for-bit for the same definition, enabled
+state, and targeting context. There is no dual-rail
+`evaluated-variants-signed` fetch — a single definitions rail drives both
+`is_enabled` and variant assignment.
+
+```rust
+use toggly::{TogglyClient, EvalContext};
+
+async fn checkout_variant(client: &TogglyClient, user_id: &str) {
+    let context = EvalContext::with_identity(user_id);
+    let assignment = client
+        .get_variant("checkout-flow", context)
+        .await
+        .unwrap_or_default();
+
+    match assignment.variant_name.as_deref() {
+        Some("B") => println!("Treatment: {:?}", assignment.configuration_value),
+        _ => println!("Control (or no variant assigned)"),
+    }
+
+    // Or just the configuration payload:
+    let value = client
+        .get_variant_value("checkout-flow", EvalContext::with_identity(user_id))
+        .await
+        .unwrap_or(None);
+    println!("{value:?}");
+}
+```
+
+`VariantAssignment` also carries `enabled` (the feature's effective enabled
+state after applying the assigned variant's `StatusOverride`, if any) and
+`assignment_reason` (`None` | `User` | `Group` | `Percentile` |
+`DefaultWhenEnabled` | `DefaultWhenDisabled`).
+
+User/group matching is case-sensitive by default; enable
+`TogglyClientBuilder::variant_ignore_case(true)` to mirror
+`Microsoft.FeatureManagement`'s `TargetingEvaluationOptions.IgnoreCase`.
 
 ## Framework Integrations
 

@@ -1108,6 +1108,8 @@ mod tests {
                 requirement_type: Default::default(),
                 context_kind: None,
                 context_requirement_type: None,
+                variants: vec![],
+                allocation: None,
             },
         );
         *provider.etag.write() = Some("rev1".into());

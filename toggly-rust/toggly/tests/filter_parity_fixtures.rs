@@ -125,6 +125,8 @@ fn to_definition(root: &FixtureRoot) -> FeatureDefinition {
         requirement_type,
         context_kind: None,
         context_requirement_type: None,
+        variants: vec![],
+        allocation: None,
     }
 }
 
