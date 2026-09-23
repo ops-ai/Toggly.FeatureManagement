@@ -25,6 +25,7 @@ python3 tool/collector.py --port 18765 --output /private/tmp/ops1388-packets.jso
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -n io.toggly.acceptance.telemetry/io.toggly.acceptance.AcceptanceActivity \
   --es endpoint http://10.0.2.2:18765 --ez runProbe true
+adb shell input keyevent 4 # Back: dispose the activity and send one plain final packet
 python3 tool/assert_packets.py /private/tmp/ops1388-packets.jsonl
 ```
 

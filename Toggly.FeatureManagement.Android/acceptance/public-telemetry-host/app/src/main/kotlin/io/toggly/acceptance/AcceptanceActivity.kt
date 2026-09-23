@@ -120,6 +120,7 @@ class AcceptanceActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        service?.recordUsage("teardown")
         variantService?.dispose()
         service?.dispose()
         Log.i("TogglyAcceptance", "LIFECYCLE_DISPOSED")

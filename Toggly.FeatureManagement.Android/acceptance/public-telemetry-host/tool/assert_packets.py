@@ -25,7 +25,10 @@ def main():
     assert any(packet.get("f", {}).get("after-replacement", {}).get("enabled", [0, 0])[1] == 1
                for packet in minted), "post-replacement explicit usage was not delivered"
     assert all("preview-a" not in packet.get("f", {}).get("checkout", {}) for packet in minted)
-    print(f"PASS: {len(rows)} credential-free loopback packets, pre/post attribution and explicit usage")
+    assert any(row["encoding"] == "plain" and
+               row["packet"].get("f", {}).get("teardown", {}).get("enabled", [0, 0])[1] == 1
+               for row in rows), "plain final-disposal usage was not delivered"
+    print(f"PASS: {len(rows)} credential-free loopback packets, attribution and plain disposal")
 
 
 if __name__ == "__main__":
