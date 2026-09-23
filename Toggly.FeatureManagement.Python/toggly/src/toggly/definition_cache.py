@@ -240,7 +240,11 @@ def parse_definitions_payload(data: Any) -> list[FeatureDefinition]:
                     )
                 )
 
-        variants = [Variant.from_dict(v) for v in item.get("variants") or []]
+        variants = [
+            v
+            for v in (Variant.from_dict(x) for x in item.get("variants") or [])
+            if v is not None
+        ]
         allocation = Allocation.from_dict(item.get("allocation"))
 
         definitions.append(

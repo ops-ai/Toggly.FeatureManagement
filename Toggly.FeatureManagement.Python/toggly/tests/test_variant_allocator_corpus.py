@@ -36,7 +36,11 @@ def _feature_definition(feature: dict[str, Any]) -> FeatureDefinition:
         FeatureFilter(name=f["name"], parameters=f.get("parameters") or {})
         for f in feature.get("enabledFor") or []
     ]
-    variants = [Variant.from_dict(v) for v in feature.get("variants") or []]
+    variants = [
+        v
+        for v in (Variant.from_dict(x) for x in feature.get("variants") or [])
+        if v is not None
+    ]
     allocation = Allocation.from_dict(feature.get("allocation"))
     return FeatureDefinition(
         feature_key=feature["name"],

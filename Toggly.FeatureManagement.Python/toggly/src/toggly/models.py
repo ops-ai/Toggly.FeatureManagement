@@ -51,10 +51,17 @@ class Variant:
     """``"None"`` | ``"Enabled"`` | ``"Disabled"`` — overrides effective enabled state."""
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> Variant:
-        """Create a Variant from a dictionary (camelCase wire keys)."""
+    def from_dict(cls, data: dict[str, Any]) -> Variant | None:
+        """Create a Variant from a dictionary (camelCase wire keys).
+
+        Returns ``None`` when required fields are missing so a malformed
+        catalog row cannot crash ``client.init()``.
+        """
+        name = data.get("name")
+        if not name:
+            return None
         return cls(
-            name=data["name"],
+            name=str(name),
             configuration_value=data.get(
                 "configurationValue", data.get("configuration_value")
             ),
@@ -82,9 +89,12 @@ class UserAllocation:
     users: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> UserAllocation:
-        """Create from a dictionary."""
-        return cls(variant=data["variant"], users=list(data.get("users") or []))
+    def from_dict(cls, data: dict[str, Any]) -> UserAllocation | None:
+        """Create from a dictionary. Returns ``None`` when ``variant`` is missing."""
+        variant = data.get("variant")
+        if not variant:
+            return None
+        return cls(variant=str(variant), users=list(data.get("users") or []))
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to a dictionary for serialization."""
@@ -99,9 +109,12 @@ class GroupAllocation:
     groups: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> GroupAllocation:
-        """Create from a dictionary."""
-        return cls(variant=data["variant"], groups=list(data.get("groups") or []))
+    def from_dict(cls, data: dict[str, Any]) -> GroupAllocation | None:
+        """Create from a dictionary. Returns ``None`` when ``variant`` is missing."""
+        variant = data.get("variant")
+        if not variant:
+            return None
+        return cls(variant=str(variant), groups=list(data.get("groups") or []))
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to a dictionary for serialization."""
@@ -117,12 +130,22 @@ class PercentileAllocation:
     to: float = 100.0
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> PercentileAllocation:
-        """Create from a dictionary (``from`` is a reserved word on the wire)."""
+    def from_dict(cls, data: dict[str, Any]) -> PercentileAllocation | None:
+        """Create from a dictionary (``from`` is a reserved word on the wire).
+
+        Returns ``None`` when ``variant`` is missing. Uses explicit ``None``
+        checks for ``from``/``to`` so a boundary of ``0`` is preserved
+        (``or`` would wrongly treat ``0`` as missing).
+        """
+        variant = data.get("variant")
+        if not variant:
+            return None
+        from_raw = data.get("from", 0.0)
+        to_raw = data.get("to", 100.0)
         return cls(
-            variant=data["variant"],
-            from_=float(data.get("from", 0.0) or 0.0),
-            to=float(data.get("to", 100.0) or 100.0),
+            variant=str(variant),
+            from_=float(from_raw if from_raw is not None else 0.0),
+            to=float(to_raw if to_raw is not None else 100.0),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -168,10 +191,23 @@ class Allocation:
             default_when_disabled=data.get("defaultWhenDisabled")
             or data.get("default_when_disabled"),
             seed=data.get("seed"),
-            user=[UserAllocation.from_dict(u) for u in (data.get("user") or [])],
-            group=[GroupAllocation.from_dict(g) for g in (data.get("group") or [])],
+            user=[
+                u
+                for u in (UserAllocation.from_dict(x) for x in (data.get("user") or []))
+                if u is not None
+            ],
+            group=[
+                g
+                for g in (GroupAllocation.from_dict(x) for x in (data.get("group") or []))
+                if g is not None
+            ],
             percentile=[
-                PercentileAllocation.from_dict(p) for p in (data.get("percentile") or [])
+                p
+                for p in (
+                    PercentileAllocation.from_dict(x)
+                    for x in (data.get("percentile") or [])
+                )
+                if p is not None
             ],
         )
 
@@ -258,7 +294,11 @@ class FeatureDefinition:
             FeatureFilter(name=f["name"], parameters=f.get("parameters", {}))
             for f in data.get("filters", [])
         ]
-        variants = [Variant.from_dict(v) for v in (data.get("variants") or [])]
+        variants = [
+            v
+            for v in (Variant.from_dict(x) for x in (data.get("variants") or []))
+            if v is not None
+        ]
         allocation = Allocation.from_dict(data.get("allocation"))
         return cls(
             feature_key=data["feature_key"],

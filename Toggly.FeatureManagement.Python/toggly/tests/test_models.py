@@ -194,6 +194,7 @@ class TestVariant:
         variant = Variant.from_dict(
             {"name": "A", "configurationValue": {"x": 1}, "statusOverride": "Enabled"}
         )
+        assert variant is not None
         assert variant.name == "A"
         assert variant.configuration_value == {"x": 1}
         assert variant.status_override == "Enabled"
@@ -201,6 +202,7 @@ class TestVariant:
     def test_variant_from_dict_defaults_status_override(self) -> None:
         """Test missing statusOverride defaults to None."""
         variant = Variant.from_dict({"name": "A"})
+        assert variant is not None
         assert variant.status_override == "None"
 
 
@@ -233,6 +235,32 @@ class TestAllocation:
         assert allocation.group[0].groups == ["g1"]
         assert allocation.percentile[0].from_ == 0
         assert allocation.percentile[0].to == 50
+
+    def test_percentile_from_dict_preserves_zero_to_boundary(self) -> None:
+        """``to: 0`` must not be coerced to 100 via truthiness."""
+        alloc = PercentileAllocation.from_dict({"variant": "A", "from": 0, "to": 0})
+        assert alloc is not None
+        assert alloc.from_ == 0.0
+        assert alloc.to == 0.0
+
+    def test_variant_from_dict_skips_missing_name(self) -> None:
+        """Malformed variant rows are skipped instead of raising KeyError."""
+        assert Variant.from_dict({}) is None
+        assert Variant.from_dict({"configurationValue": 1}) is None
+
+    def test_allocation_from_dict_skips_entries_missing_variant(self) -> None:
+        """Allocation rows without ``variant`` are skipped."""
+        allocation = Allocation.from_dict(
+            {
+                "user": [{"users": ["alice"]}],
+                "group": [{"groups": ["beta"]}],
+                "percentile": [{"from": 0, "to": 50}],
+            }
+        )
+        assert allocation is not None
+        assert allocation.user == []
+        assert allocation.group == []
+        assert allocation.percentile == []
 
     def test_allocation_from_dict_missing_lists_default_empty(self) -> None:
         """Test missing user/group/percentile default to empty lists."""
