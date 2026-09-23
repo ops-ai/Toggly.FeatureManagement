@@ -2,6 +2,17 @@
 
 All notable changes to the Toggly iOS SDK are documented in this file.
 
+## 1.6.0
+
+2026-09-22
+
+### Added
+- `TogglyConfig.enableVariants` opts into server-evaluated feature variants. When enabled, `TogglyService` fetches definitions from the variants endpoint instead of the boolean endpoint and exposes `getVariant(_:recordCheck:)` and `getVariantValue(_:)`, returning a `VariantResult` with the assigned variant name and an untyped `configurationValue`.
+- `FeatureVariant` SwiftUI property wrapper for reactive access to a variant assignment, mirroring `FeatureFlag`.
+
+### Changed
+- Cached definitions are now segregated by evaluation mode (boolean vs. variants) so switching `enableVariants` on an existing installation cannot mix incompatible cache payloads.
+
 ## 1.5.2
 
 2026-09-21

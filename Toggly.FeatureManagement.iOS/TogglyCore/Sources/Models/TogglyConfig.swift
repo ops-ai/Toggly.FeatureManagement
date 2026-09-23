@@ -38,6 +38,11 @@ public struct TogglyConfig: Sendable {
     /// Whether signatures should be verified on signed responses.
     public let verifySignatures: Bool
 
+    /// Opt into server-evaluated feature variants. When `true`, definitions are
+    /// fetched from `evaluated-variants-signed` instead of `evaluated-signed`, and
+    /// `getVariant` / `getVariantValue` become available. Defaults to `false`.
+    public let enableVariants: Bool
+
     /// Reject signed envelopes older than this many seconds (Unix timestamp age).
     /// `nil` or `<= 0` disables freshness enforcement.
     public let maxSignatureAgeSeconds: Int64?
@@ -80,6 +85,7 @@ public struct TogglyConfig: Sendable {
     ///   - refreshInterval: Interval between refreshes in seconds. Defaults to 180.
     ///   - useSignedDefinitions: Whether to use signed definitions.
     ///   - verifySignatures: Whether signatures should be verified.
+    ///   - enableVariants: Whether to opt into server-evaluated feature variants.
     ///   - connectTimeout: Connection timeout in seconds. Defaults to 10.
     ///   - requestTimeout: Request timeout in seconds. Defaults to 30.
     ///   - storage: Custom storage implementation.
@@ -97,6 +103,7 @@ public struct TogglyConfig: Sendable {
         refreshInterval: TimeInterval = 180,
         useSignedDefinitions: Bool = false,
         verifySignatures: Bool = false,
+        enableVariants: Bool = false,
         connectTimeout: TimeInterval = 10,
         requestTimeout: TimeInterval = 30,
         storage: TogglyStorage? = nil,
@@ -122,6 +129,7 @@ public struct TogglyConfig: Sendable {
         self.refreshInterval = refreshInterval
         self.useSignedDefinitions = useSignedDefinitions
         self.verifySignatures = verifySignatures
+        self.enableVariants = enableVariants
         self.connectTimeout = connectTimeout
         self.requestTimeout = requestTimeout
         self.storage = storage
