@@ -16,7 +16,15 @@ android {
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-    buildTypes { release { isMinifyEnabled = false } }
+    buildTypes {
+        debug {
+            enableAndroidTestCoverage = true
+        }
+        release {
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -26,24 +34,24 @@ android {
 }
 
 dependencies {
-    implementation("io.toggly:toggly-android-core:1.8.0")
-    implementation("io.toggly:toggly-compose:1.8.0")
-    implementation("io.toggly:toggly-views:1.8.0")
-    implementation("io.toggly:toggly-room:1.8.0")
-    implementation("io.toggly:toggly-datastore:1.8.0")
+    implementation(libs.toggly.core)
+    implementation(libs.toggly.compose)
+    implementation(libs.toggly.views)
+    implementation(libs.toggly.room)
+    implementation(libs.toggly.datastore)
 
-    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.material3)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.runtime)
+    implementation(libs.androidx.appcompat)
 
-    androidTestImplementation("androidx.test.ext:junit:1.3.0")
-    androidTestImplementation("androidx.test:runner:1.7.0")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
-    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
-    androidTestImplementation(platform("androidx.compose:compose-bom:2024.12.01"))
-    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-    debugImplementation(platform("androidx.compose:compose-bom:2024.12.01"))
-    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.espresso)
+    androidTestImplementation(libs.mockwebserver)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(platform(libs.androidx.compose.bom))
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

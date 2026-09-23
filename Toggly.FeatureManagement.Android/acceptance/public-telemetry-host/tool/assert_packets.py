@@ -1,14 +1,11 @@
 """Validate the full signed app's loopback telemetry capture, separately from its API marker."""
-import argparse
 import json
-from pathlib import Path
+import math
+import sys
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("capture", type=Path)
-    args = parser.parse_args()
-    rows = [json.loads(line) for line in args.capture.read_text().splitlines()]
+    rows = [json.loads(line) for line in sys.stdin if line.strip()]
     assert len(rows) >= 2, f"expected at least two packets, got {len(rows)}"
     for row in rows:
         assert row["path"] == "/api/frontend/telemetry"
@@ -19,7 +16,7 @@ def main():
     first = rows[0]["packet"]
     assert first.get("u") == "native-a" and "i" not in first
     assert first["f"]["checkout"]["preview-a"][1:] == [1, 1]
-    assert first["m"]["orders"] == 2 and first["m"]["queue"] == 3.5
+    assert first["m"]["orders"] == 2 and math.isclose(first["m"]["queue"], 3.5)
     minted = [row["packet"] for row in rows[1:] if row["packet"].get("i") == "local-minted-fixture"]
     assert minted and all("u" not in packet for packet in minted)
     assert any(packet.get("f", {}).get("after-replacement", {}).get("enabled", [0, 0])[1] == 1

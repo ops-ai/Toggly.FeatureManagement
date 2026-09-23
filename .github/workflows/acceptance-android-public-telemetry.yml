@@ -31,7 +31,7 @@ jobs:
           arch: x86_64
           disable-animations: true
           working-directory: Toggly.FeatureManagement.Android/acceptance/public-telemetry-host
-          script: ./gradlew :app:connectedDebugAndroidTest --no-daemon
+          script: ./gradlew :app:createDebugAndroidTestCoverageReport --no-daemon
       - name: Upload native test results
         if: always()
         uses: actions/upload-artifact@v7

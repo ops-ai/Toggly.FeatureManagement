@@ -54,7 +54,9 @@ def main():
     parser.add_argument("--ambiguous-first", action="store_true",
                         help="Read and record the first POST, then close without an HTTP response")
     args = parser.parse_args()
-    with tempfile.TemporaryDirectory(prefix="ops1388-signing-") as directory:
+    # Keep the ephemeral signing key under this checkout, away from a shared
+    # system temporary directory.
+    with tempfile.TemporaryDirectory(prefix="ops1388-signing-", dir=Path(__file__).resolve().parent) as directory:
         key_path = Path(directory) / "fixture.pem"
         subprocess.run(["openssl", "ecparam", "-name", "prime256v1", "-genkey",
                         "-noout", "-out", str(key_path)], check=True, capture_output=True)
@@ -65,6 +67,8 @@ def main():
         if len(point) != 65 or point[0] != 4:
             raise ValueError("Expected uncompressed P-256 point")
         x, y = point[1:33], point[33:65]
+        # The published Android verifier defines kid as SHA-1 of the public
+        # coordinates. This is an identifier, not a signature or trust check.
         kid = hashlib.sha1(x + y).hexdigest().upper() + "ES256"
         b64url = lambda raw: base64.urlsafe_b64encode(raw).decode().rstrip("=")
         jwks = compact({"keys": [{"kty": "EC", "use": "sig", "kid": kid,

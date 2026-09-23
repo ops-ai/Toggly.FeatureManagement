@@ -122,6 +122,27 @@ jobs:
             ./gradlew test
           fi
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Test the public acceptance collector with coverage
+        working-directory: ${{ env.SDK_ROOT }}/acceptance/public-telemetry-host
+        run: |
+          python -m pip install coverage==7.10.7
+          python -m coverage run --source=tool -m unittest discover -s tool -p 'test_*.py'
+          python -m coverage report --omit='tool/test_*.py' --fail-under=80
+          python -m coverage xml --omit='tool/test_*.py' -o coverage.xml
+
+      - name: Measure public acceptance Activity coverage on Android API 35
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          disable-animations: true
+          working-directory: Toggly.FeatureManagement.Android/acceptance/public-telemetry-host
+          script: ./gradlew :app:createDebugAndroidTestCoverageReport --no-daemon
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:
@@ -136,7 +157,10 @@ jobs:
         if: always()
         with:
           name: android-coverage
-          path: ${{ env.SDK_ROOT }}/**/build/reports/kover/report.xml
+          path: |
+            ${{ env.SDK_ROOT }}/**/build/reports/kover/report.xml
+            ${{ env.SDK_ROOT }}/acceptance/public-telemetry-host/app/build/reports/coverage/androidTest/debug/connected/report.xml
+            ${{ env.SDK_ROOT }}/acceptance/public-telemetry-host/coverage.xml
           retention-days: 7
           if-no-files-found: ignore
 
@@ -302,8 +326,9 @@ jobs:
             -Dsonar.projectName="Toggly SDKs - Android"
             -Dsonar.sources=${{ env.SDK_ROOT }}
             -Dsonar.exclusions=**/build/**,**/test/**,**/androidTest/**,**/*.bak
-            -Dsonar.test.inclusions=**/src/test/**,**/src/androidTest/**
-            -Dsonar.coverage.jacoco.xmlReportPaths=coverage-artifacts/**/build/reports/kover/report.xml
+            -Dsonar.test.inclusions=**/src/test/**,**/src/androidTest/**,**/tool/test_*.py
+            -Dsonar.coverage.jacoco.xmlReportPaths=coverage-artifacts/**/build/reports/kover/report.xml,coverage-artifacts/**/build/reports/coverage/androidTest/debug/connected/report.xml
+            -Dsonar.python.coverage.reportPaths=coverage-artifacts/**/coverage.xml
         continue-on-error: true
 
       - name: SonarQube Server Scan
@@ -317,8 +342,9 @@ jobs:
             -Dsonar.projectName="Toggly SDKs - Android"
             -Dsonar.sources=${{ env.SDK_ROOT }}
             -Dsonar.exclusions=**/build/**,**/test/**,**/androidTest/**,**/*.bak
-            -Dsonar.test.inclusions=**/src/test/**,**/src/androidTest/**
-            -Dsonar.coverage.jacoco.xmlReportPaths=coverage-artifacts/**/build/reports/kover/report.xml
+            -Dsonar.test.inclusions=**/src/test/**,**/src/androidTest/**,**/tool/test_*.py
+            -Dsonar.coverage.jacoco.xmlReportPaths=coverage-artifacts/**/build/reports/kover/report.xml,coverage-artifacts/**/build/reports/coverage/androidTest/debug/connected/report.xml
+            -Dsonar.python.coverage.reportPaths=coverage-artifacts/**/coverage.xml
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
 
