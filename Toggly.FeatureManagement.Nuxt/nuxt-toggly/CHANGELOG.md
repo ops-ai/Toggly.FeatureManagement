@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.0 — 2026-09-22
+
+### Added
+- Configure Nitro usage tracking and metrics independently with `serverEnableUsageTracking` and `serverEnableMetrics`. Omitted values preserve the server SDK defaults, while explicit `false` disables the selected server category without suppressing browser telemetry.
+
 ## 1.3.0 — 2026-09-18
 
 ### Added

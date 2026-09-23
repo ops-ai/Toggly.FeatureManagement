@@ -17,6 +17,18 @@ export interface ModuleOptions extends TogglyConfig {
   ssr?: boolean
 
   /**
+   * Enable trusted Nitro feature usage tracking independently of browser categories.
+   * Omit to retain the server SDK default (enabled when an app key is configured).
+   */
+  serverEnableUsageTracking?: boolean
+
+  /**
+   * Enable trusted Nitro metrics independently of browser categories.
+   * Omit to retain the server SDK default (enabled when an app key is configured).
+   */
+  serverEnableMetrics?: boolean
+
+  /**
    * Cache feature definitions in server storage
    * @default true
    */
