@@ -213,7 +213,11 @@ defmodule Toggly.Client do
 
   defp valid_definition?(%{"featureKey" => key} = definition)
        when is_binary(key) and key != "" do
-    filters = Map.get(definition, "filters") || []
+    filters =
+      case Map.get(definition, "filters") do
+        nil -> []
+        other -> other
+      end
 
     is_list(filters) and
       Enum.all?(filters, fn filter ->
