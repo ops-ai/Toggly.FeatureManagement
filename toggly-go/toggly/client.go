@@ -118,6 +118,16 @@ func (c *Client) GetVariant(ctx context.Context, featureKey string, evalCtx Cont
 		return nil, err
 	}
 
+	// Match IsEnabled: secure features require AuthorizationService approval
+	// before variant assignment treats the flag as enabled.
+	if baseEnabled && c.cfg.AuthorizationService != nil && c.provider.isSecure(featureKey) {
+		allowed, err := c.cfg.AuthorizationService.IsAllowed(ctx, featureKey, evalCtx)
+		if err != nil {
+			return nil, err
+		}
+		baseEnabled = allowed
+	}
+
 	assignment := variant.Assign(def, baseEnabled, variant.TargetingContext{
 		UserID: evalCtx.Identity,
 		Groups: evalCtx.Groups,
