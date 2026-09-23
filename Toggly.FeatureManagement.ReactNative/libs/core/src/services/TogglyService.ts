@@ -788,7 +788,10 @@ export class TogglyService {
     const credentials = base.username || base.password
       ? `${base.username}${base.password ? `:${base.password}` : ''}@`
       : '';
-    return new URL(`${base.protocol}//${credentials}${base.host}${base.pathname.replace(/\/+$/, '')}/${path}${base.search}${base.hash}`);
+    // A pathname setter treats ? and # in app keys/environments as path data;
+    // in a complete URL they would instead begin a query or fragment.
+    const encodedPath = path.replace(/[?#]/g, character => character === '?' ? '%3F' : '%23');
+    return new URL(`${base.protocol}//${credentials}${base.host}${base.pathname.replace(/\/+$/, '')}/${encodedPath}${base.search}${base.hash}`);
   }
 
   private buildApiUrl(): string {
