@@ -75,8 +75,9 @@ defmodule Toggly.Client do
   end
 
   @impl true
-  def handle_cast({:usage, key, enabled, kind}, state) do
-    bucket = {key, if(enabled, do: "enabled", else: "disabled"), kind}
+  def handle_cast({:usage, key, enabled, kind, variant}, state) do
+    label = variant || if(enabled, do: "enabled", else: "disabled")
+    bucket = {key, label, kind}
 
     # Bound cardinality to configured features/defaults; never retain identity.
     usage =

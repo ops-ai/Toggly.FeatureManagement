@@ -2,7 +2,7 @@
 
 | Package | Purpose | Version |
 | --- | --- | --- |
-| [toggly](apps/toggly) | OTP client, ETS evaluation, signatures, snapshots, HTTP/WebSocket updates, usage and Telemetry | 0.1.0 |
+| [toggly](apps/toggly) | OTP client, ETS evaluation, catalog-local feature variants, signatures, snapshots, HTTP/WebSocket updates, usage and Telemetry | 0.3.0 |
 | [toggly_phoenix](apps/toggly_phoenix) | Request-local Plug context and route gates | 0.1.0 |
 | [toggly_live_view](apps/toggly_live_view) | Socket-local assigns, update/restart hooks and HEEx feature/fallback component | 0.1.0 |
 

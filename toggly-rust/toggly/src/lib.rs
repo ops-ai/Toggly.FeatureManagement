@@ -88,6 +88,24 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! ## Feature Variants
+//!
+//! Variants are assigned locally from the cached definitions catalog
+//! (`variants` + `allocation`), matching `Microsoft.FeatureManagement`
+//! (`IVariantFeatureManager`) bit-for-bit. No dual-rail network call.
+//!
+//! ```rust,no_run
+//! use toggly::{TogglyClient, EvalContext};
+//!
+//! # async fn example(client: TogglyClient) -> Result<(), toggly::Error> {
+//! let assignment = client
+//!     .get_variant("checkout-flow", EvalContext::with_identity("user-123"))
+//!     .await?;
+//! println!("variant = {:?}, enabled = {}", assignment.variant_name, assignment.enabled);
+//! # Ok(())
+//! # }
+//! ```
 
 #![warn(missing_docs)]
 #![warn(rustdoc::missing_crate_level_docs)]
@@ -119,6 +137,7 @@ pub use entity_context::{
     EntityContextPropertySchema, EntityContextSchemaRegistration,
 };
 pub use error::Error;
+pub use eval::{AssignmentReason, VariantAssignment};
 pub use telemetry::{
     hash_identity, MetricsFeatureOptions, TelemetryRuntime, TelemetryRuntimeConfig,
     TelemetrySenders,
@@ -140,7 +159,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Prelude module for convenient imports.
 pub mod prelude {
     pub use crate::{
-        Error, EvalContext, EvalContextBuilder, HttpRequestMapper, RequestContext, Requirement,
-        Result, TogglyClient, TogglyConfig, TogglyConfigBuilder,
+        AssignmentReason, Error, EvalContext, EvalContextBuilder, HttpRequestMapper,
+        RequestContext, Requirement, Result, TogglyClient, TogglyConfig, TogglyConfigBuilder,
+        VariantAssignment,
     };
 }

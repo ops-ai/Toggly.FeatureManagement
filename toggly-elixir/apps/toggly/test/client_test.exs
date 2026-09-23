@@ -84,4 +84,59 @@ defmodule Toggly.ClientTest do
     assert Toggly.enabled?(RemoteFlags, "live")
     Toggly.stop(sup2)
   end
+
+  test "get_variant/4 and get_variant_value/4 assign locally from the catalog" do
+    parent = self()
+
+    transport = fn req ->
+      send(parent, {:request, req})
+
+      {:ok,
+       %{
+         status: 200,
+         body:
+           Jason.encode!([
+             %{
+               "featureKey" => "checkout-flow",
+               "filters" => [%{"name" => "AlwaysOn"}],
+               "variants" => [
+                 %{"name" => "A", "configurationValue" => %{"color" => "blue"}},
+                 %{"name" => "B", "configurationValue" => %{"color" => "green"}}
+               ],
+               "allocation" => %{
+                 "defaultWhenEnabled" => "B",
+                 "user" => [%{"variant" => "A", "users" => ["alice"]}]
+               }
+             }
+           ]),
+         headers: [{"etag", "v1"}]
+       }}
+    end
+
+    {:ok, sup} =
+      Toggly.start_link(
+        name: VariantFlags,
+        app_key: "test",
+        signed: false,
+        transport: transport,
+        refresh_interval: 0,
+        websocket: false
+      )
+
+    assert :ok = Toggly.refresh(VariantFlags)
+
+    assignment = Toggly.get_variant(VariantFlags, "checkout-flow", %{"identity" => "alice"})
+    assert assignment.variant_name == "A"
+    assert assignment.configuration_value == %{"color" => "blue"}
+    assert assignment.enabled
+    assert assignment.assignment_reason == "User"
+
+    assert Toggly.get_variant_value(VariantFlags, "checkout-flow", %{"identity" => "carol"}) ==
+             %{"color" => "green"}
+
+    assert %Toggly.Variant.Assignment{variant_name: nil, enabled: false} =
+             Toggly.get_variant(VariantFlags, "missing-feature")
+
+    Toggly.stop(sup)
+  end
 end
