@@ -58,7 +58,7 @@
     "pretest:coverage": "npm run format:check"
   },
   "dependencies": {
-    "@ops-ai/toggly-node-core": "^0.9.1"
+    "@ops-ai/toggly-node-core": "^0.10.0"
   },
   "devDependencies": {
     "@nestjs/common": "^11.1.0",

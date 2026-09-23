@@ -153,14 +153,20 @@ jobs:
         run: npm ci
 
       - name: Install dependencies
-        if: matrix.sdk != 'SolidJS' && matrix.sdk != 'SvelteKit' && matrix.sdk != 'Gatsby' && matrix.sdk != 'Client-Telemetry' && matrix.sdk != 'Client-Core'
+        if: matrix.sdk != 'SolidJS' && matrix.sdk != 'SvelteKit' && matrix.sdk != 'Gatsby' && matrix.sdk != 'Client-Telemetry' && matrix.sdk != 'Client-Core' && matrix.sdk != 'NestJS'
         working-directory: ${{ matrix.path }}
+        run: npm ci || npm install
+
+      # NestJS depends on unpublished @ops-ai/toggly-node-core from this PR.
+      # Build core from source and install via file: so CI does not wait for npm publish.
+      - name: Install NestJS with in-repo toggly-node-core
+        if: matrix.sdk == 'NestJS'
         run: |
-          if [ "${{ matrix.sdk }}" = "NestJS" ]; then
-            npm ci
-          else
-            npm ci || npm install
-          fi
+          set -euo pipefail
+          (cd toggly-eval && (npm ci || npm install) && npm run build)
+          (cd Toggly.FeatureManagement.Node/toggly-node-core && (npm ci || npm install) && npm run build)
+          cd Toggly.FeatureManagement.NestJS
+          npm install "file:$GITHUB_WORKSPACE/Toggly.FeatureManagement.Node/toggly-node-core"
 
       - name: Overlay shared JS deps into node_modules
         if: >
@@ -168,7 +174,8 @@ jobs:
           matrix.sdk != 'SolidJS' &&
           matrix.sdk != 'SvelteKit' &&
           matrix.sdk != 'Client-Telemetry' &&
-          matrix.sdk != 'Client-Core'
+          matrix.sdk != 'Client-Core' &&
+          matrix.sdk != 'NestJS'
         uses: ./.github/actions/overlay-shared-js-deps
         with:
           package-dir: ${{ matrix.path }}

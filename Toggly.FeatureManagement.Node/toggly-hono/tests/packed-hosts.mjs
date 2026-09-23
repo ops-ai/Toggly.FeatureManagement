@@ -176,7 +176,7 @@ function verifyPackedFile(tarball) {
     assert.ok(contents.includes(expected), `packed adapter contains ${expected}`)
   }
   const manifest = JSON.parse(run('tar', ['-xOf', tarball, 'package/package.json']))
-  assert.equal(manifest.dependencies['@ops-ai/toggly-node-core'], '^0.9.2')
+  assert.equal(manifest.dependencies['@ops-ai/toggly-node-core'], '^0.10.0')
 }
 
 function packCore() {
