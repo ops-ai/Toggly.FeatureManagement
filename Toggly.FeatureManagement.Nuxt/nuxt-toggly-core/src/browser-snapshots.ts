@@ -1,15 +1,16 @@
 import { isEntityGate } from '@ops-ai/toggly-hooks-types'
-import type { FeatureDefinitions, TogglyConfig } from './types'
+import type { EvaluatedVariantDef, FeatureDefinitions, TogglyConfig } from './types'
 import type { FeatureDefinitionModel } from '@ops-ai/toggly-eval'
 export interface BrowserSnapshot {
   features: FeatureDefinitions
   definitions: FeatureDefinitionModel[]
+  variants: Record<string, EvaluatedVariantDef> | null
   revision: string | null
 }
 /** Each validator travels with its response body, mode and targeting context. */
 export function createBrowserSnapshots(config: TogglyConfig) {
   const memory = new Map<string, BrowserSnapshot>()
-  const route = () => JSON.stringify([config.baseUri, config.appKey, config.environment, config.evaluationMode ?? 'remote'])
+  const route = () => JSON.stringify([config.baseUri, config.appKey, config.environment, config.evaluationMode ?? 'remote', config.enableVariants ?? false])
   const scope = () => JSON.stringify([route(), config.instanceId?.trim() ? ['i', config.instanceId.trim()]
     : ['u', config.identity ?? '', [...(config.groups ?? [])].sort((a,b)=>a<b?-1:a>b?1:0), Object.entries(config.claims ?? {}).sort(([a],[b])=>a.localeCompare(b))]])
   const key = () => `${config.featuresStorageKey ?? 'toggly:features'}:v2:${encodeURIComponent(route())}`
@@ -28,7 +29,13 @@ export function createBrowserSnapshots(config: TogglyConfig) {
               && typeof rule.property === 'string' && typeof rule.op === 'string' && typeof rule.value === 'string'
               && (rule.type === undefined || ['datetime','number','boolean','string','string[]'].includes(rule.type)))))
           && Array.isArray(value.definitions) && value.definitions.every((def: FeatureDefinitionModel)=>typeof def?.featureKey==='string')
-          && (value.revision === null || typeof value.revision === 'string')) entries.set(entry[0], value)
+          && (value.variants === undefined || value.variants === null || (typeof value.variants === 'object' && !Array.isArray(value.variants)
+            && Object.values(value.variants).every((entry) => {
+              const def = entry as EvaluatedVariantDef
+              return def !== null && typeof def === 'object'
+                && typeof def.enabled === 'boolean' && (def.variant === undefined || typeof def.variant === 'string')
+            })))
+          && (value.revision === null || typeof value.revision === 'string')) entries.set(entry[0], {...value, variants: value.variants ?? null})
       }
     } catch { /* Optional storage may be unavailable or corrupt. */ }
     return entries

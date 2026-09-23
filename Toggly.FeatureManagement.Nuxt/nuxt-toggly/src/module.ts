@@ -100,6 +100,10 @@ export default defineNuxtModule<ModuleOptions>({
           name: 'useFeatureProps',
           from: '@ops-ai/nuxt-toggly-client',
         },
+        {
+          name: 'useVariant',
+          from: '@ops-ai/nuxt-toggly-client',
+        },
       ])
 
       // Preserve existing Vue SSR imports and add Nitro route registration.
@@ -114,6 +118,14 @@ export default defineNuxtModule<ModuleOptions>({
         },
         {
           name: 'isServerFeatureOff',
+          from: '@ops-ai/nuxt-toggly-server',
+        },
+        {
+          name: 'getServerVariant',
+          from: '@ops-ai/nuxt-toggly-server',
+        },
+        {
+          name: 'getServerVariantValue',
           from: '@ops-ai/nuxt-toggly-server',
         },
         {

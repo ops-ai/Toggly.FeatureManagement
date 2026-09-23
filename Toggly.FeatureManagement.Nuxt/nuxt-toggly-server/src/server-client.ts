@@ -7,6 +7,7 @@ import {
   type FeatureDefinitions,
   type TogglyClient,
   type TogglyConfig,
+  type VariantResult,
 } from '@ops-ai/nuxt-toggly-core'
 import { createGrpcClients, isGrpcAvailable } from '@ops-ai/nuxt-toggly-core/telemetry/grpc'
 import WebSocket from 'ws'
@@ -230,8 +231,11 @@ export function createMemoryStorage(): MemoryStorage {
 /**
  * Initialize the server-side Toggly client.
  *
- * Always uses local evaluation (`definitions-signed` + `@ops-ai/toggly-eval`).
- * Durable cache stores raw definition models (not evaluated booleans).
+ * Uses local evaluation (`definitions-signed` + `@ops-ai/toggly-eval`) by default
+ * (OPS-825). When `enableVariants` is set, variant assignment is still remote
+ * (`evaluated-variants-signed`) — mirrors the Astro server client's rail split.
+ * Durable cache stores raw definition models (not evaluated booleans); variant
+ * mode has no durable definitions to cache since evaluation happens worker-side.
  */
 export async function initServerToggly(
   config: TogglyServerConfig
@@ -254,8 +258,10 @@ export async function initServerToggly(
       (telemetryTransport === 'https'
         ? false
         : DEFAULT_SERVER_CONFIG.telemetryAttachProcessHandlers),
-    // Server always uses definitions-signed + local evaluation (OPS-825).
-    evaluationMode: 'local',
+    // Server defaults to definitions-signed + local evaluation (OPS-825).
+    // enableVariants forces the remote evaluated-variants-signed rail since
+    // variant assignment happens worker-side, not via local rule evaluation.
+    evaluationMode: config.enableVariants ? 'remote' : 'local',
   }
 
   serverConfig = mergedConfig
@@ -355,6 +361,21 @@ export async function isServerFeatureOff(
 ): Promise<boolean> {
   const isOn = await isServerFeatureOn(featureKey, identityOrOptions)
   return !isOn
+}
+
+/**
+ * Current variant assignment for a feature on the server client
+ * (requires `enableVariants` in {@link initServerToggly} config).
+ */
+export function getServerVariant(featureKey: string): VariantResult | null {
+  return serverClient?.getVariant(featureKey) ?? null
+}
+
+/**
+ * Configuration payload for the server-assigned variant, if any.
+ */
+export function getServerVariantValue(featureKey: string): unknown | null {
+  return serverClient?.getVariantValue(featureKey) ?? null
 }
 
 /**

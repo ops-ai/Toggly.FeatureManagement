@@ -182,6 +182,14 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     ) {
       return client.evaluateFeatureGate(featureKeys, requirement, negate, context, kind)
     },
+
+    getVariant(featureKey: string) {
+      return client.getVariant(featureKey)
+    },
+
+    getVariantValue(featureKey: string) {
+      return client.getVariantValue(featureKey)
+    },
   }
 
   if (typeof window !== 'undefined') globalClient.value = client

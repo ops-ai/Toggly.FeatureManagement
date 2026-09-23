@@ -35,6 +35,14 @@ describe('startup context forwarding', () => {
     expect(mocks.server).toHaveBeenCalledTimes(1)
   })
 
+  it('forwards enableVariants to both the client and server owners', async () => {
+    Object.assign(mocks.config, { enableVariants: true })
+    await (clientPlugin as any)(app())
+    await (serverPlugin as any)({ hooks: { hook: vi.fn() } })
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ enableVariants: true }))
+    expect(mocks.server).toHaveBeenCalledWith(expect.objectContaining({ enableVariants: true }))
+  })
+
   it('forwards browser telemetry configuration only to the client owner', async () => {
     Object.assign(mocks.config, {
       enableTelemetry: false,
