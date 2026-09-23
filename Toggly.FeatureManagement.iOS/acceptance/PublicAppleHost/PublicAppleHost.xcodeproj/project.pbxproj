@@ -455,7 +455,7 @@
 			repositoryURL = "https://github.com/ops-ai/Toggly.FeatureManagement.git";
 			requirement = {
 				kind = revision;
-				revision = "ios-sdk-v1.6.0";
+				revision = "ios-sdk-v1.6.1";
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

@@ -3,8 +3,8 @@
 This is a narrow acceptance fixture for the released Swift package, not a
 teaching Sample. The Xcode project resolves
 `https://github.com/ops-ai/Toggly.FeatureManagement.git` at signed tag
-`ios-sdk-v1.6.0`; the committed `Package.resolved` pins
-`a657a71b2ea8088c3d2acb833825c9c6577d0b40`. It has no local Swift
+`ios-sdk-v1.6.1`; the committed `Package.resolved` pins
+`cf17ff4592104e3de5c6abc6a7413ede356c6aaa`. It has no local Swift
 package path, application key, signing identity, or production telemetry URL.
 All values are synthetic and the collector binds only `127.0.0.1:8766`.
 
@@ -33,7 +33,7 @@ The screen prints the evaluated results. Launch options are:
 
 | Option | Exercise |
 | --- | --- |
-| `--variants` | Public 1.6.0 variant endpoint and `FeatureVariant` wrapper |
+| `--variants` | Public 1.6.1 variant endpoint and `FeatureVariant` wrapper |
 | `--identity` | Replace user identity, refresh, and flush new attribution |
 | `--dispose` | Record a final view and dispose; final packet is plain JSON |
 | `--keyless` | Omit app key; no definition or telemetry request |
@@ -53,5 +53,6 @@ store a credential.
 Use `verify_capture.py <mode> <capture.jsonl>` for baseline, variant,
 retry429, retry503, ambiguous, or silent assertions on a capture from one run.
 
-This fixture does not resolve the ingestion policy for optional `i` or `u`
-fields. Its local simulator packets are not deployed/live ingestion proof.
+The client packet contract permits optional `i` or `u` fields; server-side
+acceptance of `u` depends on the default-off application policy. Local
+simulator packets are not deployed/live ingestion proof.

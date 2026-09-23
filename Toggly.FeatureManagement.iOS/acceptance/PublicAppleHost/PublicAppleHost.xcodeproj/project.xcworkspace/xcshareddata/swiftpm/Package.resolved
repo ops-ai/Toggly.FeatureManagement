@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ops-ai/Toggly.FeatureManagement.git",
       "state" : {
-        "branch" : "ios-sdk-v1.6.0",
-        "revision" : "a657a71b2ea8088c3d2acb833825c9c6577d0b40"
+        "branch" : "ios-sdk-v1.6.1",
+        "revision" : "cf17ff4592104e3de5c6abc6a7413ede356c6aaa"
       }
     }
   ],
