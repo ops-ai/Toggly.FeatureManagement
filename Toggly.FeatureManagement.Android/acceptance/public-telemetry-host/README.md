@@ -36,6 +36,10 @@ collector; an app log alone is not telemetry delivery proof. The collector
 generates ephemeral signing keys and prints no secrets. Keep each capture in a
 fresh file because the JSONL output is append-only. Background/resume can be
 exercised with Home then an `am start`; Back disposes the activity's clients.
+For an ambiguity diagnostic, start a fresh collector with `--ambiguous-first`.
+It reads and records the first POST, then closes without a response. Leave the
+app and collector running at least 32 seconds before checking that the first
+packet body appears once; later packets have distinct post-replacement context.
 
 `i` and `u` are observed optional fields whose programme wire policy is still
 open. This fixture records them without approving that policy. The public

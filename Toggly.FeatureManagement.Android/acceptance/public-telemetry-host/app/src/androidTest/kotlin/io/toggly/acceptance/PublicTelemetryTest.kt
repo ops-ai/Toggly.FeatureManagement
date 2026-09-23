@@ -21,6 +21,7 @@ import io.toggly.datastore.createDataStoreStorage
 import io.toggly.room.createRoomStorage
 import io.toggly.views.FeatureFlagViewModel
 import io.toggly.views.bindToFeatureFlag
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -80,8 +81,13 @@ class PublicTelemetryTest {
         try {
             uncertain.recordUsage("once")
             uncertain.flushTelemetry()
-            Thread.sleep(750)
             assertEquals(1, ambiguous.size)
+            assertTrue(ambiguous.single().second.getJSONObject("f").has("once"))
+            // Keep the live reporter and server past the earliest 30-second
+            // retry window; disposal would otherwise cancel a delayed replay.
+            delay(32_000)
+            assertEquals(1, ambiguous.size)
+            assertEquals(1, ambiguousServer.requestCount)
         } finally { uncertain.dispose(); ambiguousServer.shutdown() }
     }
 

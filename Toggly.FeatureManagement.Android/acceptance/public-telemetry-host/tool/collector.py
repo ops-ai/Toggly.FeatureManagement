@@ -4,8 +4,10 @@ import base64
 import gzip
 import hashlib
 import json
+import socket
 import subprocess
 import tempfile
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -49,6 +51,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=18765)
     parser.add_argument("--output", default="/private/tmp/ops1388-native-packets.jsonl")
+    parser.add_argument("--ambiguous-first", action="store_true",
+                        help="Read and record the first POST, then close without an HTTP response")
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix="ops1388-signing-") as directory:
         key_path = Path(directory) / "fixture.pem"
@@ -79,6 +83,8 @@ def main():
 
         class Handler(BaseHTTPRequestHandler):
             protocol_version = "HTTP/1.1"
+            first_lock = threading.Lock()
+            ambiguous_sent = False
 
             def do_GET(self):
                 if self.path.startswith("/.well-known/jwks"):
@@ -112,6 +118,15 @@ def main():
                 }
                 with open(args.output, "a", encoding="utf-8") as stream:
                     stream.write(json.dumps(record, separators=(",", ":")) + "\n")
+                with Handler.first_lock:
+                    ambiguous = args.ambiguous_first and not Handler.ambiguous_sent
+                    if ambiguous:
+                        Handler.ambiguous_sent = True
+                if ambiguous:
+                    self.connection.shutdown(socket.SHUT_RDWR)
+                    self.connection.close()
+                    self.close_connection = True
+                    return
                 self.send_response(202)
                 self.send_header("Content-Length", "0")
                 self.end_headers()
