@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-nestjs",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "NestJS HTTP module, request-scoped service and feature guards for Toggly",
   "keywords": [
     "feature-flags",

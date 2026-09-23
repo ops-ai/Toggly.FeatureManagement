@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.1.0
+
+2026-09-23
+
+### Added
+- `allocateVariant(def, ctx, options?)`: catalog-local feature-variant
+  allocator, bit-for-bit compatible with `Microsoft.FeatureManagement`
+  4.7.0's variant-assignment algorithm (user → group → percentile →
+  default, `statusOverride`, `IgnoreCase`). Verified 100% against the
+  shared gold corpus (`variant-allocator-corpus/cases.json` at the repo
+  root) [OPS-1395].
+- `FeatureDefinitionModel.variants` / `.allocation`, plus the
+  `VariantDefinition`, `VariantAllocation`, `UserAllocation`,
+  `GroupAllocation`, `PercentileAllocation`, `VariantAssignmentReason`, and
+  `VariantAssignmentResult` types.
+- `computeContextPercentage(contextId)`: exported low-level SHA-256
+  percentage primitive shared by `computePercentile` and the new variant
+  allocator's percentile hashing (same digest recipe, different context-id
+  ordering — see `hash.ts` for details).
+
 ## 2.0.3
 
 2026-09-03

@@ -6,7 +6,15 @@ export type {
   FeatureFilter,
   FilterEvaluator,
   GateRequirement,
+  GroupAllocation,
+  PercentileAllocation,
   RequirementType,
+  UserAllocation,
+  VariantAllocation,
+  VariantAssignmentReason,
+  VariantAssignmentResult,
+  VariantDefinition,
+  VariantStatusOverride,
 } from './types'
 
 export {
@@ -16,6 +24,11 @@ export {
   rolloutBucket,
   setTimeWindowNow,
 } from './builtin'
+
+export { computeContextPercentage } from './hash'
+
+export { allocateVariant } from './variant-allocator'
+export type { VariantAllocatorOptions } from './variant-allocator'
 
 export {
   passesSegmentPercentageGate,

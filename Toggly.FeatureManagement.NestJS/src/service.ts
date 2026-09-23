@@ -1,6 +1,10 @@
 import { Inject, Injectable, Scope } from '@nestjs/common';
 import { REQUEST } from '@nestjs/core';
-import type { EvaluationContext, FeatureRequirement } from '@ops-ai/toggly-node-core';
+import type {
+  EvaluationContext,
+  FeatureRequirement,
+  VariantResult,
+} from '@ops-ai/toggly-node-core';
 import { TogglyProvider } from './provider.js';
 import { TOGGLY_OPTIONS, type EvaluationOverrides, type TogglyModuleOptions } from './types.js';
 
@@ -54,6 +58,34 @@ export class TogglyService {
       keys,
       requirement,
       negate,
+      await this.evaluationContext(overrides),
+      overrides.entity,
+      overrides.kind,
+    );
+  }
+
+  /**
+   * Assign a variant for `key` catalog-locally from cached definitions
+   * (no server round trip), bound to this request's evaluation context.
+   * `null` when the feature is unknown, disabled for this context, or has
+   * no assignable variant.
+   */
+  async getVariant(
+    key: string,
+    overrides: EvaluationOverrides = {},
+  ): Promise<VariantResult | null> {
+    return this.provider.client.getVariant(
+      key,
+      await this.evaluationContext(overrides),
+      overrides.entity,
+      overrides.kind,
+    );
+  }
+
+  /** Convenience wrapper: the assigned variant's `configurationValue`, or `null`. */
+  async getVariantValue(key: string, overrides: EvaluationOverrides = {}): Promise<unknown | null> {
+    return this.provider.client.getVariantValue(
+      key,
       await this.evaluationContext(overrides),
       overrides.entity,
       overrides.kind,

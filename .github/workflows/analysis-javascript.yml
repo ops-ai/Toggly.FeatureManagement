@@ -394,6 +394,12 @@ jobs:
         working-directory: Toggly.FeatureManagement.Node
         run: pnpm install
 
+      - name: Overlay shared JS deps into pnpm store
+        if: needs.prepare.outputs.need_shared_deps == 'true'
+        uses: ./.github/actions/overlay-shared-js-deps
+        with:
+          pnpm-store-dir: Toggly.FeatureManagement.Node
+
       - name: Build all packages
         working-directory: Toggly.FeatureManagement.Node
         run: pnpm -r build
@@ -515,6 +521,12 @@ jobs:
       - name: Install dependencies
         working-directory: Toggly.FeatureManagement.Node
         run: pnpm install
+
+      - name: Overlay shared JS deps into pnpm store
+        if: needs.prepare.outputs.need_shared_deps == 'true'
+        uses: ./.github/actions/overlay-shared-js-deps
+        with:
+          pnpm-store-dir: Toggly.FeatureManagement.Node
 
       - name: Build all packages
         working-directory: Toggly.FeatureManagement.Node

@@ -89,6 +89,18 @@ const forAlice = await toggly.isFeatureOn('beta-access', {
 
 `overrides.context` replaces supplied top-level context fields for that call (nested claims/request values replace that whole field); it never changes ambient identity. `context()` returns a fresh clone. For domain objects, register a mapper once with `provider.client.registerContext('Order', order => ({ kind: 'Order', key: order.Id, attributes: { Vip: order.Vip } }))`, then pass `{ entity: order, kind: 'Order' }`. A raw object requires that mapper; canonical `{ kind, key, attributes }` works directly. ContextProperty rules require the feature's context kind and supplied entity kind to match.
 
+## Feature variants (catalog-local, MF-parity)
+
+```ts
+const variant = await toggly.getVariant('checkout-flow');
+// { name: 'B', configurationValue: { color: 'green' } } | null
+
+const color = await toggly.getVariantValue('checkout-flow');
+// variant.configurationValue, or null
+```
+
+`getVariant(key, overrides?)` and `getVariantValue(key, overrides?)` assign a variant catalog-locally from cached definitions — no server round trip — bound to the request's resolved evaluation context (same `overrides.context`/`entity`/`kind` shape as `isFeatureOn`). Allocation order is User → Group → Percentile → Default, matching `Microsoft.FeatureManagement`'s `AssignVariantAsync` bit-for-bit (percentile hashing included), verified against the shared `variant-allocator-corpus`. Both return `null` when the feature is unknown, disabled for this context, or has no variants configured. `variantIgnoreCase` on the module config controls case sensitivity for user/group/percentile matching (defaults to `false`, matching MF's own default — this differs from Toggly's own `Targeting` filter, which defaults to case-insensitive).
+
 ## Reliability, lifecycle and telemetry
 
 Inject singleton `TogglyProvider` for `provider.client` and `provider.state`. `initialized` means startup completed, including defaults/cache fallback. Check `state.error`, `lastRefresh` and `definitions` to distinguish a degraded fetch. Missing app keys use defaults without network. Core defaults to a 180000ms refresh and streaming when configured; `refreshInterval: 0` and `enableStreaming: false` disable those channels independently. `client.refresh()` triggers a manual refresh and preserves last-known-good definitions on network/verification failure. `onError(error, context)` observes failures.

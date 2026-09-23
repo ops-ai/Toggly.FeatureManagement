@@ -5,6 +5,22 @@ export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-h
 export type { FeatureDefinitionModel } from '@ops-ai/toggly-eval'
 
 /**
+ * Catalog-local variant assignment result, resolved entirely from cached
+ * definitions (no server round trip). `null` when the feature is unknown,
+ * disabled for this context, or has no assignable variant — matching the
+ * `getVariant`/`getVariantValue` null contract used across the rest of the
+ * Toggly JS ecosystem (React/Vue/Solid/Next.js/Nuxt/SvelteKit).
+ *
+ * The underlying allocation algorithm (`@ops-ai/toggly-eval`'s
+ * `allocateVariant`) is bit-for-bit compatible with
+ * `Microsoft.FeatureManagement`'s variant-assignment logic.
+ */
+export interface VariantResult {
+  name: string
+  configurationValue: unknown
+}
+
+/**
  * Feature requirement type for evaluating multiple features
  */
 export type FeatureRequirement = 'all' | 'any'
@@ -81,6 +97,13 @@ export interface TogglyServerConfig extends TogglyConfig {
    * Omit / null / <=0 = disabled (back-compat).
    */
   maxSignatureAgeSeconds?: number | null
+  /**
+   * Case-insensitive user/group matching for catalog-local variant
+   * allocation (`getVariant`/`getVariantValue`). Mirrors
+   * `Microsoft.FeatureManagement.Targeting.TargetingEvaluationOptions.IgnoreCase`,
+   * which defaults to `false`.
+   */
+  variantIgnoreCase?: boolean
   /**
    * Called on refresh / verification failures while last-known-good flags are preserved.
    */
@@ -256,6 +279,25 @@ export interface TogglyClient {
     entity?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
   ): Promise<boolean>
+  /**
+   * Assign a variant for `featureKey` catalog-locally (no server round
+   * trip), using the cached definition's `variants`/`allocation`. Returns
+   * `null` when the feature is unknown, disabled for this context, or has
+   * no assignable variant.
+   */
+  getVariant(
+    featureKey: string,
+    context?: EvaluationContext,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<VariantResult | null>
+  /** Convenience wrapper: the assigned variant's `configurationValue`, or `null`. */
+  getVariantValue(
+    featureKey: string,
+    context?: EvaluationContext,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<unknown | null>
   registerContext<T>(
     kind: string,
     mapper: (entity: T) => TogglyEntityContext,
