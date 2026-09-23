@@ -31,7 +31,13 @@ https://github.com/vitejs/vite-plugin-vue/issues/798; all production hosts
 retain combined islands. The Astro 5.0.0 fixture uses React 18.3.1; other
 hosts use React 19.2.4. Browser checks reject hydration warnings and errors.
 Default flags are false so successful rendering cannot be a fallback false
-positive. Telemetry is explicitly disabled only in the test host.
+positive. Trusted server usage is explicitly disabled on integration and
+request owners, while integration browser category overrides enable the shared
+island reporter. The harness removes the process telemetry kill switch, checks
+actual dev/request owners have no server runtime, and rejects any unexpected
+collector route. SSG and SSR must remain silent before browser launch. Browser
+checks retain exact nine-consumer evaluation totals and compact explicit event
+packets, then prove the master opt-out silences enabled categories.
 
 Packed consumers require public registry dependencies, including reporter 1.1.0.
 Local shared dependency overrides are rejected. The runner cleans each owned

@@ -65,6 +65,24 @@ describe('startup context forwarding', () => {
     }))
   })
 
+  it.each([
+    { serverEnableUsageTracking: false, serverEnableMetrics: false },
+    { serverEnableUsageTracking: true, serverEnableMetrics: false },
+    { serverEnableUsageTracking: false, serverEnableMetrics: true },
+    { serverEnableUsageTracking: undefined, serverEnableMetrics: undefined },
+  ])('keeps Nitro policy independent of browser categories: %j', async policy => {
+    Object.assign(mocks.config, { enableUsageTracking: true, enableMetrics: true, ...policy })
+    await (clientPlugin as any)(app())
+    await (serverPlugin as any)({ hooks: { hook: vi.fn() } })
+    expect(mocks.server.mock.calls[0][0]).toMatchObject({
+      enableUsageTracking: policy.serverEnableUsageTracking,
+      enableMetrics: policy.serverEnableMetrics,
+    })
+    expect(mocks.create.mock.calls[0][0]).toMatchObject({ enableUsageTracking: true, enableMetrics: true })
+    expect(mocks.create.mock.calls[0][0]).not.toHaveProperty('serverEnableUsageTracking')
+    expect(mocks.create.mock.calls[0][0]).not.toHaveProperty('serverEnableMetrics')
+  })
+
   it('forwards minted context and withholds an unrelated SSR identity snapshot', async () => {
     mocks.config.instanceId = 'minted'
     const hydrate = vi.fn()

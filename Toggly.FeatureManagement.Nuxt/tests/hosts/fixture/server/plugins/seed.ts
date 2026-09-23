@@ -1,6 +1,8 @@
 import { initServerToggly, closeServerToggly } from '@ops-ai/nuxt-toggly-server'
 
 export default defineNitroPlugin(async nitro => {
+  // The runtime-policy host must exercise the module initializer itself.
+  if (process.env.NUXT_TEST_MODULE_POLICY === '1') return
   // Deterministic in-memory fixture; signature verification is covered by core tests.
   const client = await initServerToggly({ identity: 'server-default', enableUsageTracking: false, enableMetrics: false, enableLiveUpdates: false })
   client.hydrateDefinitions([

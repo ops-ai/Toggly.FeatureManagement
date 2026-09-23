@@ -2,10 +2,16 @@ import {
   parseDefinitionsFromRaw,
   parseSignedEnvelope,
   verifySignedDefinitions,
+  asVariantDefsRecord,
   type Jwk,
   type JwkSet,
 } from '@ops-ai/toggly-signed-defs';
-import { validateEvaluatedDefinitions } from './validation.js';
+import { validateEvaluatedDefinitions, validateVariantDefs } from './validation.js';
+import {
+  variantDefsToFlags,
+  type EvaluatedDefinitions,
+  type EvaluatedVariantDef,
+} from './types.js';
 
 export type DefinitionStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -14,13 +20,24 @@ export interface VerificationPolicy {
   maxSignatureAgeSeconds?: number;
 }
 
-/** Only the public key which verified this exact envelope is retained. */
+/**
+ * Only the public key which verified this exact envelope is retained.
+ * `mode: 'variants'` verifies against the `/evaluated-variants-signed` wire contract
+ * (`{ enabled, variant?, configurationValue? }` per key) and also derives boolean
+ * `definitions` (`enabled === true`) so existing gate evaluation keeps working.
+ */
 export async function verifyEnvelope(
   body: string,
   keys: JwkSet,
   policy: VerificationPolicy,
   minimumTimestamp = 0,
-) {
+  mode: 'evaluated' | 'variants' = 'evaluated',
+): Promise<{
+  definitions: EvaluatedDefinitions;
+  variants?: Record<string, EvaluatedVariantDef>;
+  timestamp: number;
+  keys: JwkSet;
+}> {
   const { envelope, defsRaw } = parseSignedEnvelope(body);
   const now = Math.floor(Date.now() / 1000);
   if (
@@ -35,9 +52,23 @@ export async function verifyEnvelope(
   await verifySignedDefinitions(defsRaw, envelope, { keys: [key] }, policy.allowedKeyIds, {
     maxSignatureAgeSeconds: policy.maxSignatureAgeSeconds,
   });
-  const definitions = parseDefinitionsFromRaw(defsRaw);
-  validateEvaluatedDefinitions(definitions);
-  return { definitions, timestamp: envelope.timestamp, keys: { keys: [structuredClone(key)] } };
+  const parsed = parseDefinitionsFromRaw(defsRaw);
+  if (mode === 'variants') {
+    const variants = asVariantDefsRecord<EvaluatedVariantDef>(parsed);
+    validateVariantDefs(variants);
+    return {
+      definitions: variantDefsToFlags(variants),
+      variants,
+      timestamp: envelope.timestamp,
+      keys: { keys: [structuredClone(key)] },
+    };
+  }
+  validateEvaluatedDefinitions(parsed);
+  return {
+    definitions: parsed,
+    timestamp: envelope.timestamp,
+    keys: { keys: [structuredClone(key)] },
+  };
 }
 
 function assertPublicKey(value: unknown, now: number): asserts value is Jwk {
@@ -93,6 +124,7 @@ export function createPersistence(storage: DefinitionStorage | undefined, baseUR
       policy: VerificationPolicy,
       minimumTimestamp: number,
       observedKeys?: JwkSet,
+      mode: 'evaluated' | 'variants' = 'evaluated',
     ) {
       if (!storage || unusable) return;
       try {
@@ -109,7 +141,13 @@ export function createPersistence(storage: DefinitionStorage | undefined, baseUR
           !Array.isArray(record.jwks?.keys)
         )
           return;
-        return verifyEnvelope(record.body, observedKeys ?? record.jwks, policy, minimumTimestamp);
+        return verifyEnvelope(
+          record.body,
+          observedKeys ?? record.jwks,
+          policy,
+          minimumTimestamp,
+          mode,
+        );
       } catch {
         // Corrupt or inaccessible storage cannot block the network path.
         return;

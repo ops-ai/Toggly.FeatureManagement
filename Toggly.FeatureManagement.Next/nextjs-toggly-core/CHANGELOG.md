@@ -1,3 +1,13 @@
+## 1.12.1
+
+2026-09-22
+
+### Fixed
+
+- Resolve the trusted telemetry exports in Next.js Edge middleware when the
+  bundler also enables browser conditions. Browser application bundles continue
+  to use the compact frontend reporter without server telemetry transports.
+
 ## 1.12.0
 
 2026-09-18

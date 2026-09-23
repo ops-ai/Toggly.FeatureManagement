@@ -14,7 +14,24 @@ export default defineConfig({
   integrations: [...islandIntegrations, toggly({
     baseURI: process.env.DEFINITIONS_URL, metricsBaseUrl: process.env.METRICS_URL,
     appKey: 'packed-host', environment: 'Test',
+    enableUsageTracking: false, enableMetrics: false,
+    browserEnableUsageTracking: true, browserEnableMetrics: true,
+    telemetryAttachProcessHandlers: false, usageFlushInterval: 0,
     verifySignatures: true, flagDefaults: { Visible: false, Hidden: false },
     featureFlagsRefreshInterval: 0, enableLiveUpdates: false,
-  })],
+  }), {
+    name: 'verify-integration-server-policy',
+    hooks: {
+      'astro:server:setup': ({server}) => {
+        server.middlewares.use((request, _response, next) => {
+          const owner = request.togglyClient;
+          if (!owner || owner.telemetry !== null || owner.config.enableUsageTracking !== false ||
+              'browserEnableUsageTracking' in owner.config || 'browserEnableMetrics' in owner.config) {
+            next(new Error('Integration server policy changed')); return;
+          }
+          next();
+        });
+      },
+    },
+  }],
 });

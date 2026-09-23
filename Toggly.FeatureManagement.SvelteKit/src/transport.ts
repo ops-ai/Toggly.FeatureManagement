@@ -7,9 +7,11 @@ export function buildBrowserDefinitionsUrl(
   appKey: string,
   environment: string,
   context: TogglySnapshot['context'],
+  enableVariants = false,
 ): string {
   const url = new URL(baseURI);
-  url.pathname = `${url.pathname.replace(/\/$/, '')}/evaluated-signed/${appKey}/${environment}`;
+  const endpoint = enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed';
+  url.pathname = `${url.pathname.replace(/\/$/, '')}/${endpoint}/${appKey}/${environment}`;
   // The explicit snapshot owns the token, including its absence after navigation.
   url.searchParams.delete('i');
   const instanceId = context.instanceId?.trim();
@@ -19,7 +21,7 @@ export function buildBrowserDefinitionsUrl(
         url.searchParams.delete(key);
     }
     url.searchParams.set('i', instanceId);
-  } else appendEvaluationContext(url, context);
+  } else appendEvaluationContext(url, context, enableVariants ? 'variants' : 'evaluated');
   return url.toString();
 }
 
@@ -35,7 +37,11 @@ export function captureEvaluatedResponse(fetchImpl: typeof fetch) {
   let body: string | undefined;
   const capturedFetch: typeof fetch = async (input, init) => {
     const response = await fetchImpl(input, init);
-    if (requestUrl(input).includes('/evaluated-signed/') && response.ok) {
+    const url = requestUrl(input);
+    if (
+      (url.includes('/evaluated-signed/') || url.includes('/evaluated-variants-signed/')) &&
+      response.ok
+    ) {
       body = await response.clone().text();
     }
     return response;

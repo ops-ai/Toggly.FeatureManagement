@@ -4,6 +4,7 @@
 
 ### Added
 - Module config accepts `enableVariants`, forwarded to both the client and server plugins. When enabled, `useVariant()` (client) and `getServerVariant()` / `getServerVariantValue()` (server, auto-imported) resolve assigned variants instead of plain booleans.
+- Configure Nitro usage tracking and metrics independently with `serverEnableUsageTracking` and `serverEnableMetrics`. Omitted values preserve the server SDK defaults, while explicit `false` disables the selected server category without suppressing browser telemetry.
 
 ## 1.3.0 — 2026-09-18
 
