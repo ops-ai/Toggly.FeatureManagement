@@ -165,13 +165,16 @@ jobs:
         if: matrix.sdk == 'NestJS'
         run: |
           set -euo pipefail
-          (cd toggly-eval && (npm ci || npm install) && npm run build)
+          EVAL_DIR="$GITHUB_WORKSPACE/toggly-eval"
           CORE_DIR="$GITHUB_WORKSPACE/Toggly.FeatureManagement.Node/toggly-node-core"
-          (cd "$CORE_DIR" && (npm ci || npm install) && npm run build)
+          (cd "$EVAL_DIR" && (npm ci || npm install) && npm run build)
+          (cd "$CORE_DIR" && (npm ci || npm install) && npm install --no-save "file:$EVAL_DIR" && npm run build)
           CORE_TGZ="$(cd "$CORE_DIR" && npm pack --pack-destination "$RUNNER_TEMP")"
           echo "TOGGLY_TEST_CORE_TARBALL=$RUNNER_TEMP/$CORE_TGZ" >> "$GITHUB_ENV"
+          EVAL_TGZ="$(cd "$EVAL_DIR" && npm pack --pack-destination "$RUNNER_TEMP")"
+          echo "TOGGLY_TEST_EVAL_TARBALL=$RUNNER_TEMP/$EVAL_TGZ" >> "$GITHUB_ENV"
           cd Toggly.FeatureManagement.NestJS
-          npm install "file:$CORE_DIR"
+          npm install "file:$CORE_DIR" "file:$EVAL_DIR"
 
       - name: Overlay shared JS deps into node_modules
         if: >

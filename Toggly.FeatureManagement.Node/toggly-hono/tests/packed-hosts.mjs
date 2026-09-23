@@ -187,8 +187,18 @@ function packCore() {
   return { destination, tarball: join(destination, filename) }
 }
 
+function packEval() {
+  const destination = mkdtempSync(join(tmpdir(), 'toggly-eval-pack-'))
+  const evalDirectory = join(workspaceDirectory, '..', '..', 'toggly-eval')
+  run('npm', ['pack', '--pack-destination', destination], { cwd: evalDirectory })
+  const [filename] = readdirSync(destination).filter((name) => name.endsWith('.tgz'))
+  assert.ok(filename, 'npm pack produced an eval tarball')
+  return { destination, tarball: join(destination, filename) }
+}
+
 const packed = packAdapter()
 const packedCore = packCore()
+const packedEval = packEval()
 const hostDirectory = mkdtempSync(join(tmpdir(), 'toggly-hono-host-'))
 try {
   verifyPackedFile(packed.tarball)
@@ -200,6 +210,7 @@ try {
     '@types/node@22.19.11',
     'typescript@5.9.3',
     packedCore.tarball,
+    packedEval.tarball,
     packed.tarball,
   ], {
     cwd: hostDirectory,
@@ -214,4 +225,5 @@ try {
   rmSync(hostDirectory, { recursive: true, force: true })
   rmSync(packed.destination, { recursive: true, force: true })
   rmSync(packedCore.destination, { recursive: true, force: true })
+  rmSync(packedEval.destination, { recursive: true, force: true })
 }
