@@ -383,7 +383,15 @@ try {
     await run('npm', ['ls', '--all'], hostDirectory, { env })
     const reporter = JSON.parse(readFileSync(join(hostDirectory, 'node_modules/@ops-ai/toggly-client-telemetry/package.json'), 'utf8'))
     const lock = JSON.parse(readFileSync(join(hostDirectory, 'package-lock.json'), 'utf8'))
-    assert.equal(reporter.version, '1.1.0')
+    const installedSdk = JSON.parse(readFileSync(join(hostDirectory, 'node_modules/@ops-ai/electron-feature-flags-toggly/package.json'), 'utf8'))
+    const reporterRange = installedSdk.dependencies['@ops-ai/toggly-client-telemetry']
+    assert(reporterRange, 'Installed SDK must declare its reporter range')
+    const reporterLock = lock.packages['node_modules/@ops-ai/toggly-client-telemetry']
+    assert.equal(reporter.version, reporterLock.version)
+    assert.notEqual(reporterLock.link, true, 'Reporter must not be linked')
+    assert(reporterLock.integrity, 'Public reporter must have registry integrity')
+    // npm validates every installed reporter edge against its declaring SDK range.
+    await run('npm', ['ls', '@ops-ai/toggly-client-telemetry', '--all'], hostDirectory, { env })
     assert.match(lock.packages['node_modules/@ops-ai/toggly-client-telemetry'].resolved, /^https:\/\/registry.npmjs.org\//)
     console.log(`Public reporter: ${reporter.version} ${lock.packages['node_modules/@ops-ai/toggly-client-telemetry'].integrity}`)
     console.log('Registry dependencies', JSON.stringify(Object.fromEntries(['electron','@ops-ai/toggly-hooks-types','@ops-ai/toggly-signed-defs','@ops-ai/toggly-local-gates'].map(name=>[name,JSON.parse(readFileSync(join(hostDirectory,'node_modules',name,'package.json'),'utf8')).version]))))
