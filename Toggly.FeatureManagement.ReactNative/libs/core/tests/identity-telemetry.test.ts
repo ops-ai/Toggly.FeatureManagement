@@ -59,6 +59,25 @@ it('constructs definitions and JWKS paths when Hermes ignores URL.pathname write
     expect(requests[1].url.searchParams.getAll('keep')).toEqual(['one','two']);
   } finally {globalThis.URL=NativeURL;}
 });
+it('sends telemetry to the configured path when Hermes ignores pathname writes',async()=>{
+  const NativeURL=globalThis.URL;
+  class HermesURL extends NativeURL {
+    get pathname():string{return super.pathname}
+    set pathname(_path:string){/* Match the native URL implementation. */}
+  }
+  globalThis.URL=HermesURL;
+  try {
+    const posts:string[]=[];
+    (fetch as jest.Mock).mockImplementation(async(url:string,init:RequestInit)=>{
+      if(init.method==='POST'){posts.push(url);packets.push(JSON.parse(init.body as string));return {status:202};}
+      return response({On:true});
+    });
+    const t=client({metricsBaseUrl:'https://collector.test/nested/'});
+    await t.init();expect(await t.isFeatureOn('On')).toBe(true);await t.flushTelemetry();
+    expect(posts).toEqual(['https://collector.test/nested/api/frontend/telemetry']);
+    expect(packets).toEqual([{k:'native',e:'Test',u:'alice',f:{On:{enabled:[1]}}}]);
+  } finally {globalThis.URL=NativeURL;}
+});
 it('forwards minted context, scrubs inherited targeting, preserves repeated unrelated values and clears through identity',async()=>{
   const t=client({instanceId:' A ',baseURI:'https://defs.test/root/?u=old&userId=old&g=a&g=b&claim.role=old&i=retired&i=older&keep=one&keep=two',groups:['private'],claims:{role:'private'}});
   await t.init();t.recordUsage('A');

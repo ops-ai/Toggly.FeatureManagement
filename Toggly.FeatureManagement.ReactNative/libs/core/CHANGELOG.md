@@ -1,6 +1,7 @@
 ## 1.9.1 — 2026-09-23
 
 ### Fixed
+- Require the Hermes-compatible telemetry reporter so native requests retain the configured collector path without an app-level URL polyfill.
 - Construct complete definitions and JWKS URLs for React Native Hermes, preserving configured base paths and unrelated query values without requiring an app-level URL polyfill.
 
 ## 1.9.0 — 2026-09-22
