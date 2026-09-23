@@ -279,6 +279,12 @@ await withResources(async (own) => {
     await evaluate(() => window.telemetry.recordUsage('Leave'));
     await page.getByRole('link', { name: 'Leave', exact: true }).click();
     await page.getByRole('heading', { name: 'Away' }).waitFor();
+    // Navigating away disposes the client synchronously, but the server only
+    // observes the resulting WebSocket close after the async close handshake
+    // completes. Wait for that handshake before treating "no live socket" as
+    // the teardown baseline, otherwise a broadcast can race the in-flight
+    // close and land on a socket whose client already unsubscribed.
+    await service.waitForLiveSockets(0);
     const left = service.state.requests.length;
     service.broadcast('update');
     await page.waitForTimeout(600);

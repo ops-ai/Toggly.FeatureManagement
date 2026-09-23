@@ -71,6 +71,10 @@ export async function startService() {
     offline: false,
     revision: 1,
     requests: [],
+    // Tracks server-observed live WebSocket connections so callers can wait
+    // for a prior page's socket to fully close (not just for the browser to
+    // have called .close()) before treating teardown as complete.
+    liveSockets: 0,
   };
   const server = createServer((req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -131,6 +135,12 @@ export async function startService() {
     res.end(state.invalid ? body.replace(/"signature":"./, '"signature":"!') : body);
   });
   const sockets = new WebSocketServer({ server });
+  sockets.on('connection', (ws) => {
+    state.liveSockets++;
+    ws.once('close', () => {
+      state.liveSockets--;
+    });
+  });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   return {
     state,
@@ -138,6 +148,20 @@ export async function startService() {
     broadcast(data) {
       for (const ws of sockets.clients) {
         ws.send(data);
+      }
+    },
+    /**
+     * Wait for the server to observe every stale WebSocket connection close
+     * (e.g. after a page navigation disposes its client) before a caller
+     * relies on `state.requests.length` as a teardown baseline. Without this,
+     * a broadcast can race an in-flight close handshake and still reach a
+     * socket whose owning client already unsubscribed on the browser side,
+     * making the request count for the *next* assertion window flaky.
+     */
+    async waitForLiveSockets(expected, timeoutMs = 2000) {
+      const start = Date.now();
+      while (state.liveSockets !== expected && Date.now() - start < timeoutMs) {
+        await new Promise((r) => setTimeout(r, 10));
       }
     },
     async close() {
