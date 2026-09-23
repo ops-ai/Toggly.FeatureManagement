@@ -69,7 +69,7 @@ pub struct FeatureDefinition {
     pub context_requirement_type: Option<RequirementType>,
 
     /// Named variants available for this feature (MF-parity variant assignment).
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_null_as_default")]
     pub variants: Vec<Variant>,
 
     /// Allocation rules (user/group/percentile + defaults) for variant assignment.
@@ -273,6 +273,29 @@ mod tests {
         assert_eq!(def.filters[0].name, "AlwaysOn");
         assert!(def.client_sdk_enabled);
         assert!(!def.secured_feature);
+    }
+
+    #[test]
+    fn test_deserialize_feature_definition_null_variants() {
+        // Production has emitted `"variants": null` (rather than omitting the
+        // field or sending `[]`) for features with no variants configured.
+        // `#[serde(default)]` alone only covers a missing key, so an explicit
+        // `null` must fall back via `deserialize_null_as_default` or this
+        // panics with "invalid type: null, expected a sequence".
+        let json = r#"{
+            "featureKey": "no-variants",
+            "filters": [],
+            "metrics": [],
+            "securedFeature": false,
+            "clientSdkEnabled": true,
+            "requirementType": "Any",
+            "variants": null,
+            "allocation": null
+        }"#;
+
+        let def: FeatureDefinition = serde_json::from_str(json).unwrap();
+        assert!(def.variants.is_empty());
+        assert!(def.allocation.is_none());
     }
 
     #[test]
