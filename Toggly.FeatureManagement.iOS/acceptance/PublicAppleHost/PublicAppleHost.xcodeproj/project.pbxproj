@@ -1,0 +1,507 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		303A17D90FD8645CE4DBD749 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6C05269B02F076A5C84BCDA6 /* Foundation.framework */; };
+		483807409495D0E93A22BB3E /* TogglySwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = 544B08C9E520AAFB98594721 /* TogglySwiftUI */; };
+		4BCFF9BD80D830AC1A645488 /* TogglyCombine in Frameworks */ = {isa = PBXBuildFile; productRef = 47C6AE0E3AC392CD17FE0F75 /* TogglyCombine */; };
+		50B740DECE692247DAA70264 /* TogglySwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = BCD99426A674EEAF01BB8445 /* TogglySwiftUI */; };
+		53A599B09E7E75EB3C2B0CA6 /* TogglyUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = D2C85817F79BC65593D7FC0D /* TogglyUIKit */; };
+		9CC93A88A21AB8B25A27A6C0 /* TogglyCore in Frameworks */ = {isa = PBXBuildFile; productRef = E201410E3E7CD410DB26B901 /* TogglyCore */; };
+		9F9B06933A433A4FA9930EC5 /* HostApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64F6B7A330569C55E987CF32 /* HostApp.swift */; };
+		B8F6EA4E19CF2BC299DADE72 /* TogglyUIKit in Frameworks */ = {isa = PBXBuildFile; productRef = C668C9C245C1EAB96E56347C /* TogglyUIKit */; };
+		BAE852BCCD47CB0997B20150 /* TogglyCore in Frameworks */ = {isa = PBXBuildFile; productRef = EBCA12426B828BD539044A0B /* TogglyCore */; };
+		BE6AD30D5496BDE872C06C64 /* HostApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64F6B7A330569C55E987CF32 /* HostApp.swift */; };
+		DCAABFA7D445D210008985AC /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7001C9AA709236489AFCA628 /* Cocoa.framework */; };
+		F47164B099026C6555CC51D5 /* TogglyCombine in Frameworks */ = {isa = PBXBuildFile; productRef = 08D3574E17207CD2765EA15E /* TogglyCombine */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		1B614D84309EAB6459BA07E8 /* PublicAppleHost-macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "PublicAppleHost-macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		61346192383F52CAE448B16D /* PublicAppleHost-iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "PublicAppleHost-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		64F6B7A330569C55E987CF32 /* HostApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HostApp.swift; sourceTree = "<group>"; };
+		6C05269B02F076A5C84BCDA6 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS14.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		7001C9AA709236489AFCA628 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.15.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		8805E4D2336DFB64E68543F4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				303A17D90FD8645CE4DBD749 /* Foundation.framework in Frameworks */,
+				9CC93A88A21AB8B25A27A6C0 /* TogglyCore in Frameworks */,
+				483807409495D0E93A22BB3E /* TogglySwiftUI in Frameworks */,
+				B8F6EA4E19CF2BC299DADE72 /* TogglyUIKit in Frameworks */,
+				F47164B099026C6555CC51D5 /* TogglyCombine in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A49CFC50289DA7F94125BFEB /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DCAABFA7D445D210008985AC /* Cocoa.framework in Frameworks */,
+				BAE852BCCD47CB0997B20150 /* TogglyCore in Frameworks */,
+				50B740DECE692247DAA70264 /* TogglySwiftUI in Frameworks */,
+				53A599B09E7E75EB3C2B0CA6 /* TogglyUIKit in Frameworks */,
+				4BCFF9BD80D830AC1A645488 /* TogglyCombine in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		06FEC59099DF66B7D3707ED5 = {
+			isa = PBXGroup;
+			children = (
+				7F4BC97786C1EB040CC6CDD8 /* Products */,
+				CA737E1117777D74AC722D7A /* Frameworks */,
+				DB7F5F562EA4655C92E33979 /* HostSource */,
+			);
+			sourceTree = "<group>";
+		};
+		7F4BC97786C1EB040CC6CDD8 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				61346192383F52CAE448B16D /* PublicAppleHost-iOS.app */,
+				1B614D84309EAB6459BA07E8 /* PublicAppleHost-macOS.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		930C130FA37D29EB6441FAE0 /* OS X */ = {
+			isa = PBXGroup;
+			children = (
+				7001C9AA709236489AFCA628 /* Cocoa.framework */,
+			);
+			name = "OS X";
+			sourceTree = "<group>";
+		};
+		BF26470D27D107640A6C2679 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				6C05269B02F076A5C84BCDA6 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		CA737E1117777D74AC722D7A /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				BF26470D27D107640A6C2679 /* iOS */,
+				930C130FA37D29EB6441FAE0 /* OS X */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		DB7F5F562EA4655C92E33979 /* HostSource */ = {
+			isa = PBXGroup;
+			children = (
+				64F6B7A330569C55E987CF32 /* HostApp.swift */,
+			);
+			name = HostSource;
+			path = .;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		23FEFAA4CDA049DE5736CD79 /* PublicAppleHost-macOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 70B1D748A08D4B57BD14AB8F /* Build configuration list for PBXNativeTarget "PublicAppleHost-macOS" */;
+			buildPhases = (
+				85EE5C30292645EF8D5848D2 /* Sources */,
+				A49CFC50289DA7F94125BFEB /* Frameworks */,
+				65E3FC1D58E68C2BDE158442 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "PublicAppleHost-macOS";
+			packageProductDependencies = (
+				EBCA12426B828BD539044A0B /* TogglyCore */,
+				BCD99426A674EEAF01BB8445 /* TogglySwiftUI */,
+				D2C85817F79BC65593D7FC0D /* TogglyUIKit */,
+				47C6AE0E3AC392CD17FE0F75 /* TogglyCombine */,
+			);
+			productName = "PublicAppleHost-macOS";
+			productReference = 1B614D84309EAB6459BA07E8 /* PublicAppleHost-macOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		29086A81D2DE592A151E0915 /* PublicAppleHost-iOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6FB958FFA9BED6E62347C839 /* Build configuration list for PBXNativeTarget "PublicAppleHost-iOS" */;
+			buildPhases = (
+				36A22A35B176223A7BF8797D /* Sources */,
+				8805E4D2336DFB64E68543F4 /* Frameworks */,
+				4932331F1269D17FE0A75878 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = "PublicAppleHost-iOS";
+			packageProductDependencies = (
+				E201410E3E7CD410DB26B901 /* TogglyCore */,
+				544B08C9E520AAFB98594721 /* TogglySwiftUI */,
+				C668C9C245C1EAB96E56347C /* TogglyUIKit */,
+				08D3574E17207CD2765EA15E /* TogglyCombine */,
+			);
+			productName = "PublicAppleHost-iOS";
+			productReference = 61346192383F52CAE448B16D /* PublicAppleHost-iOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		79494C7D772C9D542AA87E51 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 2700;
+				LastUpgradeCheck = 2700;
+			};
+			buildConfigurationList = 7F31E4F9CE552B1E81C2CC7E /* Build configuration list for PBXProject "PublicAppleHost" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 06FEC59099DF66B7D3707ED5;
+			minimizedProjectReferenceProxies = 0;
+			packageReferences = (
+				460747480C716F8122174F31 /* XCRemoteSwiftPackageReference "Toggly.FeatureManagement" */,
+			);
+			productRefGroup = 7F4BC97786C1EB040CC6CDD8 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				29086A81D2DE592A151E0915 /* PublicAppleHost-iOS */,
+				23FEFAA4CDA049DE5736CD79 /* PublicAppleHost-macOS */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		4932331F1269D17FE0A75878 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		65E3FC1D58E68C2BDE158442 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		36A22A35B176223A7BF8797D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BE6AD30D5496BDE872C06C64 /* HostApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		85EE5C30292645EF8D5848D2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9F9B06933A433A4FA9930EC5 /* HostApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		17621F2EB6856E3FF62985F0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.opsai.toggly.publicapplehost;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		1864AB9EAE817F3F680A9A62 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		A21F1A7C1E493D9632A3C6DE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		AC9683E835BEE75FC89B1B97 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = io.opsai.toggly.publicapplehost;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		D32D22DDF093808231E7C2C3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGNING_ALLOWED = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks";
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.opsai.toggly.publicapplehost;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		D33FA3128955227B669AEF9C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGNING_ALLOWED = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = io.opsai.toggly.publicapplehost;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		6FB958FFA9BED6E62347C839 /* Build configuration list for PBXNativeTarget "PublicAppleHost-iOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AC9683E835BEE75FC89B1B97 /* Release */,
+				D33FA3128955227B669AEF9C /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		70B1D748A08D4B57BD14AB8F /* Build configuration list for PBXNativeTarget "PublicAppleHost-macOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				17621F2EB6856E3FF62985F0 /* Release */,
+				D32D22DDF093808231E7C2C3 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7F31E4F9CE552B1E81C2CC7E /* Build configuration list for PBXProject "PublicAppleHost" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1864AB9EAE817F3F680A9A62 /* Debug */,
+				A21F1A7C1E493D9632A3C6DE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		460747480C716F8122174F31 /* XCRemoteSwiftPackageReference "Toggly.FeatureManagement" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ops-ai/Toggly.FeatureManagement.git";
+			requirement = {
+				kind = revision;
+				revision = "ios-sdk-v1.6.1";
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		08D3574E17207CD2765EA15E /* TogglyCombine */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 460747480C716F8122174F31 /* XCRemoteSwiftPackageReference "Toggly.FeatureManagement" */;
+			productName = TogglyCombine;
+		};
+		47C6AE0E3AC392CD17FE0F75 /* TogglyCombine */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 460747480C716F8122174F31 /* XCRemoteSwiftPackageReference "Toggly.FeatureManagement" */;
+			productName = TogglyCombine;
+		};
+		544B08C9E520AAFB98594721 /* TogglySwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 460747480C716F8122174F31 /* XCRemoteSwiftPackageReference "Toggly.FeatureManagement" */;
+			productName = TogglySwiftUI;
+		};
+		BCD99426A674EEAF01BB8445 /* TogglySwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 460747480C716F8122174F31 /* XCRemoteSwiftPackageReference "Toggly.FeatureManagement" */;
+			productName = TogglySwiftUI;
+		};
+		C668C9C245C1EAB96E56347C /* TogglyUIKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 460747480C716F8122174F31 /* XCRemoteSwiftPackageReference "Toggly.FeatureManagement" */;
+			productName = TogglyUIKit;
+		};
+		D2C85817F79BC65593D7FC0D /* TogglyUIKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 460747480C716F8122174F31 /* XCRemoteSwiftPackageReference "Toggly.FeatureManagement" */;
+			productName = TogglyUIKit;
+		};
+		E201410E3E7CD410DB26B901 /* TogglyCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 460747480C716F8122174F31 /* XCRemoteSwiftPackageReference "Toggly.FeatureManagement" */;
+			productName = TogglyCore;
+		};
+		EBCA12426B828BD539044A0B /* TogglyCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 460747480C716F8122174F31 /* XCRemoteSwiftPackageReference "Toggly.FeatureManagement" */;
+			productName = TogglyCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 79494C7D772C9D542AA87E51 /* Project object */;
+}

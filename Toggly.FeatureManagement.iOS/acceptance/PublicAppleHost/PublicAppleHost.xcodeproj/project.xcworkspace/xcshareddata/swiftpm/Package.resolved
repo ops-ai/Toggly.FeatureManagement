@@ -1,0 +1,15 @@
+{
+  "originHash" : "58f05f6c320056b726ddb2bb7014a42775022e5891b2bf91446a32452fa5b21c",
+  "pins" : [
+    {
+      "identity" : "toggly.featuremanagement",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ops-ai/Toggly.FeatureManagement.git",
+      "state" : {
+        "branch" : "ios-sdk-v1.6.1",
+        "revision" : "cf17ff4592104e3de5c6abc6a7413ede356c6aaa"
+      }
+    }
+  ],
+  "version" : 3
+}
