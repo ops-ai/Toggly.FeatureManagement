@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "toggly-django"
-version = "0.4.1"
+version = "0.5.0"
 description = "Django integration for Toggly feature flag management"
 readme = "README.md"
 license = {text = "MIT"}
@@ -46,7 +46,7 @@ classifiers = [
 ]
 requires-python = ">=3.8"
 dependencies = [
-    "toggly>=0.7.0",
+    "toggly>=1.0.0",
     "django>=4.2"
 ]
 

@@ -1,21 +1,25 @@
 # toggly-fastapi
 
-## Initial context for remote variants
+## Feature variants
 
-Requires **toggly 0.7.0 and toggly-fastapi 0.3.0** (release pending; these APIs are not in the currently published packages).
+Requires **toggly 1.0.0+**. Feature variants are assigned locally from the
+same cached definitions used for `is_enabled` — there is no separate
+"variants mode" to enable.
 
 ```python
-from toggly_fastapi import configure_toggly
+from toggly_fastapi import configure_toggly, get_toggly_client
 
 configure_toggly(
     app_key="your-app-key",
-    enable_variants=True,
-    identity="user-123",           # Stable variants identity.
-    variant_groups=["beta"],        # Targeting membership.
-    variant_claims={"plan": "pro"}, # String rule attributes.
-)  # Call during application startup; context precedes the first request.
+    identity="user-123",  # Default identity used when a request/user_id isn't supplied.
+)  # Call during application startup.
+
+client = get_toggly_client()
+variant = client.get_variant("checkout-flow", user_id="user-123")
+if variant is not None and variant.enabled and variant.name == "B":
+    ...
 ```
 
-Startup context avoids an initial variants fetch with incomplete targeting followed by a second fetch. Use one variants client per fixed application-wide context; never change a shared server client's identity for each incoming request. These defaults do not replace request-local `EvaluationContext` for ordinary local boolean evaluation. Enabling remote variants retains the SDK's existing client-wide evaluated-flag behavior.
-
-Groups are trimmed and sent as repeated parameters. Claims must be string-to-string mappings: empty names/values are omitted, whitespace is preserved, and the first 20 claim names in sorted order are sent. Omitted or empty collections send no targeting parameters. Caller collections are copied. Variants caches and conditional validators match the complete context; legacy unscoped variants caches require a fresh fetch. Global definition caches retain their existing behavior.
+See the core `toggly` package README for the full `get_variant` /
+`get_variant_value` API and the Microsoft.FeatureManagement-parity assignment
+rules.

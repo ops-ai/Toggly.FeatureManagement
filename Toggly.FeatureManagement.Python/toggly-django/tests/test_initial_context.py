@@ -12,15 +12,11 @@ def test_startup_context(entry):
         def initialize():
             cfg = factory.call_args.args[0]
             assert cfg.identity == "user&123"
-            assert cfg.variant_groups == ["beta"]
-            assert cfg.variant_claims == {"plan": "pro"}
         factory.return_value.init.side_effect = initialize
         if entry == "apps":
-            with override_settings(TOGGLY={"IDENTITY": "user&123", "VARIANT_GROUPS": ["beta"],
-                                           "VARIANT_CLAIMS": {"plan": "pro"}}):
+            with override_settings(TOGGLY={"IDENTITY": "user&123"}):
                 apps.get_app_config("toggly_django").ready()
         else:
             from toggly_django.utils import configure_toggly
-            configure_toggly(identity="user&123", variant_groups=["beta"],
-                             variant_claims={"plan": "pro"})
+            configure_toggly(identity="user&123")
         factory.return_value.init.assert_called_once()
