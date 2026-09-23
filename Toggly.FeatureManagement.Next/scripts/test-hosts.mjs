@@ -19,7 +19,8 @@ if (artifact) console.log('LOCAL INTEGRATION ARTIFACT: telemetry; registry accep
 const hosts = [
   {next: '14.2.35', react: '18.3.1', reactTypes: '18.3.18', domTypes: '18.3.5', nodeTypes: '22.20.2', lib: 'es2022', typescript: '5.9.3'},
   {next: '15.5.25', react: '19.3.0', reactTypes: '19.3.0', domTypes: '19.3.0', nodeTypes: '22.20.2', lib: 'es2022', typescript: '5.9.3'},
-  {next: '16.3.5', react: '19.3.0', reactTypes: '19.3.0', domTypes: '19.3.0', nodeTypes: '24.13.6', lib: 'esnext', typescript: '6.0.3'},
+  {next: '16.3.5', react: '19.3.0', reactTypes: '19.3.0', domTypes: '19.3.0', nodeTypes: '24.13.6', lib: 'esnext', typescript: '6.0.3', bundler: '--webpack'},
+  {next: '16.3.5', react: '19.3.0', reactTypes: '19.3.0', domTypes: '19.3.0', nodeTypes: '24.13.6', lib: 'esnext', typescript: '6.0.3', bundler: '--turbopack'},
 ]
 async function files(directory) {
   const result = []
@@ -35,22 +36,26 @@ await withResources(async defer => {
   for (const name of ['core', 'client']) await run('pnpm', ['pack', '--pack-destination', temporary], join(root, `nextjs-toggly-${name}`))
   const archives = (await readdir(temporary)).filter(name => name.endsWith('.tgz')).map(name => join(temporary, name))
   assert.equal(archives.length, 2)
-  for (const fixture of hosts) {
+  const selectedHosts = hosts.filter(row => !process.env.NEXT_HOST_VERSION || row.next === process.env.NEXT_HOST_VERSION)
+  assert.ok(selectedHosts.length > 0, 'NEXT_HOST_VERSION must select a known host')
+  for (const fixture of selectedHosts) {
     const host = join(temporary, `next-${fixture.next}`)
     await cp(join(root, 'tests/browser-host'), host, {recursive: true})
     const hostTypes = JSON.parse(await readFile(join(host, 'tsconfig.json'), 'utf8'))
     hostTypes.compilerOptions.lib = ['dom', 'dom.iterable', fixture.lib]
     await writeFile(join(host, 'tsconfig.json'), JSON.stringify(hostTypes, null, 2))
-    await writeFile(join(host, 'package.json'), JSON.stringify({name: 'toggly-next-packed-host', private: true, type: 'module', dependencies: {next: fixture.next, react: fixture.react, 'react-dom': fixture.react}, devDependencies: {typescript: fixture.typescript, '@types/node': fixture.nodeTypes, '@types/react': fixture.reactTypes, '@types/react-dom': fixture.domTypes, 'puppeteer-core': '25.10.0'}}))
+    await writeFile(join(host, 'package.json'), JSON.stringify({name: 'toggly-next-packed-host', private: true, type: 'module', dependencies: {next: fixture.next, react: fixture.react, 'react-dom': fixture.react, '@ops-ai/nextjs-toggly-edge': '1.6.0'}, devDependencies: {typescript: fixture.typescript, '@types/node': fixture.nodeTypes, '@types/react': fixture.reactTypes, '@types/react-dom': fixture.domTypes, 'puppeteer-core': '25.10.0'}}))
     await run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', ...archives, ...(artifact ? [artifact] : [])], host)
     const versions = {}
-    for (const [name, version] of [['next', fixture.next], ['react', fixture.react], ['typescript', fixture.typescript], ['@ops-ai/nextjs-toggly-core', '1.12.0'], ['@ops-ai/nextjs-toggly-client', '1.5.0'], ['@ops-ai/toggly-client-telemetry', '1.1.0']]) {
+    for (const [name, version] of [['next', fixture.next], ['react', fixture.react], ['typescript', fixture.typescript], ['@ops-ai/nextjs-toggly-core', JSON.parse(await readFile(join(root, 'nextjs-toggly-core/package.json'), 'utf8')).version], ['@ops-ai/nextjs-toggly-edge', '1.6.0'], ['@ops-ai/nextjs-toggly-client', '1.5.0'], ['@ops-ai/toggly-client-telemetry', '1.1.0']]) {
       versions[name] = JSON.parse(await readFile(join(host, 'node_modules', name, 'package.json'), 'utf8')).version
       assert.equal(versions[name], version)
     }
     console.log('ACTUAL REGISTRY HOST', JSON.stringify(versions))
+    await run(process.execPath, ['--conditions=edge-light', '--conditions=browser', '--input-type=module', '-e', `import assert from 'node:assert/strict'; import {TelemetryRuntime,resolveTelemetryEnableFlag} from '@ops-ai/nextjs-toggly-core'; assert.equal(typeof TelemetryRuntime,'function'); assert.equal(resolveTelemetryEnableFlag(undefined,true),true); const {createRequire}=await import('node:module'); const cjs=createRequire(import.meta.url)('@ops-ai/nextjs-toggly-core'); assert.equal(typeof cjs.TelemetryRuntime,'function'); assert.equal(cjs.resolveTelemetryEnableFlag(undefined,true),true);`], host)
+    await run(process.execPath, ['--conditions=browser', '--input-type=module', '-e', `import assert from 'node:assert/strict'; import * as core from '@ops-ai/nextjs-toggly-core'; assert.equal(core.TelemetryRuntime,undefined); assert.equal(core.resolveTelemetryEnableFlag,undefined); assert.equal(typeof core.createTogglyClient,'function'); const {createRequire}=await import('node:module'); const cjs=createRequire(import.meta.url)('@ops-ai/nextjs-toggly-core'); assert.equal(cjs.TelemetryRuntime,undefined); assert.equal(cjs.resolveTelemetryEnableFlag,undefined);`], host)
     await run(process.execPath, [join(root, 'scripts/browser-cleanup-check.mjs')], host)
-    await run(process.execPath, ['node_modules/next/dist/bin/next', 'build', ...(fixture.next.startsWith('16.') ? ['--webpack'] : [])], host)
+    await run(process.execPath, ['node_modules/next/dist/bin/next', 'build', ...(fixture.bundler ? [fixture.bundler] : [])], host)
     const typeConfig = JSON.parse(await readFile(join(host, 'tsconfig.json'), 'utf8'))
     assert.equal(typeConfig.compilerOptions.strict, true)
     assert.equal(typeConfig.compilerOptions.skipLibCheck, false)
@@ -77,9 +82,11 @@ await withResources(async defer => {
         await new Promise(resolve => setTimeout(resolve, 100))
       }
       assert.ok(ready, 'Next production server started')
+      const edgeResponse = await fetch(`http://127.0.0.1:${port}`, {signal: AbortSignal.timeout(2000)})
+      assert.equal(edgeResponse.headers.get('x-toggly-edge-proof'), 'true', 'Published Edge middleware evaluates through the packed Core exports')
       await run(process.execPath, [join(root, 'scripts/browser-check.mjs'), String(port)], host)
     })
     await rm(host, {recursive: true, force: true})
-    console.log(`Next ${fixture.next}/React ${fixture.react}: TS ${fixture.typescript}/${fixture.lib}/Node types ${fixture.nodeTypes}, packed browser transport boundary, SSR, and host passed`)
+    console.log(`Next ${fixture.next} ${fixture.bundler ?? 'webpack'}/React ${fixture.react}: TS ${fixture.typescript}/${fixture.lib}/Node types ${fixture.nodeTypes}, packed browser transport boundary, SSR, and host passed`)
   }
 })
