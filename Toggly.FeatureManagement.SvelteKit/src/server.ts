@@ -1,6 +1,11 @@
 import { error, type Handle, type RequestEvent } from '@sveltejs/kit';
 import type { TogglyClient, EvaluationContext } from '@ops-ai/toggly-node-core';
-import { selectDefinitions, type GateOptions, type TogglySnapshot } from './types.js';
+import {
+  selectDefinitions,
+  selectVariantDefs,
+  type GateOptions,
+  type TogglySnapshot,
+} from './types.js';
 import { verifyEnvelope } from './persistence.js';
 import { buildBrowserDefinitionsUrl, captureEvaluatedResponse } from './transport.js';
 import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions } from '@ops-ai/toggly-signed-defs';
@@ -25,6 +30,12 @@ export interface ServerOptions {
     allowedKeyIds?: string[];
     maxSignatureAgeSeconds?: number;
     timeout?: number;
+    /**
+     * When true, fetch `/evaluated-variants-signed` instead of `/evaluated-signed` for the
+     * frontend snapshot, populating `TogglySnapshot.variants` for the browser store's
+     * `getVariant` / `getVariantValue`. Default false.
+     */
+    enableVariants?: boolean;
     onError?: (error: unknown) => void;
   };
 }
@@ -76,6 +87,7 @@ export function createTogglyHandle(options: ServerOptions): Handle {
           frontend.appKey,
           frontend.environment ?? 'Production',
           publicContext,
+          frontend.enableVariants,
         );
         const fetchImpl: typeof fetch = (input, init) =>
           fetch(input, { ...init, signal: AbortSignal.timeout(frontend.timeout ?? 5000) });
@@ -106,9 +118,14 @@ export function createTogglyHandle(options: ServerOptions): Handle {
           body,
           await keys.get({ ...frontend, baseURI, fetchImpl }),
           frontend,
+          0,
+          frontend.enableVariants ? 'variants' : 'evaluated',
         );
         return {
           definitions: selectDefinitions(verified.definitions, frontend.expose),
+          variants: verified.variants
+            ? selectVariantDefs(verified.variants, frontend.expose)
+            : undefined,
           context: publicContext,
           expose: [...frontend.expose],
           source: 'signed',

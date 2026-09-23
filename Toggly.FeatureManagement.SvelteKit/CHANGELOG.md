@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 — 2026-09-22
+
+### Added
+
+- Opt-in `enableVariants` on both browser (`createToggly`) and server (`ServerOptions.frontend`) configuration. When set, the SDK fetches `/evaluated-variants-signed` instead of `/evaluated-signed` for the frontend snapshot, carrying `{ enabled, variant?, configurationValue? }` per exposed key.
+- `getVariant(key)` and `getVariantValue(key)` on the browser store: return the assigned variant name/configuration only when variants are enabled, the flag is effectively on (after local gates) and a variant name was assigned; otherwise `null`.
+- `TogglySnapshot.variants` carries the raw exposed variant entries alongside the existing boolean `definitions` (still derived from `enabled === true`), so `isEnabled` / `gate` / `Feature.svelte` keep working unchanged.
+
 ## 0.2.0 — 2026-09-18
 
 ### Fixed

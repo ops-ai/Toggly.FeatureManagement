@@ -6,9 +6,11 @@ import { evaluateResolvedKeys, resolveEvaluatedDefinition } from '@ops-ai/toggly
 import { applyLocalGate, buildFlagGateIndex } from '@ops-ai/toggly-local-gates';
 import {
   selectDefinitions,
+  selectVariantDefs,
   type BrowserOptions,
   type GateOptions,
   type TogglySnapshot,
+  type VariantResult,
 } from './types.js';
 export type * from './types.js';
 
@@ -46,6 +48,7 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
       return {
         ...copy,
         definitions: {},
+        variants: undefined,
         source: 'defaults',
         signedTimestamp: undefined,
         signingKey: undefined,
@@ -100,6 +103,25 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
     };
   };
   const isEnabled = (key: string, gate: GateOptions = {}) => captureEvaluation(gate)(key);
+  /**
+   * Current variant assignment for a feature (requires {@link BrowserOptions.enableVariants}).
+   * Returns null when variants are disabled, the flag is off, or no variant name was assigned.
+   */
+  const getVariant = (featureKey: string): VariantResult | null => {
+    if (!options.enableVariants) return null;
+    const record = telemetry?.captureCheck();
+    const entry = snapshot.variants?.[featureKey];
+    const variantName = entry?.variant || 'enabled';
+    const gates = localGates.map((local) => ({ ...local, flagKeys: [...local.flagKeys] }));
+    const index = buildFlagGateIndex(gates);
+    const enabled = applyLocalGate(entry?.enabled === true, featureKey, gates, index);
+    record?.(featureKey, enabled ? variantName : 'disabled');
+    if (!enabled || !entry?.variant) return null;
+    return { name: entry.variant, configurationValue: entry.configurationValue };
+  };
+  /** Configuration payload for the assigned variant, if any. */
+  const getVariantValue = (featureKey: string): unknown | null =>
+    getVariant(featureKey)?.configurationValue ?? null;
   const start = async (): Promise<void> => {
     if (disposed || typeof window === 'undefined') return;
     mounted = true;
@@ -111,13 +133,14 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
     const disconnect = connectBrowser(
       snapshot,
       options,
-      (definitions, verification) => {
+      (definitions, verification, variants) => {
         if (!disposed && ownGeneration === generation)
           publish({
             ...snapshot,
             ...verification,
             source: 'signed',
             definitions: selectDefinitions(definitions, snapshot.expose),
+            variants: variants ? selectVariantDefs(variants, snapshot.expose) : undefined,
           });
       },
       session,
@@ -141,6 +164,8 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
     flushTelemetry: (options?: { keepalive?: boolean }) =>
       telemetry?.flush(options) ?? Promise.resolve(),
     isEnabled,
+    getVariant,
+    getVariantValue,
     gate: (keys: string[], gate: GateOptions = {}) =>
       evaluateResolvedKeys(
         [...keys],
