@@ -120,11 +120,26 @@ function readUint32LE(bytes: Uint8Array, offset: number): number {
   )
 }
 
-export function computePercentile(userId: string, featureKey: string): number {
-  const input = `${featureKey}\n${userId}`
-  const digest = sha256(new TextEncoder().encode(input))
+/**
+ * Core SHA-256 percentage primitive shared by every sticky-bucket hash in
+ * this package: digest the UTF-8 context id, read the first 4 bytes as a
+ * little-endian uint32, then scale to a percentage in `[0, 100)`.
+ *
+ * This exact recipe (SHA-256 → first 4 bytes LE → `/0xFFFFFFFF * 100`) also
+ * matches `Microsoft.FeatureManagement.Targeting.TargetingEvaluator`'s
+ * private `IsTargeted(string contextId, ...)` percentage calculation, which
+ * is why the variant allocator (`./variant-allocator`) reuses it directly
+ * with MF's own context-id ordering (`"{userId}\n{hint}"`) instead of this
+ * package's `"{featureKey}\n{userId}"` ordering below.
+ */
+export function computeContextPercentage(contextId: string): number {
+  const digest = sha256(new TextEncoder().encode(contextId))
   const value = readUint32LE(digest, 0)
   return (value / 0xffffffff) * 100
+}
+
+export function computePercentile(userId: string, featureKey: string): number {
+  return computeContextPercentage(`${featureKey}\n${userId}`)
 }
 
 /**

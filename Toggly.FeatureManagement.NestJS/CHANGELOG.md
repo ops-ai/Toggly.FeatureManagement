@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0 — 2026-09-23
+
+### Added
+
+- `TogglyService.getVariant(key, overrides?)` and `getVariantValue(key, overrides?)` assign feature variants catalog-locally (no server round trip), bound to the request-scoped evaluation context, mirroring `isFeatureOn`/`evaluateFeatureGate` [OPS-1395].
+- Re-export `VariantResult` from `@ops-ai/toggly-node-core` [OPS-1395].
+
+### Notes
+
+- Requires `@ops-ai/toggly-node-core` 0.10.0 or newer once published; bump the dependency range in a fast-follow after that release lands.
+
 ## 0.1.0 — 2026-09-12
 
 ### Added

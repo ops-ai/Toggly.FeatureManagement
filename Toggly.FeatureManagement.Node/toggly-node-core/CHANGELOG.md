@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.10.0
+
+2026-09-23
+
+### Added
+- `getVariant(featureKey, context?, entity?, kind?)` and
+  `getVariantValue(...)` assign feature variants catalog-locally from cached
+  definitions, with no server round trip. Allocation (User/Group/Percentile/
+  Default) and percentile hashing match `Microsoft.FeatureManagement` 4.7.0
+  bit-for-bit, verified against the shared `variant-allocator-corpus`
+  [OPS-1395].
+- `TogglyServerConfig.variantIgnoreCase` controls case sensitivity for user/
+  group/percentile matching during variant allocation (defaults to `false`,
+  matching MF's own default) [OPS-1395].
+- Re-export `allocateVariant` and the variant types (`VariantResult`,
+  `VariantDefinition`, `VariantAllocation`, `UserAllocation`,
+  `GroupAllocation`, `PercentileAllocation`, `VariantAssignmentResult`,
+  `VariantAssignmentReason`, `VariantStatusOverride`,
+  `VariantAllocatorOptions`) from `@ops-ai/toggly-eval` [OPS-1395].
+
 ## 0.9.2
 
 2026-09-17

@@ -79,6 +79,33 @@ client.registerContext(
 await client.isFeatureOn('OrderBadge', undefined, order, 'Order')
 ```
 
+## Feature variants (catalog-local, MF-parity)
+
+`getVariant` / `getVariantValue` assign a variant from cached definitions
+entirely locally — no server round trip, no dual-rail dependency on an
+`evaluated-variants` endpoint. The allocation algorithm
+(`@ops-ai/toggly-eval`'s `allocateVariant`) replays
+`Microsoft.FeatureManagement`'s own variant-assignment logic bit-for-bit
+(user → group → percentile → default, `statusOverride`, SHA-256 percentile
+hashing), verified against the shared gold corpus at
+`variant-allocator-corpus/cases.json` (repo root).
+
+```ts
+const variant = await client.getVariant('checkout-flow', { identity: 'alice' })
+// { name: 'A', configurationValue: { color: 'blue' } } | null
+
+const value = await client.getVariantValue('checkout-flow', { identity: 'alice' })
+// { color: 'blue' } | null
+```
+
+`getVariant` returns `null` when the feature is unknown, disabled for this
+context, or has no assignable variant — matching the `getVariant` null
+contract used across the rest of the Toggly JS ecosystem
+(React/Vue/Solid/Next.js/Nuxt/SvelteKit). Pass `variantIgnoreCase: true` in
+the client config for case-insensitive user/group matching (`false` by
+default, matching `Microsoft.FeatureManagement`'s own
+`TargetingEvaluationOptions.IgnoreCase` default).
+
 ## License
 
 [MIT](LICENSE) — see also the [repository LICENSE](https://github.com/ops-ai/Toggly.FeatureManagement/blob/develop/LICENSE).
