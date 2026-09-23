@@ -27,6 +27,19 @@ test('normalizes only metrics base path and excludes context/auth from the reque
   expect(JSON.parse(calls[0].init.body)).toEqual({ k: 'test-app', e: 'Production', u: 'user-123', f: { flag: { enabled: [1] } } });
   reporter.dispose();
 });
+test('builds the endpoint when a Hermes-style URL ignores pathname assignment', async () => {
+  const NativeURL = globalThis.URL;
+  class HermesURL extends NativeURL {
+    get pathname(): string { return super.pathname; }
+    set pathname(_path: string) { /* React Native's native URL leaves the path unchanged. */ }
+  }
+  globalThis.URL = HermesURL;
+  try {
+    const { reporter, calls } = setup({ metricsBaseUrl: 'https://collector.test/base///' });
+    reporter.recordUsage('flag'); await reporter.flush(); reporter.dispose();
+    expect(calls[0].url).toBe('https://collector.test/base/api/frontend/telemetry');
+  } finally { globalThis.URL = NativeURL; }
+});
 test('disabled reporters have no scheduled work, even on disposal', async () => {
   for (const options of [{ appKey: '' }, { enableTelemetry: false }]) {
     const { reporter, calls } = setup(options); reporter.recordUsage('flag'); reporter.dispose(); await reporter.flush();

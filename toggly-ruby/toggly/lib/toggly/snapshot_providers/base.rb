@@ -40,21 +40,6 @@ module Toggly
         false
       end
 
-      # Save evaluated variants snapshot (dual-rail, used when
-      # `config.enable_variants` is true). Default: no-op. Override in
-      # subclasses to persist variants across restarts.
-      #
-      # @param variants [Hash<String, EvaluatedVariantDef>] Variants to save
-      # @param metadata [Hash] Optional metadata
-      def save_variants(_variants, _metadata = {}); end
-
-      # Load evaluated variants snapshot (dual-rail).
-      #
-      # @return [Hash, nil] Hash with :variants and :metadata, or nil if not available
-      def load_variants
-        nil
-      end
-
       protected
 
       # Serialize definitions to a storable format
@@ -75,26 +60,6 @@ module Toggly
         data.each_with_object({}) do |item, hash|
           definition = FeatureDefinition.from_hash(item)
           hash[definition.feature_key] = definition
-        end
-      end
-
-      # Serialize evaluated variants to a storable format
-      #
-      # @param variants [Hash<String, EvaluatedVariantDef>] Variants
-      # @return [Hash<String, Hash>]
-      def serialize_variants(variants)
-        variants.transform_values(&:to_h)
-      end
-
-      # Deserialize evaluated variants from stored format
-      #
-      # @param data [Hash<String, Hash>] Serialized variants
-      # @return [Hash<String, EvaluatedVariantDef>]
-      def deserialize_variants(data)
-        return {} unless data.is_a?(Hash)
-
-        data.each_with_object({}) do |(key, value), hash|
-          hash[key.to_s] = EvaluatedVariantDef.from_hash(value)
         end
       end
     end
