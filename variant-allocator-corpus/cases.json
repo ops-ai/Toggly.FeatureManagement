@@ -1,0 +1,862 @@
+[
+  {
+    "id": "user-match-basic",
+    "feature": {
+      "name": "checkout-flow",
+      "enabledFor": [
+        {
+          "name": "AlwaysOn"
+        }
+      ],
+      "variants": [
+        {
+          "name": "A",
+          "configurationValue": {
+            "color": "blue"
+          },
+          "statusOverride": "None"
+        },
+        {
+          "name": "B",
+          "configurationValue": {
+            "color": "green"
+          },
+          "statusOverride": "None"
+        }
+      ],
+      "allocation": {
+        "defaultWhenEnabled": "B",
+        "defaultWhenDisabled": null,
+        "seed": null,
+        "user": [
+          {
+            "variant": "A",
+            "users": [
+              "alice",
+              "bob"
+            ]
+          }
+        ],
+        "group": null,
+        "percentile": null
+      }
+    },
+    "targeting": {
+      "userId": "alice",
+      "groups": []
+    },
+    "expected": {
+      "variantName": "A",
+      "configurationValue": {
+        "color": "blue"
+      },
+      "enabled": true,
+      "assignmentReason": "User"
+    }
+  },
+  {
+    "id": "user-no-match-falls-back-to-default-when-enabled",
+    "feature": {
+      "name": "checkout-flow-user-fallback",
+      "enabledFor": [
+        {
+          "name": "AlwaysOn"
+        }
+      ],
+      "variants": [
+        {
+          "name": "A",
+          "configurationValue": {
+            "color": "blue"
+          },
+          "statusOverride": "None"
+        },
+        {
+          "name": "B",
+          "configurationValue": {
+            "color": "green"
+          },
+          "statusOverride": "None"
+        }
+      ],
+      "allocation": {
+        "defaultWhenEnabled": "B",
+        "defaultWhenDisabled": null,
+        "seed": null,
+        "user": [
+          {
+            "variant": "A",
+            "users": [
+              "alice",
+              "bob"
+            ]
+          }
+        ],
+        "group": null,
+        "percentile": null
+      }
+    },
+    "targeting": {
+      "userId": "carol",
+      "groups": []
+    },
+    "expected": {
+      "variantName": "B",
+      "configurationValue": {
+        "color": "green"
+      },
+      "enabled": true,
+      "assignmentReason": "DefaultWhenEnabled"
+    }
+  },
+  {
+    "id": "group-match-basic",
+    "feature": {
+      "name": "beta-banner",
+      "enabledFor": [
+        {
+          "name": "AlwaysOn"
+        }
+      ],
+      "variants": [
+        {
+          "name": "A",
+          "configurationValue": {
+            "show": false
+          },
+          "statusOverride": "None"
+        },
+        {
+          "name": "B",
+          "configurationValue": {
+            "show": true
+          },
+          "statusOverride": "None"
+        }
+      ],
+      "allocation": {
+        "defaultWhenEnabled": "A",
+        "defaultWhenDisabled": null,
+        "seed": null,
+        "user": null,
+        "group": [
+          {
+            "variant": "B",
+            "groups": [
+              "beta-testers"
+            ]
+          }
+        ],
+        "percentile": null
+      }
+    },
+    "targeting": {
+      "userId": "dave",
+      "groups": [
+        "beta-testers",
+        "other-group"
+      ]
+    },
+    "expected": {
+      "variantName": "B",
+      "configurationValue": {
+        "show": true
+      },
+      "enabled": true,
+      "assignmentReason": "Group"
+    }
+  },
+  {
+    "id": "group-no-match-falls-back-to-default-when-enabled",
+    "feature": {
+      "name": "beta-banner-group-fallback",
+      "enabledFor": [
+        {
+          "name": "AlwaysOn"
+        }
+      ],
+      "variants": [
+        {
+          "name": "A",
+          "configurationValue": {
+            "show": false
+          },
+          "statusOverride": "None"
+        },
+        {
+          "name": "B",
+          "configurationValue": {
+            "show": true
+          },
+          "statusOverride": "None"
+        }
+      ],
+      "allocation": {
+        "defaultWhenEnabled": "A",
+        "defaultWhenDisabled": null,
+        "seed": null,
+        "user": null,
+        "group": [
+          {
+            "variant": "B",
+            "groups": [
+              "beta-testers"
+            ]
+          }
+        ],
+        "percentile": null
+      }
+    },
+    "targeting": {
+      "userId": "erin",
+      "groups": [
+        "some-other-group"
+      ]
+    },
+    "expected": {
+      "variantName": "A",
+      "configurationValue": {
+        "show": false
+      },
+      "enabled": true,
+      "assignmentReason": "DefaultWhenEnabled"
+    }
+  },
+  {
+    "id": "percentile-default-seed-user-1",
+    "feature": {
+      "name": "gradual-rollout",
+      "enabledFor": [
+        {
+          "name": "AlwaysOn"
+        }
+      ],
+      "variants": [
+        {
+          "name": "A",
+          "configurationValue": {
+            "tier": "control"
+          },
+          "statusOverride": "None"
+        },
+        {
+          "name": "B",
+          "configurationValue": {
+            "tier": "treatment"
+          },
+          "statusOverride": "None"
+        }
+      ],
+      "allocation": {
+        "defaultWhenEnabled": null,
+        "defaultWhenDisabled": null,
+        "seed": null,
+        "user": null,
+        "group": null,
+        "percentile": [
+          {
+            "variant": "A",
+            "from": 0,
+            "to": 50
+          },
+          {
+            "variant": "B",
+            "from": 50,
+            "to": 100
+          }
+        ]
+      }
+    },
+    "targeting": {
+      "userId": "percentile-user-1",
+      "groups": []
+    },
+    "expected": {
+      "variantName": "A",
+      "configurationValue": {
+        "tier": "control"
+      },
+      "enabled": true,
+      "assignmentReason": "Percentile"
+    }
+  },
+  {
+    "id": "percentile-default-seed-user-2",
+    "feature": {
+      "name": "gradual-rollout",
+      "enabledFor": [
+        {
+          "name": "AlwaysOn"
+        }
+      ],
+      "variants": [
+        {
+          "name": "A",
+          "configurationValue": {
+            "tier": "control"
+          },
+          "statusOverride": "None"
+        },
+        {
+          "name": "B",
+          "configurationValue": {
+            "tier": "treatment"
+          },
+          "statusOverride": "None"
+        }
+      ],
+      "allocation": {
+        "defaultWhenEnabled": null,
+        "defaultWhenDisabled": null,
+        "seed": null,
+        "user": null,
+        "group": null,
+        "percentile": [
+          {
+            "variant": "A",
+            "from": 0,
+            "to": 50
+          },
+          {
+            "variant": "B",
+            "from": 50,
+            "to": 100
+          }
+        ]
+      }
+    },
+    "targeting": {
+      "userId": "percentile-user-7",
+      "groups": []
+    },
+    "expected": {
+      "variantName": "B",
+      "configurationValue": {
+        "tier": "treatment"
+      },
+      "enabled": true,
+      "assignmentReason": "Percentile"
+    }
+  },
+  {
+    "id": "percentile-custom-seed",
+    "feature": {
+      "name": "gradual-rollout-custom-seed",
+      "enabledFor": [
+        {
+          "name": "AlwaysOn"
+        }
+      ],
+      "variants": [
+        {
+          "name": "A",
+          "configurationValue": {
+            "tier": "control"
+          },
+          "statusOverride": "None"
+        },
+        {
+          "name": "B",
+          "configurationValue": {
+            "tier": "treatment"
+          },
+          "statusOverride": "None"
+        }
+      ],
+      "allocation": {
+        "defaultWhenEnabled": null,
+        "defaultWhenDisabled": null,
+        "seed": "campaign-42",
+        "user": null,
+        "group": null,
+        "percentile": [
+          {
+            "variant": "A",
+            "from": 0,
+            "to": 50
+          },
+          {
+            "variant": "B",
+            "from": 50,
+            "to": 100
+          }
+        ]
+      }
+    },
+    "targeting": {
+      "userId": "percentile-user-3",
+      "groups": []
+    },
+    "expected": {
+      "variantName": "B",
+      "configurationValue": {
+        "tier": "treatment"
+      },
+      "enabled": true,
+      "assignmentReason": "Percentile"
+    }
+  },
+  {
+    "id": "percentile-to-100-edge-always-matches",
+    "feature": {
+      "name": "single-bucket-rollout",
+      "enabledFor": [
+        {
+          "name": "AlwaysOn"
+        }
+      ],
+      "variants": [
+        {
+          "name": "A",
+          "configurationValue": {
+            "tier": "everyone"
+          },
+          "statusOverride": "None"
+        }
+      ],
+      "allocation": {
+        "defaultWhenEnabled": null,
+        "defaultWhenDisabled": null,
+        "seed": null,
+        "user": null,
+        "group": null,
+        "percentile": [
+          {
+            "variant": "A",
+            "from": 0,
+            "to": 100
+          }
+        ]
+      }
+    },
+    "targeting": {
+      "userId": "any-user",
+      "groups": []
+    },
+    "expected": {
+      "variantName": "A",
+      "configurationValue": {
+        "tier": "everyone"
+      },
+      "enabled": true,
+      "assignmentReason": "Percentile"
+    }
+  },
+  {
+    "id": "default-when-enabled-no-targeting-rules",
+    "feature": {
+      "name": "simple-default-enabled",
+      "enabledFor": [
+        {
+          "name": "AlwaysOn"
+        }
+      ],
+      "variants": [
+        {
+          "name": "A",
+          "configurationValue": {
+            "plan": "free"
+          },
+          "statusOverride": "None"
+        },
+        {
+          "name": "B",
+          "configurationValue": {
+            "plan": "paid"
+          },
+          "statusOverride": "None"
+        }
+      ],
+      "allocation": {
+        "defaultWhenEnabled": "A",
+        "defaultWhenDisabled": null,
+        "seed": null,
+        "user": null,
+        "group": null,
+        "percentile": null
+      }
+    },
+    "targeting": {
+      "userId": "frank",
+      "groups": []
+    },
+    "expected": {
+      "variantName": "A",
+      "configurationValue": {
+        "plan": "free"
+      },
+      "enabled": true,
+      "assignmentReason": "DefaultWhenEnabled"
+    }
+  },
+  {
+    "id": "default-when-disabled-feature-off",
+    "feature": {
+      "name": "simple-default-disabled",
+      "enabledFor": [],
+      "variants": [
+        {
+          "name": "A",
+          "configurationValue": {
+            "plan": "free"
+          },
+          "statusOverride": "None"
+        },
+        {
+          "name": "B",
+          "configurationValue": {
+            "plan": "paid"
+          },
+          "statusOverride": "None"
+        }
+      ],
+      "allocation": {
+        "defaultWhenEnabled": "A",
+        "defaultWhenDisabled": "B",
+        "seed": null,
+        "user": null,
+        "group": null,
+        "percentile": null
+      }
+    },
+    "targeting": {
+      "userId": "gina",
+      "groups": []
+    },
+    "expected": {
+      "variantName": "B",
+      "configurationValue": {
+        "plan": "paid"
+      },
+      "enabled": false,
+      "assignmentReason": "DefaultWhenDisabled"
+    }
+  },
+  {
+    "id": "case-insensitive-user-match",
+    "feature": {
+      "name": "ci-user-match",
+      "enabledFor": [
+        {
+          "name": "AlwaysOn"
+        }
+      ],
+      "variants": [
+        {
+          "name": "A",
+          "configurationValue": {
+            "tag": "targeted"
+          },
+          "statusOverride": "None"
+        },
+        {
+          "name": "B",
+          "configurationValue": {
+            "tag": "default"
+          },
+          "statusOverride": "None"
+        }
+      ],
+      "allocation": {
+        "defaultWhenEnabled": "B",
+        "defaultWhenDisabled": null,
+        "seed": null,
+        "user": [
+          {
+            "variant": "A",
+            "users": [
+              "User1"
+            ]
+          }
+        ],
+        "group": null,
+        "percentile": null
+      }
+    },
+    "targeting": {
+      "userId": "user1",
+      "groups": []
+    },
+    "expected": {
+      "variantName": "A",
+      "configurationValue": {
+        "tag": "targeted"
+      },
+      "enabled": true,
+      "assignmentReason": "User"
+    },
+    "ignoreCase": true
+  },
+  {
+    "id": "case-sensitive-user-no-match-falls-back-to-default",
+    "feature": {
+      "name": "cs-user-no-match",
+      "enabledFor": [
+        {
+          "name": "AlwaysOn"
+        }
+      ],
+      "variants": [
+        {
+          "name": "A",
+          "configurationValue": {
+            "tag": "targeted"
+          },
+          "statusOverride": "None"
+        },
+        {
+          "name": "B",
+          "configurationValue": {
+            "tag": "default"
+          },
+          "statusOverride": "None"
+        }
+      ],
+      "allocation": {
+        "defaultWhenEnabled": "B",
+        "defaultWhenDisabled": null,
+        "seed": null,
+        "user": [
+          {
+            "variant": "A",
+            "users": [
+              "User1"
+            ]
+          }
+        ],
+        "group": null,
+        "percentile": null
+      }
+    },
+    "targeting": {
+      "userId": "user1",
+      "groups": []
+    },
+    "expected": {
+      "variantName": "B",
+      "configurationValue": {
+        "tag": "default"
+      },
+      "enabled": true,
+      "assignmentReason": "DefaultWhenEnabled"
+    }
+  },
+  {
+    "id": "no-allocation-enabled-yields-null-variant",
+    "feature": {
+      "name": "no-allocation-enabled",
+      "enabledFor": [
+        {
+          "name": "AlwaysOn"
+        }
+      ],
+      "variants": [
+        {
+          "name": "A",
+          "configurationValue": {
+            "x": 1
+          },
+          "statusOverride": "None"
+        },
+        {
+          "name": "B",
+          "configurationValue": {
+            "x": 2
+          },
+          "statusOverride": "None"
+        }
+      ],
+      "allocation": null
+    },
+    "targeting": {
+      "userId": "henry",
+      "groups": []
+    },
+    "expected": {
+      "variantName": null,
+      "configurationValue": null,
+      "enabled": true,
+      "assignmentReason": "DefaultWhenEnabled"
+    }
+  },
+  {
+    "id": "no-allocation-disabled-yields-null-variant",
+    "feature": {
+      "name": "no-allocation-disabled",
+      "enabledFor": [],
+      "variants": [
+        {
+          "name": "A",
+          "configurationValue": {
+            "x": 1
+          },
+          "statusOverride": "None"
+        },
+        {
+          "name": "B",
+          "configurationValue": {
+            "x": 2
+          },
+          "statusOverride": "None"
+        }
+      ],
+      "allocation": null
+    },
+    "targeting": {
+      "userId": "iris",
+      "groups": []
+    },
+    "expected": {
+      "variantName": null,
+      "configurationValue": null,
+      "enabled": false,
+      "assignmentReason": "DefaultWhenDisabled"
+    }
+  },
+  {
+    "id": "status-override-enabled-flips-disabled-feature",
+    "feature": {
+      "name": "status-override-enabled",
+      "enabledFor": [],
+      "variants": [
+        {
+          "name": "Off",
+          "configurationValue": {
+            "killSwitch": true
+          },
+          "statusOverride": "Enabled"
+        }
+      ],
+      "allocation": {
+        "defaultWhenEnabled": null,
+        "defaultWhenDisabled": "Off",
+        "seed": null,
+        "user": null,
+        "group": null,
+        "percentile": null
+      }
+    },
+    "targeting": {
+      "userId": "jack",
+      "groups": []
+    },
+    "expected": {
+      "variantName": "Off",
+      "configurationValue": {
+        "killSwitch": true
+      },
+      "enabled": true,
+      "assignmentReason": "DefaultWhenDisabled"
+    }
+  },
+  {
+    "id": "status-override-disabled-flips-enabled-feature",
+    "feature": {
+      "name": "status-override-disabled",
+      "enabledFor": [
+        {
+          "name": "AlwaysOn"
+        }
+      ],
+      "variants": [
+        {
+          "name": "On",
+          "configurationValue": {
+            "killSwitch": false
+          },
+          "statusOverride": "Disabled"
+        }
+      ],
+      "allocation": {
+        "defaultWhenEnabled": "On",
+        "defaultWhenDisabled": null,
+        "seed": null,
+        "user": null,
+        "group": null,
+        "percentile": null
+      }
+    },
+    "targeting": {
+      "userId": "kim",
+      "groups": []
+    },
+    "expected": {
+      "variantName": "On",
+      "configurationValue": {
+        "killSwitch": false
+      },
+      "enabled": false,
+      "assignmentReason": "DefaultWhenEnabled"
+    }
+  },
+  {
+    "id": "empty-targeting-context-uses-default-when-enabled",
+    "feature": {
+      "name": "empty-targeting-default",
+      "enabledFor": [
+        {
+          "name": "AlwaysOn"
+        }
+      ],
+      "variants": [
+        {
+          "name": "A",
+          "configurationValue": {
+            "tag": "fallback"
+          },
+          "statusOverride": "None"
+        },
+        {
+          "name": "B",
+          "configurationValue": {
+            "tag": "other"
+          },
+          "statusOverride": "None"
+        }
+      ],
+      "allocation": {
+        "defaultWhenEnabled": "A",
+        "defaultWhenDisabled": null,
+        "seed": null,
+        "user": null,
+        "group": null,
+        "percentile": null
+      }
+    },
+    "targeting": {
+      "userId": null,
+      "groups": []
+    },
+    "expected": {
+      "variantName": "A",
+      "configurationValue": {
+        "tag": "fallback"
+      },
+      "enabled": true,
+      "assignmentReason": "DefaultWhenEnabled"
+    }
+  },
+  {
+    "id": "no-variants-defined-reason-is-none",
+    "feature": {
+      "name": "no-variants-feature",
+      "enabledFor": [
+        {
+          "name": "AlwaysOn"
+        }
+      ],
+      "variants": [],
+      "allocation": null
+    },
+    "targeting": {
+      "userId": "liam",
+      "groups": []
+    },
+    "expected": {
+      "variantName": null,
+      "configurationValue": null,
+      "enabled": true,
+      "assignmentReason": "None"
+    }
+  }
+]
