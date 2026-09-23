@@ -130,7 +130,8 @@ jobs:
         working-directory: ${{ env.SDK_ROOT }}/acceptance/public-telemetry-host
         run: |
           python -m pip install coverage==7.10.7
-          python -m coverage run --source=tool -m unittest discover -s tool -p 'test_*.py'
+          python -m coverage run --parallel-mode --source=tool -m unittest discover -s tool -p 'test_*.py'
+          python -m coverage combine
           python -m coverage report --omit='tool/test_*.py' --fail-under=80
           python -m coverage xml --omit='tool/test_*.py' -o coverage.xml
 

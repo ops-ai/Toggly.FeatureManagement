@@ -28,18 +28,11 @@ def action_command(workflow):
 
 
 class RunnerScriptTest(unittest.TestCase):
-    def test_public_linux_kvm_and_coverage_macos_keep_native_gate(self):
+    def test_public_and_coverage_macos_keep_native_gate(self):
         public = WORKFLOWS[0].read_text()
-        self.assertIn("public-android:\n    runs-on: ubuntu-latest", public)
-        before_action, public_action = public.split(
-            "uses: reactivecircus/android-emulator-runner@v2", 1
-        )
-        self.assertIn("- name: Enable KVM for Android emulator", before_action)
-        self.assertIn('KERNEL=="kvm", GROUP="kvm", MODE="0666"', before_action)
-        self.assertIn("sudo udevadm control --reload-rules", before_action)
-        self.assertIn("sudo udevadm trigger --name-match=kvm", before_action)
-        self.assertIn("test -r /dev/kvm && test -w /dev/kvm", before_action)
-        self.assertIn("disable-linux-hw-accel: false", public_action)
+        self.assertIn("public-android:\n    runs-on: macos-15-intel", public)
+        self.assertNotIn("- name: Enable KVM for Android emulator", public)
+        self.assertNotIn("disable-linux-hw-accel:", public)
 
         analysis = WORKFLOWS[1].read_text()
         coverage = analysis.split("\n  code-coverage:\n", 1)[1].split(
@@ -53,6 +46,8 @@ class RunnerScriptTest(unittest.TestCase):
             self.assertIn("arch: x86_64", job)
             self.assertIn("script: bash tool/run_android_coverage.sh", job)
         self.assertIn("./gradlew testDebugUnitTest koverXmlReport", coverage)
+        self.assertIn("python -m coverage run --parallel-mode --source=tool", coverage)
+        self.assertIn("python -m coverage combine", coverage)
         self.assertIn("python -m coverage report --omit='tool/test_*.py' --fail-under=80", coverage)
         self.assertIn("app/build/reports/coverage/androidTest/debug/connected/report.xml", coverage)
         self.assertIn("name: android-coverage", coverage)
