@@ -14,6 +14,7 @@ import io.toggly.core.model.MetricDefinition;
 import io.toggly.core.model.VariantAllocation;
 import io.toggly.core.model.VariantDefinition;
 import io.toggly.core.telemetry.DefinitionCacheRecorder;
+import io.toggly.core.util.SimpleJson;
 import io.toggly.core.util.VariantJson;
 
 import java.io.BufferedReader;
@@ -671,21 +672,7 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     }
 
     private int findMatchingBrace(String json, int start) {
-        int count = 0;
-        boolean inString = false;
-        for (int i = start; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c == '"' && (i == 0 || json.charAt(i - 1) != '\\')) {
-                inString = !inString;
-            } else if (!inString) {
-                if (c == '{') count++;
-                else if (c == '}') {
-                    count--;
-                    if (count == 0) return i;
-                }
-            }
-        }
-        return -1;
+        return SimpleJson.findMatchingBrace(json, start);
     }
 
     private String extractArrayByKey(String json, String key) {
@@ -700,21 +687,8 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     }
 
     private String extractBalancedArray(String json, int openIdx) {
-        int depth = 0;
-        boolean inString = false;
-        for (int i = openIdx; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c == '"' && (i == 0 || json.charAt(i - 1) != '\\')) {
-                inString = !inString;
-            } else if (!inString) {
-                if (c == '[') {
-                    depth++;
-                } else if (c == ']' && --depth == 0) {
-                    return json.substring(openIdx + 1, i);
-                }
-            }
-        }
-        return null;
+        int end = SimpleJson.findMatchingBracket(json, openIdx);
+        return end > openIdx ? json.substring(openIdx + 1, end) : null;
     }
 
     private void parseFeatures(String json, Map<String, FeatureDefinition> features) {

@@ -47,6 +47,86 @@ public final class SimpleJson {
     }
 
     /**
+     * Returns {@code true} when {@code json.charAt(i)} is a JSON string delimiter
+     * quote (not an escaped quote inside a string). Counts consecutive preceding
+     * backslashes so {@code \\"} (escaped backslash + closing quote) is treated
+     * as a delimiter, while {@code \"} is not.
+     *
+     * @param json the JSON text
+     * @param i index of a character that may be {@code "}
+     * @return whether the quote toggles string mode
+     */
+    public static boolean isStringDelimiter(String json, int i) {
+        if (i < 0 || i >= json.length() || json.charAt(i) != '"') {
+            return false;
+        }
+        int backslashes = 0;
+        for (int j = i - 1; j >= 0 && json.charAt(j) == '\\'; j--) {
+            backslashes++;
+        }
+        return (backslashes % 2) == 0;
+    }
+
+    /**
+     * Finds the index of the {@code '{'} at {@code start}'s matching {@code '}'},
+     * ignoring braces inside JSON string literals (including strings that end with
+     * an escaped backslash before the closing quote).
+     *
+     * @param json the JSON text
+     * @param start index of the opening {@code '{'}
+     * @return index of the matching {@code '}'}, or {@code -1} if unbalanced
+     */
+    public static int findMatchingBrace(String json, int start) {
+        int count = 0;
+        boolean inString = false;
+        for (int i = start; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (isStringDelimiter(json, i)) {
+                inString = !inString;
+            } else if (!inString) {
+                if (c == '{') {
+                    count++;
+                } else if (c == '}') {
+                    count--;
+                    if (count == 0) {
+                        return i;
+                    }
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Finds the index of the {@code '['} at {@code start}'s matching {@code ']'},
+     * ignoring brackets inside JSON string literals.
+     *
+     * @param json the JSON text
+     * @param start index of the opening {@code '['}
+     * @return index of the matching {@code ']'}, or {@code -1} if unbalanced
+     */
+    public static int findMatchingBracket(String json, int start) {
+        int depth = 0;
+        boolean inString = false;
+        for (int i = start; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (isStringDelimiter(json, i)) {
+                inString = !inString;
+            } else if (!inString) {
+                if (c == '[') {
+                    depth++;
+                } else if (c == ']') {
+                    depth--;
+                    if (depth == 0) {
+                        return i;
+                    }
+                }
+            }
+        }
+        return -1;
+    }
+
+    /**
      * Parses a single JSON value starting at {@code pos[0]}, advancing
      * {@code pos[0]} past the consumed value.
      *

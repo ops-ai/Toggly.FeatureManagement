@@ -66,4 +66,28 @@ class SimpleJsonTest {
         String json = SimpleJson.serialize("a\u0001b\nc");
         assertEquals("\"a\\u0001b\\nc\"", json);
     }
+
+    @Test
+    void findMatchingBrace_handlesEscapedBackslashBeforeClosingQuote() {
+        // configurationValue ends with a Windows-style path trailing backslash:
+        // JSON: "C:\\dir\\"  → after escapes: C:\dir\
+        String object = "{\"configurationValue\":\"C:\\\\dir\\\\\",\"name\":\"A\"}";
+        int end = SimpleJson.findMatchingBrace(object, 0);
+        assertEquals(object.length() - 1, end);
+        assertEquals(object, object.substring(0, end + 1));
+    }
+
+    @Test
+    void isStringDelimiter_distinguishesEscapedQuoteFromEscapedBackslash() {
+        // Java "\"a\\\"b\"" → chars: " a \ " b "
+        String escapedQuote = "\"a\\\"b\"";
+        assertTrue(SimpleJson.isStringDelimiter(escapedQuote, 0));
+        assertTrue(!SimpleJson.isStringDelimiter(escapedQuote, 3)); // \"
+        assertTrue(SimpleJson.isStringDelimiter(escapedQuote, 5));
+
+        // Java "\"a\\\\\"" → chars: " a \ \ "
+        String escapedBackslashThenQuote = "\"a\\\\\"";
+        assertTrue(SimpleJson.isStringDelimiter(escapedBackslashThenQuote, 0));
+        assertTrue(SimpleJson.isStringDelimiter(escapedBackslashThenQuote, 4));
+    }
 }

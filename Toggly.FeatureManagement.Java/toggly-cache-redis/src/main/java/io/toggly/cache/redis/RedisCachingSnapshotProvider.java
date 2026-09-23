@@ -487,24 +487,7 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     }
 
     private int findMatchingBrace(String json, int start) {
-        int count = 0;
-        boolean inString = false;
-        for (int i = start; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c == '"' && (i == 0 || json.charAt(i - 1) != '\\')) {
-                inString = !inString;
-            } else if (!inString) {
-                if (c == '{') {
-                    count++;
-                } else if (c == '}') {
-                    count--;
-                    if (count == 0) {
-                        return i;
-                    }
-                }
-            }
-        }
-        return -1;
+        return SimpleJson.findMatchingBrace(json, start);
     }
 
     private FeatureDefinition parseFeatureDefinition(String json, String key) {
