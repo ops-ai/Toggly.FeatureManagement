@@ -28,24 +28,36 @@ def action_command(workflow):
 
 
 class RunnerScriptTest(unittest.TestCase):
-    def test_both_emulator_jobs_require_hardware_acceleration(self):
-        for workflow in WORKFLOWS:
-            with self.subTest(workflow=workflow.name):
-                before_action, action = workflow.read_text().split(
-                    "uses: reactivecircus/android-emulator-runner@v2", 1
-                )
-                job_starts = list(re.finditer(r"(?m)^  [\w-]+:$", before_action))
-                self.assertTrue(job_starts)
-                job_preflight = before_action[job_starts[-1].start():]
-                self.assertIn("- name: Enable KVM for Android emulator", job_preflight)
-                self.assertIn('KERNEL=="kvm", GROUP="kvm", MODE="0666"', job_preflight)
-                self.assertIn("sudo udevadm control --reload-rules", job_preflight)
-                self.assertIn("sudo udevadm trigger --name-match=kvm", job_preflight)
-                self.assertIn("test -r /dev/kvm && test -w /dev/kvm", job_preflight)
-                action = action.split("      - name:", 1)[0]
-                self.assertIn("api-level: 35", action)
-                self.assertIn("arch: x86_64", action)
-                self.assertIn("disable-linux-hw-accel: false", action)
+    def test_public_linux_kvm_and_coverage_macos_keep_native_gate(self):
+        public = WORKFLOWS[0].read_text()
+        self.assertIn("public-android:\n    runs-on: ubuntu-latest", public)
+        before_action, public_action = public.split(
+            "uses: reactivecircus/android-emulator-runner@v2", 1
+        )
+        self.assertIn("- name: Enable KVM for Android emulator", before_action)
+        self.assertIn('KERNEL=="kvm", GROUP="kvm", MODE="0666"', before_action)
+        self.assertIn("sudo udevadm control --reload-rules", before_action)
+        self.assertIn("sudo udevadm trigger --name-match=kvm", before_action)
+        self.assertIn("test -r /dev/kvm && test -w /dev/kvm", before_action)
+        self.assertIn("disable-linux-hw-accel: false", public_action)
+
+        analysis = WORKFLOWS[1].read_text()
+        coverage = analysis.split("\n  code-coverage:\n", 1)[1].split(
+            "\n  build-samples:\n", 1
+        )[0]
+        self.assertIn("runs-on: macos-15-intel", coverage)
+        self.assertNotIn("- name: Enable KVM for Android emulator", coverage)
+        self.assertNotIn("disable-linux-hw-accel:", coverage)
+        for job in (public, coverage):
+            self.assertIn("api-level: 35", job)
+            self.assertIn("arch: x86_64", job)
+            self.assertIn("script: bash tool/run_android_coverage.sh", job)
+        self.assertIn("./gradlew testDebugUnitTest koverXmlReport", coverage)
+        self.assertIn("python -m coverage report --omit='tool/test_*.py' --fail-under=80", coverage)
+        self.assertIn("app/build/reports/coverage/androidTest/debug/connected/report.xml", coverage)
+        self.assertIn("name: android-coverage", coverage)
+        self.assertIn("needs: [code-coverage, smoke-test, dependency-check]", analysis)
+        self.assertIn("-Dsonar.coverage.jacoco.xmlReportPaths=coverage-artifacts/", analysis)
 
     def test_action_invokes_one_script_and_preserves_gradle_result(self):
         for workflow in WORKFLOWS:
