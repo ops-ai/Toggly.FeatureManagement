@@ -118,6 +118,8 @@ class TogglyService(
     // State
     @Volatile private var definitions: EvaluatedDefinitions? = null
     @Volatile private var features: FeatureFlags? = null
+    /** Variant assignments from the last accepted `evaluated-variants-signed` snapshot. */
+    @Volatile private var variantDefs: Map<String, EvaluatedVariantDef>? = null
     @Volatile private var featuresLoading = false
     @Volatile private var identity: String? = config.identity
     @Volatile private var instanceId: String? = config.instanceId?.trim()?.takeIf { it.isNotEmpty() }
@@ -222,6 +224,20 @@ class TogglyService(
     /** Current feature flags (may be null if not loaded). */
     val currentFeatures: FeatureFlags?
         get() = synchronized(lifecycleLock) { features }
+
+    /** Current variant assignments (may be null if not loaded or [TogglyConfig.enableVariants] is false). */
+    val currentVariants: Map<String, VariantResult>?
+        get() = synchronized(lifecycleLock) {
+            val defs = variantDefs ?: return@synchronized null
+            val result = mutableMapOf<String, VariantResult>()
+            for ((key, entry) in defs) {
+                val name = entry.variant
+                if (name != null && entry.enabled) {
+                    result[key] = VariantResult(name, entry.configurationValue)
+                }
+            }
+            result
+        }
 
     /**
      * Initialize Toggly and load feature flags.
@@ -375,6 +391,45 @@ class TogglyService(
     }
 
     /**
+     * Returns the assigned variant for [featureKey], or null when the feature is
+     * disabled, has no variant assignment, or [TogglyConfig.enableVariants] is
+     * false. Fetches from `evaluated-variants-signed` (switched automatically by
+     * [buildApiUrl] when [TogglyConfig.enableVariants] is true).
+     */
+    suspend fun getVariant(featureKey: String): VariantResult? {
+        if (!config.enableVariants) return null
+        ensureFeaturesLoaded()
+        val (entry, enabled, token, user) = synchronized(lifecycleLock) {
+            VariantSnapshot(
+                entry = variantDefs?.get(featureKey),
+                enabled = features?.get(featureKey) ?: config.featureDefaults[featureKey] ?: false,
+                token = instanceId,
+                user = identity
+            )
+        }
+        val result = if (entry != null && entry.variant != null && entry.enabled && enabled) {
+            VariantResult(name = entry.variant, configurationValue = entry.configurationValue)
+        } else {
+            null
+        }
+        telemetry?.recordCheck(featureKey, result?.name ?: "disabled", token, user)
+        return result
+    }
+
+    /**
+     * Returns [VariantResult.configurationValue] for [featureKey], or null when
+     * no variant is assigned. See [getVariant].
+     */
+    suspend fun getVariantValue(featureKey: String): Any? = getVariant(featureKey)?.configurationValue
+
+    private data class VariantSnapshot(
+        val entry: EvaluatedVariantDef?,
+        val enabled: Boolean,
+        val token: String?,
+        val user: String?
+    )
+
+    /**
      * Flow for observing a specific feature flag.
      *
      * @param featureKey The feature key to observe
@@ -448,7 +503,7 @@ class TogglyService(
                 this.identity = resolvedIdentity
                 instanceId = resolvedToken
                 if (previousIdentity != resolvedIdentity || previousToken != resolvedToken) {
-                    definitions = null; features = null; snapshotContext = null
+                    definitions = null; features = null; variantDefs = null; snapshotContext = null
                     eTag = null; eTagContext = null
                     // Withdraw the old user's snapshot before any storage/network suspension.
                     contextGeneration++
@@ -476,6 +531,7 @@ class TogglyService(
         whileActive {
             features = null
             definitions = null
+            variantDefs = null
             eTag = null
             eTagContext = null
         }
@@ -565,7 +621,8 @@ class TogglyService(
             eTag = eTag,
             lastError = lastError,
             networkState = networkState,
-            appState = appState
+            appState = appState,
+            enableVariants = config.enableVariants
         )
     }
 
@@ -586,6 +643,7 @@ class TogglyService(
             stateChangeHandlers.clear()
             features = null
             definitions = null
+            variantDefs = null
             isInitialized = false
             featuresLoading = false
         }
@@ -656,6 +714,7 @@ class TogglyService(
                     ?: throw TogglyException.InvalidResponse("Empty response body")
 
                 val loaded: EvaluatedDefinitions
+                var variants: Map<String, EvaluatedVariantDef>? = null
                 var defsRaw: String? = null
                 var signature: String? = null
                 var timestamp: Long? = null
@@ -669,21 +728,33 @@ class TogglyService(
                     )
                     val jwks = fetchJwks()
                     SignedDefsVerify.verify(envelope, jwks)
-                    loaded = SignedDefsVerify.parseEvaluatedDefinitions(envelope.defsRaw)
+                    if (config.enableVariants) {
+                        val parsedVariants = parseVariantDefinitions(json.parseToJsonElement(envelope.defsRaw))
+                        variants = parsedVariants
+                        loaded = variantDefinitionsToEvaluated(parsedVariants)
+                    } else {
+                        loaded = SignedDefsVerify.parseEvaluatedDefinitions(envelope.defsRaw)
+                    }
                     defsRaw = envelope.defsRaw
                     signature = envelope.signature
                     timestamp = envelope.timestamp
                     keyId = envelope.kid
                 } else {
-                    loaded = parseBodyDefinitions(body)
                     defsRaw = SignedDefsVerify.extractRawJsonProperty(body, "defs")
                         ?: SignedDefsVerify.extractRawJsonProperty(body, "data")
                         ?: body
+                    if (config.enableVariants) {
+                        val parsedVariants = parseVariantDefinitions(json.parseToJsonElement(defsRaw))
+                        variants = parsedVariants
+                        loaded = variantDefinitionsToEvaluated(parsedVariants)
+                    } else {
+                        loaded = parseBodyDefinitions(body)
+                    }
                 }
 
                 val flags = toBooleanDefinitions(loaded)
                 val previousFlags = features
-                applySnapshot(loaded, flags)
+                applySnapshot(loaded, flags, variants)
 
                 cacheFeatureFlags(
                     flags = flags,
@@ -732,7 +803,7 @@ class TogglyService(
 
     private fun buildApiUrl(): String {
         val url = config.baseUri.toHttpUrl().newBuilder()
-            .addPathSegment("evaluated-signed")
+            .addPathSegment(if (config.enableVariants) "evaluated-variants-signed" else "evaluated-signed")
             .addPathSegment(config.appKey ?: "null")
             .addPathSegment(config.environment)
         val token = instanceId
@@ -799,7 +870,8 @@ class TogglyService(
         val definitions: EvaluatedDefinitions,
         val flags: FeatureFlags,
         val owner: CacheOwner,
-        val invalidCacheKey: String? = null
+        val invalidCacheKey: String? = null,
+        val variants: Map<String, EvaluatedVariantDef>? = null
     )
 
     // Call under mutex: accepting a cache and publishing it is atomic with identity changes.
@@ -817,14 +889,19 @@ class TogglyService(
             } catch (_: Exception) {
                 // Cleanup is best-effort; never use the invalid payload if storage is unavailable.
             }
-            applySnapshot(cached.definitions, cached.flags)
+            applySnapshot(cached.definitions, cached.flags, cached.variants)
         }
     }
 
-    private fun applySnapshot(defs: EvaluatedDefinitions, flags: FeatureFlags) = whileActive {
+    private fun applySnapshot(
+        defs: EvaluatedDefinitions,
+        flags: FeatureFlags,
+        variants: Map<String, EvaluatedVariantDef>? = null
+    ) = whileActive {
         definitions = defs
         snapshotContext = buildApiUrl()
         features = flags
+        variantDefs = variants
         publishFeatureFlags(flags)
     }
 
@@ -841,7 +918,10 @@ class TogglyService(
             val captured = cacheOwner()
             features?.let { snapshot ->
                 if (snapshotContext == captured.url) {
-                    return CachedDefinitions(definitions ?: fromBooleanDefaults(snapshot), snapshot, captured)
+                    return CachedDefinitions(
+                        definitions ?: fromBooleanDefaults(snapshot), snapshot, captured,
+                        variants = variantDefs
+                    )
                 }
             }
             captured
@@ -882,15 +962,22 @@ class TogglyService(
         cacheKey: String,
         owner: CacheOwner
     ): CachedDefinitions {
+        var variants: Map<String, EvaluatedVariantDef>? = null
         val parsed = runCatching {
-            parseEvaluatedDefinitions(cacheData.flags)
+            if (config.enableVariants) {
+                val parsedVariants = parseVariantDefinitions(cacheData.flags)
+                variants = parsedVariants
+                variantDefinitionsToEvaluated(parsedVariants)
+            } else {
+                parseEvaluatedDefinitions(cacheData.flags)
+            }
         }.getOrElse {
             return CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults, owner, cacheKey)
         }
         val flags = toBooleanDefinitions(parsed)
 
         if (!config.verifySignatures) {
-            return CachedDefinitions(parsed, flags, owner)
+            return CachedDefinitions(parsed, flags, owner, variants = variants)
         }
 
         if (cacheData.timestamp == null ||
@@ -911,7 +998,7 @@ class TogglyService(
 
         val jwks = resolveJwksForCacheVerify()
         if (jwks == null) {
-            return CachedDefinitions(parsed, flags, owner)
+            return CachedDefinitions(parsed, flags, owner, variants = variants)
         }
 
         return try {
@@ -922,7 +1009,7 @@ class TogglyService(
                 kid = cacheData.keyId
             )
             SignedDefsVerify.verify(envelope, jwks)
-            CachedDefinitions(parsed, flags, owner)
+            CachedDefinitions(parsed, flags, owner, variants = variants)
         } catch (_: Exception) {
             CachedDefinitions(fromBooleanDefaults(config.featureDefaults), config.featureDefaults, owner, cacheKey)
         }

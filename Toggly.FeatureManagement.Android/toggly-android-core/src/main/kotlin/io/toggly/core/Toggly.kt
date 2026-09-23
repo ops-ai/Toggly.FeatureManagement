@@ -71,6 +71,10 @@ object Toggly {
     val currentFeatures: FeatureFlags?
         get() = service?.currentFeatures
 
+    /** Current variant assignments (may be null if not loaded or `enableVariants` is false). */
+    val currentVariants: Map<String, VariantResult>?
+        get() = service?.currentVariants
+
     /**
      * Configure the global Toggly instance.
      * Must be called before any other Toggly operations.
@@ -147,6 +151,15 @@ object Toggly {
     ): Boolean {
         return shared.evaluateFeatureGate(featureKeys, requirement, negate, context, kind)
     }
+
+    /**
+     * Returns the assigned variant for [featureKey], or null. Requires
+     * `enableVariants = true` in [TogglyConfig].
+     */
+    suspend fun getVariant(featureKey: String): VariantResult? = shared.getVariant(featureKey)
+
+    /** Returns [VariantResult.configurationValue] for [featureKey], or null. */
+    suspend fun getVariantValue(featureKey: String): Any? = shared.getVariantValue(featureKey)
 
     fun registerContext(kind: String, mapper: EntityContextMapper) {
         shared.registerContext(kind, mapper)
