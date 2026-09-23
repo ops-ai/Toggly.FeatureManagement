@@ -7,12 +7,14 @@ import io.toggly.core.crypto.JsonWebKey;
 import io.toggly.core.crypto.JsonWebKeySet;
 import io.toggly.core.exception.TogglyNetworkException;
 import io.toggly.core.exception.TogglySignatureException;
-import io.toggly.core.model.EvaluatedVariantDef;
 import io.toggly.core.model.FeatureDefinition;
 import io.toggly.core.model.FeatureFilter;
 import io.toggly.core.model.FeatureRequirement;
 import io.toggly.core.model.MetricDefinition;
+import io.toggly.core.model.VariantAllocation;
+import io.toggly.core.model.VariantDefinition;
 import io.toggly.core.telemetry.DefinitionCacheRecorder;
+import io.toggly.core.util.VariantJson;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -21,7 +23,6 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.nio.charset.StandardCharsets;
@@ -63,21 +64,9 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
 
     private final TogglyConfig config;
     private final String definitionsUrl;
-    private final String variantsUrl;
     private final AtomicReference<FeatureSnapshot> currentSnapshot;
     private final AtomicReference<String> lastEtag;
     private final AtomicLong lastSignedTimestamp;
-    private final AtomicReference<VariantSnapshot> currentVariantSnapshot;
-    private final AtomicReference<String> lastVariantEtag;
-    private final AtomicLong lastSignedVariantTimestamp;
-    private final AtomicBoolean variantRefreshInFlight = new AtomicBoolean(false);
-    /**
-     * True after a successful variants fetch has been applied, including when the
-     * server returned an empty {@code defs} object. Distinguishes "never fetched"
-     * from "fetched but empty" so {@link #getVariantSnapshot()} does not refetch
-     * on every call when the project has no assigned variants.
-     */
-    private final AtomicBoolean variantsLoaded = new AtomicBoolean(false);
     private final AtomicReference<JsonWebKeySet> jwks;
     private final AtomicReference<Instant> jwksExpiry;
     private final ScheduledExecutorService scheduler;
@@ -97,13 +86,9 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     public HttpSnapshotProvider(TogglyConfig config) {
         this.config = config;
         this.definitionsUrl = buildDefinitionsUrl(config);
-        this.variantsUrl = buildVariantsUrl(config);
         this.currentSnapshot = new AtomicReference<>(FeatureSnapshot.empty());
         this.lastEtag = new AtomicReference<>(null);
         this.lastSignedTimestamp = new AtomicLong(0);
-        this.currentVariantSnapshot = new AtomicReference<>(VariantSnapshot.empty());
-        this.lastVariantEtag = new AtomicReference<>(null);
-        this.lastSignedVariantTimestamp = new AtomicLong(0);
         this.jwks = new AtomicReference<>(null);
         this.jwksExpiry = new AtomicReference<>(Instant.EPOCH);
 
@@ -140,28 +125,6 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         return baseUrl + "/" + endpoint + "/" + config.getAppKey() + "/" + env;
     }
 
-    /**
-     * Builds the evaluated-variants-signed URL. Additive to
-     * {@link #buildDefinitionsUrl}: the definitions endpoint remains the
-     * source of truth for {@code isEnabled} regardless of {@code enableVariants}.
-     */
-    private String buildVariantsUrl(TogglyConfig config) {
-        String baseUrl = config.getBaseUrl();
-        if (baseUrl.endsWith("/")) {
-            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
-        }
-        String env = config.getEnvironment();
-        if (env == null || env.isEmpty()) {
-            env = "Production";
-        }
-        String url = baseUrl + "/evaluated-variants-signed/" + config.getAppKey() + "/" + env;
-        String identity = config.getIdentity();
-        if (identity != null && !identity.isEmpty()) {
-            url += "?userId=" + URLEncoder.encode(identity, StandardCharsets.UTF_8);
-        }
-        return url;
-    }
-
     @Override
     public FeatureSnapshot getSnapshot() {
         FeatureSnapshot snapshot = currentSnapshot.get();
@@ -178,58 +141,6 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
             return refreshAsync();
         }
         return CompletableFuture.completedFuture(snapshot);
-    }
-
-    // ========== Evaluated variants (dual-rail; additive to definitions) ==========
-
-    @Override
-    public VariantSnapshot getVariantSnapshot() {
-        if (!config.isEnableVariants()) {
-            return VariantSnapshot.empty();
-        }
-        if (!variantsLoaded.get()) {
-            return refreshVariants();
-        }
-        return currentVariantSnapshot.get();
-    }
-
-    @Override
-    public CompletableFuture<VariantSnapshot> getVariantSnapshotAsync() {
-        if (!config.isEnableVariants()) {
-            return CompletableFuture.completedFuture(VariantSnapshot.empty());
-        }
-        if (!variantsLoaded.get()) {
-            return CompletableFuture.supplyAsync(this::refreshVariants);
-        }
-        return CompletableFuture.completedFuture(currentVariantSnapshot.get());
-    }
-
-    @Override
-    public VariantSnapshot refreshVariants() {
-        if (!config.isEnableVariants()) {
-            return VariantSnapshot.empty();
-        }
-        if (!variantRefreshInFlight.compareAndSet(false, true)) {
-            LOGGER.log(Level.FINE, "Variants refresh already in progress, skipping");
-            return currentVariantSnapshot.get();
-        }
-        try {
-            VariantFetchResult result = fetchVariants();
-            if (result.outcome == CacheOutcome.MISS) {
-                applyVariantSnapshot(result.snapshot);
-            }
-            return currentVariantSnapshot.get();
-        } catch (TogglySignatureException e) {
-            reportError("Invalid signature (evaluated variants)", e);
-            LOGGER.log(Level.WARNING, "Variants signature verification failed", e);
-        } catch (Exception e) {
-            reportError("Failed to refresh evaluated variants", e);
-            LOGGER.log(Level.WARNING, "Failed to refresh evaluated variants", e);
-        } finally {
-            variantRefreshInFlight.set(false);
-        }
-        // Last-known-good: keep serving the previous variant snapshot on transient failures.
-        return currentVariantSnapshot.get();
     }
 
     @Override
@@ -274,13 +185,6 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
 
             if (config.isEnableLiveUpdates() && !wsConnected && webSocket == null) {
                 startWebSocket();
-            }
-
-            // Dual-rail: definitions above stay the source of truth for isEnabled.
-            // Additionally fetch evaluated variants when enabled — never replaces
-            // the definitions pipeline.
-            if (config.isEnableVariants()) {
-                refreshVariants();
             }
 
             return currentSnapshot.get();
@@ -362,26 +266,11 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         }
     }
 
-    private void applyVariantSnapshot(VariantSnapshot snapshot) {
-        currentVariantSnapshot.set(snapshot);
-        variantsLoaded.set(true);
-        if (snapshot.getEtag() != null) {
-            lastVariantEtag.set(snapshot.getEtag());
-        }
-        if (snapshot.getSignedTimestamp() != null) {
-            lastSignedVariantTimestamp.set(snapshot.getSignedTimestamp());
-        }
-    }
-
     @Override
     public void clear() {
         currentSnapshot.set(FeatureSnapshot.empty());
         lastEtag.set(null);
         lastSignedTimestamp.set(0);
-        currentVariantSnapshot.set(VariantSnapshot.empty());
-        lastVariantEtag.set(null);
-        lastSignedVariantTimestamp.set(0);
-        variantsLoaded.set(false);
         clearJwks();
     }
 
@@ -567,91 +456,6 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         }
     }
 
-    /**
-     * Fetches evaluated variants. Additive to {@link #fetchDefinitions()}; a
-     * failure here must never affect the definitions/{@code isEnabled} pipeline.
-     */
-    private VariantFetchResult fetchVariants() {
-        HttpURLConnection connection = null;
-        try {
-            URL url = new URL(variantsUrl);
-            connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("GET");
-            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
-            connection.setReadTimeout(READ_TIMEOUT_MS);
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("User-Agent", SdkIdentity.userAgent());
-
-            String previousEtag = lastVariantEtag.get();
-            if (previousEtag != null) {
-                connection.setRequestProperty("If-None-Match", previousEtag);
-            }
-
-            int responseCode = connection.getResponseCode();
-
-            if (responseCode == HttpURLConnection.HTTP_NOT_MODIFIED) {
-                return VariantFetchResult.hit(currentVariantSnapshot.get());
-            }
-
-            if (responseCode != HttpURLConnection.HTTP_OK) {
-                throw new TogglyNetworkException(
-                        "Failed to fetch evaluated variants: HTTP " + responseCode,
-                        responseCode);
-            }
-
-            String newEtag = connection.getHeaderField("ETag");
-
-            // HTTP 200 whose revision/etag matches existing (CDN replay) — cache hit.
-            if (etagsMatch(previousEtag, newEtag)) {
-                if (newEtag != null) {
-                    lastVariantEtag.set(newEtag);
-                }
-                return VariantFetchResult.hit(currentVariantSnapshot.get());
-            }
-
-            if (newEtag != null) {
-                lastVariantEtag.set(newEtag);
-            }
-
-            String responseBody = readResponse(connection.getInputStream());
-            VariantSnapshot parsed = parseVariants(responseBody, newEtag);
-
-            // Older signed timestamp keeps last-known-good — treat as hit.
-            if (parsed == currentVariantSnapshot.get()) {
-                return VariantFetchResult.hit(parsed);
-            }
-
-            return VariantFetchResult.miss(parsed);
-
-        } catch (TogglyNetworkException | TogglySignatureException e) {
-            throw e;
-        } catch (IOException e) {
-            throw new TogglyNetworkException("Network error fetching evaluated variants", e);
-        } finally {
-            if (connection != null) {
-                connection.disconnect();
-            }
-        }
-    }
-
-    private static final class VariantFetchResult {
-        final VariantSnapshot snapshot;
-        final CacheOutcome outcome;
-
-        private VariantFetchResult(VariantSnapshot snapshot, CacheOutcome outcome) {
-            this.snapshot = snapshot;
-            this.outcome = outcome;
-        }
-
-        static VariantFetchResult hit(VariantSnapshot snapshot) {
-            return new VariantFetchResult(snapshot, CacheOutcome.HIT);
-        }
-
-        static VariantFetchResult miss(VariantSnapshot snapshot) {
-            return new VariantFetchResult(Objects.requireNonNull(snapshot), CacheOutcome.MISS);
-        }
-    }
-
     private String readResponse(InputStream inputStream) throws IOException {
         StringBuilder response = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(
@@ -735,284 +539,6 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         return new FeatureSnapshot(
                 features, metrics, Instant.now(), etag,
                 signature, kid, signedTs, signedDefsJson);
-    }
-
-    /**
-     * Parses an {@code evaluated-variants-signed} response body. Verifies the
-     * ES256 signature (same JWKS as definitions-signed) only when
-     * {@code useSignedDefinitions} is enabled — matching the JS SDK's
-     * {@code verifySignatures} gate, since Java exposes a single signature
-     * toggle rather than a separate one per endpoint.
-     */
-    private VariantSnapshot parseVariants(String json, String etag) {
-        Map<String, EvaluatedVariantDef> defs = new HashMap<>();
-
-        String signedDefsJson = extractRawJsonValue(json, "defs");
-        String signature = extractStringValue(json, "signature");
-        String kid = extractStringValue(json, "kid");
-        Long signedTs = extractLongValue(json, "timestamp");
-
-        if (config.isUseSignedDefinitions()) {
-            if (signedDefsJson == null) {
-                throw new TogglySignatureException("Signed variants response missing defs");
-            }
-            if (signature == null || signature.isEmpty()) {
-                throw new TogglySignatureException("Signed variants response missing signature");
-            }
-            if (kid == null || kid.isEmpty()) {
-                throw new TogglySignatureException("Signed variants response missing kid");
-            }
-            if (signedTs == null) {
-                throw new TogglySignatureException("Signed variants response missing timestamp");
-            }
-            if (signedTs < lastSignedVariantTimestamp.get() && lastSignedVariantTimestamp.get() > 0) {
-                LOGGER.log(Level.FINE, "Ignoring older signed variants timestamp");
-                return currentVariantSnapshot.get();
-            }
-
-            JsonWebKeySet keySet = loadOrFetchJwks();
-            Es256Verifier.verify(
-                    signedDefsJson,
-                    signedTs,
-                    signature,
-                    kid,
-                    keySet,
-                    config.getAllowedKeyIds());
-        }
-
-        String defsJson = signedDefsJson != null ? signedDefsJson : json;
-        parseVariantDefs(defsJson, defs);
-
-        return new VariantSnapshot(defs, Instant.now(), etag, signature, kid, signedTs, signedDefsJson);
-    }
-
-    /**
-     * Parses a JSON object mapping feature key to evaluated variant entry, e.g.
-     * {@code {"feature-a": {"enabled": true, "variant": "B", "configurationValue": "x"}}}.
-     */
-    private void parseVariantDefs(String json, Map<String, EvaluatedVariantDef> defs) {
-        Pattern keyPattern = Pattern.compile("\"([^\"]+)\"\\s*:\\s*\\{");
-        Matcher matcher = keyPattern.matcher(json);
-        int searchFrom = 0;
-        while (searchFrom < json.length() && matcher.find(searchFrom)) {
-            String featureKey = matcher.group(1);
-            int braceStart = matcher.end() - 1;
-            int braceEnd = findMatchingBrace(json, braceStart);
-            if (braceEnd <= braceStart) {
-                searchFrom = matcher.end();
-                continue;
-            }
-            String entryJson = json.substring(braceStart, braceEnd + 1);
-            EvaluatedVariantDef def = parseVariantEntry(entryJson);
-            if (def != null) {
-                defs.put(featureKey, def);
-            }
-            // Skip past the whole entry so nested keys inside configurationValue
-            // objects are never mistaken for top-level feature keys.
-            searchFrom = braceEnd + 1;
-        }
-    }
-
-    private EvaluatedVariantDef parseVariantEntry(String json) {
-        boolean enabled = extractBooleanValue(json, "enabled", false);
-        String variant = extractStringValue(json, "variant");
-        Object configurationValue = extractJsonValue(json, "configurationValue");
-        return new EvaluatedVariantDef(enabled, variant, configurationValue);
-    }
-
-    private boolean extractBooleanValue(String json, String key, boolean defaultValue) {
-        Pattern pattern = Pattern.compile("\"" + key + "\"\\s*:\\s*(true|false)");
-        Matcher matcher = pattern.matcher(json);
-        if (matcher.find()) {
-            return Boolean.parseBoolean(matcher.group(1));
-        }
-        return defaultValue;
-    }
-
-    /**
-     * Extracts a JSON value of any shape (string/number/boolean/null/object/array)
-     * for a top-level key. Used for {@code configurationValue}, whose shape is
-     * defined by the feature's variant configuration on the server and may be a
-     * scalar, a JSON object, or a JSON array.
-     *
-     * @return the parsed value ({@link String}, {@link Long}, {@link Double},
-     *     {@link Boolean}, {@link Map}, {@link List}, or {@code null})
-     */
-    private Object extractJsonValue(String json, String key) {
-        String search = "\"" + key + "\"";
-        int idx = json.indexOf(search);
-        if (idx < 0) {
-            return null;
-        }
-        idx = idx + search.length();
-        while (idx < json.length() && Character.isWhitespace(json.charAt(idx))) idx++;
-        if (idx >= json.length() || json.charAt(idx) != ':') {
-            return null;
-        }
-        idx++;
-        int[] pos = {idx};
-        return parseJsonValue(json, pos);
-    }
-
-    /**
-     * Minimal recursive-descent JSON value parser (no external deps), used to
-     * decode {@code configurationValue} payloads that may nest objects/arrays.
-     */
-    private Object parseJsonValue(String json, int[] pos) {
-        skipJsonWhitespace(json, pos);
-        if (pos[0] >= json.length()) {
-            return null;
-        }
-        char c = json.charAt(pos[0]);
-        if (c == '{') {
-            return parseJsonObject(json, pos);
-        }
-        if (c == '[') {
-            return parseJsonArray(json, pos);
-        }
-        if (c == '"') {
-            return parseJsonString(json, pos);
-        }
-        if (json.startsWith("true", pos[0])) {
-            pos[0] += 4;
-            return Boolean.TRUE;
-        }
-        if (json.startsWith("false", pos[0])) {
-            pos[0] += 5;
-            return Boolean.FALSE;
-        }
-        if (json.startsWith("null", pos[0])) {
-            pos[0] += 4;
-            return null;
-        }
-        return parseJsonNumber(json, pos);
-    }
-
-    private Map<String, Object> parseJsonObject(String json, int[] pos) {
-        Map<String, Object> map = new HashMap<>();
-        pos[0]++; // consume '{'
-        skipJsonWhitespace(json, pos);
-        if (pos[0] < json.length() && json.charAt(pos[0]) == '}') {
-            pos[0]++;
-            return map;
-        }
-        while (pos[0] < json.length()) {
-            skipJsonWhitespace(json, pos);
-            if (pos[0] >= json.length() || json.charAt(pos[0]) != '"') {
-                break;
-            }
-            String key = parseJsonString(json, pos);
-            skipJsonWhitespace(json, pos);
-            if (pos[0] < json.length() && json.charAt(pos[0]) == ':') {
-                pos[0]++;
-            }
-            Object value = parseJsonValue(json, pos);
-            map.put(key, value);
-            skipJsonWhitespace(json, pos);
-            if (pos[0] < json.length() && json.charAt(pos[0]) == ',') {
-                pos[0]++;
-                continue;
-            }
-            if (pos[0] < json.length() && json.charAt(pos[0]) == '}') {
-                pos[0]++;
-            }
-            break;
-        }
-        return map;
-    }
-
-    private List<Object> parseJsonArray(String json, int[] pos) {
-        List<Object> list = new ArrayList<>();
-        pos[0]++; // consume '['
-        skipJsonWhitespace(json, pos);
-        if (pos[0] < json.length() && json.charAt(pos[0]) == ']') {
-            pos[0]++;
-            return list;
-        }
-        while (pos[0] < json.length()) {
-            list.add(parseJsonValue(json, pos));
-            skipJsonWhitespace(json, pos);
-            if (pos[0] < json.length() && json.charAt(pos[0]) == ',') {
-                pos[0]++;
-                continue;
-            }
-            if (pos[0] < json.length() && json.charAt(pos[0]) == ']') {
-                pos[0]++;
-            }
-            break;
-        }
-        return list;
-    }
-
-    private String parseJsonString(String json, int[] pos) {
-        // Assumes json.charAt(pos[0]) == '"'.
-        pos[0]++; // consume opening quote
-        StringBuilder sb = new StringBuilder();
-        while (pos[0] < json.length()) {
-            char c = json.charAt(pos[0]);
-            if (c == '"') {
-                pos[0]++;
-                break;
-            }
-            if (c == '\\' && pos[0] + 1 < json.length()) {
-                char next = json.charAt(pos[0] + 1);
-                switch (next) {
-                    case '"': sb.append('"'); break;
-                    case '\\': sb.append('\\'); break;
-                    case '/': sb.append('/'); break;
-                    case 'n': sb.append('\n'); break;
-                    case 'r': sb.append('\r'); break;
-                    case 't': sb.append('\t'); break;
-                    case 'b': sb.append('\b'); break;
-                    case 'f': sb.append('\f'); break;
-                    case 'u':
-                        if (pos[0] + 5 < json.length()) {
-                            String hex = json.substring(pos[0] + 2, pos[0] + 6);
-                            try {
-                                sb.append((char) Integer.parseInt(hex, 16));
-                            } catch (NumberFormatException ignored) {
-                                // Malformed escape — skip rather than throw.
-                            }
-                            pos[0] += 4;
-                        }
-                        break;
-                    default:
-                        sb.append(next);
-                }
-                pos[0] += 2;
-            } else {
-                sb.append(c);
-                pos[0]++;
-            }
-        }
-        return sb.toString();
-    }
-
-    private Object parseJsonNumber(String json, int[] pos) {
-        int start = pos[0];
-        while (pos[0] < json.length() && "-+.eE0123456789".indexOf(json.charAt(pos[0])) >= 0) {
-            pos[0]++;
-        }
-        String numStr = json.substring(start, pos[0]);
-        if (numStr.isEmpty()) {
-            // Unrecognized token — advance one char to avoid an infinite loop.
-            pos[0]++;
-            return null;
-        }
-        try {
-            if (numStr.indexOf('.') >= 0 || numStr.indexOf('e') >= 0 || numStr.indexOf('E') >= 0) {
-                return Double.parseDouble(numStr);
-            }
-            return Long.parseLong(numStr);
-        } catch (NumberFormatException e) {
-            return numStr;
-        }
-    }
-
-    private void skipJsonWhitespace(String json, int[] pos) {
-        while (pos[0] < json.length() && Character.isWhitespace(json.charAt(pos[0]))) {
-            pos[0]++;
-        }
     }
 
     private JsonWebKeySet loadOrFetchJwks() {
@@ -1235,6 +761,8 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
                 : FeatureRequirement.fromString(contextReqStr);
 
         List<FeatureFilter> filters = parseFilters(json);
+        List<VariantDefinition> variants = VariantJson.parseVariants(json);
+        VariantAllocation allocation = VariantJson.parseAllocation(json);
 
         return FeatureDefinition.builder()
                 .featureKey(featureKey)
@@ -1242,6 +770,8 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
                 .contextKind(contextKind)
                 .contextRequirementType(contextRequirement)
                 .filters(filters)
+                .variants(variants)
+                .allocation(allocation)
                 .build();
     }
 

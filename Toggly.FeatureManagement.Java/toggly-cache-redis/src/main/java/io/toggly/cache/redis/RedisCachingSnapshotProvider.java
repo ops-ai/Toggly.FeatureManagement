@@ -4,11 +4,14 @@ import io.toggly.core.model.FeatureDefinition;
 import io.toggly.core.model.FeatureFilter;
 import io.toggly.core.model.FeatureRequirement;
 import io.toggly.core.model.MetricDefinition;
+import io.toggly.core.model.VariantAllocation;
+import io.toggly.core.model.VariantDefinition;
 import io.toggly.core.snapshot.FeatureSnapshot;
 import io.toggly.core.snapshot.HttpSnapshotProvider;
 import io.toggly.core.snapshot.SnapshotProvider;
-import io.toggly.core.snapshot.VariantSnapshot;
 import io.toggly.core.telemetry.DefinitionCacheRecorder;
+import io.toggly.core.util.SimpleJson;
+import io.toggly.core.util.VariantJson;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
@@ -199,29 +202,6 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
         delegate.setDefinitionCacheRecorder(recorder);
     }
 
-    // ========== Evaluated variants (dual-rail; additive to definitions) ==========
-    //
-    // Variants are not distributed through this Redis layer: the delegate
-    // (typically HttpSnapshotProvider) already keeps its own last-known-good
-    // variant snapshot with ETag-based freshness. Forwarding directly here
-    // keeps getVariant/getVariantValue working through caching wrappers
-    // instead of silently falling back to the SnapshotProvider default no-ops.
-
-    @Override
-    public VariantSnapshot getVariantSnapshot() {
-        return delegate.getVariantSnapshot();
-    }
-
-    @Override
-    public CompletableFuture<VariantSnapshot> getVariantSnapshotAsync() {
-        return delegate.getVariantSnapshotAsync();
-    }
-
-    @Override
-    public VariantSnapshot refreshVariants() {
-        return delegate.refreshVariants();
-    }
-
     @Override
     public void close() {
         if (pool != null && !pool.isClosed()) {
@@ -299,6 +279,16 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
                 first = false;
             }
             sb.append("]");
+        }
+
+        if (feature.getVariants() != null && !feature.getVariants().isEmpty()) {
+            sb.append(",\"variants\":")
+                    .append(SimpleJson.serialize(VariantJson.serializeVariants(feature.getVariants())));
+        }
+
+        if (feature.getAllocation() != null) {
+            sb.append(",\"allocation\":")
+                    .append(SimpleJson.serialize(VariantJson.serializeAllocation(feature.getAllocation())));
         }
 
         sb.append("}");
@@ -534,12 +524,17 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
                 ? null
                 : FeatureRequirement.fromString(contextReqStr);
 
+        List<VariantDefinition> variants = VariantJson.parseVariants(json);
+        VariantAllocation allocation = VariantJson.parseAllocation(json);
+
         return FeatureDefinition.builder()
                 .featureKey(featureKey)
                 .requirementType(requirement)
                 .contextKind(contextKind)
                 .contextRequirementType(contextRequirement)
                 .filters(filters)
+                .variants(variants)
+                .allocation(allocation)
                 .build();
     }
 

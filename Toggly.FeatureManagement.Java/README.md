@@ -20,6 +20,7 @@ Official Java SDK for [Toggly](https://toggly.io) feature flags and experimentat
 - **Distributed caching** - Caffeine and Redis support
 - **Deterministic rollouts** - Consistent user experience across requests
 - **Entity ContextProperty filters** - Evaluate `ContextProperty` filters against `{kind, key, attributes}` and register kinds at startup
+- **Catalog-local feature variants** - A/B testing and progressive rollouts assigned entirely on the client, bit-for-bit compatible with `Microsoft.FeatureManagement`'s variant allocator, with no separate network round-trip
 
 ## Installation
 
@@ -30,7 +31,7 @@ Official Java SDK for [Toggly](https://toggly.io) feature flags and experimentat
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-core</artifactId>
-    <version>1.7.0</version>
+    <version>2.0.0</version>
 </dependency>
 
 <!-- Optional: send usage/metrics over gRPC -->
@@ -59,48 +60,48 @@ Official Java SDK for [Toggly](https://toggly.io) feature flags and experimentat
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-spring-boot-starter</artifactId>
-    <version>1.7.0</version>
+    <version>2.0.0</version>
 </dependency>
 
 <!-- Spring MVC -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-spring-mvc</artifactId>
-    <version>1.7.0</version>
+    <version>2.0.0</version>
 </dependency>
 
 <!-- Spring WebFlux -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-spring-webflux</artifactId>
-    <version>1.7.0</version>
+    <version>2.0.0</version>
 </dependency>
 
 <!-- Servlet -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-servlet</artifactId>
-    <version>1.7.0</version>
+    <version>2.0.0</version>
 </dependency>
 
 <!-- Caching (optional) -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-cache-caffeine</artifactId>
-    <version>1.7.0</version>
+    <version>2.0.0</version>
 </dependency>
 
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-cache-redis</artifactId>
-    <version>1.7.0</version>
+    <version>2.0.0</version>
 </dependency>
 
 <!-- Redis with Jedis 8.x (choose this instead of toggly-cache-redis) -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-cache-redis-jedis8</artifactId>
-    <version>1.7.0</version>
+    <version>2.0.0</version>
 </dependency>
 ```
 
@@ -108,10 +109,10 @@ Official Java SDK for [Toggly](https://toggly.io) feature flags and experimentat
 
 ```kotlin
 // Core
-implementation("io.toggly:toggly-core:1.7.0")
+implementation("io.toggly:toggly-core:2.0.0")
 
 // Spring Boot
-implementation("io.toggly:toggly-spring-boot-starter:1.7.0")
+implementation("io.toggly:toggly-spring-boot-starter:2.0.0")
 ```
 
 ## Quick Start
@@ -197,6 +198,49 @@ if (client.isEnabled("premium-feature", context)) {
     // Feature is enabled for this user
 }
 ```
+
+## Feature Variants
+
+Variants (A/B testing, progressive rollouts) are parsed directly from the same
+definitions payload that drives `isEnabled` and assigned entirely on the
+client — there is no separate network fetch. Assignment follows
+`Microsoft.FeatureManagement`'s `IVariantFeatureManager` precedence
+(user → group → percentile → default) bit-for-bit, including `StatusOverride`
+semantics, and is verified against a gold corpus generated from the real
+`Microsoft.FeatureManagement` 4.7.0 library.
+
+```java
+VariantResult variant = client.getVariant("checkout-flow");
+if (variant != null) {
+    String name = variant.getName();                 // e.g. "B"
+    Object configValue = variant.getConfigurationValue();
+    boolean effectiveEnabled = variant.isEnabled();   // reflects any StatusOverride
+}
+
+// Shorthand for just the configuration value
+Object configValue = client.getVariantValue("checkout-flow");
+
+// With an explicit context (falls back to the current thread context otherwise)
+EvaluationContext context = EvaluationContext.builder().identity("user-123").build();
+VariantResult targeted = client.getVariant("checkout-flow", context);
+
+// Async equivalents
+client.getVariantAsync("checkout-flow").thenAccept(v -> { /* ... */ });
+```
+
+`getVariant` returns `null` when the feature has no variants configured, or
+when assignment resolves to no variant (no matching allocation rule and no
+default configured for the branch that ran). A variant's `StatusOverride` can
+flip `VariantResult#isEnabled()` independently of the feature's own
+filter-based `isEnabled` result — check `variant.isEnabled()` when a variant
+is meant to act as a kill switch.
+
+> **Migrating from 1.x:** prior to 2.0.0, variants used a dual-rail model —
+> a separate `evaluated-variants-signed` fetch, gated behind
+> `TogglyConfig.enableVariants`. That rail has been removed entirely.
+> Variants and allocation rules now live on the same definitions payload; no
+> configuration flag is needed, and `enableVariants` no longer exists. See
+> [CHANGELOG.md](CHANGELOG.md) for details.
 
 ## Spring MVC Integration
 

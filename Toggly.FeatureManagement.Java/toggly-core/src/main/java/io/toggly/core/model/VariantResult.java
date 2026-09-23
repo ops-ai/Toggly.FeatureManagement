@@ -3,36 +3,60 @@ package io.toggly.core.model;
 import java.util.Objects;
 
 /**
- * Assigned variant name and configuration value for a feature, returned by
- * {@code TogglyClient#getVariant} when {@code enableVariants} is true and the
- * feature has an active variant assignment.
+ * Assigned variant name, configuration value, and effective enabled state
+ * for a feature, returned by {@code TogglyClient#getVariant}.
  *
- * <p>Matches JS/Python/.NET/Go semantics: never returned unless the feature is
- * effectively enabled, the evaluated entry is {@code enabled == true}, and a
- * non-empty {@code variant} name is present.</p>
+ * <p>Catalog-local: assigned by the local MF-parity allocator
+ * ({@code io.toggly.core.eval.VariantAllocator}) directly from
+ * {@code FeatureDefinition#getVariants()} / {@code getAllocation()} — never
+ * fetched separately from the definitions payload.</p>
+ *
+ * <p>{@link #isEnabled()} reflects the feature's effective enabled state
+ * <em>after</em> applying the assigned variant's
+ * {@link VariantStatusOverride}, matching
+ * {@code Microsoft.FeatureManagement}'s {@code GetVariantAsync} semantics.
+ * It may differ from {@code TogglyClient#isEnabled}, which stays purely
+ * filter-based and is never affected by {@code StatusOverride}.</p>
  */
 public final class VariantResult {
 
     private final String name;
     private final Object configurationValue;
+    private final boolean enabled;
 
-    public VariantResult(String name, Object configurationValue) {
+    /**
+     * Creates a variant result.
+     *
+     * @param name assigned variant name
+     * @param configurationValue configuration payload for the variant
+     * @param enabled effective enabled state after {@code StatusOverride}
+     */
+    public VariantResult(String name, Object configurationValue, boolean enabled) {
         this.name = name;
         this.configurationValue = configurationValue;
+        this.enabled = enabled;
     }
 
     /**
-     * Variant name assigned by the server.
+     * Variant name assigned by the local allocator.
      */
     public String getName() {
         return name;
     }
 
     /**
-     * Optional configuration payload for the variant.
+     * Configuration payload for the variant.
      */
     public Object getConfigurationValue() {
         return configurationValue;
+    }
+
+    /**
+     * Effective enabled state after applying the variant's
+     * {@link VariantStatusOverride}, if any.
+     */
+    public boolean isEnabled() {
+        return enabled;
     }
 
     @Override
@@ -40,13 +64,14 @@ public final class VariantResult {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         VariantResult that = (VariantResult) o;
-        return Objects.equals(name, that.name)
+        return enabled == that.enabled
+                && Objects.equals(name, that.name)
                 && Objects.equals(configurationValue, that.configurationValue);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, configurationValue);
+        return Objects.hash(name, configurationValue, enabled);
     }
 
     @Override
@@ -54,6 +79,7 @@ public final class VariantResult {
         return "VariantResult{" +
                 "name='" + name + '\'' +
                 ", configurationValue=" + configurationValue +
+                ", enabled=" + enabled +
                 '}';
     }
 }
