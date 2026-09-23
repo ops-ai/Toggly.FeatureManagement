@@ -263,10 +263,17 @@ public final class SimpleJson {
             switch (c) {
                 case '\\': sb.append("\\\\"); break;
                 case '"': sb.append("\\\""); break;
+                case '\b': sb.append("\\b"); break;
+                case '\f': sb.append("\\f"); break;
                 case '\n': sb.append("\\n"); break;
                 case '\r': sb.append("\\r"); break;
                 case '\t': sb.append("\\t"); break;
-                default: sb.append(c);
+                default:
+                    if (c <= 0x1F) {
+                        sb.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        sb.append(c);
+                    }
             }
         }
         return sb.toString();

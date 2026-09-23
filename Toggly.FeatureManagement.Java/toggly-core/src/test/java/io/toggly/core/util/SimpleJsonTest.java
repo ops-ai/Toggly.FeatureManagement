@@ -60,4 +60,10 @@ class SimpleJsonTest {
         assertTrue(VariantJson.parseAllocation(featureJson) != null);
         assertEquals("treatment", VariantJson.parseAllocation(featureJson).getDefaultWhenEnabled());
     }
+
+    @Test
+    void serialize_escapesControlCharactersPerRfc8259() {
+        String json = SimpleJson.serialize("a\u0001b\nc");
+        assertEquals("\"a\\u0001b\\nc\"", json);
+    }
 }
