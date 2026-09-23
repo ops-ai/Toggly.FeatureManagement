@@ -18,6 +18,29 @@ beforeEach(()=>{
   });
 });
 afterEach(()=>services.splice(0).forEach(t=>t.dispose()));
+it('constructs definitions and JWKS paths when Hermes ignores URL.pathname writes',async()=>{
+  const NativeURL=globalThis.URL;
+  class HermesURL extends NativeURL {
+    get pathname():string{return super.pathname}
+    set pathname(_path:string){/* Native React Native URL can ignore assignment. */}
+  }
+  globalThis.URL=HermesURL;
+  try {
+    (fetch as jest.Mock).mockImplementation(async(url:string)=>{
+      requests.push({url:new NativeURL(url),init:{}});
+      return url.includes('/.well-known/jwks')
+        ? {ok:true,status:200,json:async()=>({keys:[]})}
+        : response({On:true});
+    });
+    const t=client({baseURI:'https://defs.test/base/?keep=one&keep=two',enableTelemetry:false});
+    await t.init();
+    expect(requests[0].url.pathname).toBe('/base/evaluated-signed/native/Test');
+    expect(requests[0].url.searchParams.getAll('keep')).toEqual(['one','two']);
+    await (t as any).getJwks(new AbortController().signal,()=>true);
+    expect(requests[1].url.pathname).toBe('/base/.well-known/jwks');
+    expect(requests[1].url.searchParams.getAll('keep')).toEqual(['one','two']);
+  } finally {globalThis.URL=NativeURL;}
+});
 it('forwards minted context, scrubs inherited targeting, preserves repeated unrelated values and clears through identity',async()=>{
   const t=client({instanceId:' A ',baseURI:'https://defs.test/root/?u=old&userId=old&g=a&g=b&claim.role=old&i=retired&i=older&keep=one&keep=two',groups:['private'],claims:{role:'private'}});
   await t.init();t.recordUsage('A');

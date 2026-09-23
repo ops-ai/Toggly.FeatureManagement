@@ -781,10 +781,19 @@ export class TogglyService {
   /**
    * Build the API URL for fetching feature flags.
    */
+  private buildEndpointUrl(path: string): URL {
+    const base = new URL(this.config.baseURI);
+    // Hermes can ignore URL.pathname assignment. Construct the full URL so
+    // both definitions and JWKS retain the configured base path and query.
+    const credentials = base.username || base.password
+      ? `${base.username}${base.password ? `:${base.password}` : ''}@`
+      : '';
+    return new URL(`${base.protocol}//${credentials}${base.host}${base.pathname.replace(/\/+$/, '')}/${path}${base.search}${base.hash}`);
+  }
+
   private buildApiUrl(): string {
-    const url = new URL(this.config.baseURI);
     const path = this.config.enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed';
-    url.pathname = `${url.pathname.replace(/\/+$/, '')}/${path}/${this.config.appKey}/${this.config.environment}`;
+    const url = this.buildEndpointUrl(`${path}/${this.config.appKey}/${this.config.environment}`);
     url.searchParams.delete('i');
     if (this.instanceId) {
       for (const key of [...url.searchParams.keys()]) {
@@ -995,8 +1004,7 @@ export class TogglyService {
       return JSON.parse(cached) as JwkSet;
     }
 
-    const url = new URL(this.config.baseURI);
-    url.pathname = `${url.pathname.replace(/\/+$/, '')}/.well-known/jwks`;
+    const url = this.buildEndpointUrl('.well-known/jwks');
     for (const key of [...url.searchParams.keys()]) {
       if (key === 'i' || key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) url.searchParams.delete(key);
     }

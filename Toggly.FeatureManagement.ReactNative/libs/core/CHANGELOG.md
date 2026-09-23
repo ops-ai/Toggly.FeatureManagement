@@ -1,3 +1,8 @@
+## 1.9.1 — 2026-09-23
+
+### Fixed
+- Construct complete definitions and JWKS URLs for React Native Hermes, preserving configured base paths and unrelated query values without requiring an app-level URL polyfill.
+
 ## 1.9.0 — 2026-09-22
 
 ### Added

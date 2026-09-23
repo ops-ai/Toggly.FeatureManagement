@@ -2,6 +2,8 @@
 
 Core feature flag logic for React Native applications. Framework-agnostic, minimal dependencies. Can be used with or without Toggly.io.
 
+Core 1.9.1 builds definitions and JWKS request paths on React Native Hermes without an app-level URL polyfill. For telemetry request paths, use `@ops-ai/toggly-client-telemetry` 1.1.1 or later when publishing or installing the package graph.
+
 ## Install
 
 ```bash
