@@ -29,11 +29,13 @@ it.each([false,true])('keeps reserved key and environment characters in path seg
     (fetch as jest.Mock).mockImplementation(async(url:string,init:RequestInit)=>{
       requests.push({url:new NativeURL(url),init});return response({On:true});
     });
-    const t=client({appKey:'sample?token=broken#part',environment:'QA?stage#canary',baseURI:'https://defs.test/base/?keep=one&keep=two',enableTelemetry:false});
+    const t=client({appKey:'sample?token=broken#part',environment:'QA?stage#canary',baseURI:'https://user:secret@defs.test/base/?keep=one&keep=two#anchor',enableTelemetry:false});
     await t.init();
     expect(requests[0].url.pathname).toBe('/base/evaluated-signed/sample%3Ftoken=broken%23part/QA%3Fstage%23canary');
     expect([...requests[0].url.searchParams]).toEqual([['keep','one'],['keep','two'],['u','alice']]);
-    expect(requests[0].url.hash).toBe('');
+    expect(requests[0].url.username).toBe('user');
+    expect(requests[0].url.password).toBe('secret');
+    expect(requests[0].url.hash).toBe('#anchor');
   } finally {globalThis.URL=NativeURL;}
 });
 it('constructs definitions and JWKS paths when Hermes ignores URL.pathname writes',async()=>{

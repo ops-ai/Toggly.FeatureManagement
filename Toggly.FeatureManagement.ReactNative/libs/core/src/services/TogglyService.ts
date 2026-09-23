@@ -785,13 +785,29 @@ export class TogglyService {
     const base = new URL(this.config.baseURI);
     // Hermes can ignore URL.pathname assignment. Construct the full URL so
     // both definitions and JWKS retain the configured base path and query.
-    const credentials = base.username || base.password
-      ? `${base.username}${base.password ? `:${base.password}` : ''}@`
-      : '';
+    let credentials = '';
+    if (base.username || base.password) {
+      credentials = base.username;
+      if (base.password) credentials += `:${base.password}`;
+      credentials += '@';
+    }
     // A pathname setter treats ? and # in app keys/environments as path data;
     // in a complete URL they would instead begin a query or fragment.
     const encodedPath = path.replace(/[?#]/g, character => character === '?' ? '%3F' : '%23');
-    return new URL(`${base.protocol}//${credentials}${base.host}${base.pathname.replace(/\/+$/, '')}/${encodedPath}${base.search}${base.hash}`);
+    let basePath = base.pathname;
+    while (basePath.endsWith('/')) basePath = basePath.slice(0, -1);
+    const endpoint = [
+      base.protocol,
+      '//',
+      credentials,
+      base.host,
+      basePath,
+      '/',
+      encodedPath,
+      base.search,
+      base.hash,
+    ].join('');
+    return new URL(endpoint);
   }
 
   private buildApiUrl(): string {
