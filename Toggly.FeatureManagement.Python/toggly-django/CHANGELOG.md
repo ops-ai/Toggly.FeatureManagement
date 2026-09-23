@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0 - 2026-09-23
+
+### Changed
+- Requires `toggly>=1.0.0`. Feature variants are now assigned locally from
+  cached feature definitions instead of a separate remote-variants request;
+  use `get_client().get_variant(feature_key, user_id=...)`.
+
+### Breaking Changes
+- Removed the `ENABLE_VARIANTS`, `VARIANT_GROUPS`, and `VARIANT_CLAIMS`
+  `TOGGLY` settings, and the matching `configure_toggly(...)` keyword
+  arguments. Passing them now raises a `TypeError`. Remove them from your
+  Django settings / `configure_toggly` calls and use per-request
+  `get_variant(feature_key, user_id=..., groups=[...])` instead.
+
 ## 0.4.1 - 2026-09-12
 
 ### Changed

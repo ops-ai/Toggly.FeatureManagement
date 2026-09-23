@@ -5,16 +5,20 @@ from datetime import datetime, timezone
 import pytest
 
 from toggly import (
+    Allocation,
     DebugInfo,
-    EvaluatedVariantDef,
     FeatureDefinition,
     FeatureFilter,
     FeatureState,
+    GroupAllocation,
     JsonWebKey,
     JsonWebKeySet,
     LoadStatus,
     NetworkState,
+    PercentileAllocation,
     TogglyInitResponse,
+    UserAllocation,
+    Variant,
     VariantResult,
 )
 
@@ -123,6 +127,149 @@ class TestFeatureDefinition:
 
         assert definition.metrics == ["metric1", "metric2"]
 
+    def test_definition_with_variants_and_allocation(self) -> None:
+        """Test definition carries variants + allocation."""
+        definition = FeatureDefinition(
+            feature_key="my-feature",
+            variants=[Variant(name="A"), Variant(name="B")],
+            allocation=Allocation(default_when_enabled="A"),
+        )
+
+        assert [v.name for v in definition.variants] == ["A", "B"]
+        assert definition.allocation is not None
+        assert definition.allocation.default_when_enabled == "A"
+
+    def test_definition_to_dict_from_dict_roundtrip_with_variants(self) -> None:
+        """Test to_dict/from_dict preserves variants + allocation."""
+        definition = FeatureDefinition(
+            feature_key="my-feature",
+            variants=[
+                Variant(name="A", configuration_value={"x": 1}, status_override="Enabled")
+            ],
+            allocation=Allocation(
+                default_when_enabled="A",
+                default_when_disabled="B",
+                seed="my-seed",
+                user=[UserAllocation(variant="A", users=["u1"])],
+                group=[GroupAllocation(variant="A", groups=["g1"])],
+                percentile=[PercentileAllocation(variant="A", from_=0, to=50)],
+            ),
+        )
+
+        restored = FeatureDefinition.from_dict(definition.to_dict())
+
+        assert len(restored.variants) == 1
+        assert restored.variants[0].name == "A"
+        assert restored.variants[0].configuration_value == {"x": 1}
+        assert restored.variants[0].status_override == "Enabled"
+        assert restored.allocation is not None
+        assert restored.allocation.default_when_enabled == "A"
+        assert restored.allocation.default_when_disabled == "B"
+        assert restored.allocation.seed == "my-seed"
+        assert restored.allocation.user[0].users == ["u1"]
+        assert restored.allocation.group[0].groups == ["g1"]
+        assert restored.allocation.percentile[0].from_ == 0
+        assert restored.allocation.percentile[0].to == 50
+
+    def test_definition_defaults_to_no_variants(self) -> None:
+        """Test definition defaults to empty variants / no allocation."""
+        definition = FeatureDefinition(feature_key="my-feature")
+
+        assert definition.variants == []
+        assert definition.allocation is None
+
+
+class TestVariant:
+    """Tests for Variant class."""
+
+    def test_variant_defaults(self) -> None:
+        """Test variant default status override."""
+        variant = Variant(name="A")
+        assert variant.name == "A"
+        assert variant.configuration_value is None
+        assert variant.status_override == "None"
+
+    def test_variant_from_dict_camel_case(self) -> None:
+        """Test parsing camelCase wire keys."""
+        variant = Variant.from_dict(
+            {"name": "A", "configurationValue": {"x": 1}, "statusOverride": "Enabled"}
+        )
+        assert variant is not None
+        assert variant.name == "A"
+        assert variant.configuration_value == {"x": 1}
+        assert variant.status_override == "Enabled"
+
+    def test_variant_from_dict_defaults_status_override(self) -> None:
+        """Test missing statusOverride defaults to None."""
+        variant = Variant.from_dict({"name": "A"})
+        assert variant is not None
+        assert variant.status_override == "None"
+
+
+class TestAllocation:
+    """Tests for Allocation class."""
+
+    def test_allocation_from_dict_none_when_absent(self) -> None:
+        """Test Allocation.from_dict returns None for falsy input."""
+        assert Allocation.from_dict(None) is None
+        assert Allocation.from_dict({}) is None
+
+    def test_allocation_from_dict_full(self) -> None:
+        """Test parsing a fully populated allocation."""
+        allocation = Allocation.from_dict(
+            {
+                "defaultWhenEnabled": "A",
+                "defaultWhenDisabled": "B",
+                "seed": "s1",
+                "user": [{"variant": "A", "users": ["u1", "u2"]}],
+                "group": [{"variant": "B", "groups": ["g1"]}],
+                "percentile": [{"variant": "A", "from": 0, "to": 50}],
+            }
+        )
+        assert allocation is not None
+        assert allocation.default_when_enabled == "A"
+        assert allocation.default_when_disabled == "B"
+        assert allocation.seed == "s1"
+        assert allocation.user[0].variant == "A"
+        assert allocation.user[0].users == ["u1", "u2"]
+        assert allocation.group[0].groups == ["g1"]
+        assert allocation.percentile[0].from_ == 0
+        assert allocation.percentile[0].to == 50
+
+    def test_percentile_from_dict_preserves_zero_to_boundary(self) -> None:
+        """``to: 0`` must not be coerced to 100 via truthiness."""
+        alloc = PercentileAllocation.from_dict({"variant": "A", "from": 0, "to": 0})
+        assert alloc is not None
+        assert alloc.from_ == 0.0
+        assert alloc.to == 0.0
+
+    def test_variant_from_dict_skips_missing_name(self) -> None:
+        """Malformed variant rows are skipped instead of raising KeyError."""
+        assert Variant.from_dict({}) is None
+        assert Variant.from_dict({"configurationValue": 1}) is None
+
+    def test_allocation_from_dict_skips_entries_missing_variant(self) -> None:
+        """Allocation rows without ``variant`` are skipped."""
+        allocation = Allocation.from_dict(
+            {
+                "user": [{"users": ["alice"]}],
+                "group": [{"groups": ["beta"]}],
+                "percentile": [{"from": 0, "to": 50}],
+            }
+        )
+        assert allocation is not None
+        assert allocation.user == []
+        assert allocation.group == []
+        assert allocation.percentile == []
+
+    def test_allocation_from_dict_missing_lists_default_empty(self) -> None:
+        """Test missing user/group/percentile default to empty lists."""
+        allocation = Allocation.from_dict({"defaultWhenEnabled": "A"})
+        assert allocation is not None
+        assert allocation.user == []
+        assert allocation.group == []
+        assert allocation.percentile == []
+
 
 class TestFeatureState:
     """Tests for FeatureState class."""
@@ -203,33 +350,6 @@ class TestTogglyInitResponse:
         assert response.etag == "abc123"
 
 
-class TestEvaluatedVariantDef:
-    """Tests for EvaluatedVariantDef."""
-
-    def test_from_dict_camel_case(self) -> None:
-        """Parse API camelCase keys."""
-        d = EvaluatedVariantDef.from_dict(
-            {
-                "enabled": True,
-                "variant": "blue",
-                "configurationValue": {"theme": "dark"},
-            }
-        )
-        assert d.enabled is True
-        assert d.variant == "blue"
-        assert d.configuration_value == {"theme": "dark"}
-
-    def test_to_dict_roundtrip(self) -> None:
-        """Serialization roundtrip."""
-        original = EvaluatedVariantDef(
-            enabled=False, variant=None, configuration_value=42
-        )
-        restored = EvaluatedVariantDef.from_dict(original.to_dict())
-        assert restored.enabled is False
-        assert restored.variant is None
-        assert restored.configuration_value == 42
-
-
 class TestVariantResult:
     """Tests for VariantResult."""
 
@@ -238,6 +358,19 @@ class TestVariantResult:
         vr = VariantResult(name="a", configuration_value="x")
         assert vr.name == "a"
         assert vr.configuration_value == "x"
+        assert vr.enabled is True
+        assert vr.assignment_reason == "None"
+
+    def test_variant_result_with_reason_and_enabled(self) -> None:
+        """Construction with explicit reason / effective-enabled fields."""
+        vr = VariantResult(
+            name="B",
+            configuration_value=42,
+            enabled=False,
+            assignment_reason="DefaultWhenEnabled",
+        )
+        assert vr.enabled is False
+        assert vr.assignment_reason == "DefaultWhenEnabled"
 
 
 class TestNetworkState:

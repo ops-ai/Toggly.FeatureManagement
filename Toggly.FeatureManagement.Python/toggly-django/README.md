@@ -28,22 +28,29 @@ The legacy `{% else %}` branch remains supported for compatibility. It renders
 when the final result, including any negation, is false. Prefer paired blocks in
 new templates. Programmatic boolean helpers and view decorators are unchanged.
 
-## Initial context for remote variants
+## Feature variants
 
-Requires **toggly 0.7.0 and toggly-django 0.3.0**.
+Requires **toggly 1.0.0+**. Feature variants are assigned locally from the
+same cached definitions used for `iffeature`/`is_feature_enabled` — there is
+no separate "variants mode" to enable.
 
 ```python
-# settings.py: application-wide startup defaults, not incoming request values.
+# settings.py
 TOGGLY = {
     "APP_KEY": "your-app-key",
-    "ENABLE_VARIANTS": True,
-    "IDENTITY": "user-123",           # Stable variants identity.
-    "VARIANT_GROUPS": ["beta"],        # Targeting membership.
-    "VARIANT_CLAIMS": {"plan": "pro"}, # String rule attributes.
+    "IDENTITY": "user-123",  # Default identity used when a request/user_id isn't supplied.
 }
-# Programmatic configure_toggly also accepts identity, variant_groups, variant_claims.
 ```
 
-Startup context avoids an initial variants fetch with incomplete targeting followed by a second fetch. Use one variants client per fixed application-wide context; never change a shared server client's identity for each incoming request. These defaults do not replace request-local `EvaluationContext` for ordinary local boolean evaluation. Enabling remote variants retains the SDK's existing client-wide evaluated-flag behavior.
+```python
+from toggly_django.utils import get_client
 
-Groups are trimmed and sent as repeated parameters. Claims must be string-to-string mappings: empty names/values are omitted, whitespace is preserved, and the first 20 claim names in sorted order are sent. Omitted or empty collections send no targeting parameters. Caller collections are copied. Variants caches and conditional validators match the complete context; legacy unscoped variants caches require a fresh fetch. Global definition caches retain their existing behavior.
+client = get_client()
+variant = client.get_variant("checkout-flow", user_id=str(request.user.pk))
+if variant is not None and variant.enabled and variant.name == "B":
+    ...
+```
+
+See the core `toggly` package README for the full `get_variant` /
+`get_variant_value` API and the Microsoft.FeatureManagement-parity assignment
+rules.

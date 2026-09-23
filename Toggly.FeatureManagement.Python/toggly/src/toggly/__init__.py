@@ -41,15 +41,19 @@ from toggly.exceptions import (
     TogglyTimeoutError,
 )
 from toggly.models import (
+    Allocation,
     DebugInfo,
-    EvaluatedVariantDef,
     FeatureDefinition,
     FeatureFilter,
     FeatureState,
+    GroupAllocation,
     JsonWebKey,
     JsonWebKeySet,
     NetworkState,
+    PercentileAllocation,
     TogglyInitResponse,
+    UserAllocation,
+    Variant,
     VariantResult,
 )
 from toggly.providers import (
@@ -58,8 +62,8 @@ from toggly.providers import (
     JwksSnapshot,
     MemorySnapshotProvider,
     SnapshotProvider,
-    VariantsSnapshot,
 )
+from toggly.variants import VariantAssignment, assign_variant
 from toggly.version import __version__
 
 __all__ = [
@@ -102,19 +106,25 @@ __all__ = [
     "FeatureDefinition",
     "FeatureFilter",
     "FeatureState",
-    "EvaluatedVariantDef",
+    "Variant",
+    "Allocation",
+    "UserAllocation",
+    "GroupAllocation",
+    "PercentileAllocation",
     "VariantResult",
     "TogglyInitResponse",
     "DebugInfo",
     "NetworkState",
     "JsonWebKey",
     "JsonWebKeySet",
+    # Variants (catalog-local allocator)
+    "assign_variant",
+    "VariantAssignment",
     # Providers
     "SnapshotProvider",
     "MemorySnapshotProvider",
     "FileSnapshotProvider",
     "DefinitionsSnapshot",
-    "VariantsSnapshot",
     "JwksSnapshot",
     "__version__",
 ]
