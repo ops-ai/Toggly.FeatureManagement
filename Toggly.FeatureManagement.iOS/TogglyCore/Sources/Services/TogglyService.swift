@@ -964,48 +964,10 @@ public actor TogglyService {
         }
         let flags = toBooleanDefinitions(parsed)
 
-        guard config.verifySignatures else {
+        switch await verifyOrInvalidateCachedSignature(cacheData, cacheKey: cacheKey, generation: generation) {
+        case .trusted:
             return CachedDefinitions(definitions: parsed, flags: flags)
-        }
-
-        guard let timestamp = cacheData.timestamp,
-              let signature = cacheData.signature, !signature.isEmpty,
-              let keyId = cacheData.keyId, !keyId.isEmpty else {
-            await mutateCache(generation: generation) { await self.storage.delete(cacheKey) }
-            return CachedDefinitions(
-                definitions: fromBooleanDefaults(config.featureDefaults),
-                flags: config.featureDefaults
-            )
-        }
-
-        do {
-            try SignedDefsVerify.assertEnvelopeFreshness(
-                timestamp: timestamp,
-                maxSignatureAgeSeconds: config.maxSignatureAgeSeconds
-            )
-        } catch {
-            await mutateCache(generation: generation) { await self.storage.delete(cacheKey) }
-            return CachedDefinitions(
-                definitions: fromBooleanDefaults(config.featureDefaults),
-                flags: config.featureDefaults
-            )
-        }
-
-        guard let jwks = await resolveJwksForCacheVerify() else {
-            return CachedDefinitions(definitions: parsed, flags: flags)
-        }
-
-        do {
-            try SignedDefsVerify.verifySignedDefinitions(
-                defsRaw: cacheData.flags,
-                signature: signature,
-                timestamp: timestamp,
-                kid: keyId,
-                jwks: jwks
-            )
-            return CachedDefinitions(definitions: parsed, flags: flags)
-        } catch {
-            await mutateCache(generation: generation) { await self.storage.delete(cacheKey) }
+        case .invalidated:
             return CachedDefinitions(
                 definitions: fromBooleanDefaults(config.featureDefaults),
                 flags: config.featureDefaults
@@ -1028,18 +990,44 @@ public actor TogglyService {
         }
         let flags = toBooleanFlags(fromVariantDefs: variants)
 
-        guard config.verifySignatures else {
+        switch await verifyOrInvalidateCachedSignature(cacheData, cacheKey: cacheKey, generation: generation) {
+        case .trusted:
             return CachedDefinitions(definitions: fromBooleanDefaults(flags), flags: flags, variantDefs: variants)
+        case .invalidated:
+            return CachedDefinitions(
+                definitions: fromBooleanDefaults(config.featureDefaults),
+                flags: config.featureDefaults
+            )
+        }
+    }
+
+    private enum CacheSignatureVerification {
+        /// Verification is off, the signature checked out, or JWKS is unavailable
+        /// (soft-fail: trust the cache rather than lock the user out offline).
+        case trusted
+        /// The cache was deleted because its envelope metadata, freshness, or
+        /// signature failed verification; the caller should fall back to defaults.
+        case invalidated
+    }
+
+    /// Shared signature verification + cache-invalidation for a cached defs entry.
+    /// Used by both `trustOrReverifyCachedFlags` and `trustOrReverifyCachedVariants`,
+    /// which differ only in how they parse `cacheData.flags` (boolean/gate defs vs.
+    /// variant defs) and how they rebuild `CachedDefinitions` from the outcome.
+    private func verifyOrInvalidateCachedSignature(
+        _ cacheData: TogglyFeatureFlagsCache,
+        cacheKey: String,
+        generation: Int
+    ) async -> CacheSignatureVerification {
+        guard config.verifySignatures else {
+            return .trusted
         }
 
         guard let timestamp = cacheData.timestamp,
               let signature = cacheData.signature, !signature.isEmpty,
               let keyId = cacheData.keyId, !keyId.isEmpty else {
             await mutateCache(generation: generation) { await self.storage.delete(cacheKey) }
-            return CachedDefinitions(
-                definitions: fromBooleanDefaults(config.featureDefaults),
-                flags: config.featureDefaults
-            )
+            return .invalidated
         }
 
         do {
@@ -1049,14 +1037,11 @@ public actor TogglyService {
             )
         } catch {
             await mutateCache(generation: generation) { await self.storage.delete(cacheKey) }
-            return CachedDefinitions(
-                definitions: fromBooleanDefaults(config.featureDefaults),
-                flags: config.featureDefaults
-            )
+            return .invalidated
         }
 
         guard let jwks = await resolveJwksForCacheVerify() else {
-            return CachedDefinitions(definitions: fromBooleanDefaults(flags), flags: flags, variantDefs: variants)
+            return .trusted
         }
 
         do {
@@ -1067,13 +1052,10 @@ public actor TogglyService {
                 kid: keyId,
                 jwks: jwks
             )
-            return CachedDefinitions(definitions: fromBooleanDefaults(flags), flags: flags, variantDefs: variants)
+            return .trusted
         } catch {
             await mutateCache(generation: generation) { await self.storage.delete(cacheKey) }
-            return CachedDefinitions(
-                definitions: fromBooleanDefaults(config.featureDefaults),
-                flags: config.featureDefaults
-            )
+            return .invalidated
         }
     }
 
