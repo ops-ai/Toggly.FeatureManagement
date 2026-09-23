@@ -11,7 +11,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import quote, urlencode, urljoin
+from urllib.parse import quote, urljoin
 
 from toggly.exceptions import TogglyNetworkError, TogglyTimeoutError
 from toggly.version import __version__
@@ -233,31 +233,6 @@ def build_definitions_url(
         path = f"{path}?identity={quote(identity, safe='')}"
 
     return urljoin(base_url + "/", path.lstrip("/"))
-
-
-def build_evaluated_variants_url(
-    base_url: str,
-    app_key: str,
-    environment: str,
-    identity: str | None = None,
-    groups: list[str] | None = None,
-    claims: dict[str, str] | None = None,
-) -> str:
-    """Build a variants URL with encoded, normalized string targeting values."""
-    path = f"evaluated-variants-signed/{app_key}/{environment}"
-    query: list[tuple[str, str]] = []
-    if identity:
-        query.append(("userId", identity))
-    for group in groups or []:
-        if isinstance(group, str) and group.strip():
-            query.append(("g", group.strip()))
-    normalized = {
-        key: value for key, value in (claims or {}).items()
-        if isinstance(key, str) and isinstance(value, str) and key and value
-    }
-    query.extend((f"claim.{key}", normalized[key]) for key in sorted(normalized)[:20])
-    url = urljoin(base_url + "/", path)
-    return f"{url}?{urlencode(query)}" if query else url
 
 
 def build_jwks_url(base_url: str) -> str:

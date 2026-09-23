@@ -635,46 +635,6 @@ class TestAsyncDefinitionCacheHits:
             await client.close()
 
     @pytest.mark.asyncio
-    async def test_async_variants_miss_then_304(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.delenv("TOGGLY_DISABLE_TELEMETRY", raising=False)
-        config, usage = _telemetry_config(enable_variants=True)
-
-        def _ok_variants(etag: str = '"v1"') -> MagicMock:
-            response = MagicMock()
-            response.status_code = 200
-            response.headers = {"ETag": etag}
-            response.json.return_value = {
-                "defs": {"feature-a": {"enabled": True, "variant": "A"}},
-                "signature": "sig",
-                "kid": "k1",
-                "timestamp": 1,
-            }
-            return response
-
-        client = AsyncTogglyClient(config)
-        responses = [_ok_variants('"v1"'), _not_modified('"v1"')]
-
-        def fake_get(*_a: Any, **_k: Any) -> MagicMock:
-            return responses.pop(0)
-
-        try:
-            with pytest.MonkeyPatch.context() as mp:
-                from toggly.http import HttpClient
-
-                mp.setattr(HttpClient, "get", fake_get)
-                await client.init()
-                await client.refresh()
-            client.flush_telemetry()
-            payload = usage.calls[0]
-            assert payload["definitionCacheMisses"] == 1
-            assert payload["definitionCacheHits"] == 1
-            assert await client.is_enabled("feature-a") is True
-        finally:
-            await client.close()
-
-    @pytest.mark.asyncio
     async def test_async_signature_error_keeps_last_good_hit(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

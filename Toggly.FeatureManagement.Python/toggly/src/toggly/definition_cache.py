@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from dataclasses import dataclass
@@ -13,14 +12,14 @@ from typing import Any, Literal, Mapping, Optional, Union
 from toggly.crypto import verify_signed_definitions
 from toggly.enums import LoadStatus
 from toggly.exceptions import TogglyNetworkError, TogglySignatureError
-from toggly.http import build_evaluated_variants_url
 from toggly.models import (
-    EvaluatedVariantDef,
+    Allocation,
     FeatureDefinition,
     FeatureFilter,
     TogglyInitResponse,
+    Variant,
 )
-from toggly.providers import DefinitionsSnapshot, VariantsSnapshot
+from toggly.providers import DefinitionsSnapshot
 
 CacheOutcome = Literal["hit", "miss"]
 
@@ -162,7 +161,7 @@ def decode_json_text(raw_body: str) -> Any:
 
 
 def decode_response_json(response: Any) -> Any:
-    """Parse ``response.json()`` for variants (or similar) payloads."""
+    """Parse ``response.json()``, wrapping decode errors as ``TogglyNetworkError``."""
     try:
         return response.json()
     except Exception as e:
@@ -241,6 +240,9 @@ def parse_definitions_payload(data: Any) -> list[FeatureDefinition]:
                     )
                 )
 
+        variants = [Variant.from_dict(v) for v in item.get("variants") or []]
+        allocation = Allocation.from_dict(item.get("allocation"))
+
         definitions.append(
             FeatureDefinition(
                 feature_key=feature_key,
@@ -250,6 +252,8 @@ def parse_definitions_payload(data: Any) -> list[FeatureDefinition]:
                 context_requirement_type=item.get("contextRequirementType"),
                 secured_feature=item.get("securedFeature", False),
                 metrics=item.get("metrics"),
+                variants=variants,
+                allocation=allocation,
             )
         )
 
@@ -371,62 +375,6 @@ def fetched_definitions_result(
     return init_response, "miss", snapshot
 
 
-def parse_evaluated_variants_payload(
-    data: Any,
-) -> tuple[dict[str, EvaluatedVariantDef], Optional[str], Optional[int], Optional[str]]:
-    """Parse evaluated-variants-signed JSON body."""
-    if not isinstance(data, dict):
-        return {}, None, None, None
-    raw_defs = data.get("defs")
-    if not isinstance(raw_defs, dict):
-        raw_defs = {}
-    defs: dict[str, EvaluatedVariantDef] = {}
-    for key, value in raw_defs.items():
-        if isinstance(value, dict):
-            defs[key] = EvaluatedVariantDef.from_dict(value)
-    raw_sig = data.get("signature")
-    signature = raw_sig if isinstance(raw_sig, str) else None
-    ts = data.get("timestamp")
-    if isinstance(ts, int):
-        timestamp = ts
-    elif isinstance(ts, float):
-        timestamp = int(ts)
-    else:
-        timestamp = None
-    raw_kid = data.get("kid")
-    kid = raw_kid if isinstance(raw_kid, str) else None
-    return defs, signature, timestamp, kid
-
-
-def fetched_variants_result(
-    flags: dict[str, bool],
-    defs: dict[str, EvaluatedVariantDef],
-    *,
-    etag: Optional[str],
-    signature: Optional[str],
-    kid: Optional[str],
-    timestamp: Optional[int],
-) -> tuple[TogglyInitResponse, Literal["miss"], VariantsSnapshot]:
-    """Build the FETCHED/miss return triple after applying evaluated variants."""
-    snapshot = VariantsSnapshot(
-        defs=defs,
-        signature=signature,
-        key_id=kid,
-        timestamp=timestamp,
-        etag=etag,
-    )
-    return (
-        TogglyInitResponse(
-            status=LoadStatus.FETCHED,
-            flags=dict(flags),
-            etag=etag,
-            timestamp=datetime.now(timezone.utc),
-        ),
-        "miss",
-        snapshot,
-    )
-
-
 def verify_and_parse_signed_envelope(
     envelope: SignedDefinitionsEnvelope,
     jwks: Any,
@@ -463,17 +411,6 @@ class DefinitionsMissPlan:
     signed_defs_json: Optional[str] = None
 
 
-@dataclass(frozen=True)
-class VariantsMissPlan:
-    """Parsed evaluated variants ready to apply under the client lock."""
-
-    defs: dict[str, EvaluatedVariantDef]
-    response_etag: Optional[str]
-    signature: Optional[str] = None
-    kid: Optional[str] = None
-    timestamp: Optional[int] = None
-
-
 class DefinitionRefreshMixin:
     """Shared conditional-GET hit completion for sync and async clients."""
 
@@ -481,56 +418,20 @@ class DefinitionRefreshMixin:
     _etag: Optional[str]
     _last_refresh: Optional[datetime]
     _last_signed_timestamp: int
-    _variant_defs: dict[str, EvaluatedVariantDef]
     _definitions: dict[str, FeatureDefinition]
     _config: Any
 
     _identity: Optional[str]
-    _variant_groups: list[str]
-    _variant_claims: dict[str, str]
-    _variant_generation: int
 
     def _initialize_variant_context(self) -> None:
-        """Own startup targeting before client storage or transport work begins."""
+        """Own startup identity before client storage or transport work begins."""
         self._identity = self._config.identity
-        self._variant_groups = list(self._config.variant_groups)
-        self._variant_claims = dict(self._config.variant_claims)
-        self._variant_generation = 0
 
     def _set_variant_identity_unlocked(self, identity: Optional[str]) -> Optional[str]:
-        """Replace identity and invalidate evaluated state while the client lock is held."""
+        """Replace identity while the client lock is held; returns the previous identity."""
         old_identity = self._identity
         self._identity = identity
-        if self._config.enable_variants and old_identity != identity:
-            self._variant_generation += 1
-            self._etag = None
-            self._variant_defs = {}
-            self._flags = dict(self._config.feature_defaults)
         return old_identity
-
-    def _variant_context_key(self) -> str:
-        """Fingerprint the complete variants request without exposing targeting in cache keys."""
-        url = build_evaluated_variants_url(
-            self._config.base_url, self._config.app_key or "", self._config.environment,
-            self._identity, self._variant_groups, self._variant_claims,
-        )
-        return hashlib.sha256(url.encode("utf-8")).hexdigest()
-
-    def _complete_variants_response_unlocked(
-        self, response: Any, generation: int,
-    ) -> tuple[TogglyInitResponse, CacheOutcome, Optional[VariantsSnapshot]] | None:
-        """Commit an owned response under the client lock, or request a fresh-context retry."""
-        if generation != self._variant_generation:
-            return None
-        planned = self._plan_variants_http_response(response)
-        if isinstance(planned, VariantsMissPlan):
-            result, outcome, snapshot = self._commit_variants_miss_plan(planned)
-            # Synchronous state handlers can change identity during commit.
-            if generation != self._variant_generation:
-                return None
-            snapshot.context_key = self._variant_context_key()
-            return result, outcome, snapshot
-        return planned
 
     def _complete_conditional_get_hit(
         self, early: ConditionalGetHit
@@ -555,25 +456,8 @@ class DefinitionRefreshMixin:
     ) -> None:
         """Apply a new definitions revision; caller must hold ``_lock``."""
         old_flags = dict(self._flags)
-        self._variant_defs = {}
         self._definitions = {d.feature_key: d for d in definitions}
         self._update_flags()  # type: ignore[attr-defined]
-        self._last_refresh = datetime.now(timezone.utc)
-        self._etag = response_etag
-        self._notify_changes(old_flags)  # type: ignore[attr-defined]
-
-    def _apply_fetched_variants_unlocked(
-        self,
-        defs: dict[str, EvaluatedVariantDef],
-        response_etag: Optional[str],
-    ) -> None:
-        """Apply evaluated variants; caller must hold ``_lock``."""
-        old_flags = dict(self._flags)
-        self._variant_defs = defs
-        self._definitions = {}
-        self._flags = dict(self._config.feature_defaults)
-        for key, vd in defs.items():
-            self._flags[key] = vd.enabled
         self._last_refresh = datetime.now(timezone.utc)
         self._etag = response_etag
         self._notify_changes(old_flags)  # type: ignore[attr-defined]
@@ -625,24 +509,6 @@ class DefinitionRefreshMixin:
             signed_defs_json=signed_defs_json,
         )
 
-    def _variants_miss_result(
-        self,
-        defs: dict[str, EvaluatedVariantDef],
-        *,
-        signature: Optional[str],
-        kid: Optional[str],
-        timestamp: Optional[int],
-    ) -> tuple[TogglyInitResponse, Literal["miss"], VariantsSnapshot]:
-        """Build the variants miss triple from current client flags/etag."""
-        return fetched_variants_result(
-            self._flags,
-            defs,
-            etag=self._etag,
-            signature=signature,
-            kid=kid,
-            timestamp=timestamp,
-        )
-
     def _plan_definitions_http_response(
         self,
         response: Any,
@@ -682,27 +548,6 @@ class DefinitionRefreshMixin:
             signed_defs_json=signed_defs_json,
         )
 
-    def _plan_variants_http_response(
-        self,
-        response: Any,
-    ) -> tuple[TogglyInitResponse, Literal["hit"], None] | VariantsMissPlan:
-        """Interpret a variants HTTP response into a hit or miss plan (no lock)."""
-        previous_etag = self._etag
-        probe = probe_http_cache(response.status_code, previous_etag, response.headers)
-        early = resolve_conditional_get(probe, resource_label="evaluated variants")
-        if early is not None:
-            return self._complete_conditional_get_hit(early)
-
-        data = decode_response_json(response)
-        defs, signature, timestamp, kid = parse_evaluated_variants_payload(data)
-        return VariantsMissPlan(
-            defs=defs,
-            response_etag=probe.response_etag,
-            signature=signature,
-            kid=kid,
-            timestamp=timestamp,
-        )
-
     def _commit_definitions_miss_plan(
         self, plan: DefinitionsMissPlan
     ) -> tuple[TogglyInitResponse, Literal["miss"], DefinitionsSnapshot]:
@@ -714,16 +559,4 @@ class DefinitionRefreshMixin:
             kid=plan.kid,
             signed_ts=plan.signed_ts,
             signed_defs_json=plan.signed_defs_json,
-        )
-
-    def _commit_variants_miss_plan(
-        self, plan: VariantsMissPlan
-    ) -> tuple[TogglyInitResponse, Literal["miss"], VariantsSnapshot]:
-        """Apply a variants miss plan (caller must already hold ``_lock``)."""
-        self._apply_fetched_variants_unlocked(plan.defs, plan.response_etag)
-        return self._variants_miss_result(
-            plan.defs,
-            signature=plan.signature,
-            kid=plan.kid,
-            timestamp=plan.timestamp,
         )
