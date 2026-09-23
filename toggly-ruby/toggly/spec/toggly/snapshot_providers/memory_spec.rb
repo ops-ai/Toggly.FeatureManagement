@@ -39,29 +39,22 @@ RSpec.describe Toggly::SnapshotProviders::Memory do
     end
   end
 
-  describe "#save_variants and #load_variants (dual-rail)" do
-    it "saves and loads evaluated variants independently from definitions" do
-      variants = {
-        "checkout-flow" => Toggly::EvaluatedVariantDef.new(enabled: true, variant: "treatment", configuration_value: { "cta" => "Buy" })
-      }
+  describe "definitions with variants/allocation" do
+    it "round-trips variants and allocation through save/load" do
+      definition = Toggly::FeatureDefinition.new(
+        feature_key: "checkout-flow",
+        enabled: true,
+        variants: [Toggly::FeatureVariant.new(name: "A", configuration_value: { "cta" => "Buy" })],
+        allocation: Toggly::FeatureVariantAllocation.new(default_when_enabled: "A")
+      )
 
-      provider.save_variants(variants, { version: "1.0" })
-      result = provider.load_variants
+      provider.save({ "checkout-flow" => definition })
+      result = provider.load
 
-      expect(result[:variants].keys).to eq(["checkout-flow"])
-      expect(result[:variants]["checkout-flow"].variant).to eq("treatment")
-      expect(result[:metadata][:version]).to eq("1.0")
-    end
-
-    it "returns nil when nothing has been saved" do
-      expect(provider.load_variants).to be_nil
-    end
-
-    it "clears variants on #clear" do
-      provider.save_variants({ "f" => Toggly::EvaluatedVariantDef.new(enabled: true) })
-      provider.clear
-
-      expect(provider.load_variants).to be_nil
+      loaded = result[:definitions]["checkout-flow"]
+      expect(loaded.variants.first.name).to eq("A")
+      expect(loaded.variants.first.configuration_value).to eq({ "cta" => "Buy" })
+      expect(loaded.allocation.default_when_enabled).to eq("A")
     end
   end
 end

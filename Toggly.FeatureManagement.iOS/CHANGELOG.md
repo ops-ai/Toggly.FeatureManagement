@@ -2,6 +2,14 @@
 
 All notable changes to the Toggly iOS SDK are documented in this file.
 
+## 1.6.1
+
+2026-09-23
+
+### Fixed
+- Signed-definition verification no longer crashes when an ECDSA signature component begins with zero bytes. P1363-to-DER conversion keeps the canonical integer value and required positive sign padding.
+- DER signature conversion safely reads integer components with redundant leading zero bytes instead of terminating the app.
+
 ## 1.6.0
 
 2026-09-22

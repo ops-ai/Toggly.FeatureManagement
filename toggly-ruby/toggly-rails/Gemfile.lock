@@ -1,14 +1,14 @@
 PATH
   remote: ../toggly
   specs:
-    toggly (0.5.2)
+    toggly (1.0.0)
 
 PATH
   remote: .
   specs:
     toggly-rails (0.3.1)
       railties (>= 7.0)
-      toggly (~> 0.1)
+      toggly (>= 0.1, < 2.0)
 
 GEM
   remote: https://rubygems.org/
