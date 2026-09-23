@@ -139,4 +139,38 @@ defmodule Toggly.ClientTest do
 
     Toggly.stop(sup)
   end
+
+  test "refresh accepts definitions with null or missing filters" do
+    {:ok, replies} =
+      Agent.start_link(fn ->
+        [
+          {200, Jason.encode!([%{"featureKey" => "null-filters", "filters" => nil}]),
+           [{"etag", "n1"}]},
+          {200, Jason.encode!([%{"featureKey" => "missing-filters"}]), [{"etag", "n2"}]}
+        ]
+      end)
+
+    transport = fn _req ->
+      {status, body, headers} =
+        Agent.get_and_update(replies, fn [reply | rest] -> {reply, rest} end)
+
+      {:ok, %{status: status, body: body, headers: headers}}
+    end
+
+    {:ok, _sup} =
+      Toggly.start_link(
+        name: NullFiltersFlags,
+        app_key: "test",
+        signed: false,
+        transport: transport,
+        refresh_interval: 0,
+        websocket: false
+      )
+
+    assert :ok = Toggly.refresh(NullFiltersFlags)
+    refute Toggly.enabled?(NullFiltersFlags, "null-filters")
+    assert :ok = Toggly.refresh(NullFiltersFlags)
+    refute Toggly.enabled?(NullFiltersFlags, "missing-filters")
+    Toggly.stop(NullFiltersFlags)
+  end
 end
