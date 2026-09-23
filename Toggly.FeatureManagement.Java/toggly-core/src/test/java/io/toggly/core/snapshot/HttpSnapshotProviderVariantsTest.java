@@ -185,6 +185,25 @@ class HttpSnapshotProviderVariantsTest {
     }
 
     @Test
+    void emptyVariantResponseDoesNotRefetchOnEveryGet() {
+        variantsBody.set("{\"defs\":{}}");
+        HttpSnapshotProvider provider = new HttpSnapshotProvider(
+                baseConfig().enableVariants(true).build());
+
+        VariantSnapshot first = provider.getVariantSnapshot();
+        VariantSnapshot second = provider.getVariantSnapshot();
+        VariantSnapshot third = provider.getVariantSnapshot();
+
+        assertThat(first.isEmpty()).isTrue();
+        assertThat(second.isEmpty()).isTrue();
+        assertThat(third.isEmpty()).isTrue();
+        // One lazy fetch for the empty-but-valid response; subsequent gets reuse it.
+        assertThat(variantsRequestCount.get()).isEqualTo(1);
+
+        provider.close();
+    }
+
+    @Test
     void identityIsSentAsUserIdQueryParam() {
         HttpSnapshotProvider provider = new HttpSnapshotProvider(
                 baseConfig().enableVariants(true).identity("user-42").build());

@@ -4,6 +4,11 @@
 
 2026-09-22
 
+### Fixed
+- `getVariantSnapshot()` no longer refetches on every call when the server
+  returned an empty variants map. Track a separate `variantsLoaded` flag so
+  "never fetched" and "fetched but empty" are distinct.
+
 ### Added
 - `TogglyConfig.enableVariants` (default `false`). When enabled, `HttpSnapshotProvider`
   additionally fetches `evaluated-variants-signed/{appKey}/{environment}` on every

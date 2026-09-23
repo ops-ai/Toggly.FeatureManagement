@@ -114,7 +114,11 @@ public final class VariantSnapshot {
     }
 
     /**
-     * Checks if this snapshot is empty (no variant entries fetched yet).
+     * Checks if this snapshot has no variant entries.
+     *
+     * <p>An empty map is a valid post-fetch state (the environment may simply
+     * have no assigned variants). Callers must not treat {@code isEmpty()} as
+     * "never fetched" — {@code HttpSnapshotProvider} tracks that separately.
      */
     public boolean isEmpty() {
         return defs.isEmpty();

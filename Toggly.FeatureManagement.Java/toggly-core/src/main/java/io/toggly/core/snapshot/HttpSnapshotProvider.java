@@ -71,6 +71,13 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     private final AtomicReference<String> lastVariantEtag;
     private final AtomicLong lastSignedVariantTimestamp;
     private final AtomicBoolean variantRefreshInFlight = new AtomicBoolean(false);
+    /**
+     * True after a successful variants fetch has been applied, including when the
+     * server returned an empty {@code defs} object. Distinguishes "never fetched"
+     * from "fetched but empty" so {@link #getVariantSnapshot()} does not refetch
+     * on every call when the project has no assigned variants.
+     */
+    private final AtomicBoolean variantsLoaded = new AtomicBoolean(false);
     private final AtomicReference<JsonWebKeySet> jwks;
     private final AtomicReference<Instant> jwksExpiry;
     private final ScheduledExecutorService scheduler;
@@ -180,11 +187,10 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         if (!config.isEnableVariants()) {
             return VariantSnapshot.empty();
         }
-        VariantSnapshot snapshot = currentVariantSnapshot.get();
-        if (snapshot.isEmpty()) {
+        if (!variantsLoaded.get()) {
             return refreshVariants();
         }
-        return snapshot;
+        return currentVariantSnapshot.get();
     }
 
     @Override
@@ -192,11 +198,10 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         if (!config.isEnableVariants()) {
             return CompletableFuture.completedFuture(VariantSnapshot.empty());
         }
-        VariantSnapshot snapshot = currentVariantSnapshot.get();
-        if (snapshot.isEmpty()) {
+        if (!variantsLoaded.get()) {
             return CompletableFuture.supplyAsync(this::refreshVariants);
         }
-        return CompletableFuture.completedFuture(snapshot);
+        return CompletableFuture.completedFuture(currentVariantSnapshot.get());
     }
 
     @Override
@@ -359,6 +364,7 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
 
     private void applyVariantSnapshot(VariantSnapshot snapshot) {
         currentVariantSnapshot.set(snapshot);
+        variantsLoaded.set(true);
         if (snapshot.getEtag() != null) {
             lastVariantEtag.set(snapshot.getEtag());
         }
@@ -375,6 +381,7 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         currentVariantSnapshot.set(VariantSnapshot.empty());
         lastVariantEtag.set(null);
         lastSignedVariantTimestamp.set(0);
+        variantsLoaded.set(false);
         clearJwks();
     }
 
