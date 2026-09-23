@@ -101,6 +101,15 @@ const packedCandidateDependencies = Object.entries(dependencies).filter(([name])
 )
 const artifactPath = spec => spec.replace(/^file:(?:\.\/)?/, '')
 const artifactIntegrity = async spec => `sha512-${createHash('sha512').update(await readFile(join(work, artifactPath(spec)))).digest('base64')}`
+function assertCaretRangeContains(version, range, packageName) {
+  const requested = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(range)
+  const installed = /^(\d+)\.(\d+)\.(\d+)$/.exec(version)
+  assert(requested && installed, `${packageName} must use a plain semver caret range`)
+  const [, major, minor, patch] = requested.map(Number)
+  const [, installedMajor, installedMinor, installedPatch] = installed.map(Number)
+  assert.equal(installedMajor, major, `${packageName} must satisfy ${range}`)
+  assert(installedMinor > minor || installedMinor === minor && installedPatch >= patch, `${packageName} must satisfy ${range}`)
+}
 if (lockMode === 'locked') {
   const lockedManifest = JSON.parse(await readFile(join(lockDir, 'package.json'), 'utf8'))
   assert.deepEqual(lockedManifest, manifest, 'consumer lock must match the packed candidate versions and dependency mode')
@@ -137,10 +146,22 @@ for (const [name, spec] of packedCandidateDependencies) {
 }
 for (const [path, pkg] of Object.entries(consumerLock.packages)) {
   if (!path || packedCandidateDependencies.some(([name]) => path === `node_modules/${name}`)) continue
-  if (pkg.resolved) assert(pkg.resolved.startsWith('https://registry.npmjs.org/'), `${path} must resolve from public npm`)
+  if (pkg.resolved) {
+    assert(pkg.resolved.startsWith('https://registry.npmjs.org/'), `${path} must resolve from public npm`)
+    assert.notEqual(pkg.link, true, `${path} must not be a workspace link`)
+    assert.match(pkg.integrity ?? '', /^sha512-/, `${path} must retain npm SHA-512 integrity`)
+  }
 }
 assert.equal(consumerLock.packages['node_modules/@ops-ai/toggly-signed-defs'].version, '1.2.7')
-assert.equal(consumerLock.packages['node_modules/@ops-ai/toggly-client-telemetry'].version, '1.1.0')
+const telemetryPackage = consumerLock.packages['node_modules/@ops-ai/toggly-client-telemetry']
+assert(telemetryPackage, 'frontend reporter must be present in the consumer lock')
+const telemetrySdk = JSON.parse(await readFile(join(work, 'node_modules/@ops-ai/nuxt-toggly-client/package.json'), 'utf8'))
+assertCaretRangeContains(telemetryPackage.version, telemetrySdk.dependencies['@ops-ai/toggly-client-telemetry'], '@ops-ai/toggly-client-telemetry')
+if (!process.env.TOGGLY_CLIENT_TELEMETRY_SOURCE) {
+  assert(telemetryPackage.resolved?.startsWith('https://registry.npmjs.org/@ops-ai/toggly-client-telemetry/-/'), 'frontend reporter must resolve from the public npm registry')
+  assert.notEqual(telemetryPackage.link, true, 'frontend reporter must not be a workspace link')
+  assert.match(telemetryPackage.integrity ?? '', /^sha512-/, 'frontend reporter must retain npm SHA-512 integrity')
+}
 console.log('Installed registry versions',JSON.stringify(Object.fromEntries(['nuxt','vue','typescript','@ops-ai/nuxt-toggly-core','@ops-ai/nuxt-toggly-client','@ops-ai/nuxt-toggly-server','@ops-ai/nuxt-toggly','@ops-ai/toggly-client-telemetry'].map(name=>[name,consumerLock.packages[`node_modules/${name}`].version]))))
 console.log(`Consumer resolution: ${lockMode === 'fresh' ? 'fresh install' : 'npm ci from recorded lock'}; ${version}`)
 await run('npx', ['nuxt', 'prepare'])
