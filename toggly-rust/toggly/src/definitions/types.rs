@@ -41,11 +41,11 @@ pub struct FeatureDefinition {
     pub feature_key: String,
 
     /// Feature filters for evaluation.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_null_as_default")]
     pub filters: Vec<FeatureFilter>,
 
     /// Associated metrics.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_null_as_default")]
     pub metrics: Vec<String>,
 
     /// Whether this is a secured feature.
@@ -296,6 +296,28 @@ mod tests {
         let def: FeatureDefinition = serde_json::from_str(json).unwrap();
         assert!(def.variants.is_empty());
         assert!(def.allocation.is_none());
+    }
+
+    #[test]
+    fn test_deserialize_feature_definition_null_metrics_and_filters() {
+        // The backend's Metrics (and, defensively, Filters) list is a nullable
+        // C# property and has been observed emitting an explicit `null` (not
+        // an omitted key or `[]`) for features with no metrics/filters
+        // configured, e.g. the "FlagOn"/"FlagOff" smoke-test features. Same
+        // failure mode as the variants case above: "invalid type: null,
+        // expected a sequence" without `deserialize_null_as_default`.
+        let json = r#"{
+            "featureKey": "FlagOn",
+            "filters": null,
+            "metrics": null,
+            "securedFeature": false,
+            "clientSdkEnabled": true,
+            "requirementType": "Any"
+        }"#;
+
+        let def: FeatureDefinition = serde_json::from_str(json).unwrap();
+        assert!(def.filters.is_empty());
+        assert!(def.metrics.is_empty());
     }
 
     #[test]
