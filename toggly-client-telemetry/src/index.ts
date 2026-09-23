@@ -74,8 +74,12 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
     const parsed = new URL(base);
     // URL.search/hash omit empty delimiters, so reject them in the input too.
     if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || /[?#]/.test(base)) throw new Error();
-    parsed.pathname = parsed.pathname.replace(/\/+$/, '') + '/api/frontend/telemetry';
-    url = parsed.href;
+    // React Native's native URL accepts pathname writes but can ignore them.
+    // Put the complete path in the constructor input instead.
+    const path = parsed.pathname;
+    let end = path.length;
+    while (end > 0 && path[end - 1] === '/') end--;
+    url = new URL(`${parsed.origin}${path.slice(0, end)}/api/frontend/telemetry`).href;
   } catch { if (enabled()) diagnostic('invalid-option'); }
   const configured = options.telemetryFlushIntervalMs ?? 45000;
   const interval = Number.isFinite(configured) && configured >= 30000 && configured <= 60000 ? configured : 45000;
