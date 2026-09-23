@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.7.0
+
+2026-09-22
+
+### Fixed
+- `getVariantSnapshot()` no longer refetches on every call when the server
+  returned an empty variants map. Track a separate `variantsLoaded` flag so
+  "never fetched" and "fetched but empty" are distinct.
+
+### Added
+- `TogglyConfig.enableVariants` (default `false`). When enabled, `HttpSnapshotProvider`
+  additionally fetches `evaluated-variants-signed/{appKey}/{environment}` on every
+  refresh cycle (manual `refresh()`, scheduled poll, WebSocket notify) — dual-rail,
+  matching the Python SDK: `definitions`/`definitions-signed` remain the source of
+  truth for `isEnabled`; variants are a separate, additive cache that never
+  replaces the definitions pipeline.
+- `TogglyClient.getVariant(featureKey)` / `getVariantAsync(featureKey)` /
+  `getVariantValue(featureKey)` — a new public variant-assignment API returning
+  `VariantResult` (`name` + `configurationValue`), non-null only when
+  `enableVariants` is true, the evaluated entry is `enabled == true`, and a
+  non-empty variant name is present. Mirrored on the `Toggly` static facade.
+  Distinct from the `variant` label already used by `recordUsage`/`recordView`
+  telemetry, which is not an assignment API.
+- `EvaluatedVariantDef` / `VariantResult` models and `VariantSnapshot` (new
+  `io.toggly.core.snapshot` type, separate from `FeatureSnapshot`).
+- `SnapshotProvider.getVariantSnapshot()` / `getVariantSnapshotAsync()` /
+  `refreshVariants()` default methods (no-op unless overridden); implemented in
+  `HttpSnapshotProvider` and `InMemorySnapshotProvider` (test helper
+  `setVariants(...)`).
+- Signed-variants verification reuses the existing ES256/JWKS pipeline, gated by
+  the same `useSignedDefinitions` flag Java already exposes for definitions
+  (Java has one signature toggle rather than JS's separate `verifySignatures`).
+- `toggly-cache-caffeine` / `toggly-cache-redis` / `toggly-cache-redis-jedis8`
+  now forward `getVariantSnapshot()` / `getVariantSnapshotAsync()` /
+  `refreshVariants()` to their delegate, so `getVariant`/`getVariantValue` work
+  correctly through caching wrappers instead of always seeing an empty variant
+  snapshot.
+- `HttpSnapshotProvider` now parses structured (object/array) `configurationValue`
+  payloads for evaluated variants, not only scalars.
+
 ## 1.6.2
 
 2026-09-17

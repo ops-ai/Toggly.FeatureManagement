@@ -7,12 +7,15 @@ import io.toggly.core.context.EvaluationContext;
 import io.toggly.core.eval.EvaluationEngine;
 import io.toggly.core.eval.EvaluatorRegistry;
 import io.toggly.core.exception.TogglyConfigException;
+import io.toggly.core.model.EvaluatedVariantDef;
 import io.toggly.core.model.FeatureDefinition;
 import io.toggly.core.model.FeatureRequirement;
 import io.toggly.core.model.MetricDefinition;
+import io.toggly.core.model.VariantResult;
 import io.toggly.core.snapshot.FeatureSnapshot;
 import io.toggly.core.snapshot.HttpSnapshotProvider;
 import io.toggly.core.snapshot.SnapshotProvider;
+import io.toggly.core.snapshot.VariantSnapshot;
 import io.toggly.core.telemetry.MetricsFeatureOptions;
 import io.toggly.core.telemetry.TelemetryRuntime;
 
@@ -249,6 +252,85 @@ public final class TogglyClient implements AutoCloseable {
                     LOGGER.log(Level.WARNING, "Async error evaluating feature: " + featureKey, e);
                     return config.getDefaultFeatureState();
                 });
+    }
+
+    // ========== Feature Variants ==========
+    //
+    // Dual-rail pattern (matches the Python SDK): definitions/definitions-signed
+    // above remain the source of truth for isEnabled. When config.enableVariants
+    // is true, the SnapshotProvider additionally fetches evaluated-variants-signed
+    // and caches it separately; these methods only read that additive rail and
+    // never influence isEnabled. This is a public assignment API, distinct from
+    // the "variant" label recorded by recordUsage/recordView for telemetry.
+
+    /**
+     * Gets the server-evaluated variant assigned for a feature.
+     *
+     * <p>Returns {@code null} unless {@code enableVariants} is true, an
+     * evaluated entry exists for the feature, that entry is enabled, and it
+     * has a non-empty variant name — matching JS/Python/.NET/Go semantics.</p>
+     *
+     * @param featureKey the feature key
+     * @return the assigned variant, or null if unavailable
+     */
+    public VariantResult getVariant(String featureKey) {
+        if (featureKey == null || featureKey.isEmpty() || !config.isEnableVariants()) {
+            return null;
+        }
+        try {
+            VariantSnapshot snapshot = snapshotProvider.getVariantSnapshot();
+            EvaluatedVariantDef entry = snapshot.getVariant(featureKey);
+            if (entry == null || !entry.isEnabled()) {
+                return null;
+            }
+            String variant = entry.getVariant();
+            if (variant == null || variant.isEmpty()) {
+                return null;
+            }
+            return new VariantResult(variant, entry.getConfigurationValue());
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Error resolving variant for feature: " + featureKey, e);
+            return null;
+        }
+    }
+
+    /**
+     * Gets the server-evaluated variant asynchronously.
+     *
+     * @param featureKey the feature key
+     * @return a future that completes with the assigned variant, or null if unavailable
+     */
+    public CompletableFuture<VariantResult> getVariantAsync(String featureKey) {
+        if (featureKey == null || featureKey.isEmpty() || !config.isEnableVariants()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return snapshotProvider.getVariantSnapshotAsync()
+                .thenApply(snapshot -> {
+                    EvaluatedVariantDef entry = snapshot.getVariant(featureKey);
+                    if (entry == null || !entry.isEnabled()) {
+                        return null;
+                    }
+                    String variant = entry.getVariant();
+                    if (variant == null || variant.isEmpty()) {
+                        return null;
+                    }
+                    return new VariantResult(variant, entry.getConfigurationValue());
+                })
+                .exceptionally(e -> {
+                    LOGGER.log(Level.WARNING, "Async error resolving variant for feature: " + featureKey, e);
+                    return null;
+                });
+    }
+
+    /**
+     * Gets the configuration value of the assigned variant for a feature.
+     *
+     * @param featureKey the feature key
+     * @return the variant's configuration value, or null if no variant is assigned
+     */
+    public Object getVariantValue(String featureKey) {
+        VariantResult variant = getVariant(featureKey);
+        return variant != null ? variant.getConfigurationValue() : null;
     }
 
     // ========== Feature Gate ==========

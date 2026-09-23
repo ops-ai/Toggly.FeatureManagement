@@ -37,6 +37,7 @@ public final class TogglyConfig {
     private final String instanceName;
     private final String appVersion;
     private final boolean useSignedDefinitions;
+    private final boolean enableVariants;
     private final boolean debug;
     private final boolean enableLiveUpdates;
     private final Map<String, Boolean> featureDefaults;
@@ -62,6 +63,7 @@ public final class TogglyConfig {
         this.instanceName = builder.instanceName;
         this.appVersion = builder.appVersion;
         this.useSignedDefinitions = builder.useSignedDefinitions;
+        this.enableVariants = builder.enableVariants;
         this.debug = builder.debug;
         this.enableLiveUpdates = builder.enableLiveUpdates;
         this.featureDefaults = Collections.unmodifiableMap(new HashMap<>(builder.featureDefaults));
@@ -169,6 +171,22 @@ public final class TogglyConfig {
         return useSignedDefinitions;
     }
 
+    /**
+     * Whether server-evaluated variants are fetched in addition to
+     * definitions/definitions-signed (dual-rail; additive, never replaces the
+     * definitions pipeline used by {@code isEnabled}).
+     *
+     * <p>When true, the SDK additionally fetches
+     * {@code evaluated-variants-signed/{appKey}/{environment}} so
+     * {@code TogglyClient#getVariant} / {@code getVariantValue} can resolve
+     * an assigned variant name and configuration value.</p>
+     *
+     * @return true if evaluated variants are enabled
+     */
+    public boolean isEnableVariants() {
+        return enableVariants;
+    }
+
     public boolean isDebug() {
         return debug;
     }
@@ -264,6 +282,7 @@ public final class TogglyConfig {
                 .instanceName(instanceName)
                 .appVersion(appVersion)
                 .useSignedDefinitions(useSignedDefinitions)
+                .enableVariants(enableVariants)
                 .debug(debug)
                 .enableLiveUpdates(enableLiveUpdates)
                 .featureDefaults(featureDefaults)
@@ -293,6 +312,7 @@ public final class TogglyConfig {
         private String instanceName;
         private String appVersion;
         private boolean useSignedDefinitions = false;
+        private boolean enableVariants = false;
         private boolean debug = false;
         private boolean enableLiveUpdates = true;
         private Map<String, Boolean> featureDefaults = new HashMap<>();
@@ -473,6 +493,24 @@ public final class TogglyConfig {
         }
 
         /**
+         * Enables or disables fetching server-evaluated variants in addition to
+         * definitions/definitions-signed (dual-rail; additive, never replaces
+         * the definitions pipeline used by {@code isEnabled}).
+         *
+         * <p>When true, additionally fetches
+         * {@code evaluated-variants-signed/{appKey}/{environment}} so
+         * {@code getVariant} / {@code getVariantValue} can resolve an assigned
+         * variant name and configuration value.</p>
+         *
+         * @param enableVariants true to enable evaluated variants (default: false)
+         * @return this builder
+         */
+        public Builder enableVariants(boolean enableVariants) {
+            this.enableVariants = enableVariants;
+            return this;
+        }
+
+        /**
          * Enables or disables debug mode.
          *
          * @param debug true to enable debug logging
@@ -601,6 +639,7 @@ public final class TogglyConfig {
         return enableAutoRefresh == that.enableAutoRefresh &&
                 enableUsageTracking == that.enableUsageTracking &&
                 useSignedDefinitions == that.useSignedDefinitions &&
+                enableVariants == that.enableVariants &&
                 debug == that.debug &&
                 enableLiveUpdates == that.enableLiveUpdates &&
                 Objects.equals(appKey, that.appKey) &&
@@ -615,7 +654,7 @@ public final class TogglyConfig {
     public int hashCode() {
         return Objects.hash(appKey, environment, baseUrl, refreshInterval,
                 enableAutoRefresh, enableUsageTracking, useSignedDefinitions,
-                debug, enableLiveUpdates, featureDefaults, identity);
+                enableVariants, debug, enableLiveUpdates, featureDefaults, identity);
     }
 
     @Override
@@ -628,6 +667,7 @@ public final class TogglyConfig {
                 ", enableAutoRefresh=" + enableAutoRefresh +
                 ", enableUsageTracking=" + enableUsageTracking +
                 ", useSignedDefinitions=" + useSignedDefinitions +
+                ", enableVariants=" + enableVariants +
                 ", debug=" + debug +
                 ", enableLiveUpdates=" + enableLiveUpdates +
                 ", featureDefaults=" + featureDefaults.size() + " entries" +
