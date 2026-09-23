@@ -50,52 +50,6 @@ RSpec.describe Toggly::Config do
     end
   end
 
-  describe "#variants_endpoint" do
-    it "builds the evaluated-variants-signed endpoint URL" do
-      config = described_class.new(app_key: "my-app", environment: "Production")
-      expect(config.variants_endpoint).to eq("https://definitions.toggly.io/evaluated-variants-signed/my-app/Production")
-    end
-
-    it "uses definitions_url when set" do
-      config = described_class.new(
-        app_key: "my-app",
-        environment: "Production",
-        definitions_url: "https://cdn.example.com"
-      )
-      expect(config.variants_endpoint).to eq("https://cdn.example.com/evaluated-variants-signed/my-app/Production")
-    end
-  end
-
-  describe "variants configuration" do
-    it "defaults enable_variants to false" do
-      config = described_class.new(app_key: "test")
-      expect(config.enable_variants).to be false
-      expect(config.variant_identity).to be_nil
-      expect(config.variant_groups).to eq([])
-      expect(config.variant_claims).to eq({})
-    end
-
-    it "accepts variant targeting options" do
-      config = described_class.new(
-        app_key: "test",
-        enable_variants: true,
-        variant_identity: "user-1",
-        variant_groups: ["beta"],
-        variant_claims: { "role" => "admin" }
-      )
-
-      expect(config.enable_variants).to be true
-      expect(config.variant_identity).to eq("user-1")
-      expect(config.variant_groups).to eq(["beta"])
-      expect(config.variant_claims).to eq({ "role" => "admin" })
-    end
-
-    it "includes enable_variants in to_h" do
-      config = described_class.new(app_key: "test", enable_variants: true)
-      expect(config.to_h[:enable_variants]).to be true
-    end
-  end
-
   describe "#validate!" do
     it "raises error when app_key is missing" do
       config = described_class.new

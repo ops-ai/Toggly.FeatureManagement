@@ -38,6 +38,28 @@ if client.enabled?(:my_feature)
 end
 ```
 
+## Feature variants (catalog-local, MF-parity)
+
+`get_variant` / `get_variant_value` assign a variant purely from the
+feature's `variants` / `allocation` catalog data (no network round-trip),
+matching `Microsoft.FeatureManagement`'s `IVariantFeatureManager`
+bit-for-bit — verified against the shared
+`variant-allocator-corpus/cases.json` gold corpus.
+
+```ruby
+variant = client.get_variant('checkout-flow', context: Toggly::Context.new(identity: 'user-1'))
+variant&.name                 # assigned variant name, or nil
+variant&.configuration_value  # untyped configuration payload
+variant&.enabled               # effective enabled after StatusOverride
+variant&.reason                # "User" | "Group" | "Percentile" | "DefaultWhenEnabled" | "DefaultWhenDisabled"
+
+client.get_variant_value('checkout-flow', context: context) # shortcut for configuration_value
+```
+
+`enabled?` stays filter-based only. The `enable_variants` /
+`evaluated-variants-signed` dual-rail (and `set_variant_identity`) was
+removed in 1.0 — see [CHANGELOG.md](CHANGELOG.md).
+
 ## Usage & metrics telemetry
 
 When `app_key` is set, usage tracking and metrics default **on** (disable with
