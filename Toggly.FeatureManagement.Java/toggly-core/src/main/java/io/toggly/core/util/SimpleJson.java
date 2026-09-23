@@ -21,28 +21,29 @@ public final class SimpleJson {
     private SimpleJson() {}
 
     /**
-     * Extracts and parses the JSON value for a top-level key (string, number,
-     * boolean, null, object, or array), scanning from the first occurrence of
-     * {@code "key"} in the buffer.
+     * Extracts and parses the JSON value for a <em>top-level</em> object key
+     * (string, number, boolean, null, object, or array).
      *
-     * @param json the JSON text to scan
-     * @param key the key whose value should be extracted
-     * @return the parsed value, or null if the key is absent or its value is JSON {@code null}
+     * <p>The root must be a JSON object. Nested keys with the same name (for
+     * example a filter parameter named {@code "variants"} or
+     * {@code "allocation"}) are ignored — only the root object's property is
+     * returned.</p>
+     *
+     * @param json the JSON object text to parse
+     * @param key the top-level key whose value should be extracted
+     * @return the parsed value, or null if the root is not an object, the key
+     *     is absent, or its value is JSON {@code null}
      */
     public static Object extractValue(String json, String key) {
-        String search = "\"" + key + "\"";
-        int idx = json.indexOf(search);
-        if (idx < 0) {
+        if (json == null || key == null) {
             return null;
         }
-        idx = idx + search.length();
-        while (idx < json.length() && Character.isWhitespace(json.charAt(idx))) idx++;
-        if (idx >= json.length() || json.charAt(idx) != ':') {
+        int[] pos = {0};
+        Object root = parseValue(json, pos);
+        if (!(root instanceof Map)) {
             return null;
         }
-        idx++;
-        int[] pos = {idx};
-        return parseValue(json, pos);
+        return ((Map<?, ?>) root).get(key);
     }
 
     /**
