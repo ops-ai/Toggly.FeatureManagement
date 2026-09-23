@@ -484,12 +484,14 @@ enum SignedDefsVerify {
     }
 
     private static func encodeASN1Integer(_ bytes: Data.SubSequence) -> Data {
-        var value = Data(bytes)
+        // Data.removeFirst() can leave a nonzero startIndex; this loop indexes
+        // from zero while stripping P1363 padding.
+        var value = Array(bytes)
         while value.count > 1, value[0] == 0x00, value[1] & 0x80 == 0 {
             value.removeFirst()
         }
         if value.isEmpty {
-            value = Data([0x00])
+            value = [0x00]
         }
         if value[0] & 0x80 != 0 {
             value.insert(0x00, at: 0)
@@ -497,7 +499,7 @@ enum SignedDefsVerify {
 
         var encoded = Data([0x02])
         encoded.append(contentsOf: encodeLength(value.count))
-        encoded.append(value)
+        encoded.append(contentsOf: value)
         return encoded
     }
 
@@ -534,10 +536,10 @@ enum SignedDefsVerify {
         guard let (length, afterLength) = readLength(data, at: afterTag) else { return nil }
         guard data.distance(from: afterLength, to: data.endIndex) >= length else { return nil }
         let end = data.index(afterLength, offsetBy: length)
-        var value = data.subdata(in: afterLength..<end)
+        var value = Array(data.subdata(in: afterLength..<end))
         while value.count > 1, value[0] == 0x00 {
             value.removeFirst()
         }
-        return (value, end)
+        return (Data(value), end)
     }
 }

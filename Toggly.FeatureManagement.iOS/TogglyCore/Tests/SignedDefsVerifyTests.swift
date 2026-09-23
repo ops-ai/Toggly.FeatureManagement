@@ -4,6 +4,35 @@ import XCTest
 @testable import TogglyCore
 
 final class SignedDefsVerifyTests: XCTestCase {
+    func testP1363LeadingZeroComponentsEncodeCanonicalDER() {
+        let one = Data(repeating: 0, count: 31) + Data([1])
+        let signature = one + one
+
+        XCTAssertEqual(
+            SignedDefsVerify.p1363ToDER(signature),
+            Data([0x30, 0x06, 0x02, 0x01, 0x01, 0x02, 0x01, 0x01])
+        )
+    }
+
+    func testDERLeadingZeroComponentsDecodeToP1363() {
+        let der = Data([0x30, 0x0a, 0x02, 0x03, 0x00, 0x00, 0x01,
+                        0x02, 0x03, 0x00, 0x00, 0x01])
+        let one = Data(repeating: 0, count: 31) + Data([1])
+
+        XCTAssertEqual(SignedDefsVerify.derToP1363(der), one + one)
+    }
+
+    func testP1363HighBitComponentsKeepPositiveDERPadding() {
+        let r = Data([0x80]) + Data(repeating: 0, count: 31)
+        let s = Data([0x00, 0x80]) + Data(repeating: 0, count: 30)
+        let expected = Data([0x30, 0x45, 0x02, 0x21, 0x00, 0x80]) +
+            Data(repeating: 0, count: 31) +
+            Data([0x02, 0x20, 0x00, 0x80]) + Data(repeating: 0, count: 30)
+
+        XCTAssertEqual(SignedDefsVerify.p1363ToDER(r + s), expected)
+        XCTAssertEqual(SignedDefsVerify.derToP1363(expected), r + s)
+    }
+
     func testExtractRawJsonPropertyReadsScalarsAndMissingKeys() {
         let body = #"{"defs":{"A":true},"data":[1,2],"name":"x\"y","count":42,"empty":null}"#
         XCTAssertEqual(SignedDefsVerify.extractRawJsonProperty(from: body, key: "defs"), #"{"A":true}"#)
