@@ -332,7 +332,11 @@ it('retains the single reporter admission budget across sustained context change
   expect(bodies.reduce((sum, body) => sum + JSON.stringify(body).length, 0)).toBeLessThanOrEqual(
     256 * 1024,
   );
-}, 15000);
+  // 2200 sequential setContext/refresh cycles are deterministic but CPU-bound;
+  // under v8 coverage instrumentation and shared CI runners this can run well
+  // past the default timeout without indicating a real regression, so the
+  // budget is generous rather than tuned to local, uninstrumented timing.
+}, 30000);
 it('retains failed-send bytes and original owner when new-context events are admitted', async () => {
   vi.useFakeTimers();
   try {

@@ -6,6 +6,7 @@ import {
   type JwkSet,
 } from '@ops-ai/toggly-signed-defs';
 import { selectDefinitions } from './snapshot.js';
+import { selectVariantDefinitions } from './variant.js';
 
 export type DefinitionStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -20,6 +21,7 @@ export async function verifyEnvelope(
   keys: JwkSet,
   policy: VerificationPolicy,
   minimumTimestamp = 0,
+  variants = false,
 ) {
   const { envelope, defsRaw } = parseSignedEnvelope(body);
   const now = Math.floor(Date.now() / 1000);
@@ -35,7 +37,8 @@ export async function verifyEnvelope(
   await verifySignedDefinitions(defsRaw, envelope, { keys: [key] }, policy.allowedKeyIds, {
     maxSignatureAgeSeconds: policy.maxSignatureAgeSeconds,
   });
-  const definitions = selectDefinitions(parseDefinitionsFromRaw(defsRaw));
+  const parsed = parseDefinitionsFromRaw(defsRaw);
+  const definitions = variants ? selectVariantDefinitions(parsed) : selectDefinitions(parsed);
   return { definitions, timestamp: envelope.timestamp, keys: { keys: [structuredClone(key)] } };
 }
 
@@ -87,7 +90,7 @@ export function createPersistence(storage: DefinitionStorage | undefined, baseUR
   }
 
   return {
-    read(scope: string, policy: VerificationPolicy, minimumTimestamp: number) {
+    read(scope: string, policy: VerificationPolicy, minimumTimestamp: number, variants = false) {
       if (!storage || unusable) return;
       try {
         const raw = storage.getItem(`toggly:solid:envelope:${scope}`);
@@ -103,7 +106,7 @@ export function createPersistence(storage: DefinitionStorage | undefined, baseUR
           !Array.isArray(record.jwks?.keys)
         )
           return;
-        return verifyEnvelope(record.body, record.jwks, policy, minimumTimestamp);
+        return verifyEnvelope(record.body, record.jwks, policy, minimumTimestamp, variants);
       } catch {
         // Corrupt or inaccessible storage cannot block the network path.
         return;

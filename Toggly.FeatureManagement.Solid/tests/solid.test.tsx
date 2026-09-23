@@ -8,6 +8,7 @@ import {
   useFeatureFlag,
   useFeatureFlags,
   useToggly,
+  useVariant,
 } from '../src';
 afterEach(cleanup);
 
@@ -156,5 +157,90 @@ describe('Solid ownership and native gates', () => {
     expect(t.flags()).toEqual({});
     dispose();
     expect(await t.client.refresh()).toEqual({});
+  });
+});
+
+describe('variants', () => {
+  const variantBody = () =>
+    JSON.stringify({
+      On: { enabled: true, variant: 'blue', configurationValue: 42 },
+      Off: { enabled: false, variant: 'red' },
+    });
+
+  it('is null everywhere when enableVariants is not set', async () => {
+    const Reader = () => {
+      const t = useToggly();
+      const variant = useVariant('On');
+      return (
+        <p>
+          {String(t.getVariant('On'))}/{String(t.getVariantValue('On'))}/{String(variant())}
+        </p>
+      );
+    };
+    render(() => (
+      <TogglyProvider config={{ flagDefaults: { On: true } }}>
+        <Reader />
+      </TogglyProvider>
+    ));
+    await screen.findByText('null/null/null');
+  });
+
+  it('exposes the assigned variant reactively via getVariant, getVariantValue and useVariant', async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(variantBody()));
+    const Reader = () => {
+      const t = useToggly();
+      const variant = useVariant('On');
+      return (
+        <p>
+          {JSON.stringify(t.getVariant('On'))}/{String(t.getVariantValue('On'))}/
+          {JSON.stringify(variant())}
+        </p>
+      );
+    };
+    render(() => (
+      <TogglyProvider
+        config={{
+          appKey: 'test',
+          verifySignatures: false,
+          enableVariants: true,
+          fetch: fetcher,
+          enableLiveUpdates: false,
+        }}
+      >
+        <Reader />
+      </TogglyProvider>
+    ));
+    await waitFor(() =>
+      expect(screen.getByText(/blue/).textContent).toBe(
+        '{"name":"blue","configurationValue":42}/42/{"name":"blue","configurationValue":42}',
+      ),
+    );
+  });
+
+  it('is null for a disabled feature and updates reactively on refresh', async () => {
+    let resolve!: (value: Response) => void;
+    const fetcher = vi.fn(() => new Promise<Response>((r) => (resolve = r)));
+    const Reader = () => {
+      const variant = useVariant('Off');
+      return <p>{String(variant())}</p>;
+    };
+    render(() => (
+      <TogglyProvider
+        config={{
+          appKey: 'test',
+          verifySignatures: false,
+          enableVariants: true,
+          fetch: fetcher,
+          enableLiveUpdates: false,
+        }}
+      >
+        <Reader />
+      </TogglyProvider>
+    ));
+    expect(screen.getByText('null')).toBeTruthy();
+    resolve(new Response(variantBody()));
+    await waitFor(() => expect(screen.getByText('null')).toBeTruthy());
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(String(fetcher.mock.calls[0][0])).toContain('/evaluated-variants-signed/');
   });
 });

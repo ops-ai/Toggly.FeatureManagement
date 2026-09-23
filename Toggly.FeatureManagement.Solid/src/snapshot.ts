@@ -77,6 +77,7 @@ export function frontendDefinitionsUrl(
   appKey: string,
   environment: string,
   context: TogglyEvaluationContext & { instanceId?: string },
+  variants = false,
 ): string {
   const token = context.instanceId?.trim();
   const query = new URL(baseURI).searchParams;
@@ -88,7 +89,7 @@ export function frontendDefinitionsUrl(
       encodeURIComponent(appKey),
       encodeURIComponent(environment),
       token ? undefined : context,
-      false,
+      variants,
     ),
   );
   const contextKeys = new Set(target.searchParams.keys());
