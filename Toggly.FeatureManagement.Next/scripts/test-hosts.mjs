@@ -44,7 +44,7 @@ await withResources(async defer => {
     await writeFile(join(host, 'package.json'), JSON.stringify({name: 'toggly-next-packed-host', private: true, type: 'module', dependencies: {next: fixture.next, react: fixture.react, 'react-dom': fixture.react}, devDependencies: {typescript: fixture.typescript, '@types/node': fixture.nodeTypes, '@types/react': fixture.reactTypes, '@types/react-dom': fixture.domTypes, 'puppeteer-core': '25.10.0'}}))
     await run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', ...archives, ...(artifact ? [artifact] : [])], host)
     const versions = {}
-    for (const [name, version] of [['next', fixture.next], ['react', fixture.react], ['typescript', fixture.typescript], ['@ops-ai/nextjs-toggly-core', '1.12.0'], ['@ops-ai/nextjs-toggly-client', '1.5.0'], ['@ops-ai/toggly-client-telemetry', '1.1.0']]) {
+    for (const [name, version] of [['next', fixture.next], ['react', fixture.react], ['typescript', fixture.typescript], ['@ops-ai/nextjs-toggly-core', '1.13.0'], ['@ops-ai/nextjs-toggly-client', '1.6.0'], ['@ops-ai/toggly-client-telemetry', '1.1.0']]) {
       versions[name] = JSON.parse(await readFile(join(host, 'node_modules', name, 'package.json'), 'utf8')).version
       assert.equal(versions[name], version)
     }
