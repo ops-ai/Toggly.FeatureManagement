@@ -41,6 +41,13 @@ func main() {
 
 	fmt.Printf("MyFeature enabled: %v\n", on)
 
+	// Example: catalog-local variant assignment (no extra network call).
+	if variant, err := client.GetVariant(context.Background(), "MyFeature", evalCtx); err != nil {
+		log.Fatal(err)
+	} else if variant != nil {
+		fmt.Printf("MyFeature variant: %s (enabled=%v)\n", variant.Name, variant.Enabled)
+	}
+
 	// Record usage / view separately from checks.
 	client.RecordUsage("MyFeature", on, evalCtx)
 	client.RecordView("MyFeature", evalCtx)

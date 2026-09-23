@@ -22,17 +22,11 @@ type DefinitionsSnapshot struct {
 	// ETag is the definitions revision for conditional fetches.
 	ETag string `json:"etag,omitempty"`
 
-	// VariantContext binds payload and validators to the full normalized request context.
-	VariantContext string `json:"variantContext,omitempty"`
-
-	// VariantDefs is set when definitions came from evaluated-variants-signed.
-	// Omitempty keeps JSON backward compatible with older snapshots.
-	VariantDefs      map[string]definitions.EvaluatedVariantDef `json:"variantDefs,omitempty"`
-	VariantSignature string                                     `json:"variantSignature,omitempty"`
-	VariantKid       string                                     `json:"variantKid,omitempty"`
-	VariantTimestamp int64                                      `json:"variantTimestamp,omitempty"`
-	// VariantRawDefs is the exact signed defs JSON for evaluated-variants-signed.
-	VariantRawDefs json.RawMessage `json:"variantRawDefs,omitempty"`
+	// VariantContext / VariantDefs are legacy dual-rail (evaluated-variants-signed)
+	// fields. Retained only so loadSnapshot can refuse snapshots that mixed
+	// synthetic AlwaysOn/AlwaysOff defs into Defs under those keys.
+	VariantContext string          `json:"variantContext,omitempty"`
+	VariantDefs    json.RawMessage `json:"variantDefs,omitempty"`
 }
 
 // JWKSnap stores cached JWKS.

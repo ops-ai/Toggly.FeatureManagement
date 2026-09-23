@@ -23,22 +23,12 @@ type Config struct {
 	UseSignedDefinitions bool
 	AllowedKeyIDs        map[string]struct{}
 
-	// EnableVariants loads evaluated feature variants from evaluated-variants-signed
-	// (server-side evaluation) instead of definitions or definitions-signed.
-	// When true, UseSignedDefinitions controls whether responses are signature-verified.
-	EnableVariants bool
-
-	// VariantIdentity is sent as the userId query parameter for evaluated-variants-signed.
-	// This context belongs to this client, not to individual server requests.
-	VariantIdentity string
-
-	// VariantGroups supplies targeting memberships for this client's remote variants.
-	// NewClient copies these groups before any background refresh starts.
-	VariantGroups []string
-
-	// VariantClaims supplies string attributes used by variant feature rules.
-	// Empty keys/values are omitted; the first 20 sorted claim types are sent.
-	VariantClaims map[string]string
+	// VariantIgnoreCase controls case-sensitivity for GetVariant / GetVariantValue
+	// user and group targeting matches, and the percentile allocator's userId
+	// casing. Mirrors Microsoft.FeatureManagement.FeatureFilters.
+	// TargetingEvaluationOptions.IgnoreCase; defaults to false (case-sensitive),
+	// matching Microsoft.FeatureManagement's own default.
+	VariantIgnoreCase bool
 
 	AppVersion   string
 	InstanceName string

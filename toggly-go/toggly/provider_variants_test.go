@@ -4,137 +4,189 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/eval"
 )
 
-func TestDefinitionsProvider_RefreshEvaluatedVariants_UsesETagAndUserId(t *testing.T) {
-	var calls int32
-	var sawIfNoneMatch atomic.Value // string
-	var sawPath atomic.Value        // string
-	var sawRawQuery atomic.Value    // string
+const catalogVariantsDefsJSON = `[
+  {
+    "featureKey": "checkout-flow",
+    "filters": [{"name": "AlwaysOn", "parameters": {}}],
+    "metrics": [],
+    "securedFeature": false,
+    "clientSdkEnabled": true,
+    "requirementType": "Any",
+    "variants": [
+      {"name": "A", "configurationValue": {"color": "blue"}, "statusOverride": "None"},
+      {"name": "B", "configurationValue": {"color": "green"}, "statusOverride": "None"}
+    ],
+    "allocation": {
+      "defaultWhenEnabled": "B",
+      "defaultWhenDisabled": null,
+      "seed": null,
+      "user": [{"variant": "A", "users": ["alice", "bob"]}],
+      "group": null,
+      "percentile": null
+    }
+  },
+  {
+    "featureKey": "kill-switch",
+    "filters": [],
+    "metrics": [],
+    "securedFeature": false,
+    "clientSdkEnabled": true,
+    "requirementType": "Any",
+    "variants": [
+      {"name": "Off", "configurationValue": {"killSwitch": true}, "statusOverride": "Enabled"}
+    ],
+    "allocation": {
+      "defaultWhenEnabled": null,
+      "defaultWhenDisabled": "Off",
+      "seed": null,
+      "user": null,
+      "group": null,
+      "percentile": null
+    }
+  },
+  {
+    "featureKey": "no-variants-feature",
+    "filters": [{"name": "AlwaysOn", "parameters": {}}],
+    "metrics": [],
+    "securedFeature": false,
+    "clientSdkEnabled": true,
+    "requirementType": "Any",
+    "variants": [],
+    "allocation": null
+  }
+]`
 
-	payload := `{"defs":{"f1":{"enabled":true,"variant":"control","configurationValue":"x"}},"signature":"","timestamp":100,"kid":""}`
-
+func newCatalogVariantsClient(t *testing.T) *Client {
+	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&calls, 1)
-		sawPath.Store(r.URL.Path)
-		sawRawQuery.Store(r.URL.RawQuery)
-		if r.URL.Path != "/evaluated-variants-signed/app/env" {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		if inm := r.Header.Get("If-None-Match"); inm != "" {
-			sawIfNoneMatch.Store(inm)
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
 		w.Header().Set("ETag", `"v1"`)
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(payload))
+		_, _ = w.Write([]byte(catalogVariantsDefsJSON))
 	}))
-	defer srv.Close()
+	t.Cleanup(srv.Close)
 
-	cfg := Config{
-		AppKey:          "app",
-		Environment:     "env",
-		DefinitionsURL:  srv.URL + "/",
-		HTTPTimeout:     2 * time.Second,
-		RefreshInterval: time.Minute,
-		EnableVariants:  true,
-		VariantIdentity: "user%40x",
-	}
-	p := newDefinitionsProvider(cfg, nil)
-	p.hc = srv.Client()
-
-	if _, err := p.refreshEvaluatedVariants(context.Background()); err != nil {
-		t.Fatalf("refresh 1: %v", err)
-	}
-	if _, err := p.refreshEvaluatedVariants(context.Background()); err != nil {
-		t.Fatalf("refresh 2: %v", err)
-	}
-
-	if got := atomic.LoadInt32(&calls); got != 2 {
-		t.Fatalf("expected 2 calls, got %d", got)
-	}
-	if v, _ := sawIfNoneMatch.Load().(string); v != `"v1"` {
-		t.Fatalf("expected If-None-Match %q, got %q", `"v1"`, v)
-	}
-	if v, _ := sawPath.Load().(string); v != "/evaluated-variants-signed/app/env" {
-		t.Fatalf("unexpected path: %q", v)
-	}
-	if v, _ := sawRawQuery.Load().(string); v != "userId=user%2540x" {
-		t.Fatalf("unexpected query: %q", v)
-	}
-
-	def, ok := p.get("f1")
-	if !ok {
-		t.Fatal("expected definition f1")
-	}
-	eng := eval.NewEngine(eval.DefaultRegistry())
-	on, err := eng.Evaluate(def, eval.Context{})
+	c, err := NewClient(Config{
+		AppKey:                   "app",
+		Environment:              "env",
+		DefinitionsURL:           srv.URL + "/",
+		HTTPTimeout:              2 * time.Second,
+		RefreshInterval:          time.Hour,
+		DisableBackgroundRefresh: true,
+	})
 	if err != nil {
-		t.Fatalf("eval: %v", err)
+		t.Fatalf("NewClient: %v", err)
 	}
-	if !on {
-		t.Fatal("expected f1 enabled from variant defs")
-	}
+	t.Cleanup(func() { _ = c.Close() })
 
-	v := p.getVariant("f1")
-	if v == nil || v.Name != "control" || v.ConfigurationValue != "x" {
+	if err := c.provider.refresh(context.Background(), time.Second, false); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+	return c
+}
+
+func TestClient_GetVariant_UserAllocation(t *testing.T) {
+	c := newCatalogVariantsClient(t)
+
+	v, err := c.GetVariant(context.Background(), "checkout-flow", Context{Identity: "alice"})
+	if err != nil {
+		t.Fatalf("GetVariant: %v", err)
+	}
+	if v == nil || v.Name != "A" || !v.Enabled {
+		t.Fatalf("unexpected variant: %#v", v)
+	}
+	if m, ok := v.ConfigurationValue.(map[string]any); !ok || m["color"] != "blue" {
+		t.Fatalf("unexpected configuration value: %#v", v.ConfigurationValue)
+	}
+}
+
+func TestClient_GetVariant_FallsBackToDefaultWhenEnabled(t *testing.T) {
+	c := newCatalogVariantsClient(t)
+
+	v, err := c.GetVariant(context.Background(), "checkout-flow", Context{Identity: "carol"})
+	if err != nil {
+		t.Fatalf("GetVariant: %v", err)
+	}
+	if v == nil || v.Name != "B" || !v.Enabled {
 		t.Fatalf("unexpected variant: %#v", v)
 	}
 }
 
-func TestClient_SetVariantIdentity_ClearsVariantETag(t *testing.T) {
-	var calls int32
-	payload := `{"defs":{"f1":{"enabled":true,"variant":"a","configurationValue":null}},"signature":"","timestamp":200,"kid":""}`
+func TestClient_GetVariant_StatusOverrideFlipsDisabledFeature(t *testing.T) {
+	c := newCatalogVariantsClient(t)
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&calls, 1)
-		if r.Header.Get("If-None-Match") != "" {
-			w.WriteHeader(http.StatusNotModified)
-			return
-		}
-		w.Header().Set("ETag", `"e"`)
-		_, _ = w.Write([]byte(payload))
-	}))
-	defer srv.Close()
-
-	cfg := Config{
-		AppKey:                   "k",
-		Environment:              "e",
-		DefinitionsURL:           srv.URL + "/",
-		HTTPTimeout:              2 * time.Second,
-		RefreshInterval:          time.Hour,
-		EnableVariants:           true,
-		DisableBackgroundRefresh: true,
-	}
-	c, err := NewClient(cfg)
+	v, err := c.GetVariant(context.Background(), "kill-switch", Context{Identity: "anyone"})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("GetVariant: %v", err)
 	}
-	defer func() { _ = c.Close() }()
+	// kill-switch has no enabled filters (base disabled), but StatusOverride:
+	// Enabled on the DefaultWhenDisabled variant flips the effective enabled state.
+	if v == nil || v.Name != "Off" || !v.Enabled {
+		t.Fatalf("unexpected variant: %#v", v)
+	}
+}
 
-	c.provider.hc = srv.Client()
-	if _, err := c.provider.refreshEvaluatedVariants(context.Background()); err != nil {
-		t.Fatalf("refresh 1: %v", err)
+func TestClient_GetVariant_NoVariantsConfigured_ReturnsNil(t *testing.T) {
+	c := newCatalogVariantsClient(t)
+
+	v, err := c.GetVariant(context.Background(), "no-variants-feature", Context{Identity: "alice"})
+	if err != nil {
+		t.Fatalf("GetVariant: %v", err)
 	}
-	if _, err := c.provider.refreshEvaluatedVariants(context.Background()); err != nil {
-		t.Fatalf("refresh 2: %v", err)
+	if v != nil {
+		t.Fatalf("expected nil variant, got %#v", v)
 	}
-	if atomic.LoadInt32(&calls) != 2 {
-		t.Fatalf("expected 2 calls before identity change, got %d", atomic.LoadInt32(&calls))
+}
+
+func TestClient_GetVariant_UnknownFeature_ReturnsNil(t *testing.T) {
+	c := newCatalogVariantsClient(t)
+
+	v, err := c.GetVariant(context.Background(), "does-not-exist", Context{Identity: "alice"})
+	if err != nil {
+		t.Fatalf("GetVariant: %v", err)
+	}
+	if v != nil {
+		t.Fatalf("expected nil variant, got %#v", v)
+	}
+}
+
+func TestClient_GetVariant_RequiresFeatureKey(t *testing.T) {
+	c := newCatalogVariantsClient(t)
+
+	if _, err := c.GetVariant(context.Background(), "", Context{}); err == nil {
+		t.Fatal("expected error for empty featureKey")
+	}
+}
+
+func TestClient_GetVariant_UsesAmbientContext(t *testing.T) {
+	c := newCatalogVariantsClient(t)
+
+	ctx := WithEvalContext(context.Background(), Context{Identity: "bob"})
+	v, err := c.GetVariant(ctx, "checkout-flow", Context{})
+	if err != nil {
+		t.Fatalf("GetVariant: %v", err)
+	}
+	if v == nil || v.Name != "A" {
+		t.Fatalf("expected ambient identity to resolve variant A, got %#v", v)
+	}
+}
+
+func TestClient_GetVariantValue(t *testing.T) {
+	c := newCatalogVariantsClient(t)
+
+	value, err := c.GetVariantValue(context.Background(), "checkout-flow", Context{Identity: "alice"})
+	if err != nil {
+		t.Fatalf("GetVariantValue: %v", err)
+	}
+	m, ok := value.(map[string]any)
+	if !ok || m["color"] != "blue" {
+		t.Fatalf("unexpected configuration value: %#v", value)
 	}
 
-	c.SetVariantIdentity("other")
-	if _, err := c.provider.refreshEvaluatedVariants(context.Background()); err != nil {
-		t.Fatalf("refresh 3: %v", err)
-	}
-	if atomic.LoadInt32(&calls) != 3 {
-		t.Fatalf("expected 3rd fetch after identity change, got %d", atomic.LoadInt32(&calls))
+	value, err = c.GetVariantValue(context.Background(), "does-not-exist", Context{})
+	if err != nil || value != nil {
+		t.Fatalf("expected nil value/no error, got value=%#v err=%v", value, err)
 	}
 }

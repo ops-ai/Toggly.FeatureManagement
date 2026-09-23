@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.9.0
+
+2026-09-23
+
+### Breaking
+- Removed the server-side `evaluated-variants-signed` dual-rail entirely:
+  `Config.EnableVariants`, `Config.VariantIdentity`, `Config.VariantGroups`,
+  `Config.VariantClaims`, and `Client.SetVariantIdentity` are gone. Variant
+  assignment is now computed locally from the cached definitions catalog —
+  no extra network round-trip, no server-side identity coupling [OPS-1395].
+- `Client.GetVariant` and `Client.GetVariantValue` now take `(ctx
+  context.Context, featureKey string, evalCtx Context)` instead of
+  `(featureKey string)`, matching `IsEnabled`'s signature and ambient
+  evaluation-context resolution. `GetVariant` returns `(*VariantResult,
+  error)`; `VariantResult` gains an `Enabled` field.
+
+### Added
+- Catalog-local variant allocation ported bit-for-bit from
+  Microsoft.FeatureManagement 4.7.0's `FeatureManager.GetVariantAsync`:
+  disabled features resolve `DefaultWhenDisabled` only; enabled features
+  check User → Group → Percentile → `DefaultWhenEnabled` in order. Percentile
+  buckets hash `{userId}\n{seed-or-"allocation\n{featureKey}"}` with
+  SHA-256, matching Microsoft.FeatureManagement's sticky-bucket scheme.
+- `Variants` / `Allocation` fields on the definitions wire model
+  (`FeatureDefinitionModel`), decoded from `/definitions` and
+  `/definitions-signed` like any other feature field — no separate endpoint.
+- `Config.VariantIgnoreCase` mirrors Microsoft.FeatureManagement's
+  `TargetingEvaluationOptions.IgnoreCase` for variant user/group targeting
+  (default `false`, case-sensitive).
+- Verified against the shared `variant-allocator-corpus` gold corpus (18
+  cases) for bit-for-bit parity with the Microsoft.FeatureManagement 4.7.0
+  allocator.
+
+### Changed
+- User-Agent is `toggly-go/0.9.0`.
+
 ## 0.8.1
 
 2026-09-17

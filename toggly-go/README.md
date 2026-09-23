@@ -117,47 +117,44 @@ Report vulnerabilities privately via [GitHub Private Vulnerability Reporting](ht
 [MIT](LICENSE)
 
 
-## Initial targeting for remote variants
+## Feature variants
 
-`VariantGroups` and `VariantClaims` require **v0.7.0 (release pending)**.
-These fields belong to one client-wide remotely evaluated variants context:
+`GetVariant` / `GetVariantValue` require **v0.9.0**. Variants are assigned
+**locally**, from the same cached definitions catalog `IsEnabled` already
+uses — there is no separate network call and no client-wide identity to set.
+The allocator replays Microsoft.FeatureManagement 4.7.0's
+`FeatureManager.GetVariantAsync` bit-for-bit: disabled features resolve
+`DefaultWhenDisabled` only; enabled features check User → Group → Percentile
+→ `DefaultWhenEnabled`, in that order.
 
 ```go
-client, err := toggly.NewClient(toggly.Config{
-    AppKey: "YOUR_APP_KEY",
-    Environment: "Production",
-    EnableVariants: true,
-    // Identity is a stable user identifier used for variant allocation.
-    VariantIdentity: "user-123",
-    // Groups are memberships used by targeting and group allocation rules.
-    VariantGroups: []string{"beta", "subscribers"},
-    // Claims are string attributes used by feature rules, including enabled/disabled defaults.
-    VariantClaims: map[string]string{"plan": "pro"},
+variant, err := client.GetVariant(ctx, "checkout-flow", toggly.Context{
+    Identity: "user-123",
+    Groups:   []string{"beta", "subscribers"},
 })
 if err != nil {
     return err
 }
-defer client.Close()
+if variant != nil {
+    fmt.Println(variant.Name, variant.ConfigurationValue, variant.Enabled)
+}
 ```
 
-The client copies the supplied groups and claims before its initial background
-refresh, so that first request already has the intended targeting. No identity
-setter or second refresh is needed to seed it. Initialization is asynchronous;
-variant results become available after the first successful refresh.
+`GetVariant` returns `nil, nil` when the feature is unknown or has no
+`Variants` configured. `variant.Enabled` is the effective enabled state after
+the assigned variant's `StatusOverride` is applied — this can differ from a
+plain `IsEnabled` call, which never applies `StatusOverride`. Use
+`GetVariantValue` as a shortcut when you only need the configuration payload:
 
-Blank groups and empty claim names/values are omitted. Claims are sorted by
-name and limited to 20. Omitted and empty collections both send no targeting
-values. Groups use repeated `g` parameters; the backend treats commas inside a
-group value as separators, so avoid commas in group names.
+```go
+value, err := client.GetVariantValue(ctx, "checkout-flow", toggly.Context{Identity: "user-123"})
+```
 
-Use one variants client per context. `SetVariantIdentity` changes the shared
-client's identity and clears its prior evaluated payload; it is unsuitable for
-switching users on each HTTP request. Ordinary boolean evaluation with
-`EnableVariants: false` continues to use request-local `toggly.Context` passed
-to `IsEnabled`; these startup fields do not replace that context. In variants
-mode the server supplies the enabled result as well as the assigned variant.
+Like `IsEnabled`, `GetVariant` resolves ambient evaluation context set via
+`toggly.WithEvalContext` (or `togglyctx`); empty per-call `Context` fields
+fall back to ambient, non-empty per-call fields win.
 
-Persisted variant payloads and revisions are accepted only for the same complete
-context, endpoint, app and environment. Legacy variant snapshots without context
-metadata require a fresh fetch. A single snapshot store may be shared safely,
-but using a separate store per variants client avoids cache replacement churn.
+Set `Config.VariantIgnoreCase: true` to match user/group targeting names
+case-insensitively (mirrors Microsoft.FeatureManagement's
+`TargetingEvaluationOptions.IgnoreCase`). Default is `false`
+(case-sensitive), matching Microsoft.FeatureManagement's own default.
