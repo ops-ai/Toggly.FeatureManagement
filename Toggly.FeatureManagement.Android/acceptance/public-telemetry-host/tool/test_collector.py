@@ -14,6 +14,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import collector
 
@@ -126,6 +127,44 @@ time.sleep(60)
 
 
 class CollectorTest(unittest.TestCase):
+    def test_no_destructive_signal_after_group_absence(self):
+        original = os.killpg
+        absent = set()
+        stale_signals = []
+
+        def observed(group, value):
+            if group in absent and value != 0:
+                stale_signals.append(value)
+            try:
+                return original(group, value)
+            except ProcessLookupError:
+                absent.add(group)
+                raise
+
+        with patch.object(os, "killpg", side_effect=observed):
+            self.run_collector(mode="descendant-ready")
+            self.stop_collector()
+            self.assert_descendant_stopped()
+            self.stop_collector()
+        self.assertEqual(stale_signals, [], "signalled a group after confirmed absence")
+
+    def test_early_exit_keeps_pid_reserved_until_destructive_signals_finish(self):
+        original = os.killpg
+        unanchored_signals = []
+
+        def observed(group, value):
+            if value != 0 and self.collector_process.returncode is not None:
+                unanchored_signals.append(value)
+            return original(group, value)
+
+        with patch.object(os, "killpg", side_effect=observed):
+            for mode in ("failed", "descendant-exit"):
+                with self.subTest(mode=mode):
+                    with self.assertRaisesRegex(AssertionError, "collector did not bind"):
+                        self.run_collector(mode=mode, startup_timeout=0.3)
+                    self.assert_group_stopped()
+        self.assertEqual(unanchored_signals, [], "reaped the PID ownership anchor before signalling")
+
     def assert_group_stopped(self):
         self.assertIsNotNone(self.collector_process.poll(), "leader was not reaped")
         with self.assertRaises(ProcessLookupError, msg="collector group survived cleanup"):
@@ -142,19 +181,13 @@ class CollectorTest(unittest.TestCase):
 
     def assert_descendant_stopped(self):
         descendant = json.loads(self.bind_marker.read_text())
-        try:
-            self.assert_group_stopped()
-            with self.assertRaises(ProcessLookupError, msg="descendant survived collector cleanup"):
-                os.kill(descendant["pid"], 0)
-            with self.assertRaises(OSError, msg="descendant socket survived collector cleanup"):
-                socket.create_connection(("127.0.0.1", descendant["port"]), timeout=0.2)
-        finally:
-            # Independent emergency cleanup keeps a failing regression from
-            # leaving its intentionally TERM-ignoring process behind.
-            try:
-                os.killpg(self.collector_process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+        self.assert_group_stopped()
+        with self.assertRaises(ProcessLookupError, msg="descendant survived collector cleanup"):
+            os.kill(descendant["pid"], 0)
+        with self.assertRaises(OSError, msg="descendant socket survived collector cleanup"):
+            socket.create_connection(("127.0.0.1", descendant["port"]), timeout=0.2)
+        # Registered owner disposal handles failures too. Never send an ad hoc
+        # signal here: after group absence, the numeric PGID may be reused.
 
     def test_ignored_term_descendant_stops_after_leader_exits_on_term(self):
         with self.assertRaisesRegex(AssertionError, "collector did not bind"):
@@ -249,14 +282,23 @@ class CollectorTest(unittest.TestCase):
             raise
         self.collector_process = process
         stopped = False
+        group_absent = False
+        signals_finished = False
 
         def signal_group(value):
-            # The group ID remains ours after its leader exits. Never gate
-            # signalling or escalation on the direct child's return code.
+            nonlocal group_absent
+            if group_absent:
+                return False
+            if value != 0:
+                self.assertFalse(signals_finished, "cannot signal after releasing the PID anchor")
+            # Keep the leader unreaped until ALL destructive signals finish.
+            # Its reserved PID prevents the numeric PGID from being reused,
+            # even when the leader exits before a TERM-ignoring descendant.
             try:
                 os.killpg(process.pid, value)
                 return True
             except ProcessLookupError:
+                group_absent = True
                 return False
             except PermissionError:
                 # macOS may return EPERM while killed group members await
@@ -268,7 +310,6 @@ class CollectorTest(unittest.TestCase):
         def wait_for_group(timeout):
             deadline = time.monotonic() + timeout
             while True:
-                process.poll()  # Reap the direct child as soon as it exits.
                 if not signal_group(0):
                     return True
                 if time.monotonic() >= deadline:
@@ -276,16 +317,20 @@ class CollectorTest(unittest.TestCase):
                 time.sleep(0.02)
 
         def cleanup():
-            nonlocal stopped
+            nonlocal stopped, signals_finished
             if stopped:
                 return
             started = time.monotonic()
             try:
-                signal_group(signal.SIGTERM)
-                if not wait_for_group(1):
-                    signal_group(signal.SIGKILL)
-                    self.assertTrue(wait_for_group(3), "collector process group did not stop")
-                process.wait(timeout=1)
+                if not signals_finished:
+                    signal_group(signal.SIGTERM)
+                    if not wait_for_group(1):
+                        signal_group(signal.SIGKILL)
+                    signals_finished = True
+                # No TERM/KILL is permitted after this wait releases the PID.
+                # Retrying disposal may only wait and probe, never signal.
+                process.wait(timeout=2)
+                self.assertTrue(wait_for_group(3), "collector process group did not stop")
                 stopped = True
             finally:
                 self.cleanup_seconds = time.monotonic() - started
@@ -319,8 +364,8 @@ class CollectorTest(unittest.TestCase):
                     pending += chunk
                     if len(pending) > 4096:
                         raise AssertionError("collector readiness output exceeded 4096 bytes")
-                elif process.poll() is not None:
-                    return None
+                # EOF or the readiness deadline detects early exit without
+                # poll()/wait(), preserving the PID until group teardown.
 
         try:
             if mode != "normal":
