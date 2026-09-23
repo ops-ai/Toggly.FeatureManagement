@@ -7,6 +7,8 @@ import { createServer } from 'node:http';
 import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 import { once } from 'node:events';
+import assert from 'node:assert/strict';
+import semver from 'semver';
 import { WebSocketServer } from 'ws';
 import { chromium } from '@playwright/test';
 import { run, cleanupAll, closeBrowser, stopChild } from './host-resources.mjs';
@@ -62,8 +64,20 @@ try {
     }),
   );
   const reporter = lock.packages['node_modules/@ops-ai/toggly-client-telemetry'];
-  if (reporter?.version !== '1.1.0' || !reporter.resolved.startsWith('https://registry.npmjs.org/'))
-    throw new Error('Reporter must come from the public registry');
+  const reporterRange =
+    lock.packages['node_modules/@ops-ai/toggly-sveltekit'].dependencies[
+      '@ops-ai/toggly-client-telemetry'
+    ];
+  assert.ok(
+    reporter && semver.satisfies(reporter.version, reporterRange),
+    `Reporter must satisfy SDK dependency ${reporterRange}`,
+  );
+  assert.equal(reporter.link, undefined, 'Reporter must not be linked');
+  assert.ok(
+    reporter.resolved?.startsWith('https://registry.npmjs.org/'),
+    'Reporter must come from the public registry',
+  );
+  assert.ok(reporter.integrity, 'Reporter must have registry integrity');
   await run('npm', ['run', 'check'], host);
   const built = await run('npm', ['run', 'build'], host);
   if (built.includes('externalized for browser compatibility'))
