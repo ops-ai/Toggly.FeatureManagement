@@ -1,0 +1,22 @@
+{
+  "name": "toggly-client-core-public-acceptance",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "test": "node --test tests/portable.test.cjs && node tests/browser.cjs"
+  },
+  "dependencies": {
+    "@ops-ai/toggly-client-core": "0.5.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.0"
+  },
+  "engines": {
+    "node": ">=22.23.2"
+  }
+}
