@@ -607,38 +607,25 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
             return JsonWebKeySet.empty();
         }
 
-        int braceCount = 0;
-        int objStart = -1;
-        for (int i = 0; i < arrayContent.length(); i++) {
-            char c = arrayContent.charAt(i);
-            if (c == '{') {
-                if (braceCount == 0) objStart = i;
-                braceCount++;
-            } else if (c == '}') {
-                braceCount--;
-                if (braceCount == 0 && objStart >= 0) {
-                    String keyJson = arrayContent.substring(objStart, i + 1);
-                    String kty = extractStringValue(keyJson, "kty");
-                    String kid = extractStringValue(keyJson, "kid");
-                    String crv = extractStringValue(keyJson, "crv");
-                    String x = extractStringValue(keyJson, "x");
-                    String y = extractStringValue(keyJson, "y");
-                    String alg = extractStringValue(keyJson, "alg");
-                    String use = extractStringValue(keyJson, "use");
-                    Long exp = extractLongValue(keyJson, "exp");
-                    if (kid != null && x != null && y != null) {
-                        keys.add(new JsonWebKey(
-                                kty != null ? kty : "EC",
-                                kid,
-                                crv != null ? crv : "P-256",
-                                x,
-                                y,
-                                alg != null ? alg : "ES256",
-                                use != null ? use : "sig",
-                                exp));
-                    }
-                    objStart = -1;
-                }
+        for (String keyJson : SimpleJson.splitTopLevelObjects(arrayContent)) {
+            String kty = extractStringValue(keyJson, "kty");
+            String kid = extractStringValue(keyJson, "kid");
+            String crv = extractStringValue(keyJson, "crv");
+            String x = extractStringValue(keyJson, "x");
+            String y = extractStringValue(keyJson, "y");
+            String alg = extractStringValue(keyJson, "alg");
+            String use = extractStringValue(keyJson, "use");
+            Long exp = extractLongValue(keyJson, "exp");
+            if (kid != null && x != null && y != null) {
+                keys.add(new JsonWebKey(
+                        kty != null ? kty : "EC",
+                        kid,
+                        crv != null ? crv : "P-256",
+                        x,
+                        y,
+                        alg != null ? alg : "ES256",
+                        use != null ? use : "sig",
+                        exp));
             }
         }
         return new JsonWebKeySet(keys);
@@ -692,23 +679,10 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     }
 
     private void parseFeatures(String json, Map<String, FeatureDefinition> features) {
-        int braceCount = 0;
-        int start = -1;
-        for (int i = 0; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c == '{') {
-                if (braceCount == 0) start = i;
-                braceCount++;
-            } else if (c == '}') {
-                braceCount--;
-                if (braceCount == 0 && start >= 0) {
-                    String featureJson = json.substring(start, i + 1);
-                    FeatureDefinition def = parseFeatureDefinition(featureJson);
-                    if (def != null && def.getFeatureKey() != null) {
-                        features.put(def.getFeatureKey(), def);
-                    }
-                    start = -1;
-                }
+        for (String featureJson : SimpleJson.splitTopLevelObjects(json)) {
+            FeatureDefinition def = parseFeatureDefinition(featureJson);
+            if (def != null && def.getFeatureKey() != null) {
+                features.put(def.getFeatureKey(), def);
             }
         }
     }
@@ -751,34 +725,16 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
 
     private List<FeatureFilter> parseFilters(String json) {
         List<FeatureFilter> filters = new ArrayList<>();
-
-        Pattern filtersPattern = Pattern.compile(
-                "\"filters\"\\s*:\\s*\\[([^\\]]*(?:\\{[^}]*}[^\\]]*)*)]",
-                Pattern.DOTALL);
-        Matcher matcher = filtersPattern.matcher(json);
-        if (!matcher.find()) return filters;
-
-        String filtersJson = matcher.group(1);
-        int braceCount = 0;
-        int start = -1;
-        for (int i = 0; i < filtersJson.length(); i++) {
-            char c = filtersJson.charAt(i);
-            if (c == '{') {
-                if (braceCount == 0) start = i;
-                braceCount++;
-            } else if (c == '}') {
-                braceCount--;
-                if (braceCount == 0 && start >= 0) {
-                    String filterJson = filtersJson.substring(start, i + 1);
-                    FeatureFilter filter = parseFilter(filterJson);
-                    if (filter != null) {
-                        filters.add(filter);
-                    }
-                    start = -1;
-                }
+        String filtersJson = extractArrayByKey(json, "filters");
+        if (filtersJson == null) {
+            return filters;
+        }
+        for (String filterJson : SimpleJson.splitTopLevelObjects(filtersJson)) {
+            FeatureFilter filter = parseFilter(filterJson);
+            if (filter != null) {
+                filters.add(filter);
             }
         }
-
         return filters;
     }
 
@@ -787,13 +743,16 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         if (name == null) return null;
 
         Map<String, Object> parameters = new HashMap<>();
-
-        Pattern paramsPattern = Pattern.compile(
-                "\"parameters\"\\s*:\\s*\\{([^}]*)}",
-                Pattern.DOTALL);
-        Matcher paramsMatcher = paramsPattern.matcher(json);
-        if (paramsMatcher.find()) {
-            parseParameters(paramsMatcher.group(1), parameters);
+        String search = "\"parameters\"";
+        int idx = json.indexOf(search);
+        if (idx >= 0) {
+            int braceStart = json.indexOf('{', idx + search.length());
+            if (braceStart >= 0) {
+                int braceEnd = SimpleJson.findMatchingBrace(json, braceStart);
+                if (braceEnd > braceStart) {
+                    parseParameters(json.substring(braceStart + 1, braceEnd), parameters);
+                }
+            }
         }
 
         return FeatureFilter.of(name, parameters);
@@ -831,27 +790,14 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     }
 
     private void parseMetrics(String json, Map<String, MetricDefinition> metrics) {
-        int braceCount = 0;
-        int start = -1;
-        for (int i = 0; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c == '{') {
-                if (braceCount == 0) start = i;
-                braceCount++;
-            } else if (c == '}') {
-                braceCount--;
-                if (braceCount == 0 && start >= 0) {
-                    String metricJson = json.substring(start, i + 1);
-                    String key = extractStringValue(metricJson, "metric_key");
-                    if (key == null) key = extractStringValue(metricJson, "metricKey");
-                    String name = extractStringValue(metricJson, "name");
-                    String unit = extractStringValue(metricJson, "unit");
+        for (String metricJson : SimpleJson.splitTopLevelObjects(json)) {
+            String key = extractStringValue(metricJson, "metric_key");
+            if (key == null) key = extractStringValue(metricJson, "metricKey");
+            String name = extractStringValue(metricJson, "name");
+            String unit = extractStringValue(metricJson, "unit");
 
-                    if (key != null) {
-                        metrics.put(key, MetricDefinition.of(name != null ? name : key, "counter", unit));
-                    }
-                    start = -1;
-                }
+            if (key != null) {
+                metrics.put(key, MetricDefinition.of(name != null ? name : key, "counter", unit));
             }
         }
     }

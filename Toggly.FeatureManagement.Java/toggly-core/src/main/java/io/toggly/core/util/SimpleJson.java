@@ -68,6 +68,43 @@ public final class SimpleJson {
     }
 
     /**
+     * Splits a JSON array interior (no outer {@code [...]}) into top-level object
+     * substrings, using string-aware brace matching so {@code '{'/'}'} inside
+     * string values (e.g. variant {@code configurationValue}) do not truncate.
+     *
+     * @param arrayInterior comma-separated objects, optionally with whitespace
+     * @return each top-level {@code {...}} substring in order
+     */
+    public static List<String> splitTopLevelObjects(String arrayInterior) {
+        List<String> result = new ArrayList<>();
+        if (arrayInterior == null || arrayInterior.isEmpty()) {
+            return result;
+        }
+        int i = 0;
+        while (i < arrayInterior.length()) {
+            while (i < arrayInterior.length()
+                    && (Character.isWhitespace(arrayInterior.charAt(i))
+                    || arrayInterior.charAt(i) == ',')) {
+                i++;
+            }
+            if (i >= arrayInterior.length()) {
+                break;
+            }
+            if (arrayInterior.charAt(i) != '{') {
+                i++;
+                continue;
+            }
+            int end = findMatchingBrace(arrayInterior, i);
+            if (end <= i) {
+                break;
+            }
+            result.add(arrayInterior.substring(i, end + 1));
+            i = end + 1;
+        }
+        return result;
+    }
+
+    /**
      * Finds the index of the {@code '{'} at {@code start}'s matching {@code '}'},
      * ignoring braces inside JSON string literals (including strings that end with
      * an escaped backslash before the closing quote).

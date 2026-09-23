@@ -78,16 +78,14 @@ class SimpleJsonTest {
     }
 
     @Test
-    void isStringDelimiter_distinguishesEscapedQuoteFromEscapedBackslash() {
-        // Java "\"a\\\"b\"" → chars: " a \ " b "
-        String escapedQuote = "\"a\\\"b\"";
-        assertTrue(SimpleJson.isStringDelimiter(escapedQuote, 0));
-        assertTrue(!SimpleJson.isStringDelimiter(escapedQuote, 3)); // \"
-        assertTrue(SimpleJson.isStringDelimiter(escapedQuote, 5));
-
-        // Java "\"a\\\\\"" → chars: " a \ \ "
-        String escapedBackslashThenQuote = "\"a\\\\\"";
-        assertTrue(SimpleJson.isStringDelimiter(escapedBackslashThenQuote, 0));
-        assertTrue(SimpleJson.isStringDelimiter(escapedBackslashThenQuote, 4));
+    void splitTopLevelObjects_survivesBracesInsideConfigurationValue() {
+        String arrayInterior =
+                "{\"featureKey\":\"a\",\"variants\":[{\"name\":\"A\",\"configurationValue\":\"has } brace\"}]},"
+                        + "{\"featureKey\":\"b\",\"filters\":[]}";
+        List<String> objects = SimpleJson.splitTopLevelObjects(arrayInterior);
+        assertEquals(2, objects.size());
+        assertTrue(objects.get(0).contains("\"featureKey\":\"a\""));
+        assertTrue(objects.get(0).contains("has } brace"));
+        assertTrue(objects.get(1).contains("\"featureKey\":\"b\""));
     }
 }

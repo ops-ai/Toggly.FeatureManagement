@@ -524,27 +524,24 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     private List<FeatureFilter> parseFilters(String json) {
         List<FeatureFilter> filters = new ArrayList<>();
 
-        Pattern filtersPattern = Pattern.compile("\"filters\"\\s*:\\s*\\[([^\\]]*)\\]");
-        Matcher matcher = filtersPattern.matcher(json);
-        if (!matcher.find()) return filters;
-
-        String filtersJson = matcher.group(1);
-        // Parse individual filter objects
-        int braceCount = 0;
-        int start = -1;
-        for (int i = 0; i < filtersJson.length(); i++) {
-            char c = filtersJson.charAt(i);
-            if (c == '{') {
-                if (braceCount == 0) start = i;
-                braceCount++;
-            } else if (c == '}') {
-                braceCount--;
-                if (braceCount == 0 && start >= 0) {
-                    String filterJson = filtersJson.substring(start, i + 1);
-                    FeatureFilter filter = parseFilter(filterJson);
-                    if (filter != null) filters.add(filter);
-                    start = -1;
-                }
+        String search = "\"filters\"";
+        int idx = json.indexOf(search);
+        if (idx < 0) {
+            return filters;
+        }
+        int arrayStart = json.indexOf('[', idx + search.length());
+        if (arrayStart < 0) {
+            return filters;
+        }
+        int arrayEnd = SimpleJson.findMatchingBracket(json, arrayStart);
+        if (arrayEnd <= arrayStart) {
+            return filters;
+        }
+        String filtersJson = json.substring(arrayStart + 1, arrayEnd);
+        for (String filterJson : SimpleJson.splitTopLevelObjects(filtersJson)) {
+            FeatureFilter filter = parseFilter(filterJson);
+            if (filter != null) {
+                filters.add(filter);
             }
         }
 
