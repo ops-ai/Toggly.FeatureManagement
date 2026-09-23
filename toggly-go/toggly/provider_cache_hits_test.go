@@ -262,6 +262,46 @@ func (m *memorySnap) Clear(ctx context.Context) error                         { 
 func (m *memorySnap) LoadJWKS(ctx context.Context) (*snapshot.JWKSnap, error) { return nil, nil }
 func (m *memorySnap) SaveJWKS(ctx context.Context, j snapshot.JWKSnap) error  { return nil }
 
+func TestProvider_IgnoresLegacyEvaluatedVariantsSnapshot(t *testing.T) {
+	// Dual-rail snapshots stored synthetic AlwaysOn/AlwaysOff rows in Defs
+	// with VariantContext set. Catalog-local load must refuse them.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"net"`)
+		_, _ = w.Write([]byte(`[{"featureKey":"real","filters":[{"name":"AlwaysOn","parameters":{}}],"requirementType":"Any"}]`))
+	}))
+	defer srv.Close()
+
+	snap := &memorySnap{defs: snapshot.DefinitionsSnapshot{
+		Defs: []definitions.FeatureDefinitionModel{{
+			FeatureKey:      "synthetic",
+			Filters:         []definitions.FeatureFilter{{Name: "AlwaysOn"}},
+			RequirementType: definitions.RequirementAny,
+		}},
+		VariantContext: "userId=alice",
+		VariantDefs:    json.RawMessage(`{"synthetic":{"enabled":true}}`),
+		ETag:           `"legacy"`,
+	}}
+
+	p := newDefinitionsProvider(Config{
+		AppKey:          "app",
+		Environment:     "env",
+		DefinitionsURL:  srv.URL + "/",
+		HTTPTimeout:     2 * time.Second,
+		RefreshInterval: time.Hour,
+	}, snap)
+	p.hc = srv.Client()
+
+	if err := p.refresh(context.Background(), 2*time.Second, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := p.get("synthetic"); ok {
+		t.Fatal("legacy evaluated-variants snapshot must not load synthetic defs")
+	}
+	if _, ok := p.get("real"); !ok {
+		t.Fatal("expected network definitions after ignoring legacy snapshot")
+	}
+}
+
 func TestProvider_SnapshotBeforeNetwork_CountsHit(t *testing.T) {
 	// Snapshot + network in one refresh() must emit exactly one outcome (304 → hit).
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

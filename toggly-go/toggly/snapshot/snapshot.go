@@ -21,6 +21,12 @@ type DefinitionsSnapshot struct {
 
 	// ETag is the definitions revision for conditional fetches.
 	ETag string `json:"etag,omitempty"`
+
+	// VariantContext / VariantDefs are legacy dual-rail (evaluated-variants-signed)
+	// fields. Retained only so loadSnapshot can refuse snapshots that mixed
+	// synthetic AlwaysOn/AlwaysOff defs into Defs under those keys.
+	VariantContext string          `json:"variantContext,omitempty"`
+	VariantDefs    json.RawMessage `json:"variantDefs,omitempty"`
 }
 
 // JWKSnap stores cached JWKS.

@@ -289,6 +289,14 @@ func (p *definitionsProvider) loadSnapshot(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
+	// Dual-rail snapshots stored synthetic AlwaysOn/AlwaysOff rows in Defs
+	// alongside VariantContext/VariantDefs. Never promote those into the
+	// catalog-local definitions cache (wait for a definitions-signed refresh).
+	if snapDefs.VariantContext != "" || len(snapDefs.VariantDefs) > 0 {
+		log.Printf("toggly: ignoring legacy evaluated-variants snapshot; waiting for definitions refresh")
+		return false, nil
+	}
+
 	if len(snapDefs.Defs) > 0 {
 		if p.cfg.UseSignedDefinitions {
 			if err := p.verifySnapshotRawDefs(ctx, snapDefs.RawDefs, snapDefs.Signature, snapDefs.Kid, snapDefs.Timestamp); err != nil {
