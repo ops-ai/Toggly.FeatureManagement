@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0
+
+### Added
+- Client-held targeting identity: `:identity` start option, `Toggly.set_identity/2`,
+  and `Toggly.identity/1`. When `get_variant/4` / `get_variant_value/4` receive
+  an empty context identity, the client default is merged so
+  `get_variant(client, key)` works after config or `set_identity` [OPS-1407].
+
+### Fixed
+- `get_variant/4` treats a `nil` context like `%{}` when merging client identity.
+- `set_identity/2` ignores maps/lists/other non-stringable values instead of
+  crashing the client GenServer via `String.Chars`.
+
 ## 0.3.0
 
 ### Added

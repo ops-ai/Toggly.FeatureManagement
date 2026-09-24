@@ -85,6 +85,15 @@ pub struct TogglyConfig {
     /// Mirrors `Microsoft.FeatureManagement`'s
     /// `TargetingEvaluationOptions.IgnoreCase` (default `false`).
     pub variant_ignore_case: bool,
+
+    /// Default targeting userId for [`crate::TogglyClient::get_variant`] /
+    /// [`crate::TogglyClient::get_variant_value`] when the per-call
+    /// [`crate::EvalContext`] has no identity.
+    ///
+    /// Mutable at runtime via [`crate::TogglyClient::set_identity`]. Groups are
+    /// never taken from config — only from ambient request context or an
+    /// explicit per-call override.
+    pub identity: Option<String>,
 }
 
 impl Default for TogglyConfig {
@@ -113,6 +122,7 @@ impl Default for TogglyConfig {
             usage_flush_interval: None,
             metrics_flush_interval: None,
             variant_ignore_case: false,
+            identity: None,
         }
     }
 }
@@ -145,6 +155,7 @@ impl fmt::Debug for TogglyConfig {
             .field("usage_flush_interval", &self.usage_flush_interval)
             .field("metrics_flush_interval", &self.metrics_flush_interval)
             .field("variant_ignore_case", &self.variant_ignore_case)
+            .field("identity", &self.identity)
             .finish()
     }
 }
@@ -349,6 +360,13 @@ impl TogglyConfigBuilder {
         self
     }
 
+    /// Set the default targeting identity for variant assignment when the
+    /// per-call context has none. Groups are never set here.
+    pub fn identity(mut self, identity: impl Into<String>) -> Self {
+        self.config.identity = Some(identity.into());
+        self
+    }
+
     /// Build the configuration.
     pub fn build(self) -> TogglyConfig {
         self.config
@@ -378,6 +396,18 @@ mod tests {
         assert_eq!(config.app_key, "test-key");
         assert_eq!(config.environment, "staging");
         assert_eq!(config.refresh_interval, Duration::from_secs(60));
+    }
+
+    #[test]
+    fn test_identity_on_config_debug() {
+        let config = TogglyConfig::builder()
+            .app_key("test-key")
+            .identity("user-42")
+            .build();
+        assert_eq!(config.identity.as_deref(), Some("user-42"));
+        let rendered = format!("{config:?}");
+        assert!(rendered.contains("identity"));
+        assert!(rendered.contains("user-42"));
     }
 
     #[test]

@@ -6,11 +6,11 @@ A feature flag is a named decision in your application. The environment's defini
 
 ## Install and supervise
 
-Requires Elixir **1.20+** and Erlang/OTP **29+**. Verified on Elixir 1.20.4 / OTP 29. Use `toggly` **0.3.0+** for feature variants; the compatible `toggly_phoenix` and `toggly_live_view` adapters start at **0.1.0**.
+Requires Elixir **1.20+** and Erlang/OTP **29+**. Verified on Elixir 1.20.4 / OTP 29. Use `toggly` **0.4.0+** for ambient client identity on catalog-local variants; `toggly_phoenix` **0.2.0+** for `Plug.get_variant/2`.
 
 ```elixir
 # mix.exs
-{:toggly, "~> 0.3.0"}
+{:toggly, "~> 0.4.0"}
 
 # Application.start/2 child list; create one named client per application/environment.
 {Toggly,

@@ -4,7 +4,7 @@ defmodule TogglyPhoenix.MixProject do
   def project do
     [
       app: :toggly_phoenix,
-      version: "0.1.1",
+      version: "0.2.0",
       elixir: "~> 1.20",
       description: "Toggly feature flags for toggly phoenix",
       package: [

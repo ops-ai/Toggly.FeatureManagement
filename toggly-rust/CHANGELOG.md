@@ -3,9 +3,24 @@
 ## Unreleased
 
 ### Added
-- `toggly-axum08` 0.1.0, a separate Axum 0.8 adapter. `toggly-axum` remains
+- `toggly-axum08` 0.2.0, a separate Axum 0.8 adapter. `toggly-axum` remains
   the Axum 0.7 adapter, so existing applications keep their dependency types
   and imports.
+
+## 0.8.0
+
+### Added
+- Ambient / config identity for catalog-local variants: `TogglyConfig::identity`,
+  `TogglyClientBuilder::identity`, `TogglyClient::set_identity` /
+  `identity` / `clear_identity`. When `EvalContext` has no identity,
+  `get_variant` / `get_variant_value` fill from the client default so
+  `get_variant(key, EvalContext::default())` works after config or
+  `set_identity` [OPS-1407].
+- HTTP adapters: request-scoped `Feature` continues to extract identity from
+  headers into `EvalContext`; call
+  `client.get_variant(key, feature.context().clone())` (Actix: pair with
+  `TogglyData`, which derefs to the client) so empty ambient identity falls
+  through to config / `set_identity` [OPS-1407].
 
 ## 0.7.0
 

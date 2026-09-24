@@ -27,11 +27,13 @@ defmodule Toggly.Client do
       definitions: %{},
       defaults: Keyword.get(opts, :defaults, %{}),
       source: :defaults,
-      jwks: Keyword.get(opts, :jwks)
+      jwks: Keyword.get(opts, :jwks),
+      identity: normalize_identity(Keyword.get(opts, :identity))
     }
 
-    # Restore and reverify before any refresh can reach the network. Identity,
-    # groups and claims are evaluated per call and never persisted in this cache.
+    # Restore and reverify before any refresh can reach the network. Groups and
+    # claims stay per-call; optional client `:identity` is memory/ETS only and
+    # is never written to the signed snapshot file.
     state =
       with {:ok, stored} <- Snapshot.read(opts[:snapshot_path]),
            {:ok, body, jwks} <- Snapshot.decode(stored, opts),
@@ -42,6 +44,7 @@ defmodule Toggly.Client do
       end
 
     publish(state)
+    publish_identity(state)
     interval = Keyword.get(opts, :refresh_interval, 60_000)
     if interval > 0, do: send(self(), :refresh)
     schedule(:flush, Keyword.get(opts, :flush_interval, 60_000))
@@ -58,6 +61,15 @@ defmodule Toggly.Client do
     {result, state} = flush(state)
     {:reply, result, state}
   end
+
+  def handle_call({:set_identity, identity}, _, state) do
+    identity = normalize_identity(identity)
+    state = %{state | identity: identity}
+    publish_identity(state)
+    {:reply, :ok, state}
+  end
+
+  def handle_call(:identity, _, state), do: {:reply, state.identity, state}
 
   def handle_call({:subscribe, pid}, _, state) do
     state =
@@ -254,6 +266,23 @@ defmodule Toggly.Client do
       {:snapshot, Map.take(state, [:definitions, :defaults, :source, :revision, :timestamp])}
     )
   end
+
+  defp publish_identity(state) do
+    :ets.insert(state.name, {:identity, state.identity})
+  end
+
+  defp normalize_identity(nil), do: nil
+  defp normalize_identity(identity) when is_binary(identity) and identity != "", do: identity
+  defp normalize_identity(identity) when is_binary(identity), do: nil
+
+  defp normalize_identity(identity)
+       when is_atom(identity) or is_integer(identity) or is_float(identity) do
+    identity |> to_string() |> normalize_identity()
+  end
+
+  # Maps, lists, tuples, PIDs, etc. are not targeting userIds — ignore rather
+  # than crash the GenServer via Protocol.UndefinedError on String.Chars.
+  defp normalize_identity(_), do: nil
 
   defp fetch_keys(state) do
     case request(state, :get, ".well-known/jwks", []) do
