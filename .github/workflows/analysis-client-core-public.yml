@@ -1,0 +1,39 @@
+name: Public client-core browser acceptance
+
+on:
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'toggly-docusaurus-edge-sdk/libs/core/tests/fixtures/public-client-core/**'
+      - '.github/workflows/analysis-client-core-public.yml'
+  push:
+    branches: [develop, main]
+    paths:
+      - 'toggly-docusaurus-edge-sdk/libs/core/tests/fixtures/public-client-core/**'
+      - '.github/workflows/analysis-client-core-public.yml'
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: client-core-public-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-client-core:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: toggly-docusaurus-edge-sdk/libs/core/tests/fixtures/public-client-core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.2'
+          cache: npm
+          cache-dependency-path: toggly-docusaurus-edge-sdk/libs/core/tests/fixtures/public-client-core/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - run: npm run build
