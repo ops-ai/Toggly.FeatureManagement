@@ -277,42 +277,39 @@ describe('togglyMiddleware', () => {
     await app.request('/test')
   })
 
-  it('should resolve getVariant from ambient x-toggly-identity without handler context', async () => {
-    const checkoutFlow = {
-      featureKey: 'checkout-flow',
+  it('binds getVariant to middleware identity (pat → banner Hero)', async () => {
+    const banner = {
+      featureKey: 'home-banner',
       filters: [{ name: 'AlwaysOn', parameters: {} }],
       variants: [
-        { name: 'A', configurationValue: { color: 'blue' } },
-        { name: 'B', configurationValue: { color: 'green' } },
+        { name: 'Hero', configurationValue: { slot: 'top' } },
+        { name: 'Quiet', configurationValue: { slot: 'none' } },
       ],
       allocation: {
-        defaultWhenEnabled: 'B',
-        user: [{ variant: 'A', users: ['alice'] }],
+        defaultWhenEnabled: 'Quiet',
+        user: [{ variant: 'Hero', users: ['pat'] }],
       },
     }
     mockFetch.mockResolvedValue({
       ok: true,
       status: 200,
       headers: new Map(),
-      json: async () => [checkoutFlow],
-      text: async () => JSON.stringify([checkoutFlow]),
+      json: async () => [banner],
+      text: async () => JSON.stringify([banner]),
     })
 
     app.use('*', togglyMiddleware({ appKey: 'test-app' }))
 
-    app.get('/test', async (c) => {
+    app.get('/banner', async (c) => {
       const toggly = c.get('toggly')
-      expect(toggly.identity).toBe('alice')
-      expect(await toggly.getVariant('checkout-flow')).toEqual({
-        name: 'A',
-        configurationValue: { color: 'blue' },
-      })
-      expect(await toggly.getVariantValue('checkout-flow')).toEqual({ color: 'blue' })
-      return c.json({ success: true })
+      expect(toggly.identity).toBe('pat')
+      expect((await toggly.getVariant('home-banner'))?.name).toBe('Hero')
+      expect(await toggly.getVariantValue('home-banner')).toEqual({ slot: 'top' })
+      return c.json({ ok: true })
     })
 
-    const response = await app.request('/test', {
-      headers: { 'x-toggly-identity': 'alice' },
+    const response = await app.request('/banner', {
+      headers: { 'x-toggly-identity': 'pat' },
     })
     expect(response.status).toBe(200)
   })

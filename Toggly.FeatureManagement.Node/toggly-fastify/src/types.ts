@@ -56,7 +56,7 @@ export interface TogglyRequestData {
   /** Catalog-local variant assignment using the plugin-attached context. */
   getVariant: (featureKey: string) => Promise<VariantResult | null>
   /** Assigned variant `configurationValue`, or `null`. */
-  getVariantValue: (featureKey: string) => Promise<unknown | null>
+  getVariantValue: (featureKey: string) => Promise<unknown>
 }
 
 /**

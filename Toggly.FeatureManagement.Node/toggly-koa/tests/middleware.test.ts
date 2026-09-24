@@ -317,41 +317,38 @@ describe('togglyMiddleware', () => {
     await makeRequest(app, 'GET', '/test')
   })
 
-  it('should resolve getVariant from ambient x-toggly-identity without handler context', async () => {
-    const checkoutFlow = {
-      featureKey: 'checkout-flow',
+  it('binds getVariant to middleware identity (kim → trial Pro)', async () => {
+    const trial = {
+      featureKey: 'trial-plan',
       filters: [{ name: 'AlwaysOn', parameters: {} }],
       variants: [
-        { name: 'A', configurationValue: { color: 'blue' } },
-        { name: 'B', configurationValue: { color: 'green' } },
+        { name: 'Pro', configurationValue: { days: 14 } },
+        { name: 'Basic', configurationValue: { days: 7 } },
       ],
       allocation: {
-        defaultWhenEnabled: 'B',
-        user: [{ variant: 'A', users: ['alice'] }],
+        defaultWhenEnabled: 'Basic',
+        user: [{ variant: 'Pro', users: ['kim'] }],
       },
     }
     mockFetch.mockResolvedValue({
       ok: true,
       status: 200,
       headers: new Map(),
-      json: async () => [checkoutFlow],
-      text: async () => JSON.stringify([checkoutFlow]),
+      json: async () => [trial],
+      text: async () => JSON.stringify([trial]),
     })
 
     app.use(togglyMiddleware({ appKey: 'test-app' }))
     app.use(async (ctx: Context) => {
       const toggly = ctx.state.toggly!
-      expect(toggly.identity).toBe('alice')
-      expect(await toggly.getVariant('checkout-flow')).toEqual({
-        name: 'A',
-        configurationValue: { color: 'blue' },
-      })
-      expect(await toggly.getVariantValue('checkout-flow')).toEqual({ color: 'blue' })
-      ctx.body = { success: true }
+      expect(toggly.identity).toBe('kim')
+      expect((await toggly.getVariant('trial-plan'))?.name).toBe('Pro')
+      expect(await toggly.getVariantValue('trial-plan')).toEqual({ days: 14 })
+      ctx.body = { ok: true }
     })
 
     const response = await makeRequest(app, 'GET', '/test', {
-      'x-toggly-identity': 'alice',
+      'x-toggly-identity': 'kim',
     })
     expect(response.status).toBe(200)
   })

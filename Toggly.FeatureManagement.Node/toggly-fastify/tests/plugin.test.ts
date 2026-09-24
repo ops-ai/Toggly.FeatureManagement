@@ -278,43 +278,41 @@ describe('togglyPlugin', () => {
     })
   })
 
-  it('should resolve getVariant from ambient x-toggly-identity without handler context', async () => {
-    const checkoutFlow = {
-      featureKey: 'checkout-flow',
+  it('binds getVariant to plugin request identity (sam → pricing X)', async () => {
+    const pricing = {
+      featureKey: 'pricing-tier',
       filters: [{ name: 'AlwaysOn', parameters: {} }],
       variants: [
-        { name: 'A', configurationValue: { color: 'blue' } },
-        { name: 'B', configurationValue: { color: 'green' } },
+        { name: 'X', configurationValue: { tier: 1 } },
+        { name: 'Y', configurationValue: { tier: 2 } },
       ],
       allocation: {
-        defaultWhenEnabled: 'B',
-        user: [{ variant: 'A', users: ['alice'] }],
+        defaultWhenEnabled: 'Y',
+        user: [{ variant: 'X', users: ['sam'] }],
       },
     }
     mockFetch.mockResolvedValue({
       ok: true,
       status: 200,
       headers: new Map(),
-      json: async () => [checkoutFlow],
-      text: async () => JSON.stringify([checkoutFlow]),
+      json: async () => [pricing],
+      text: async () => JSON.stringify([pricing]),
     })
 
     await app.register(togglyPlugin, { appKey: 'test-app' })
 
-    app.get('/test', async request => {
-      expect(request.toggly!.identity).toBe('alice')
-      expect(await request.toggly!.getVariant('checkout-flow')).toEqual({
-        name: 'A',
-        configurationValue: { color: 'blue' },
-      })
-      expect(await request.toggly!.getVariantValue('checkout-flow')).toEqual({ color: 'blue' })
-      return { success: true }
+    app.get('/pricing', async request => {
+      expect(request.toggly!.identity).toBe('sam')
+      const assigned = await request.toggly!.getVariant('pricing-tier')
+      expect(assigned?.name).toBe('X')
+      expect(await request.toggly!.getVariantValue('pricing-tier')).toEqual({ tier: 1 })
+      return { ok: true }
     })
 
     const response = await app.inject({
       method: 'GET',
-      url: '/test',
-      headers: { 'x-toggly-identity': 'alice' },
+      url: '/pricing',
+      headers: { 'x-toggly-identity': 'sam' },
     })
 
     expect(response.statusCode).toBe(200)
