@@ -35,4 +35,24 @@ defmodule Toggly.Phoenix.Plug do
       conn
     end
   end
+
+  @doc """
+  Assigns a feature variant using `conn.assigns.toggly_context` (and
+  `toggly_client`) set by this Plug — no manual context map required.
+
+  Empty context identity still falls back to the client's `set_identity/2`
+  default via `Toggly.get_variant/4`.
+  """
+  @spec get_variant(Plug.Conn.t(), String.t(), keyword()) :: Toggly.Variant.Assignment.t()
+  def get_variant(conn, key, options \\ []) do
+    client = Map.fetch!(conn.assigns, :toggly_client)
+    context = Map.get(conn.assigns, :toggly_context, %{})
+    Toggly.get_variant(client, key, context, options)
+  end
+
+  @doc "Convenience for `get_variant/3`: the assigned configuration payload, or `nil`."
+  @spec get_variant_value(Plug.Conn.t(), String.t(), keyword()) :: term()
+  def get_variant_value(conn, key, options \\ []) do
+    get_variant(conn, key, options).configuration_value
+  end
 end

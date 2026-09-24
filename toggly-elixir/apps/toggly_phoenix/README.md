@@ -14,6 +14,14 @@ plug Toggly.Phoenix.Plug,
 
 The callback returns a string-keyed map such as `%{"identity" => conn.assigns.current_user.id}`. The Plug adds `request.userAgent`, `request.acceptLanguage` and `request.country` from request headers without replacing explicit context. Trust proxy headers only after your infrastructure sanitizes them. Assigns: `toggly_client`, `toggly_context`, `toggly_flags`.
 
+For catalog-local variants, use the Plug helper so handlers need no manual map:
+
+```elixir
+assignment = Toggly.Phoenix.Plug.get_variant(conn, "checkout-flow")
+```
+
+Empty context identity still falls back to the client's `:identity` / `Toggly.set_identity/2`.
+
 Route protection is optional: `gate: "beta-access"`, `status: 404` (default), `requirement: :all | :any`, `negate: false`, and `default: false`. A disabled gate sends `Feature unavailable` and halts. It does not replace authorization. Pass identity, claims, groups and `entity` per call; never mutate a shared user.
 
 Run `mix test --cover` from the umbrella root for concurrent request isolation and route gate tests. MIT. [Full documentation](https://docs.toggly.io/sdks/elixir).

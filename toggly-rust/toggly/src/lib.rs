@@ -95,12 +95,16 @@
 //! (`variants` + `allocation`), matching `Microsoft.FeatureManagement`
 //! (`IVariantFeatureManager`) bit-for-bit. No dual-rail network call.
 //!
+//! Prefer config / [`TogglyClient::set_identity`] or HTTP ambient context over
+//! hand-building identity on every call:
+//!
 //! ```rust,no_run
 //! use toggly::{TogglyClient, EvalContext};
 //!
 //! # async fn example(client: TogglyClient) -> Result<(), toggly::Error> {
+//! client.set_identity("user-123");
 //! let assignment = client
-//!     .get_variant("checkout-flow", EvalContext::with_identity("user-123"))
+//!     .get_variant("checkout-flow", EvalContext::default())
 //!     .await?;
 //! println!("variant = {:?}, enabled = {}", assignment.variant_name, assignment.enabled);
 //! # Ok(())

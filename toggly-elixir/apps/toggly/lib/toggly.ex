@@ -1,5 +1,5 @@
 defmodule Toggly do
-  @moduledoc "Supervised local feature evaluation with explicit per-call context."
+  @moduledoc "Supervised local feature evaluation with per-call context and optional client identity."
 
   @type client :: atom()
   @version Mix.Project.config()[:version]
@@ -11,7 +11,9 @@ defmodule Toggly do
   Starts a supervised client for one backend application and environment.
 
   Required `:name` identifies both the GenServer and its protected ETS table.
-  Evaluation context belongs to each call, never to shared client state.
+  Optional `:identity` sets a default targeting userId for `get_variant/4` when
+  the per-call context has none (mutable via `set_identity/2`). Groups and
+  claims remain per-call / Plug ambient — never stored on the client.
   `:snapshot_path` optionally persists signed bytes and public verification keys
   in a durable application-owned directory. `:jwks` overrides stored keys;
   `:allowed_kids` and `:max_signature_age_seconds` also apply during cold restore.
@@ -29,6 +31,17 @@ defmodule Toggly do
 
   @doc "Stops the returned supervisor, including its client, socket and ETS table."
   def stop(supervisor), do: Supervisor.stop(supervisor)
+
+  @doc """
+  Sets the client's default targeting userId for variant assignment when the
+  per-call context has no `"identity"`. Pass `nil` or `""` to clear.
+  """
+  @spec set_identity(client(), String.t() | nil) :: :ok
+  def set_identity(client, identity), do: GenServer.call(client, {:set_identity, identity})
+
+  @doc "Returns the client's current default targeting userId, or `nil`."
+  @spec identity(client()) :: String.t() | nil
+  def identity(client), do: GenServer.call(client, :identity)
 
   @doc "Evaluates one or more keys against one immutable snapshot and the caller's context."
   @spec enabled?(client(), String.t() | [String.t()], Toggly.Context.t(), keyword()) :: boolean()
@@ -69,6 +82,11 @@ defmodule Toggly do
   context. Assigns from the same cached snapshot `enabled?/4` reads — no
   network call and no dependency on `evaluated-variants-signed`.
 
+  When `context` has no `"identity"` (missing, `nil`, or `""`), the client's
+  `:identity` / `set_identity/2` default is merged in. Groups are never taken
+  from the client. Prefer `get_variant(client, key)` after setting identity, or
+  `Toggly.Phoenix.Plug.get_variant/2` for Plug ambient context.
+
   Options: `:ignore_case` (default `false`, mirrors
   `TargetingEvaluationOptions.IgnoreCase`) and `:track` (default `true`).
   """
@@ -77,6 +95,7 @@ defmodule Toggly do
   def get_variant(client, key, context \\ %{}, options \\ []) do
     :telemetry.span([:toggly, :variant], %{client: client, feature: key}, fn ->
       data = data(client)
+      context = merge_client_identity(client, context)
 
       assignment =
         case Map.fetch(data.definitions, key) do
@@ -167,5 +186,21 @@ defmodule Toggly do
   def data(client) do
     [{:snapshot, data}] = :ets.lookup(client, :snapshot)
     data
+  end
+
+  defp merge_client_identity(client, context) when is_map(context) do
+    case Map.get(context, "identity") do
+      id when is_binary(id) and id != "" ->
+        context
+
+      _ ->
+        case :ets.lookup(client, :identity) do
+          [{:identity, id}] when is_binary(id) and id != "" ->
+            Map.put(context, "identity", id)
+
+          _ ->
+            context
+        end
+    end
   end
 end

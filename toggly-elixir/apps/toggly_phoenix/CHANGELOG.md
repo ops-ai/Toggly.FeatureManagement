@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.0 — 2026-09-23
+
+### Added
+- `Toggly.Phoenix.Plug.get_variant/2` and `get_variant_value/2` read
+  `conn.assigns.toggly_context` / `toggly_client` so handlers need no manual
+  context map [OPS-1407].
+
 ## 0.1.1 — 2026-09-16
 
 ### Changed

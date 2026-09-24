@@ -140,6 +140,61 @@ defmodule Toggly.ClientTest do
     Toggly.stop(sup)
   end
 
+  test "get_variant uses client identity when context identity is blank" do
+    transport = fn _req ->
+      {:ok,
+       %{
+         status: 200,
+         body:
+           Jason.encode!([
+             %{
+               "featureKey" => "checkout-flow",
+               "filters" => [%{"name" => "AlwaysOn"}],
+               "variants" => [
+                 %{"name" => "A", "configurationValue" => %{"color" => "blue"}},
+                 %{"name" => "B", "configurationValue" => %{"color" => "green"}}
+               ],
+               "allocation" => %{
+                 "defaultWhenEnabled" => "B",
+                 "user" => [%{"variant" => "A", "users" => ["alice"]}]
+               }
+             }
+           ]),
+         headers: [{"etag", "v1"}]
+       }}
+    end
+
+    {:ok, sup} =
+      Toggly.start_link(
+        name: IdentityVariantFlags,
+        app_key: "test",
+        signed: false,
+        transport: transport,
+        refresh_interval: 0,
+        websocket: false,
+        identity: "alice"
+      )
+
+    assert :ok = Toggly.refresh(IdentityVariantFlags)
+    assert Toggly.identity(IdentityVariantFlags) == "alice"
+
+    assignment = Toggly.get_variant(IdentityVariantFlags, "checkout-flow")
+    assert assignment.variant_name == "A"
+    assert assignment.assignment_reason == "User"
+
+    assert :ok = Toggly.set_identity(IdentityVariantFlags, "carol")
+    fallback = Toggly.get_variant(IdentityVariantFlags, "checkout-flow", %{})
+    assert fallback.variant_name == "B"
+    assert fallback.assignment_reason == "DefaultWhenEnabled"
+
+    override =
+      Toggly.get_variant(IdentityVariantFlags, "checkout-flow", %{"identity" => "alice"})
+
+    assert override.variant_name == "A"
+
+    Toggly.stop(sup)
+  end
+
   test "refresh accepts definitions with null or missing filters" do
     {:ok, replies} =
       Agent.start_link(fn ->

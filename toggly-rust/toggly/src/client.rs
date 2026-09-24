@@ -9,6 +9,7 @@ use crate::telemetry::{
     MetricsFeatureOptions, TelemetryRuntime, TelemetryRuntimeConfig, TelemetrySenders,
 };
 use crate::Requirement;
+use parking_lot::RwLock;
 use std::sync::Arc;
 use tracing::{debug, info, instrument};
 
@@ -44,6 +45,9 @@ pub struct TogglyClient {
     engine: Engine,
     cache: Cache<bool>,
     telemetry: Option<Arc<TelemetryRuntime>>,
+    /// Mutable default targeting userId (from [`TogglyConfig::identity`],
+    /// overridable via [`Self::set_identity`]).
+    identity: RwLock<Option<String>>,
 }
 
 impl TogglyClient {
@@ -78,18 +82,39 @@ impl TogglyClient {
         provider.set_definition_cache_recorder(telemetry.clone());
         provider.initialize().await?;
 
+        let identity = RwLock::new(config.identity.clone());
         Ok(Self {
             config,
             provider: Arc::new(tokio::sync::RwLock::new(provider)),
             engine: Engine::with_defaults(),
             cache,
             telemetry: Some(telemetry),
+            identity,
         })
     }
 
     /// Get the configuration.
     pub fn config(&self) -> &TogglyConfig {
         &self.config
+    }
+
+    /// Update the client's default targeting userId used when the per-call
+    /// [`EvalContext`] has no identity.
+    ///
+    /// Groups are never stored here — pass them on ambient/request context or
+    /// the per-call override.
+    pub fn set_identity(&self, identity: impl Into<String>) {
+        *self.identity.write() = Some(identity.into());
+    }
+
+    /// Clear the client's default targeting identity.
+    pub fn clear_identity(&self) {
+        *self.identity.write() = None;
+    }
+
+    /// Current default targeting userId (from config / [`Self::set_identity`]).
+    pub fn identity(&self) -> Option<String> {
+        self.identity.read().clone()
     }
 
     /// Get the evaluation engine.
@@ -156,6 +181,15 @@ impl TogglyClient {
     /// `allocation`); no network call and no dependency on
     /// `evaluated-variants-signed`. Records a usage check (variant-tagged)
     /// when usage tracking is enabled.
+    ///
+    /// Targeting identity resolution (first non-empty wins):
+    /// 1. per-call `context.identity`
+    /// 2. [`TogglyConfig::identity`] / [`Self::set_identity`]
+    ///
+    /// Prefer `get_variant(key, EvalContext::default())` after setting config
+    /// or client identity, or pass a request-scoped context from the HTTP
+    /// adapters — not a hand-built identity on every call. Groups come only
+    /// from ambient/request or the per-call override (never config).
     #[instrument(skip(self, context), fields(feature = %feature_key))]
     pub async fn get_variant(
         &self,
@@ -165,6 +199,8 @@ impl TogglyClient {
         if feature_key.is_empty() {
             return Err(crate::Error::Config("feature_key is required".to_string()));
         }
+
+        let context = self.resolve_targeting_context(context);
 
         let provider = self.provider.read().await;
         let definition = match provider.get(feature_key) {
@@ -207,7 +243,7 @@ impl TogglyClient {
     }
 
     /// Get the assigned variant's configuration payload, or `None` if no
-    /// variant was assigned.
+    /// variant was assigned. See [`Self::get_variant`] for identity resolution.
     pub async fn get_variant_value(
         &self,
         feature_key: &str,
@@ -407,6 +443,20 @@ impl TogglyClient {
         let groups = context.groups.join(",");
         format!("{feature_key}:{identity}:{groups}")
     }
+
+    /// Fill empty per-call identity from the client default (config /
+    /// [`Self::set_identity`]). Non-empty per-call identity wins; groups are
+    /// never filled from config.
+    fn resolve_targeting_context(&self, mut context: EvalContext) -> EvalContext {
+        if !context.has_identity() {
+            if let Some(id) = self.identity.read().as_ref() {
+                if !id.is_empty() {
+                    context.identity = Some(id.clone());
+                }
+            }
+        }
+        context
+    }
 }
 
 impl std::fmt::Debug for TogglyClient {
@@ -536,6 +586,12 @@ impl TogglyClientBuilder {
     /// Enable case-insensitive user/group matching for variant allocation.
     pub fn variant_ignore_case(mut self, enabled: bool) -> Self {
         self.config_builder = self.config_builder.variant_ignore_case(enabled);
+        self
+    }
+
+    /// Set the default targeting identity for variant assignment.
+    pub fn identity(mut self, identity: impl Into<String>) -> Self {
+        self.config_builder = self.config_builder.identity(identity);
         self
     }
 

@@ -7,6 +7,7 @@
 //! - Request guards for feature checks
 //! - Managed state for the client
 //! - Fairings for setup
+//! - Request-scoped `Feature::get_variant` (identity from headers or client config)
 //!
 //! ## Quick Start
 //!
@@ -24,8 +25,17 @@
 //!     }
 //! }
 //!
+//! #[get("/checkout")]
+//! async fn checkout(feature: Feature) -> String {
+//!     // Uses X-User-Id / X-Identity when present; otherwise config / set_identity.
+//!     match feature.get_variant("checkout-flow").await {
+//!         Ok(a) => format!("{:?}", a.variant_name),
+//!         Err(_) => "error".into(),
+//!     }
+//! }
+//!
 //! #[get("/beta")]
-//! async fn beta(_guard: FeatureEnabled<"beta-features">) -> &'static str {
+//! async fn beta(_guard: FeatureEnabled) -> &'static str {
 //!     "Welcome to the beta!"
 //! }
 //!
@@ -40,7 +50,7 @@
 //!
 //!     rocket::build()
 //!         .manage(client)
-//!         .mount("/", routes![index, beta])
+//!         .mount("/", routes![index, checkout, beta])
 //! }
 //! ```
 
@@ -51,4 +61,4 @@ pub use fairing::TogglyFairing;
 pub use guard::{Feature, FeatureDisabled, FeatureEnabled};
 
 // Re-export core types for convenience
-pub use toggly::{EvalContext, Requirement, TogglyClient, TogglyConfig};
+pub use toggly::{EvalContext, Requirement, TogglyClient, TogglyConfig, VariantAssignment};
