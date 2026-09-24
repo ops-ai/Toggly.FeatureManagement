@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `userId`. Groups still come only from the per-call context (never Config).
   Prefer config / `set_identity` (or Rails ambient context) over building
   `Context.new(identity: …)` at every call site.
+  `Config#identity=` is configuration-time only (`Toggly.configure` /
+  `Config.new`); after `Client` is built, use `Client#set_identity`.
 
 ## [1.0.0] - 2026-09-23
 

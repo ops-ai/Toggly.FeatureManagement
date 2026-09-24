@@ -15,7 +15,10 @@ module Toggly
     # Default targeting userId for catalog-local +get_variant+ /
     # +get_variant_value+ when neither a per-call +Context#identity+ nor
     # Rails ambient context supplies one. Groups are never taken from Config.
-    # Mutable at runtime via {Client#set_identity}.
+    #
+    # Set at configuration time only ({Config.new}, +Toggly.configure+ block).
+    # After a {Client} is built, mutating this value has no effect — use
+    # {Client#set_identity} for runtime updates.
     #
     # @return [String, nil]
     attr_reader :identity
@@ -181,6 +184,12 @@ module Toggly
       (@app_key.nil? || @app_key.empty?) && !@defaults.empty?
     end
 
+    # Configuration-time identity only (e.g. inside +Toggly.configure+ before
+    # {Client} is constructed). Does not update an existing client's targeting
+    # identity — call {Client#set_identity} after initialization.
+    #
+    # @param value [String, nil]
+    # @return [String, nil]
     def identity=(value)
       @identity = normalize_identity(value)
     end

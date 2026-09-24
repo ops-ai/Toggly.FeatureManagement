@@ -360,6 +360,22 @@ RSpec.describe Toggly::Client do
         expect(seeded.get_variant("checkout-flow")&.reason).to eq("User")
       end
 
+      it "does not pick up Config#identity= after Client initialization" do
+        seeded = described_class.new(
+          app_key: app_key,
+          environment: environment,
+          disable_background_refresh: true,
+          identity: "carol"
+        )
+
+        seeded.config.identity = "alice"
+        expect(seeded.identity).to eq("carol")
+        expect(seeded.get_variant("checkout-flow")&.name).to eq("B")
+
+        seeded.set_identity("alice")
+        expect(seeded.get_variant("checkout-flow")&.name).to eq("A")
+      end
+
       it "uses Client#set_identity when context identity is blank" do
         client.set_identity("alice")
 

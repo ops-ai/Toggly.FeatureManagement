@@ -38,6 +38,12 @@ RSpec.describe Toggly::Config do
       expect(config.identity).to be_nil
     end
 
+    it "allows identity= during configuration before Client is built" do
+      config = described_class.new(app_key: "test")
+      config.identity = "configure-user"
+      expect(config.identity).to eq("configure-user")
+    end
+
     it "normalizes base_url to end with slash" do
       config = described_class.new(app_key: "test", base_url: "https://example.com")
       expect(config.base_url).to eq("https://example.com/")
