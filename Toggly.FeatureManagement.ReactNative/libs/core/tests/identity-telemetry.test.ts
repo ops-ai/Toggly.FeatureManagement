@@ -18,6 +18,68 @@ beforeEach(()=>{
   });
 });
 afterEach(()=>services.splice(0).forEach(t=>t.dispose()));
+it.each([false,true])('keeps reserved key and environment characters in path segments with inert pathname=%s',async inert=>{
+  const NativeURL=globalThis.URL;
+  class HermesURL extends NativeURL {
+    get pathname():string{return super.pathname}
+    set pathname(_path:string){/* React Native native URL may ignore assignment. */}
+  }
+  if(inert) globalThis.URL=HermesURL;
+  try {
+    (fetch as jest.Mock).mockImplementation(async(url:string,init:RequestInit)=>{
+      requests.push({url:new NativeURL(url),init});return response({On:true});
+    });
+    const t=client({appKey:'sample?token=broken#part',environment:'QA?stage#canary',baseURI:'https://user:secret@defs.test/base/?keep=one&keep=two#anchor',enableTelemetry:false});
+    await t.init();
+    expect(requests[0].url.pathname).toBe('/base/evaluated-signed/sample%3Ftoken=broken%23part/QA%3Fstage%23canary');
+    expect([...requests[0].url.searchParams]).toEqual([['keep','one'],['keep','two'],['u','alice']]);
+    expect(requests[0].url.username).toBe('user');
+    expect(requests[0].url.password).toBe('secret');
+    expect(requests[0].url.hash).toBe('#anchor');
+  } finally {globalThis.URL=NativeURL;}
+});
+it('constructs definitions and JWKS paths when Hermes ignores URL.pathname writes',async()=>{
+  const NativeURL=globalThis.URL;
+  class HermesURL extends NativeURL {
+    get pathname():string{return super.pathname}
+    set pathname(_path:string){/* Native React Native URL can ignore assignment. */}
+  }
+  globalThis.URL=HermesURL;
+  try {
+    (fetch as jest.Mock).mockImplementation(async(url:string)=>{
+      requests.push({url:new NativeURL(url),init:{}});
+      return url.includes('/.well-known/jwks')
+        ? {ok:true,status:200,json:async()=>({keys:[]})}
+        : response({On:true});
+    });
+    const t=client({baseURI:'https://defs.test/base/?keep=one&keep=two',enableTelemetry:false});
+    await t.init();
+    expect(requests[0].url.pathname).toBe('/base/evaluated-signed/native/Test');
+    expect(requests[0].url.searchParams.getAll('keep')).toEqual(['one','two']);
+    await (t as any).getJwks(new AbortController().signal,()=>true);
+    expect(requests[1].url.pathname).toBe('/base/.well-known/jwks');
+    expect(requests[1].url.searchParams.getAll('keep')).toEqual(['one','two']);
+  } finally {globalThis.URL=NativeURL;}
+});
+it('sends telemetry to the configured path when Hermes ignores pathname writes',async()=>{
+  const NativeURL=globalThis.URL;
+  class HermesURL extends NativeURL {
+    get pathname():string{return super.pathname}
+    set pathname(_path:string){/* Match the native URL implementation. */}
+  }
+  globalThis.URL=HermesURL;
+  try {
+    const posts:string[]=[];
+    (fetch as jest.Mock).mockImplementation(async(url:string,init:RequestInit)=>{
+      if(init.method==='POST'){posts.push(url);packets.push(JSON.parse(init.body as string));return {status:202};}
+      return response({On:true});
+    });
+    const t=client({metricsBaseUrl:'https://collector.test/nested/'});
+    await t.init();expect(await t.isFeatureOn('On')).toBe(true);await t.flushTelemetry();
+    expect(posts).toEqual(['https://collector.test/nested/api/frontend/telemetry']);
+    expect(packets).toEqual([{k:'native',e:'Test',u:'alice',f:{On:{enabled:[1]}}}]);
+  } finally {globalThis.URL=NativeURL;}
+});
 it('forwards minted context, scrubs inherited targeting, preserves repeated unrelated values and clears through identity',async()=>{
   const t=client({instanceId:' A ',baseURI:'https://defs.test/root/?u=old&userId=old&g=a&g=b&claim.role=old&i=retired&i=older&keep=one&keep=two',groups:['private'],claims:{role:'private'}});
   await t.init();t.recordUsage('A');

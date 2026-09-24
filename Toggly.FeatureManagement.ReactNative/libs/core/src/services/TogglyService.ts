@@ -781,10 +781,38 @@ export class TogglyService {
   /**
    * Build the API URL for fetching feature flags.
    */
+  private buildEndpointUrl(path: string): URL {
+    const base = new URL(this.config.baseURI);
+    // Hermes can ignore URL.pathname assignment. Construct the full URL so
+    // both definitions and JWKS retain the configured base path and query.
+    let credentials = '';
+    if (base.username || base.password) {
+      credentials = base.username;
+      if (base.password) credentials += `:${base.password}`;
+      credentials += '@';
+    }
+    // A pathname setter treats ? and # in app keys/environments as path data;
+    // in a complete URL they would instead begin a query or fragment.
+    const encodedPath = path.replace(/[?#]/g, character => character === '?' ? '%3F' : '%23');
+    let basePath = base.pathname;
+    while (basePath.endsWith('/')) basePath = basePath.slice(0, -1);
+    const endpoint = [
+      base.protocol,
+      '//',
+      credentials,
+      base.host,
+      basePath,
+      '/',
+      encodedPath,
+      base.search,
+      base.hash,
+    ].join('');
+    return new URL(endpoint);
+  }
+
   private buildApiUrl(): string {
-    const url = new URL(this.config.baseURI);
     const path = this.config.enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed';
-    url.pathname = `${url.pathname.replace(/\/+$/, '')}/${path}/${this.config.appKey}/${this.config.environment}`;
+    const url = this.buildEndpointUrl(`${path}/${this.config.appKey}/${this.config.environment}`);
     url.searchParams.delete('i');
     if (this.instanceId) {
       for (const key of [...url.searchParams.keys()]) {
@@ -995,8 +1023,7 @@ export class TogglyService {
       return JSON.parse(cached) as JwkSet;
     }
 
-    const url = new URL(this.config.baseURI);
-    url.pathname = `${url.pathname.replace(/\/+$/, '')}/.well-known/jwks`;
+    const url = this.buildEndpointUrl('.well-known/jwks');
     for (const key of [...url.searchParams.keys()]) {
       if (key === 'i' || key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) url.searchParams.delete(key);
     }
