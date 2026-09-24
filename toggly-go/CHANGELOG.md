@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.10.0
+
+2026-09-24
+
+### Added
+- `Config.Identity` and `Client.SetIdentity` / `Client.Identity` supply the
+  default targeting userId for `GetVariant` / `GetVariantValue` (and
+  `IsEnabled`) when neither ambient `WithEvalContext` nor a per-call
+  `Context` sets Identity. Groups still come only from ambient or per-call
+  Context [OPS-1407].
+
+### Changed
+- Prefer `GetVariant(r.Context(), key, Context{})` after HTTP middleware, or
+  `Config.Identity` / `SetIdentity` for workers — not a hand-built Identity
+  on every call.
+- User-Agent is `toggly-go/0.10.0`.
+
 ## 0.9.0
 
 2026-09-23

@@ -3,6 +3,7 @@ package toggly
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/eval"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/metrics"
@@ -37,6 +38,11 @@ type Client struct {
 	engine   *eval.Engine
 	registry *eval.Registry
 
+	// identity is the mutable default targeting userId (from Config.Identity,
+	// overridable via SetIdentity). Guarded by identityMu.
+	identityMu sync.RWMutex
+	identity   string
+
 	usage   *usage.Client
 	metrics *metrics.Client
 }
@@ -51,7 +57,7 @@ func NewClient(cfg Config) (*Client, error) {
 	p := newDefinitionsProvider(cfg, cfg.SnapshotProvider)
 	reg := eval.DefaultRegistry()
 	eng := eval.NewEngine(reg)
-	c := &Client{cfg: cfg, provider: p, engine: eng, registry: reg}
+	c := &Client{cfg: cfg, provider: p, engine: eng, registry: reg, identity: cfg.Identity}
 
 	ua := SDKUserAgent()
 	if cfg.EnableUsage {
@@ -94,10 +100,15 @@ func NewClient(cfg Config) (*Client, error) {
 // DefaultWhenEnabled). Returns nil when the feature is unknown or has no
 // Variants configured.
 //
-// When ctx carries ambient evaluation context (via WithEvalContext /
-// togglyctx.With), empty or nil per-call evalCtx fields are filled from
-// ambient; non-empty per-call fields win. Pass a non-empty evalCtx.Identity /
-// evalCtx.Groups explicitly for per-request targeting.
+// Targeting identity resolution (first non-empty wins):
+//  1. per-call evalCtx.Identity
+//  2. ambient WithEvalContext / togglyctx.With on ctx
+//  3. Config.Identity / Client.SetIdentity
+//
+// Groups come only from ambient or per-call Context (never Config). Prefer
+// GetVariant(r.Context(), key, Context{}) after HTTP middleware, or
+// SetIdentity / Config.Identity for non-HTTP hosts — not a hand-built
+// Identity on every call.
 func (c *Client) GetVariant(ctx context.Context, featureKey string, evalCtx Context) (*VariantResult, error) {
 	if featureKey == "" {
 		return nil, errors.New("toggly: featureKey is required")
@@ -106,7 +117,7 @@ func (c *Client) GetVariant(ctx context.Context, featureKey string, evalCtx Cont
 		return nil, nil
 	}
 
-	evalCtx = ResolveEvalContext(ctx, evalCtx)
+	evalCtx = c.resolveTargetingContext(ctx, evalCtx)
 
 	def, ok := c.provider.get(featureKey)
 	if !ok || len(def.Variants) == 0 {
@@ -153,6 +164,42 @@ func (c *Client) GetVariantValue(ctx context.Context, featureKey string, evalCtx
 	return v.ConfigurationValue, nil
 }
 
+// SetIdentity updates the client's default targeting userId used when neither
+// ambient nor per-call Context supplies Identity.
+func (c *Client) SetIdentity(identity string) {
+	if c == nil {
+		return
+	}
+	c.identityMu.Lock()
+	c.identity = identity
+	c.identityMu.Unlock()
+}
+
+// Identity returns the client's current default targeting userId.
+func (c *Client) Identity() string {
+	if c == nil {
+		return ""
+	}
+	c.identityMu.RLock()
+	defer c.identityMu.RUnlock()
+	return c.identity
+}
+
+// resolveTargetingContext merges ambient → per-call, then fills empty Identity
+// from the client default (Config.Identity / SetIdentity).
+func (c *Client) resolveTargetingContext(ctx context.Context, perCall Context) Context {
+	merged := ResolveEvalContext(ctx, perCall)
+	if merged.Identity == "" && c != nil {
+		c.identityMu.RLock()
+		id := c.identity
+		c.identityMu.RUnlock()
+		if id != "" {
+			merged.Identity = id
+		}
+	}
+	return merged
+}
+
 // Close stops background refresh (if enabled) and closes optional gRPC clients.
 func (c *Client) Close() error {
 	if c.provider != nil {
@@ -176,7 +223,7 @@ func (c *Client) IsEnabled(ctx context.Context, featureKey string, evalCtx Conte
 		return false, errors.New("toggly: featureKey is required")
 	}
 
-	evalCtx = ResolveEvalContext(ctx, evalCtx)
+	evalCtx = c.resolveTargetingContext(ctx, evalCtx)
 
 	def, ok := c.provider.get(featureKey)
 	if !ok {

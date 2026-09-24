@@ -30,6 +30,13 @@ type Config struct {
 	// matching Microsoft.FeatureManagement's own default.
 	VariantIgnoreCase bool
 
+	// Identity is the default targeting userId for GetVariant / GetVariantValue
+	// (and filter evaluation) when neither ambient WithEvalContext nor a
+	// per-call Context supplies Identity. Mutable at runtime via
+	// Client.SetIdentity. Groups are never taken from Config — only from
+	// ambient or per-call Context.
+	Identity string
+
 	AppVersion   string
 	InstanceName string
 
