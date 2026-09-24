@@ -119,25 +119,46 @@ Report vulnerabilities privately via [GitHub Private Vulnerability Reporting](ht
 
 ## Feature variants
 
-`GetVariant` / `GetVariantValue` require **v0.9.0**. Variants are assigned
-**locally**, from the same cached definitions catalog `IsEnabled` already
-uses — there is no separate network call and no client-wide identity to set.
-The allocator replays Microsoft.FeatureManagement 4.7.0's
+`GetVariant` / `GetVariantValue` require **v0.10.0** (catalog-local
+assignment since v0.9.0). Variants are assigned **locally** from the same
+cached definitions catalog `IsEnabled` already uses — no separate network
+call. The allocator replays Microsoft.FeatureManagement 4.7.0's
 `FeatureManager.GetVariantAsync` bit-for-bit: disabled features resolve
 `DefaultWhenDisabled` only; enabled features check User → Group → Percentile
 → `DefaultWhenEnabled`, in that order.
 
+**Identity precedence** (first non-empty wins): per-call `Context.Identity`
+→ ambient `WithEvalContext` / `togglyctx` → `Config.Identity` /
+`Client.SetIdentity`. Groups come only from ambient or per-call Context.
+
+### HTTP / middleware (preferred)
+
+After `togglyhttp` (or any middleware that stores eval context on
+`r.Context()`), pass an empty per-call Context:
+
 ```go
-variant, err := client.GetVariant(ctx, "checkout-flow", toggly.Context{
-    Identity: "user-123",
-    Groups:   []string{"beta", "subscribers"},
-})
+variant, err := client.GetVariant(r.Context(), "checkout-flow", toggly.Context{})
 if err != nil {
     return err
 }
 if variant != nil {
     fmt.Println(variant.Name, variant.ConfigurationValue, variant.Enabled)
 }
+```
+
+### CLI / worker
+
+Set identity once at startup (or when the user session begins):
+
+```go
+client, err := toggly.NewClient(toggly.Config{
+    AppKey:      "YOUR_APP_KEY",
+    Environment: "Production",
+    Identity:    "user-123", // optional default
+})
+// ...
+client.SetIdentity("user-123")
+variant, err := client.GetVariant(ctx, "checkout-flow", toggly.Context{})
 ```
 
 `GetVariant` returns `nil, nil` when the feature is unknown or has no
@@ -147,12 +168,11 @@ plain `IsEnabled` call, which never applies `StatusOverride`. Use
 `GetVariantValue` as a shortcut when you only need the configuration payload:
 
 ```go
-value, err := client.GetVariantValue(ctx, "checkout-flow", toggly.Context{Identity: "user-123"})
+value, err := client.GetVariantValue(r.Context(), "checkout-flow", toggly.Context{})
 ```
 
-Like `IsEnabled`, `GetVariant` resolves ambient evaluation context set via
-`toggly.WithEvalContext` (or `togglyctx`); empty per-call `Context` fields
-fall back to ambient, non-empty per-call fields win.
+Pass a non-empty per-call `Context` only when you need to **override** ambient
+or client identity for that call (e.g. impersonation).
 
 Set `Config.VariantIgnoreCase: true` to match user/group targeting names
 case-insensitively (mirrors Microsoft.FeatureManagement's
