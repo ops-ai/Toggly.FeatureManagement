@@ -8,7 +8,7 @@ vi.stubGlobal('fetch', mockFetch);
 const SDK_FETCH_OPTIONS = expect.objectContaining({
   headers: expect.objectContaining({
     'X-Toggly-Sdk': 'vue',
-    'X-Toggly-Sdk-Version': '1.10.0',
+    'X-Toggly-Sdk-Version': '1.11.0',
   }),
 });
 

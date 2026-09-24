@@ -4,7 +4,7 @@ import { Toggly, type TogglyOptions } from '../services/toggly.service';
 const SDK_FETCH_OPTIONS = expect.objectContaining({
   headers: expect.objectContaining({
     'X-Toggly-Sdk': 'svelte',
-    'X-Toggly-Sdk-Version': '1.4.1',
+    'X-Toggly-Sdk-Version': '1.12.0',
   }),
 });
 
