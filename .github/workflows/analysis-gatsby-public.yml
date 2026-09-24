@@ -1,0 +1,44 @@
+name: Public Gatsby browser acceptance
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - 'Toggly.FeatureManagement.Gatsby/tests/fixtures/public-gatsby-consumer/**'
+      - '.github/workflows/analysis-gatsby-public.yml'
+  pull_request:
+    paths:
+      - 'Toggly.FeatureManagement.Gatsby/tests/fixtures/public-gatsby-consumer/**'
+      - '.github/workflows/analysis-gatsby-public.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: gatsby-public-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-gatsby:
+    runs-on: ubuntu-latest
+    env:
+      GATSBY_TELEMETRY_DISABLED: '1'
+      GATSBY_FEEDBACK_DISABLED: '1'
+    defaults:
+      run:
+        working-directory: Toggly.FeatureManagement.Gatsby/tests/fixtures/public-gatsby-consumer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.23.2
+          cache: npm
+          cache-dependency-path: Toggly.FeatureManagement.Gatsby/tests/fixtures/public-gatsby-consumer/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install chromium
+      - run: npm run test:cleanup
+      - run: npm run test:e2e
