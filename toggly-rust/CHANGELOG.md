@@ -18,9 +18,9 @@
   `set_identity` [OPS-1407].
 - HTTP adapters: request-scoped `Feature` continues to extract identity from
   headers into `EvalContext`; call
-  `feature.client().get_variant(key, feature.context().clone())` so empty
-  ambient identity falls through to config / `set_identity`. Actix `Feature`
-  now exposes `client()` for that pattern [OPS-1407].
+  `client.get_variant(key, feature.context().clone())` (Actix: pair with
+  `TogglyData`, which derefs to the client) so empty ambient identity falls
+  through to config / `set_identity` [OPS-1407].
 
 ## 0.7.0
 

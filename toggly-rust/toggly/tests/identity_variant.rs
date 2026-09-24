@@ -125,3 +125,34 @@ async fn identity_round_trip() {
     assert!(client.identity().is_none());
     client.close().await;
 }
+
+#[tokio::test]
+async fn client_builder_identity_feeds_get_variant() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path_regex(r"^/definitions/"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(checkout_flow_body()))
+        .mount(&server)
+        .await;
+
+    let client = TogglyClient::builder()
+        .app_key("test-app")
+        .environment("Production")
+        .definitions_url(format!("{}/", server.uri()))
+        .use_signed_definitions(false)
+        .disable_background_refresh(true)
+        .enable_live_updates(false)
+        .enable_usage_tracking(false)
+        .enable_metrics(false)
+        .identity("alice")
+        .build()
+        .await
+        .expect("client");
+
+    let assignment = client
+        .get_variant("checkout-flow", EvalContext::default())
+        .await
+        .expect("variant");
+    assert_eq!(assignment.variant_name.as_deref(), Some("A"));
+    client.close().await;
+}

@@ -399,6 +399,18 @@ mod tests {
     }
 
     #[test]
+    fn test_identity_on_config_debug() {
+        let config = TogglyConfig::builder()
+            .app_key("test-key")
+            .identity("user-42")
+            .build();
+        assert_eq!(config.identity.as_deref(), Some("user-42"));
+        let rendered = format!("{config:?}");
+        assert!(rendered.contains("identity"));
+        assert!(rendered.contains("user-42"));
+    }
+
+    #[test]
     fn test_validate() {
         let config = TogglyConfig::default();
         assert!(config.validate().is_err());

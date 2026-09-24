@@ -132,11 +132,6 @@ impl Feature {
         !self.is_enabled(feature_key).await
     }
 
-    /// Underlying client (for `get_variant` with [`Self::context`]).
-    pub fn client(&self) -> &TogglyClient {
-        self.client.get_ref()
-    }
-
     /// Get the underlying context.
     pub fn context(&self) -> &EvalContext {
         &self.context
