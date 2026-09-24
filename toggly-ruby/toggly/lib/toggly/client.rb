@@ -172,31 +172,7 @@ module Toggly
 
       return nil if value.nil?
 
-      begin
-        if block
-          block.call(value)
-        elsif !as.nil? && value.is_a?(as)
-          value
-        elsif as.respond_to?(:new) && value.is_a?(Hash)
-          as.new(**value.transform_keys(&:to_sym))
-        elsif as.respond_to?(:json_create) && value.is_a?(Hash)
-          as.json_create(value)
-        elsif as == Hash && value.is_a?(Hash)
-          value
-        elsif as == String
-          value.is_a?(String) ? value : nil
-        elsif as == Integer
-          value.is_a?(Integer) && !value.is_a?(TrueClass) && !value.is_a?(FalseClass) ? value : nil
-        elsif as == Float
-          value.is_a?(Numeric) && !value.is_a?(TrueClass) && !value.is_a?(FalseClass) ? value.to_f : nil
-        elsif as == TrueClass || as == FalseClass || as == :boolean
-          [true, false].include?(value) ? value : nil
-        else
-          nil
-        end
-      rescue StandardError
-        nil
-      end
+      decode_variant_configuration(value, as, &block)
     end
 
     # Default targeting userId used by {#get_variant} / {#get_variant_value}
@@ -378,6 +354,28 @@ module Toggly
     end
 
     private
+
+    def decode_variant_configuration(value, as, &block)
+      if block
+        block.call(value)
+      elsif !as.nil? && value.is_a?(as)
+        value
+      elsif as.respond_to?(:new) && value.is_a?(Hash)
+        as.new(**value.transform_keys(&:to_sym))
+      elsif as.respond_to?(:json_create) && value.is_a?(Hash)
+        as.json_create(value)
+      elsif as == String
+        value.is_a?(String) ? value : nil
+      elsif as == Integer
+        value.is_a?(Integer) && !value.is_a?(TrueClass) && !value.is_a?(FalseClass) ? value : nil
+      elsif as == Float
+        value.is_a?(Numeric) && !value.is_a?(TrueClass) && !value.is_a?(FalseClass) ? value.to_f : nil
+      elsif [TrueClass, FalseClass, :boolean].include?(as)
+        [true, false].include?(value) ? value : nil
+      end
+    rescue StandardError
+      nil
+    end
 
     # `definitions` / `definitions-signed` → local rule eval. The sole
     # source of truth for `enabled?`; also carries `variants` / `allocation`

@@ -161,12 +161,14 @@ async fn get_variant_value_as_scalar() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path_regex(r"^/definitions/"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([{
-            "featureKey": "banner",
-            "filters": [{"name": "AlwaysOn"}],
-            "variants": [{"name": "A", "configurationValue": "hello"}],
-            "allocation": {"defaultWhenEnabled": "A"}
-        }])))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!([{
+                "featureKey": "banner",
+                "filters": [{"name": "AlwaysOn"}],
+                "variants": [{"name": "A", "configurationValue": "hello"}],
+                "allocation": {"defaultWhenEnabled": "A"}
+            }])),
+        )
         .mount(&server)
         .await;
 

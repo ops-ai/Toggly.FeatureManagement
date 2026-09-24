@@ -14,7 +14,7 @@ import {
 describe('ws-sync', () => {
   it('buildWebSocketUrl appends rev and sdk query params', () => {
     expect(buildWebSocketUrl('https://definitions.toggly.io', 'app-key', 'abc123'))
-      .toBe('wss://definitions.toggly.io/app-key/ws?rev=abc123&sdk=angular&sdkVersion=2.2.1');
+      .toBe('wss://definitions.toggly.io/app-key/ws?rev=abc123&sdk=angular&sdkVersion=2.10.0');
   });
 
   it('getNextReconnectDelayMs caps at max delay', () => {
@@ -47,7 +47,7 @@ describe('ws-sync', () => {
 
   it('buildWebSocketUrl works without cached revision', () => {
     expect(buildWebSocketUrl('https://definitions.toggly.io', 'app-key', null))
-      .toBe('wss://definitions.toggly.io/app-key/ws?sdk=angular&sdkVersion=2.2.1');
+      .toBe('wss://definitions.toggly.io/app-key/ws?sdk=angular&sdkVersion=2.10.0');
   });
 
   it('shouldFetchOnSigningKeyUpdated detects rotation', () => {

@@ -1005,12 +1005,12 @@ describe('TogglyService', () => {
 
     it('should use wss:// for https:// baseURI', async () => {
       await createWsService('https://custom.io');
-      expect(mockWs.url).toBe('wss://custom.io/key/ws?sdk=angular&sdkVersion=2.2.1');
+      expect(mockWs.url).toBe('wss://custom.io/key/ws?sdk=angular&sdkVersion=2.10.0');
     });
 
     it('should use ws:// for http:// baseURI', async () => {
       await createWsService('http://local');
-      expect(mockWs.url).toBe('ws://local/key/ws?sdk=angular&sdkVersion=2.2.1');
+      expect(mockWs.url).toBe('ws://local/key/ws?sdk=angular&sdkVersion=2.10.0');
     });
 
     it('should handle WebSocket constructor throw', async () => {

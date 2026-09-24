@@ -674,13 +674,13 @@ describe('Toggly Service', () => {
       const s = createWsService({ appKey: 'mykey', environment: 'Prod' });
       s.startWebSocket();
       expect(mockWsInstances).toHaveLength(1);
-      expect(mockWsInstances[0].url).toBe('wss://definitions.toggly.io/mykey/ws?sdk=vue&sdkVersion=1.10.0');
+      expect(mockWsInstances[0].url).toBe('wss://definitions.toggly.io/mykey/ws?sdk=vue&sdkVersion=1.11.0');
     });
 
     it('should build ws:// URL from http:// baseURI', () => {
       const s = createWsService({ appKey: 'mykey', baseURI: 'http://local.test', environment: 'Prod' });
       s.startWebSocket();
-      expect(mockWsInstances[0].url).toBe('ws://local.test/mykey/ws?sdk=vue&sdkVersion=1.10.0');
+      expect(mockWsInstances[0].url).toBe('ws://local.test/mykey/ws?sdk=vue&sdkVersion=1.11.0');
     });
 
     it('should set _wsConnected on onopen', () => {

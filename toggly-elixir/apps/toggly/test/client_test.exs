@@ -140,18 +140,23 @@ defmodule Toggly.ClientTest do
 
     assert %CheckoutConfig{color: "blue"} =
              Toggly.get_variant_value(VariantFlags, "checkout-flow", %{"identity" => "alice"},
-               as: CheckoutConfig)
+               as: CheckoutConfig
+             )
 
     assert "blue" =
              Toggly.get_variant_value(VariantFlags, "checkout-flow", %{"identity" => "alice"},
-               as: fn %{"color" => color} -> color end)
+               as: fn %{"color" => color} -> color end
+             )
 
     assert is_nil(
              Toggly.get_variant_value(VariantFlags, "checkout-flow", %{"identity" => "alice"},
-               as: :not_a_decoder)
+               as: :not_a_decoder
+             )
            )
 
-    assert is_nil(Toggly.get_variant_value(VariantFlags, "missing-feature", %{}, as: CheckoutConfig))
+    assert is_nil(
+             Toggly.get_variant_value(VariantFlags, "missing-feature", %{}, as: CheckoutConfig)
+           )
 
     assert %Toggly.Variant.Assignment{variant_name: nil, enabled: false} =
              Toggly.get_variant(VariantFlags, "missing-feature")

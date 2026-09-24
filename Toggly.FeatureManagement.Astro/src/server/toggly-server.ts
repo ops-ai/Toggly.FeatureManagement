@@ -36,8 +36,8 @@ import {
   parseEvaluatedResponseBody,
   readResponseBody,
 } from '../signed-response.js';
-import {
 import { decodeVariantValue } from '../utils/decode-variant-value.js';
+import {
   UsageTelemetryRuntime,
   resolveTelemetryEnableFlag,
   type UsageSender,
