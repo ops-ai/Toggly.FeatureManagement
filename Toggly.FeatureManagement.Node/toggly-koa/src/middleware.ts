@@ -130,9 +130,12 @@ export function togglyMiddleware(config: TogglyKoaConfig): Middleware {
       isFeatureOff: (featureKey: string) => koaClient!.isFeatureOff(featureKey, evalContext),
       evaluateFeatureGate: (featureKeys, requirement, negate) =>
         koaClient!.evaluateFeatureGate(featureKeys, requirement, negate, evalContext),
-      getVariant: (featureKey: string) => koaClient!.getVariant(featureKey, evalContext),
-      getVariantValue: (featureKey: string) =>
-        koaClient!.getVariantValue(featureKey, evalContext),
+      getVariant(featureKey: string) {
+        return koaClient!.getVariant(featureKey, evalContext)
+      },
+      getVariantValue(featureKey: string) {
+        return koaClient!.getVariantValue(featureKey, evalContext)
+      },
     }
 
     await next()

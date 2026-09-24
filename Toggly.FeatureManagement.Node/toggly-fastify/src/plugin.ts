@@ -136,9 +136,12 @@ const togglyPluginAsync: FastifyPluginAsync<TogglyFastifyConfig> = async (
       isFeatureOff: (featureKey: string) => fastifyClient!.isFeatureOff(featureKey, context),
       evaluateFeatureGate: (featureKeys, requirement, negate) =>
         fastifyClient!.evaluateFeatureGate(featureKeys, requirement, negate, context),
-      getVariant: (featureKey: string) => fastifyClient!.getVariant(featureKey, context),
-      getVariantValue: (featureKey: string) =>
-        fastifyClient!.getVariantValue(featureKey, context),
+      async getVariant(featureKey: string) {
+        return fastifyClient!.getVariant(featureKey, context)
+      },
+      async getVariantValue(featureKey: string) {
+        return fastifyClient!.getVariantValue(featureKey, context)
+      },
     }
   })
 
