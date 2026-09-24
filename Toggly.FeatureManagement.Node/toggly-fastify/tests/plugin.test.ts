@@ -278,6 +278,48 @@ describe('togglyPlugin', () => {
     })
   })
 
+  it('should resolve getVariant from ambient x-toggly-identity without handler context', async () => {
+    const checkoutFlow = {
+      featureKey: 'checkout-flow',
+      filters: [{ name: 'AlwaysOn', parameters: {} }],
+      variants: [
+        { name: 'A', configurationValue: { color: 'blue' } },
+        { name: 'B', configurationValue: { color: 'green' } },
+      ],
+      allocation: {
+        defaultWhenEnabled: 'B',
+        user: [{ variant: 'A', users: ['alice'] }],
+      },
+    }
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Map(),
+      json: async () => [checkoutFlow],
+      text: async () => JSON.stringify([checkoutFlow]),
+    })
+
+    await app.register(togglyPlugin, { appKey: 'test-app' })
+
+    app.get('/test', async request => {
+      expect(request.toggly!.identity).toBe('alice')
+      expect(await request.toggly!.getVariant('checkout-flow')).toEqual({
+        name: 'A',
+        configurationValue: { color: 'blue' },
+      })
+      expect(await request.toggly!.getVariantValue('checkout-flow')).toEqual({ color: 'blue' })
+      return { success: true }
+    })
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/test',
+      headers: { 'x-toggly-identity': 'alice' },
+    })
+
+    expect(response.statusCode).toBe(200)
+  })
+
   it('should gracefully degrade when fetch fails', async () => {
     mockFetch.mockRejectedValue(new Error('Network error'))
 

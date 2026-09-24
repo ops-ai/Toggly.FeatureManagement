@@ -267,6 +267,45 @@ describe('togglyMiddleware', () => {
     expect(await toggly.evaluateFeatureGate(['feature-a', 'feature-b'], 'any')).toBe(true)
   })
 
+  it('should resolve getVariant from ambient x-toggly-identity without handler context', async () => {
+    const checkoutFlow = {
+      featureKey: 'checkout-flow',
+      filters: [{ name: 'AlwaysOn', parameters: {} }],
+      variants: [
+        { name: 'A', configurationValue: { color: 'blue' } },
+        { name: 'B', configurationValue: { color: 'green' } },
+      ],
+      allocation: {
+        defaultWhenEnabled: 'B',
+        user: [{ variant: 'A', users: ['alice'] }],
+      },
+    }
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Map(),
+      json: async () => [checkoutFlow],
+      text: async () => JSON.stringify([checkoutFlow]),
+    })
+
+    const middleware = togglyMiddleware({ appKey: 'test-app' })
+    const req = createMockRequest({
+      headers: { 'x-toggly-identity': 'alice' },
+    })
+    const res = createMockResponse()
+    const next = vi.fn()
+
+    await middleware(req, res, next)
+
+    const toggly = (req as TogglyRequest).toggly!
+    expect(toggly.identity).toBe('alice')
+    expect(await toggly.getVariant('checkout-flow')).toEqual({
+      name: 'A',
+      configurationValue: { color: 'blue' },
+    })
+    expect(await toggly.getVariantValue('checkout-flow')).toEqual({ color: 'blue' })
+  })
+
   it('should use custom error handler for middleware errors', async () => {
     const onError = vi.fn()
 
