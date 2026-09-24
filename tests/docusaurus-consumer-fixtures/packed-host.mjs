@@ -30,6 +30,20 @@ const sdk = join(
 );
 const currentDocusaurus = '3.10.2';
 const currentReact = '19.3.0';
+
+function assertCaretRangeContains(range, version, label) {
+  const base = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(range);
+  const actual = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+  assert.ok(base, `${label} must declare a simple caret range`);
+  assert.ok(actual, `${label} must resolve to a stable semantic version`);
+  const [, baseMajor, baseMinor, basePatch] = base.map(Number);
+  const [, major, minor, patch] = actual.map(Number);
+  assert.equal(major, baseMajor, `${label} must stay within its caret major`);
+  assert.ok(
+    minor > baseMinor || (minor === baseMinor && patch >= basePatch),
+    `${label} ${version} must satisfy ${range}`
+  );
+}
 let temporary, host, own;
 let browser;
 let sockets;
@@ -324,16 +338,29 @@ if (!process.env.TOGGLY_DOCUSAURUS_WORKER) {
       assert(value.integrity, key + ' has maintained registry integrity');
     }
   }
-  assert.equal(
-    lock.packages['node_modules/@ops-ai/toggly-client-telemetry'].version,
-    '1.1.0'
+  const reporter = lock.packages['node_modules/@ops-ai/toggly-client-telemetry'];
+  const pluginManifest = JSON.parse(
+    readFileSync(join(host, 'node_modules/@ops-ai/toggly-docusaurus-plugin/package.json'))
   );
+  assertCaretRangeContains(
+    pluginManifest.dependencies['@ops-ai/toggly-client-telemetry'],
+    reporter.version,
+    'Docusaurus plugin reporter dependency'
+  );
+  assert(
+    reporter.resolved?.startsWith('https://registry.npmjs.org/'),
+    'shared reporter must resolve from public npm'
+  );
+  assert(reporter.integrity, 'shared reporter must retain registry integrity');
   console.log(
     'PACKED_DOCUSAURUS_REGISTRY',
     JSON.stringify({
       archive: packed.shasum,
       integrity: packed.integrity,
-      reporter: '1.1.0',
+      reporter: reporter.version,
+      reporterRange: pluginManifest.dependencies['@ops-ai/toggly-client-telemetry'],
+      reporterResolved: reporter.resolved,
+      reporterIntegrity: reporter.integrity,
     })
   );
   const config = {

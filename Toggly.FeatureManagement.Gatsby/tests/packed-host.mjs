@@ -21,6 +21,20 @@ if (reporterTarball) {
 }
 const currentGatsby = '5.16.1';
 
+function assertCaretRangeContains(range, version, label) {
+  const base = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(range);
+  const actual = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+  assert.ok(base, `${label} must declare a simple caret range`);
+  assert.ok(actual, `${label} must resolve to a stable semantic version`);
+  const [, baseMajor, baseMinor, basePatch] = base.map(Number);
+  const [, major, minor, patch] = actual.map(Number);
+  assert.equal(major, baseMajor, `${label} must stay within its caret major`);
+  assert.ok(
+    minor > baseMinor || (minor === baseMinor && patch >= basePatch),
+    `${label} ${version} must satisfy ${range}`,
+  );
+}
+
 function run(command, args, options = {}) {
   console.log('GATSBY_HOST_COMMAND', command, args.join(' '));
   return runOwnedCommand(command, args, {
@@ -441,7 +455,6 @@ try {
     'npm',
     [
       'install',
-      '--no-package-lock',
       `gatsby@${currentGatsby}`,
       'react@18.3.1',
       'react-dom@18.3.1',
@@ -457,15 +470,32 @@ try {
     (await run(process.execPath, ['-p', "require('gatsby/package.json').version"], { cwd: host })).trim(),
     currentGatsby,
   );
-  assert.equal(
-    JSON.parse(
-      readFileSync(
-        join(host, 'node_modules', '@ops-ai', 'toggly-client-telemetry', 'package.json'),
-        'utf8',
-      ),
-    ).version,
-    '1.1.0',
+  const reporter = JSON.parse(
+    readFileSync(
+      join(host, 'node_modules', '@ops-ai', 'toggly-client-telemetry', 'package.json'),
+      'utf8',
+    ),
   );
+  const installedSdk = JSON.parse(
+    readFileSync(
+      join(host, 'node_modules', '@ops-ai', 'gatsby-feature-flags-toggly', 'package.json'),
+      'utf8',
+    ),
+  );
+  assertCaretRangeContains(
+    installedSdk.dependencies['@ops-ai/toggly-client-telemetry'],
+    reporter.version,
+    'Gatsby SDK reporter dependency',
+  );
+  const reporterLock = JSON.parse(readFileSync(join(host, 'package-lock.json'), 'utf8'));
+  const reporterProvenance = reporterLock.packages['node_modules/@ops-ai/toggly-client-telemetry'];
+  if (!reporterTarball) {
+    assert.ok(
+      reporterProvenance.resolved?.startsWith('https://registry.npmjs.org/'),
+      'shared reporter must resolve from public npm',
+    );
+    assert.ok(reporterProvenance.integrity, 'shared reporter must retain registry integrity');
+  }
   console.log('PACKED_GATSBY_REGISTRY_GRAPH', await run('npm', ['ls', '@ops-ai/toggly-client-telemetry', '@ops-ai/toggly-hooks-types', '@ops-ai/toggly-signed-defs', '--json'], { cwd: host }));
   await run(join(host, 'node_modules', '.bin', 'playwright'), ['install', 'chromium'], {
     cwd: host,
@@ -712,7 +742,21 @@ try {
   assert.ok(requests.includes('/definitions-signed/gatsby-current-host/Production'));
   assert.ok(requests.includes('/evaluated-signed/gatsby-current-host/Production'));
   assert.ok(requests.includes('/.well-known/jwks'));
-  console.log(`PACKED_GATSBY_HOST_PASS ${JSON.stringify({ gatsby: currentGatsby, react: '18.3.1', reporter: '1.1.0', typescript: '5.3.3', playwright: '1.58.2', chromium: browser.version(), node: process.version, actualEnvelopes: telemetryRequests.length })}`);
+  console.log(
+    `PACKED_GATSBY_HOST_PASS ${JSON.stringify({
+      gatsby: currentGatsby,
+      react: '18.3.1',
+      reporter: reporter.version,
+      reporterRange: installedSdk.dependencies['@ops-ai/toggly-client-telemetry'],
+      reporterResolved: reporterProvenance.resolved,
+      reporterIntegrity: reporterProvenance.integrity,
+      typescript: '5.3.3',
+      playwright: '1.58.2',
+      chromium: browser.version(),
+      node: process.version,
+      actualEnvelopes: telemetryRequests.length,
+    })}`,
+  );
 } catch (error) { failure = error; }
 await cleanupOwned([
   () => browser && bounded(() => browser.close(), 'Browser connection close'),
