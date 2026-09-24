@@ -5,7 +5,7 @@ Recorded: 2026-09-24
 Companion docs:
 
 - [nuget-signing-status.md](nuget-signing-status.md) — NuGet Key Vault
-  signing and Authenticode gate
+  signing and Authenticode status
 - [npm-governance-status.md](npm-governance-status.md) — npm org and
   Trusted Publisher human gates
 - [npm-packages.json](npm-packages.json) — per-package `oidcReady`
@@ -16,7 +16,8 @@ Companion docs:
 |-----------|-----------|---------------------|--------|
 | NuGet | 18 `Toggly.*` packages (`sdk-dotnet-release.yml`) | Azure Key Vault `NuGetKeyVaultSignTool` on `*.nupkg` + `*.snupkg` | **Signed** |
 | NuGet / CLI release assets | GitHub Release `SHA256SUMS` + `.asc` | GPG-signed checksums | **Signed** |
-| Authenticode | DLLs / Windows `toggly-cli.exe` | Not enabled | **Gated** — needs Code Signing EKU on `NUGET_SIGN_CERTIFICATE` |
+| Authenticode | Windows `toggly-cli.exe` (`cli-build-release.yml`) | Azure Key Vault `AzureSignTool` (GlobalSign Code Signing) | **Signed** |
+| Authenticode | Packed .NET DLLs | Not enabled | **Intentional gap** — NuGet signatures cover library consumers |
 | npm `@ops-ai/*` | 40 inventoried packages | OIDC Trusted Publisher + `--provenance` | **Ready** — all inventoried packages `oidcReady: true` |
 | Maven Central (Java / Android) | Java + Android SDKs | GPG-signed artifacts | **Signed** |
 | PyPI | Python packages | Trusted publishing / OIDC attestations | **Acceptable** |
@@ -30,16 +31,16 @@ Companion docs:
 
 - macOS notarization / Apple notarize
 - Linux package-manager signing (deb/rpm)
+- Authenticode on NuGet-packed DLLs
 - New certificates or secret stores for NuGet / Authenticode
 - Revoking npm tokens until every inventoried package has a verified
   OIDC publish (see npm governance)
 
-## Authenticode (human gate)
+## Authenticode (Windows CLI)
 
-Do **not** wire `AzureSignTool` into `sdk-dotnet-release.yml` or
-`cli-build-release.yml` until a human confirms the existing Key Vault
-certificate `NUGET_SIGN_CERTIFICATE` has Extended Key Usage OID
-`1.3.6.1.5.5.7.3.3` (Code Signing). Details:
+Enabled 2026-09-24 after confirming the issued `NUGET_SIGN_CERTIFICATE`
+leaf has Code Signing EKU (GlobalSign GCC R45 CodeSigning CA 2020,
+Opsai LLC). Same `NUGET_SIGN_*` secrets as NuGet signing. Details:
 [nuget-signing-status.md](nuget-signing-status.md).
 
 ## npm Trusted Publishing

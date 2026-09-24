@@ -134,6 +134,68 @@ jobs:
             exit 1
           fi
 
+      - name: Install AzureSignTool
+        if: matrix.rid == 'win-x64'
+        shell: bash
+        run: |
+          dotnet tool install --global AzureSignTool
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Sign Windows CLI with Authenticode
+        if: matrix.rid == 'win-x64'
+        shell: bash
+        env:
+          AZURE_KEY_VAULT_URL: ${{ secrets.NUGET_SIGN_VAULT_URL }}
+          AZURE_KEY_VAULT_CLIENT_ID: ${{ secrets.NUGET_SIGN_CLIENT_ID }}
+          AZURE_KEY_VAULT_CLIENT_SECRET: ${{ secrets.NUGET_SIGN_CLIENT_SECRET }}
+          AZURE_KEY_VAULT_TENANT_ID: ${{ secrets.NUGET_SIGN_TENANT_ID }}
+          AZURE_KEY_VAULT_CERTIFICATE: ${{ secrets.NUGET_SIGN_CERTIFICATE }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for required in \
+            AZURE_KEY_VAULT_URL \
+            AZURE_KEY_VAULT_CLIENT_ID \
+            AZURE_KEY_VAULT_CLIENT_SECRET \
+            AZURE_KEY_VAULT_TENANT_ID \
+            AZURE_KEY_VAULT_CERTIFICATE
+          do
+            if [ -z "${!required}" ]; then
+              echo "Missing required NUGET_SIGN_* secret mapped to $required"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+          EXE="./publish/${{ matrix.rid }}/${{ matrix.binary-name }}"
+          test -f "$EXE"
+
+          AzureSignTool sign \
+            --azure-key-vault-url "$AZURE_KEY_VAULT_URL" \
+            --azure-key-vault-client-id "$AZURE_KEY_VAULT_CLIENT_ID" \
+            --azure-key-vault-client-secret "$AZURE_KEY_VAULT_CLIENT_SECRET" \
+            --azure-key-vault-tenant-id "$AZURE_KEY_VAULT_TENANT_ID" \
+            --azure-key-vault-certificate "$AZURE_KEY_VAULT_CERTIFICATE" \
+            --file-digest sha256 \
+            --timestamp-rfc3161 http://timestamp.digicert.com \
+            --timestamp-digest sha256 \
+            --description "Toggly CLI" \
+            --description-url "https://docs.toggly.io/docs/using-toggly/cli" \
+            --verbose \
+            "$EXE"
+
+      - name: Verify Authenticode signature
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          $sig = Get-AuthenticodeSignature -FilePath "./publish/${{ matrix.rid }}/${{ matrix.binary-name }}"
+          $sig | Format-List Status, StatusMessage, SignerCertificate
+          if ($sig.Status -ne 'Valid') {
+            throw "Authenticode status was $($sig.Status): $($sig.StatusMessage)"
+          }
+
       - name: Create archive (Linux/macOS)
         if: runner.os != 'Windows'
         shell: bash
@@ -226,8 +288,8 @@ jobs:
             See the [CLI documentation](https://docs.toggly.io/docs/using-toggly/cli) for installation instructions.
 
             Release assets include `SHA256SUMS` and `SHA256SUMS.asc` (GPG-signed).
-            Authenticode for Windows `toggly-cli.exe` is not enabled yet — see
-            `.github/package-registry/nuget-signing-status.md`.
+            Windows `toggly-cli.exe` is Authenticode-signed with the Opsai LLC
+            GlobalSign code-signing certificate (Azure Key Vault / AzureSignTool).
           files: |
             artifacts/**/*.tar.gz
             artifacts/**/*.zip
