@@ -1,5 +1,62 @@
 # Changelog
 
+## 2.0.0
+
+2026-09-23
+
+### Breaking
+
+- Removed the dual-rail evaluated-variants pipeline shipped in 1.7.0 entirely:
+  `TogglyConfig.enableVariants` (and its builder setter), `EvaluatedVariantDef`,
+  `VariantSnapshot`, and `SnapshotProvider.getVariantSnapshot()` /
+  `getVariantSnapshotAsync()` / `refreshVariants()` no longer exist.
+  `HttpSnapshotProvider` no longer fetches
+  `evaluated-variants-signed/{appKey}/{environment}` at all.
+- `VariantResult` gained a required third constructor argument, `enabled`
+  (`VariantResult(String name, Object configurationValue, boolean enabled)`),
+  reflecting the assigned variant's effective enabled state after any
+  `StatusOverride`.
+
+### Added
+
+- **Catalog-local feature variants**, replacing the dual-rail model.
+  `FeatureDefinition` now carries `variants` (`List<VariantDefinition>`) and
+  `allocation` (`VariantAllocation`), parsed directly from the same
+  `definitions` / `definitions-signed` payload that drives `isEnabled` — no
+  separate network fetch, no `enableVariants` flag.
+- `io.toggly.core.eval.VariantAllocator` — an MF-parity variant allocator
+  matching `Microsoft.FeatureManagement`'s `IVariantFeatureManager`
+  assignment pipeline bit-for-bit (user → group → percentile → default
+  precedence, `StatusOverride` applied after assignment, percentile hashing
+  via `SHA-256("{userId}\n{hint}")`). Verified against a gold corpus
+  (`variant-allocator-corpus/cases.json`) generated from the real
+  `Microsoft.FeatureManagement` 4.7.0 library — see
+  `VariantAllocatorCorpusTest`.
+- `TogglyClient.getVariant(featureKey)` / `getVariant(featureKey, context)` /
+  `getVariantAsync(featureKey)` / `getVariantAsync(featureKey, context)` /
+  `getVariantValue(featureKey)` / `getVariantValue(featureKey, context)` —
+  same public method names as 1.7.0's dual-rail API, now backed entirely by
+  catalog-local assignment. Mirrored on the `Toggly` static facade.
+- `VariantDefinition`, `VariantAllocation` (with nested `UserAllocation` /
+  `GroupAllocation` / `PercentileAllocation`), `VariantStatusOverride`,
+  `VariantAssignment`, and `VariantAssignmentReason` model types.
+- `io.toggly.core.util.SimpleJson` / `VariantJson` — shared, dependency-free
+  JSON value parsing/serialization for variants and allocation rules, used by
+  both `HttpSnapshotProvider` (wire parsing) and `RedisCachingSnapshotProvider`
+  (cache round-trip), replacing a previously duplicated recursive-descent
+  parser inside `HttpSnapshotProvider`.
+- `toggly-cache-redis` now serializes/deserializes `variants` and `allocation`
+  on its cached feature definitions, so variant assignment works correctly
+  through the Redis caching layer.
+
+### Migration from 1.x
+
+Variants no longer require `TogglyConfig.enableVariants(true)` or a second
+fetch — remove that config option, if set. `getVariant`/`getVariantValue`
+call sites are source-compatible; only direct construction of `VariantResult`
+(now requiring an `enabled` argument) or direct use of the removed
+`EvaluatedVariantDef`/`VariantSnapshot` types needs updating.
+
 ## 1.7.0
 
 2026-09-22

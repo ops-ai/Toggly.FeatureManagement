@@ -108,13 +108,25 @@ public final class Toggly {
     }
 
     /**
-     * Gets the server-evaluated variant assigned for a feature.
+     * Gets the variant assigned for a feature, assigned locally from the
+     * catalog (variants + allocation on the feature definition).
      *
      * @param featureKey the feature key
      * @return the assigned variant, or null if unavailable
      */
     public static VariantResult getVariant(String featureKey) {
         return client().getVariant(featureKey);
+    }
+
+    /**
+     * Gets the variant assigned for a feature for the given context.
+     *
+     * @param featureKey the feature key
+     * @param context the evaluation context
+     * @return the assigned variant, or null if unavailable
+     */
+    public static VariantResult getVariant(String featureKey, EvaluationContext context) {
+        return client().getVariant(featureKey, context);
     }
 
     /**
@@ -125,6 +137,18 @@ public final class Toggly {
      */
     public static Object getVariantValue(String featureKey) {
         return client().getVariantValue(featureKey);
+    }
+
+    /**
+     * Gets the configuration value of the assigned variant for a feature,
+     * for the given context.
+     *
+     * @param featureKey the feature key
+     * @param context the evaluation context
+     * @return the variant's configuration value, or null if no variant is assigned
+     */
+    public static Object getVariantValue(String featureKey, EvaluationContext context) {
+        return client().getVariantValue(featureKey, context);
     }
 
     /**
