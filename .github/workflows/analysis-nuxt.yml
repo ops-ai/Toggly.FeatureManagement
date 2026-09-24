@@ -148,6 +148,10 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
 
+      # npm 11 rewrites the public lock graph while rebinding packed SDK tarballs.
+      - name: Pin npm for recorded consumer locks
+        run: npm install --global npm@10.2.3
+
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
 
