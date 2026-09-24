@@ -77,11 +77,13 @@ jobs:
           cargo update -p actix-web --precise 4.15.0
           cargo test -p toggly-actix -p toggly-axum -p toggly-axum08 -p toggly-rocket
           cargo package -p toggly-axum08 --allow-dirty --no-verify
-          archive="target/package/toggly-axum08-0.1.0.crate"
+          ver="$(cargo metadata --format-version 1 --no-deps --manifest-path toggly-axum08/Cargo.toml \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["packages"][0]["version"])')"
+          archive="target/package/toggly-axum08-${ver}.crate"
           unpacked="$RUNNER_TEMP/toggly-axum08-package"
           mkdir -p "$unpacked"
           tar -xf "$archive" -C "$unpacked"
-          cargo run --manifest-path "$unpacked/toggly-axum08-0.1.0/Cargo.toml" \
+          cargo run --manifest-path "$unpacked/toggly-axum08-${ver}/Cargo.toml" \
             --example current_host
 
   smoke-test:
