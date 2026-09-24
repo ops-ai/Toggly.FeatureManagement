@@ -181,9 +181,11 @@ module Toggly
     # Set the default targeting userId (overrides Config#identity at runtime).
     # Pass +nil+ or an empty string to clear.
     #
+    # Named +set_identity+ (not +identity=+) to match Python/Java/Go SDK APIs.
+    #
     # @param value [String, nil]
     # @return [String, nil]
-    def set_identity(value)
+    def set_identity(value) # rubocop:disable Naming/AccessorMethodName
       @mutex.synchronize { @identity = normalize_client_identity(value) }
     end
 
