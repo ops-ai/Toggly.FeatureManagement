@@ -100,4 +100,34 @@ RSpec.describe Toggly::Rails::ViewHelpers do
       expect(view).to have_received(:feature).with(:checkout, context: context, negate: true)
     end
   end
+
+  describe "#feature_variant" do
+    let(:controller) { double("controller") }
+
+    before do
+      allow(view).to receive(:controller).and_return(controller)
+    end
+
+    it "delegates to the controller when available" do
+      allow(controller).to receive(:respond_to?).with(:feature_variant, true).and_return(true)
+      allow(controller).to receive(:feature_variant).and_return(
+        Toggly::VariantResult.new(name: "A", configuration_value: { "cta" => "Buy" }, enabled: true, reason: "User")
+      )
+
+      result = view.feature_variant(:checkout_flow)
+
+      expect(result.name).to eq("A")
+      expect(controller).to have_received(:feature_variant).with(:checkout_flow, context: nil)
+    end
+
+    it "forwards an explicit context override" do
+      context = Toggly::Context.new(identity: "override")
+      allow(controller).to receive(:respond_to?).with(:feature_variant, true).and_return(true)
+      allow(controller).to receive(:feature_variant).and_return(nil)
+
+      view.feature_variant(:checkout_flow, context: context)
+
+      expect(controller).to have_received(:feature_variant).with(:checkout_flow, context: context)
+    end
+  end
 end

@@ -106,6 +106,29 @@ module Toggly
       !enabled?(feature_key, context: context)
     end
 
+    # Assign a catalog-local variant using the global client.
+    # See {Client#get_variant}.
+    #
+    # @param feature_key [String, Symbol]
+    # @param context [Context, nil]
+    # @return [VariantResult, nil]
+    def get_variant(feature_key, context: nil)
+      raise Error, "Toggly not configured. Call Toggly.configure first." unless @client
+
+      @client.get_variant(feature_key, context: context)
+    end
+
+    # Configuration value for the assigned variant. See {Client#get_variant_value}.
+    #
+    # @param feature_key [String, Symbol]
+    # @param context [Context, nil]
+    # @return [Object, nil]
+    def get_variant_value(feature_key, context: nil)
+      raise Error, "Toggly not configured. Call Toggly.configure first." unless @client
+
+      @client.get_variant_value(feature_key, context: context)
+    end
+
     # Reset the global client (mainly for testing)
     def reset!
       @client&.close

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-23
+
+### Added
+
+- `feature_variant(key)` / `feature_variant_value(key)` controller and view
+  helpers. They use the same ambient `toggly_context` as `feature_enabled?`,
+  so callers need not pass a targeting context for catalog-local variants.
+
 ## [0.3.1] - 2026-09-16
 
 ### Fixed

@@ -60,6 +60,51 @@ RSpec.describe Toggly::Rails::ControllerConcern do
     end
   end
 
+  describe "#feature_variant" do
+    before do
+      stub_definitions_api(
+        app_key: "test-key",
+        environment: "Production",
+        features: [
+          {
+            "featureKey" => "checkout_flow",
+            "enabled" => true,
+            "variants" => [
+              { "name" => "A", "configurationValue" => { "cta" => "Buy" }, "statusOverride" => "None" },
+              { "name" => "B", "configurationValue" => { "cta" => "Later" }, "statusOverride" => "None" }
+            ],
+            "allocation" => {
+              "defaultWhenEnabled" => "B",
+              "user" => [{ "variant" => "A", "users" => ["123"] }]
+            }
+          }
+        ]
+      )
+      Toggly::Rails.configure do |config|
+        config.app_key = "test-key"
+        config.environment = "Production"
+        config.disable_background_refresh = true
+      end
+      controller.instance_variable_set(:@request, ActionDispatch::Request.new({}))
+    end
+
+    it "uses toggly_context identity without requiring an explicit context" do
+      variant = controller.feature_variant(:checkout_flow)
+
+      expect(variant).to be_a(Toggly::VariantResult)
+      expect(variant.name).to eq("A")
+      expect(controller.feature_variant_value(:checkout_flow)).to eq({ "cta" => "Buy" })
+    end
+
+    it "lets an explicit context override ambient toggly_context" do
+      override = Toggly::Context.new(identity: "other-user")
+      variant = controller.feature_variant(:checkout_flow, context: override)
+
+      expect(variant.name).to eq("B")
+      expect(controller.feature_variant_value(:checkout_flow, context: override)).to eq({ "cta" => "Later" })
+    end
+  end
+
   describe "#toggly_context" do
     before do
       controller.instance_variable_set(:@request, ActionDispatch::Request.new({}))

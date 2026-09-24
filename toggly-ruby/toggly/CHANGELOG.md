@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-09-23
+
+### Added
+
+- Ambient targeting identity for catalog-local variants: `Config#identity`,
+  `Client#identity` / `Client#set_identity`. When `get_variant` /
+  `get_variant_value` are called with a nil context or a blank
+  `context.identity`, the client identity is used as the allocator
+  `userId`. Groups still come only from the per-call context (never Config).
+  Prefer config / `set_identity` (or Rails ambient context) over building
+  `Context.new(identity: …)` at every call site.
+  `Config#identity=` is configuration-time only (`Toggly.configure` /
+  `Config.new`); after `Client` is built, use `Client#set_identity`.
+
 ## [1.0.0] - 2026-09-23
 
 ### Changed (Breaking)

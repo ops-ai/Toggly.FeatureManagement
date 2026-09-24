@@ -47,6 +47,7 @@ module Toggly
       # True once a revision (including empty) or durable snapshot was applied.
       @definitions_loaded = false
       @mutex = Mutex.new
+      @identity = normalize_client_identity(@config.identity)
       @ready = false
       @closed = false
 
@@ -121,6 +122,16 @@ module Toggly
     # `enable_variants` / `evaluated-variants-signed` dual-rail removed in
     # 1.0 (see CHANGELOG).
     #
+    # Targeting identity resolution (first non-empty wins):
+    # 1. per-call `context.identity`
+    # 2. {#identity} from Config / {#set_identity}
+    # 3. empty (MF anonymous)
+    #
+    # Groups come only from the per-call context (never Config). Prefer
+    # Rails `feature_variant` / ambient `toggly_context`, or
+    # `set_identity` / `Config#identity` for non-HTTP hosts — not a
+    # hand-built identity on every call.
+    #
     # NOTE: this is the actual A/B assignment. It is unrelated to the
     # `variant:` telemetry label on `record_usage` / `record_view`, which is
     # a free-form usage tag (defaults to "enabled"/"disabled").
@@ -137,7 +148,7 @@ module Toggly
       assignment = VariantAllocator.assign(
         definition,
         enabled: enabled,
-        identity: context&.identity,
+        identity: variant_user_id(context),
         groups: context&.groups || []
       )
       return nil if assignment.variant_name.nil?
@@ -157,6 +168,25 @@ module Toggly
     # @return [Object, nil]
     def get_variant_value(feature_key, context: nil)
       get_variant(feature_key, context: context)&.configuration_value
+    end
+
+    # Default targeting userId used by {#get_variant} / {#get_variant_value}
+    # when the per-call context has no identity.
+    #
+    # @return [String, nil]
+    def identity
+      @mutex.synchronize { @identity }
+    end
+
+    # Set the default targeting userId (overrides Config#identity at runtime).
+    # Pass +nil+ or an empty string to clear.
+    #
+    # Named +set_identity+ (not +identity=+) to match Python/Java/Go SDK APIs.
+    #
+    # @param value [String, nil]
+    # @return [String, nil]
+    def set_identity(value) # rubocop:disable Naming/AccessorMethodName
+      @mutex.synchronize { @identity = normalize_client_identity(value) }
     end
 
     # Get detailed evaluation result
@@ -450,6 +480,20 @@ module Toggly
 
       identity = context&.identity
       @telemetry.record_check(feature_key, enabled, identity)
+    end
+
+    # Allocator userId: per-call context identity when present, else client identity.
+    def variant_user_id(context)
+      return context.identity if context&.identity?
+
+      identity
+    end
+
+    def normalize_client_identity(value)
+      return nil if value.nil?
+
+      text = value.to_s
+      text.empty? ? nil : text
     end
 
     def log_info(message)

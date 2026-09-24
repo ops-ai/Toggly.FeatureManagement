@@ -12,6 +12,17 @@ module Toggly
     # @return [String] Application key from Toggly dashboard
     attr_reader :app_key
 
+    # Default targeting userId for catalog-local +get_variant+ /
+    # +get_variant_value+ when neither a per-call +Context#identity+ nor
+    # Rails ambient context supplies one. Groups are never taken from Config.
+    #
+    # Set at configuration time only ({Config.new}, +Toggly.configure+ block).
+    # After a {Client} is built, mutating this value has no effect — use
+    # {Client#set_identity} for runtime updates.
+    #
+    # @return [String, nil]
+    attr_reader :identity
+
     # @return [String] Environment name (e.g., "Production", "Staging")
     attr_accessor :environment
 
@@ -89,6 +100,7 @@ module Toggly
 
     def initialize(**options)
       @app_key = options[:app_key]
+      @identity = normalize_identity(options[:identity])
       @environment = options[:environment] || DEFAULT_ENVIRONMENT
       @base_url = normalize_url(options[:base_url] || DEFAULT_BASE_URL)
       @definitions_url = options[:definitions_url]
@@ -172,12 +184,23 @@ module Toggly
       (@app_key.nil? || @app_key.empty?) && !@defaults.empty?
     end
 
+    # Configuration-time identity only (e.g. inside +Toggly.configure+ before
+    # {Client} is constructed). Does not update an existing client's targeting
+    # identity — call {Client#set_identity} after initialization.
+    #
+    # @param value [String, nil]
+    # @return [String, nil]
+    def identity=(value)
+      @identity = normalize_identity(value)
+    end
+
     # Convert to hash
     #
     # @return [Hash]
     def to_h
       {
         app_key: @app_key,
+        identity: @identity,
         environment: @environment,
         base_url: @base_url,
         definitions_url: @definitions_url,
@@ -207,6 +230,13 @@ module Toggly
       return url if url.nil?
 
       url.end_with?("/") ? url : "#{url}/"
+    end
+
+    def normalize_identity(value)
+      return nil if value.nil?
+
+      text = value.to_s
+      text.empty? ? nil : text
     end
   end
 end

@@ -28,6 +28,22 @@ RSpec.describe Toggly::Config do
       expect(config.http_timeout).to eq(30)
     end
 
+    it "accepts an optional identity" do
+      config = described_class.new(app_key: "test", identity: "user-1")
+      expect(config.identity).to eq("user-1")
+    end
+
+    it "normalizes blank identity to nil" do
+      config = described_class.new(app_key: "test", identity: "")
+      expect(config.identity).to be_nil
+    end
+
+    it "allows identity= during configuration before Client is built" do
+      config = described_class.new(app_key: "test")
+      config.identity = "configure-user"
+      expect(config.identity).to eq("configure-user")
+    end
+
     it "normalizes base_url to end with slash" do
       config = described_class.new(app_key: "test", base_url: "https://example.com")
       expect(config.base_url).to eq("https://example.com/")
@@ -167,11 +183,12 @@ RSpec.describe Toggly::Config do
 
   describe "#to_h" do
     it "returns hash representation" do
-      config = described_class.new(app_key: "test", environment: "Staging")
+      config = described_class.new(app_key: "test", environment: "Staging", identity: "u1")
       hash = config.to_h
 
       expect(hash[:app_key]).to eq("test")
       expect(hash[:environment]).to eq("Staging")
+      expect(hash[:identity]).to eq("u1")
     end
   end
 end

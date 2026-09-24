@@ -20,7 +20,7 @@ module Toggly
       extend ActiveSupport::Concern
 
       included do
-        helper_method :feature_enabled?, :feature_disabled? if respond_to?(:helper_method)
+        helper_method :feature_enabled?, :feature_disabled?, :feature_variant, :feature_variant_value if respond_to?(:helper_method)
 
         # Set up user in middleware on each request
         before_action :set_toggly_context, if: -> { Toggly::Rails.configuration&.request_context_enabled }
@@ -43,6 +43,26 @@ module Toggly
       # @return [Boolean]
       def feature_disabled?(feature_key, context: nil)
         !feature_enabled?(feature_key, context: context)
+      end
+
+      # Assigned catalog-local variant for a feature. Uses +toggly_context+
+      # when +context+ is omitted (same ambient path as {#feature_enabled?}).
+      #
+      # @param feature_key [String, Symbol] Feature key
+      # @param context [Toggly::Context, nil] Optional override context
+      # @return [Toggly::VariantResult, nil]
+      def feature_variant(feature_key, context: nil)
+        ctx = context || toggly_context
+        Toggly.get_variant(feature_key, context: ctx)
+      end
+
+      # Configuration value for the assigned variant. See {#feature_variant}.
+      #
+      # @param feature_key [String, Symbol] Feature key
+      # @param context [Toggly::Context, nil] Optional override context
+      # @return [Object, nil]
+      def feature_variant_value(feature_key, context: nil)
+        feature_variant(feature_key, context: context)&.configuration_value
       end
 
       # Require a feature to be enabled, otherwise render not found

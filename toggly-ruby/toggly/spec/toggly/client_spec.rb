@@ -346,6 +346,111 @@ RSpec.describe Toggly::Client do
         expect(client.get_variant_value("no-variants-feature")).to be_nil
       end
     end
+
+    describe "identity precedence for get_variant" do
+      it "uses Config#identity when context is nil" do
+        seeded = described_class.new(
+          app_key: app_key,
+          environment: environment,
+          disable_background_refresh: true,
+          identity: "alice"
+        )
+
+        expect(seeded.get_variant("checkout-flow")&.name).to eq("A")
+        expect(seeded.get_variant("checkout-flow")&.reason).to eq("User")
+      end
+
+      it "does not pick up Config#identity= after Client initialization" do
+        seeded = described_class.new(
+          app_key: app_key,
+          environment: environment,
+          disable_background_refresh: true,
+          identity: "carol"
+        )
+
+        seeded.config.identity = "alice"
+        expect(seeded.identity).to eq("carol")
+        expect(seeded.get_variant("checkout-flow")&.name).to eq("B")
+
+        seeded.set_identity("alice")
+        expect(seeded.get_variant("checkout-flow")&.name).to eq("A")
+      end
+
+      it "uses Client#set_identity when context identity is blank" do
+        client.set_identity("alice")
+
+        expect(client.get_variant("checkout-flow", context: Toggly::Context.new(identity: ""))&.name)
+          .to eq("A")
+        expect(client.get_variant("checkout-flow", context: Toggly::Context.new)&.name).to eq("A")
+      end
+
+      it "lets a non-blank per-call context identity override client identity" do
+        client.set_identity("alice")
+
+        variant = client.get_variant(
+          "checkout-flow",
+          context: Toggly::Context.new(identity: "carol")
+        )
+
+        expect(variant.name).to eq("B")
+        expect(variant.reason).to eq("DefaultWhenEnabled")
+      end
+
+      it "keeps groups from the per-call context while filling identity from the client" do
+        stub_definitions_api(
+          app_key: app_key,
+          environment: environment,
+          features: [
+            {
+              "featureKey" => "group-checkout",
+              "enabled" => true,
+              "variants" => [
+                { "name" => "VIP", "configurationValue" => { "tier" => "vip" }, "statusOverride" => "None" },
+                { "name" => "Default", "configurationValue" => { "tier" => "std" }, "statusOverride" => "None" }
+              ],
+              "allocation" => {
+                "group" => [{ "variant" => "VIP", "groups" => ["beta"] }],
+                "defaultWhenEnabled" => "Default"
+              }
+            }
+          ]
+        )
+        grouped = described_class.new(
+          app_key: app_key,
+          environment: environment,
+          disable_background_refresh: true,
+          identity: "anyone"
+        )
+
+        vip = grouped.get_variant(
+          "group-checkout",
+          context: Toggly::Context.new(identity: nil, groups: ["beta"])
+        )
+        expect(vip.name).to eq("VIP")
+        expect(vip.reason).to eq("Group")
+
+        default = grouped.get_variant("group-checkout")
+        expect(default.name).to eq("Default")
+        expect(default.reason).to eq("DefaultWhenEnabled")
+      end
+
+      it "falls through to empty/anonymous when neither context nor client has identity" do
+        expect(client.identity).to be_nil
+        variant = client.get_variant("checkout-flow")
+
+        expect(variant.name).to eq("B")
+        expect(variant.reason).to eq("DefaultWhenEnabled")
+      end
+
+      it "applies the same precedence for get_variant_value" do
+        client.set_identity("alice")
+        expect(client.get_variant_value("checkout-flow")).to eq({ "cta" => "Buy now" })
+
+        expect(
+          client.get_variant_value("checkout-flow", context: Toggly::Context.new(identity: "carol"))
+        ).to eq({ "cta" => "Purchase" })
+      end
+    end
   end
 
   describe "snapshot provider" do
