@@ -317,6 +317,42 @@ describe('togglyMiddleware', () => {
     await makeRequest(app, 'GET', '/test')
   })
 
+  it('binds getVariant to middleware identity (kim → trial Pro)', async () => {
+    const trial = {
+      featureKey: 'trial-plan',
+      filters: [{ name: 'AlwaysOn', parameters: {} }],
+      variants: [
+        { name: 'Pro', configurationValue: { days: 14 } },
+        { name: 'Basic', configurationValue: { days: 7 } },
+      ],
+      allocation: {
+        defaultWhenEnabled: 'Basic',
+        user: [{ variant: 'Pro', users: ['kim'] }],
+      },
+    }
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Map(),
+      json: async () => [trial],
+      text: async () => JSON.stringify([trial]),
+    })
+
+    app.use(togglyMiddleware({ appKey: 'test-app' }))
+    app.use(async (ctx: Context) => {
+      const toggly = ctx.state.toggly!
+      expect(toggly.identity).toBe('kim')
+      expect((await toggly.getVariant('trial-plan'))?.name).toBe('Pro')
+      expect(await toggly.getVariantValue('trial-plan')).toEqual({ days: 14 })
+      ctx.body = { ok: true }
+    })
+
+    const response = await makeRequest(app, 'GET', '/test', {
+      'x-toggly-identity': 'kim',
+    })
+    expect(response.status).toBe(200)
+  })
+
   it('should gracefully degrade when fetch fails', async () => {
     mockFetch.mockRejectedValue(new Error('Network error'))
 

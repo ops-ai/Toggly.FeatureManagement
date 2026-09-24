@@ -5,6 +5,7 @@ import type {
   FeatureRequirement,
   EvaluationContext,
   FeatureDefinitions,
+  VariantResult,
 } from '@ops-ai/toggly-node-core'
 
 /**
@@ -52,6 +53,10 @@ export interface TogglyRequestData {
     requirement?: FeatureRequirement,
     negate?: boolean
   ) => Promise<boolean>
+  /** Fastify: catalog-local variant via the request-scoped EvaluationContext. */
+  getVariant(featureKey: string): Promise<VariantResult | null>
+  /** Fastify: assigned variant configurationValue, or null. */
+  getVariantValue(featureKey: string): Promise<unknown>
 }
 
 /**

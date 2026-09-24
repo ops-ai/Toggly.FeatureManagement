@@ -278,6 +278,46 @@ describe('togglyPlugin', () => {
     })
   })
 
+  it('binds getVariant to plugin request identity (sam → pricing X)', async () => {
+    const pricing = {
+      featureKey: 'pricing-tier',
+      filters: [{ name: 'AlwaysOn', parameters: {} }],
+      variants: [
+        { name: 'X', configurationValue: { tier: 1 } },
+        { name: 'Y', configurationValue: { tier: 2 } },
+      ],
+      allocation: {
+        defaultWhenEnabled: 'Y',
+        user: [{ variant: 'X', users: ['sam'] }],
+      },
+    }
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Map(),
+      json: async () => [pricing],
+      text: async () => JSON.stringify([pricing]),
+    })
+
+    await app.register(togglyPlugin, { appKey: 'test-app' })
+
+    app.get('/pricing', async request => {
+      expect(request.toggly!.identity).toBe('sam')
+      const assigned = await request.toggly!.getVariant('pricing-tier')
+      expect(assigned?.name).toBe('X')
+      expect(await request.toggly!.getVariantValue('pricing-tier')).toEqual({ tier: 1 })
+      return { ok: true }
+    })
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/pricing',
+      headers: { 'x-toggly-identity': 'sam' },
+    })
+
+    expect(response.statusCode).toBe(200)
+  })
+
   it('should gracefully degrade when fetch fails', async () => {
     mockFetch.mockRejectedValue(new Error('Network error'))
 

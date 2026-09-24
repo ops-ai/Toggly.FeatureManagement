@@ -277,6 +277,43 @@ describe('togglyMiddleware', () => {
     await app.request('/test')
   })
 
+  it('binds getVariant to middleware identity (pat → banner Hero)', async () => {
+    const banner = {
+      featureKey: 'home-banner',
+      filters: [{ name: 'AlwaysOn', parameters: {} }],
+      variants: [
+        { name: 'Hero', configurationValue: { slot: 'top' } },
+        { name: 'Quiet', configurationValue: { slot: 'none' } },
+      ],
+      allocation: {
+        defaultWhenEnabled: 'Quiet',
+        user: [{ variant: 'Hero', users: ['pat'] }],
+      },
+    }
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Map(),
+      json: async () => [banner],
+      text: async () => JSON.stringify([banner]),
+    })
+
+    app.use('*', togglyMiddleware({ appKey: 'test-app' }))
+
+    app.get('/banner', async (c) => {
+      const toggly = c.get('toggly')
+      expect(toggly.identity).toBe('pat')
+      expect((await toggly.getVariant('home-banner'))?.name).toBe('Hero')
+      expect(await toggly.getVariantValue('home-banner')).toEqual({ slot: 'top' })
+      return c.json({ ok: true })
+    })
+
+    const response = await app.request('/banner', {
+      headers: { 'x-toggly-identity': 'pat' },
+    })
+    expect(response.status).toBe(200)
+  })
+
   it('should gracefully degrade when fetch fails', async () => {
     mockFetch.mockRejectedValue(new Error('Network error'))
 

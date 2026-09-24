@@ -155,6 +155,10 @@ export function togglyMiddleware(config: TogglyExpressConfig): RequestHandler {
           expressClient!.isFeatureOff(featureKey, context),
         evaluateFeatureGate: (featureKeys, requirement, negate) =>
           expressClient!.evaluateFeatureGate(featureKeys, requirement, negate, context),
+        getVariant: (featureKey: string) =>
+          expressClient!.getVariant(featureKey, context),
+        getVariantValue: (featureKey: string) =>
+          expressClient!.getVariantValue(featureKey, context),
       }
 
       next()

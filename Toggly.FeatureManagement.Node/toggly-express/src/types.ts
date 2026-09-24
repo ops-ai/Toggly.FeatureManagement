@@ -5,6 +5,7 @@ import type {
   FeatureRequirement,
   EvaluationContext,
   FeatureDefinitions,
+  VariantResult,
 } from '@ops-ai/toggly-node-core'
 
 /**
@@ -59,6 +60,10 @@ export interface TogglyRequest extends Request {
       requirement?: FeatureRequirement,
       negate?: boolean
     ) => Promise<boolean>
+    /** Catalog-local variant assignment using the middleware-attached context. */
+    getVariant: (featureKey: string) => Promise<VariantResult | null>
+    /** Assigned variant `configurationValue`, or `null`. */
+    getVariantValue: (featureKey: string) => Promise<unknown>
   }
 }
 

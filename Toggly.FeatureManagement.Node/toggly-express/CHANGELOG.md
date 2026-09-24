@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0
+
+2026-09-23
+
+### Added
+- Ambient `request.toggly.getVariant(key)` and `getVariantValue(key)` bound to
+  the middleware-attached evaluation context (identity from `x-toggly-identity`
+  or custom extractors), mirroring NestJS request-scoped variants [OPS-1407].
+- Re-export `VariantResult` from `@ops-ai/toggly-node-core` [OPS-1407].
+
+
 ## 0.2.1
 
 2026-09-12

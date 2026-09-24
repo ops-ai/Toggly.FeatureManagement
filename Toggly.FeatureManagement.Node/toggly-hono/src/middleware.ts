@@ -147,6 +147,12 @@ export function togglyMiddleware(config: TogglyHonoConfig): MiddlewareHandler {
       isFeatureOff: (featureKey: string) => honoClient!.isFeatureOff(featureKey, evalContext),
       evaluateFeatureGate: (featureKeys, requirement, negate) =>
         honoClient!.evaluateFeatureGate(featureKeys, requirement, negate, evalContext),
+      getVariant(featureKey: string) {
+        return honoClient!.getVariant(featureKey, evalContext)
+      },
+      getVariantValue(featureKey: string) {
+        return honoClient!.getVariantValue(featureKey, evalContext)
+      },
     })
 
     await next()

@@ -5,6 +5,7 @@ import type {
   FeatureRequirement,
   EvaluationContext,
   FeatureDefinitions,
+  VariantResult,
 } from '@ops-ai/toggly-node-core'
 
 /**
@@ -52,6 +53,10 @@ export interface TogglyContextData {
     requirement?: FeatureRequirement,
     negate?: boolean
   ) => Promise<boolean>
+  /** Koa: catalog-local variant from ctx.state.toggly context. */
+  getVariant(name: string): Promise<VariantResult | null>
+  /** Koa: assigned variant configurationValue, or null. */
+  getVariantValue(name: string): Promise<unknown>
 }
 
 /**

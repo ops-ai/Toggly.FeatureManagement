@@ -28,6 +28,7 @@ export type {
   EvaluationContext,
   Hook,
   HookMetadata,
+  VariantResult,
 } from '@ops-ai/toggly-node-core'
 
 // Re-export core utilities

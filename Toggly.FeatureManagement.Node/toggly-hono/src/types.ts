@@ -5,6 +5,7 @@ import type {
   FeatureRequirement,
   EvaluationContext,
   FeatureDefinitions,
+  VariantResult,
 } from '@ops-ai/toggly-node-core'
 
 /**
@@ -52,6 +53,10 @@ export interface TogglyContextData {
     requirement?: FeatureRequirement,
     negate?: boolean
   ) => Promise<boolean>
+  /** Hono: catalog-local variant from context variables. */
+  getVariant(feature: string): Promise<VariantResult | null>
+  /** Hono: assigned variant configurationValue, or null. */
+  getVariantValue(feature: string): Promise<unknown>
 }
 
 /**
