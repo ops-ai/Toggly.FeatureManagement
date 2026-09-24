@@ -16,4 +16,5 @@ export type {
   TogglyServerConfig,
   CacheProvider,
   Hook,
+  VariantResult,
 } from '@ops-ai/toggly-node-core';

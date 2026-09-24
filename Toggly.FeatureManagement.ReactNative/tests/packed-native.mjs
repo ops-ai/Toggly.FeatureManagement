@@ -37,7 +37,7 @@ try {
     await execute(npm,['ls','--all']);
     const reporter=JSON.parse(await readFile(join(temp,'node_modules/@ops-ai/toggly-client-telemetry/package.json'),'utf8'));
     const provenance=lock.packages['node_modules/@ops-ai/toggly-client-telemetry'];
-    if(reporter.version!=='1.1.0'||!provenance.resolved.startsWith('https://registry.npmjs.org/'))throw new Error('Expected genuine public reporter1.1.0');
+    if(reporter.version!=='1.1.1'||!provenance.resolved.startsWith('https://registry.npmjs.org/'))throw new Error('Expected genuine public reporter1.1.1');
     console.log(`Public reporter ${reporter.version}, ${provenance.resolved}, ${provenance.integrity}`);
     await execute(join(temp,'node_modules/.bin/tsc'),['--noEmit','--strict','--target','ES2020','--module','Node16','--moduleResolution','Node16','--lib','ES2020','--esModuleInterop','consumer.ts']);
     await execute(process.execPath,['verify.cjs']);

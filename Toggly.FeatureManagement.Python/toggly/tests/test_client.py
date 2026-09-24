@@ -1,8 +1,8 @@
 """Tests for TogglyClient."""
 
-from unittest.mock import MagicMock, patch
-
 from toggly import (
+    Allocation,
+    AsyncTogglyClient,
     EvaluationContext,
     FeatureDefinition,
     FeatureFilter,
@@ -11,6 +11,8 @@ from toggly import (
     MemorySnapshotProvider,
     TogglyClient,
     TogglyConfig,
+    UserAllocation,
+    Variant,
 )
 from toggly.providers import DefinitionsSnapshot
 
@@ -370,48 +372,159 @@ class TestTogglyClientRegistry:
 
 
 class TestTogglyClientVariants:
-    """Tests for variant mode (evaluated-variants-signed)."""
+    """Tests for catalog-local variant assignment (get_variant / get_variant_value)."""
 
-    def test_fetch_variants_and_get_variant(self) -> None:
-        """HTTP fetch fills variant defs, flags, and get_variant accessors."""
-        config = TogglyConfig(
-            app_key="app-k",
-            environment="Production",
-            enable_variants=True,
-            identity="user-1",
-            disable_background_refresh=True,
-            enable_live_updates=False,
-        )
-        client = TogglyClient(config)
+    def _client_with_variant_feature(self) -> TogglyClient:
+        provider = MemorySnapshotProvider()
+        provider.save_definitions(DefinitionsSnapshot(
+            definitions=[
+                FeatureDefinition(
+                    feature_key="checkout-flow",
+                    filters=[FeatureFilter(name="AlwaysOn")],
+                    variants=[
+                        Variant(name="A", configuration_value={"color": "blue"}),
+                        Variant(name="B", configuration_value={"color": "green"}),
+                    ],
+                    allocation=Allocation(
+                        default_when_enabled="B",
+                        user=[UserAllocation(variant="A", users=["alice"])],
+                    ),
+                )
+            ]
+        ))
+        client = TogglyClient(TogglyConfig(snapshot_provider=provider))
+        client.init()
+        return client
+
+    def test_get_variant_user_match(self) -> None:
+        """User allocation match returns the targeted variant."""
+        client = self._client_with_variant_feature()
         try:
-            mock_response = MagicMock()
-            mock_response.status_code = 200
-            mock_response.headers = {}
-            mock_response.json.return_value = {
-                "defs": {
-                    "f1": {"enabled": True, "variant": "a", "configurationValue": 42},
-                    "f2": {"enabled": False, "variant": None, "configurationValue": None},
-                },
-                "signature": "sig",
-                "timestamp": 1,
-                "kid": "kid1",
-            }
-            with patch.object(client._http, "get", return_value=mock_response):
-                client.init()
-
-            assert client.is_enabled("f1") is True
-            assert client.is_enabled("f2") is False
-            v = client.get_variant("f1")
+            v = client.get_variant("checkout-flow", user_id="alice")
             assert v is not None
-            assert v.name == "a"
-            assert v.configuration_value == 42
-            assert client.get_variant_value("f1") == 42
-            assert client.get_variant("f2") is None
+            assert v.name == "A"
+            assert v.configuration_value == {"color": "blue"}
+            assert v.enabled is True
+            assert v.assignment_reason == "User"
+            assert client.get_variant_value("checkout-flow", user_id="alice") == {
+                "color": "blue"
+            }
         finally:
             client.close()
 
-    def test_get_variant_none_when_disabled(self) -> None:
-        """Variant helpers return None when enable_variants is False."""
-        client = TogglyClient(TogglyConfig(enable_variants=False))
-        assert client.get_variant("any") is None
-        assert client.get_variant_value("any") is None
+    def test_get_variant_falls_back_to_default_when_enabled(self) -> None:
+        """No user/group/percentile match falls back to defaultWhenEnabled."""
+        client = self._client_with_variant_feature()
+        try:
+            v = client.get_variant("checkout-flow", user_id="bob")
+            assert v is not None
+            assert v.name == "B"
+            assert v.assignment_reason == "DefaultWhenEnabled"
+        finally:
+            client.close()
+
+    def test_get_variant_uses_client_identity_when_user_id_omitted(self) -> None:
+        """Omitting user_id falls back to the client's current identity."""
+        client = self._client_with_variant_feature()
+        try:
+            client.set_identity("alice")
+            v = client.get_variant("checkout-flow")
+            assert v is not None
+            assert v.name == "A"
+        finally:
+            client.close()
+
+    def test_get_variant_none_for_unknown_feature(self) -> None:
+        """Unknown feature key returns None."""
+        client = TogglyClient()
+        assert client.get_variant("unknown") is None
+        assert client.get_variant_value("unknown") is None
+
+    def test_get_variant_none_when_feature_has_no_variants(self) -> None:
+        """A feature definition without variants returns None."""
+        provider = MemorySnapshotProvider()
+        provider.save_definitions(DefinitionsSnapshot(
+            definitions=[
+                FeatureDefinition(
+                    feature_key="plain-flag", filters=[FeatureFilter(name="AlwaysOn")]
+                )
+            ]
+        ))
+        client = TogglyClient(TogglyConfig(snapshot_provider=provider))
+        client.init()
+        try:
+            assert client.get_variant("plain-flag") is None
+        finally:
+            client.close()
+
+    def test_get_variant_status_override_flips_effective_enabled(self) -> None:
+        """A statusOverride on the assigned variant flips VariantResult.enabled."""
+        provider = MemorySnapshotProvider()
+        provider.save_definitions(DefinitionsSnapshot(
+            definitions=[
+                FeatureDefinition(
+                    feature_key="kill-switch",
+                    filters=[FeatureFilter(name="AlwaysOn")],
+                    variants=[Variant(name="On", status_override="Disabled")],
+                    allocation=Allocation(default_when_enabled="On"),
+                )
+            ]
+        ))
+        client = TogglyClient(TogglyConfig(snapshot_provider=provider))
+        client.init()
+        try:
+            # is_enabled stays filter-based (does not apply StatusOverride).
+            assert client.is_enabled("kill-switch") is True
+            v = client.get_variant("kill-switch")
+            assert v is not None
+            assert v.name == "On"
+            assert v.enabled is False
+        finally:
+            client.close()
+
+
+class TestAsyncTogglyClientVariants:
+    """Tests for catalog-local variant assignment on AsyncTogglyClient."""
+
+    async def test_get_variant_user_match(self) -> None:
+        """User allocation match returns the targeted variant (async)."""
+        provider = MemorySnapshotProvider()
+        provider.save_definitions(DefinitionsSnapshot(
+            definitions=[
+                FeatureDefinition(
+                    feature_key="checkout-flow",
+                    filters=[FeatureFilter(name="AlwaysOn")],
+                    variants=[
+                        Variant(name="A", configuration_value={"color": "blue"}),
+                        Variant(name="B", configuration_value={"color": "green"}),
+                    ],
+                    allocation=Allocation(
+                        default_when_enabled="B",
+                        user=[UserAllocation(variant="A", users=["alice"])],
+                    ),
+                )
+            ]
+        ))
+        client = AsyncTogglyClient(TogglyConfig(snapshot_provider=provider))
+        await client.init()
+        try:
+            v = await client.get_variant("checkout-flow", user_id="alice")
+            assert v is not None
+            assert v.name == "A"
+            assert v.assignment_reason == "User"
+
+            v2 = await client.get_variant("checkout-flow", user_id="bob")
+            assert v2 is not None
+            assert v2.name == "B"
+            assert v2.assignment_reason == "DefaultWhenEnabled"
+
+            value = await client.get_variant_value("checkout-flow", user_id="alice")
+            assert value == {"color": "blue"}
+        finally:
+            await client.close()
+
+    async def test_get_variant_none_for_unknown_feature(self) -> None:
+        """Unknown feature key returns None (async)."""
+        client = AsyncTogglyClient()
+        assert await client.get_variant("unknown") is None
+        assert await client.get_variant_value("unknown") is None

@@ -296,6 +296,8 @@ mod tests {
             requirement_type: req,
             context_kind: None,
             context_requirement_type: None,
+            variants: vec![],
+            allocation: None,
         }
     }
 

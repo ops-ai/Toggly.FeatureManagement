@@ -94,6 +94,8 @@ try {
     dependencies['@ops-ai/toggly-node-core'] = `file:${resolve(
       process.env.TOGGLY_TEST_CORE_TARBALL,
     )}`;
+  if (process.env.TOGGLY_TEST_EVAL_TARBALL)
+    dependencies['@ops-ai/toggly-eval'] = `file:${resolve(process.env.TOGGLY_TEST_EVAL_TARBALL)}`;
   writeFileSync(
     join(consumer, 'package.json'),
     JSON.stringify({ private: true, type: 'module', dependencies }),

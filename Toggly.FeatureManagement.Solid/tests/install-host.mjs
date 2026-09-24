@@ -76,7 +76,20 @@ await withResources(async (own) => {
     );
     assert(value.integrity);
   }
-  assert.equal(lock.packages['node_modules/@ops-ai/toggly-client-telemetry'].version, '1.1.0');
+  const reporterName = '@ops-ai/toggly-client-telemetry';
+  const installedSdk = JSON.parse(
+    await readFile(join(work, 'node_modules', pkg.name, 'package.json')),
+  );
+  const reporter = JSON.parse(
+    await readFile(join(work, 'node_modules', reporterName, 'package.json')),
+  );
+  const reporterLock = lock.packages[`node_modules/${reporterName}`];
+  assert.equal(installedSdk.dependencies[reporterName], pkg.dependencies[reporterName]);
+  assert(installedSdk.dependencies[reporterName], 'Installed SDK must declare its reporter range');
+  assert.equal(reporter.version, reporterLock.version);
+  assert.notEqual(reporterLock.link, true, 'Reporter must not be linked');
+  // npm validates every installed reporter edge against its declaring SDK range.
+  await run([npm, 'ls', reporterName, '--all']);
   console.log(
     'Registry versions',
     JSON.stringify(

@@ -79,6 +79,12 @@ pub struct TogglyConfig {
 
     /// Metrics flush interval (default 60s).
     pub metrics_flush_interval: Option<Duration>,
+
+    /// Case-insensitive user/group matching for variant allocation.
+    ///
+    /// Mirrors `Microsoft.FeatureManagement`'s
+    /// `TargetingEvaluationOptions.IgnoreCase` (default `false`).
+    pub variant_ignore_case: bool,
 }
 
 impl Default for TogglyConfig {
@@ -106,6 +112,7 @@ impl Default for TogglyConfig {
             metrics_base_url: None,
             usage_flush_interval: None,
             metrics_flush_interval: None,
+            variant_ignore_case: false,
         }
     }
 }
@@ -137,6 +144,7 @@ impl fmt::Debug for TogglyConfig {
             .field("metrics_base_url", &self.metrics_base_url)
             .field("usage_flush_interval", &self.usage_flush_interval)
             .field("metrics_flush_interval", &self.metrics_flush_interval)
+            .field("variant_ignore_case", &self.variant_ignore_case)
             .finish()
     }
 }
@@ -330,6 +338,14 @@ impl TogglyConfigBuilder {
     /// Set the metrics flush interval.
     pub fn metrics_flush_interval(mut self, interval: Duration) -> Self {
         self.config.metrics_flush_interval = Some(interval);
+        self
+    }
+
+    /// Enable case-insensitive user/group matching for variant allocation
+    /// (mirrors `Microsoft.FeatureManagement`'s
+    /// `TargetingEvaluationOptions.IgnoreCase`). Default `false`.
+    pub fn variant_ignore_case(mut self, enabled: bool) -> Self {
+        self.config.variant_ignore_case = enabled;
         self
     }
 

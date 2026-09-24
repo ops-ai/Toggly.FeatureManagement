@@ -28,6 +28,7 @@ export type {
   HookMetadata,
   EvaluationSeriesData,
   IdentitySeriesData,
+  VariantResult,
 } from './types.js'
 
 // Hooks
@@ -70,6 +71,7 @@ export type { VerifyFreshnessOptions } from './verify.js'
 
 // Local evaluation (re-export for consumers)
 export {
+  allocateVariant,
   evaluateDefinition,
   evaluateDefinitions,
   evaluateFeatureGate as evaluateDefinitionsGate,
@@ -84,7 +86,16 @@ export type {
   EntityEvalContext,
   FeatureFilter,
   GateRequirement,
+  GroupAllocation,
   HttpHeaderBag,
+  PercentileAllocation,
+  UserAllocation,
+  VariantAllocation,
+  VariantAllocatorOptions,
+  VariantAssignmentReason,
+  VariantAssignmentResult,
+  VariantDefinition,
+  VariantStatusOverride,
 } from '@ops-ai/toggly-eval'
 
 export {

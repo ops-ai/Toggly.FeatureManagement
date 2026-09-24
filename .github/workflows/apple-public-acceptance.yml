@@ -1,0 +1,23 @@
+name: Apple public Swift package acceptance
+on:
+  pull_request:
+    paths:
+      - 'Toggly.FeatureManagement.iOS/acceptance/PublicAppleHost/**'
+      - '.github/workflows/apple-public-acceptance.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'Toggly.FeatureManagement.iOS/acceptance/PublicAppleHost/**'
+      - '.github/workflows/apple-public-acceptance.yml'
+jobs:
+  public-package-build:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve public SwiftPM tag
+        run: xcodebuild -resolvePackageDependencies -project Toggly.FeatureManagement.iOS/acceptance/PublicAppleHost/PublicAppleHost.xcodeproj -scheme PublicAppleHost-iOS -clonedSourcePackagesDirPath "$RUNNER_TEMP/apple-public-packages"
+      - name: Build iOS simulator host
+        run: xcodebuild -project Toggly.FeatureManagement.iOS/acceptance/PublicAppleHost/PublicAppleHost.xcodeproj -scheme PublicAppleHost-iOS -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -clonedSourcePackagesDirPath "$RUNNER_TEMP/apple-public-packages" -derivedDataPath "$RUNNER_TEMP/apple-public-derived" CODE_SIGNING_ALLOWED=NO build
+      - name: Build macOS host
+        run: xcodebuild -project Toggly.FeatureManagement.iOS/acceptance/PublicAppleHost/PublicAppleHost.xcodeproj -scheme PublicAppleHost-macOS -destination 'platform=macOS' -clonedSourcePackagesDirPath "$RUNNER_TEMP/apple-public-packages" -derivedDataPath "$RUNNER_TEMP/apple-public-derived" CODE_SIGNING_ALLOWED=NO build

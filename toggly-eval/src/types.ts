@@ -18,6 +18,68 @@ export interface FeatureDefinitionModel {
   requirementType?: RequirementType
   contextKind?: string
   contextRequirementType?: RequirementType
+  /** Catalog-local variant definitions (Microsoft.FeatureManagement parity). */
+  variants?: VariantDefinition[]
+  /** Variant allocation rules; absent/null means no allocation is configured. */
+  allocation?: VariantAllocation | null
+}
+
+/**
+ * Variant-allocation types mirroring `Microsoft.FeatureManagement`'s
+ * `VariantDefinition` / `Allocation` model (see
+ * `variant-allocator-corpus/README.md` at the repo root for the exact
+ * schema these mirror).
+ */
+export type VariantStatusOverride = 'None' | 'Enabled' | 'Disabled'
+
+export interface VariantDefinition {
+  name: string
+  /** Arbitrary JSON — object, array, scalar, or null. */
+  configurationValue?: unknown
+  statusOverride?: VariantStatusOverride
+}
+
+export interface UserAllocation {
+  variant: string
+  users: string[]
+}
+
+export interface GroupAllocation {
+  variant: string
+  groups: string[]
+}
+
+export interface PercentileAllocation {
+  variant: string
+  /** Inclusive lower bound, percent in [0, 100]. */
+  from: number
+  /** Exclusive upper bound, percent in [0, 100] — 100 is treated as unbounded-above. */
+  to: number
+}
+
+export interface VariantAllocation {
+  defaultWhenEnabled?: string | null
+  defaultWhenDisabled?: string | null
+  /** Custom percentile hash seed. Defaults to `allocation\n{featureKey}` when unset. */
+  seed?: string | null
+  user?: UserAllocation[] | null
+  group?: GroupAllocation[] | null
+  percentile?: PercentileAllocation[] | null
+}
+
+export type VariantAssignmentReason =
+  | 'User'
+  | 'Group'
+  | 'Percentile'
+  | 'DefaultWhenEnabled'
+  | 'DefaultWhenDisabled'
+  | 'None'
+
+export interface VariantAssignmentResult {
+  variantName: string | null
+  configurationValue: unknown
+  enabled: boolean
+  assignmentReason: VariantAssignmentReason
 }
 
 /** Entity instance for ContextProperty evaluation. */

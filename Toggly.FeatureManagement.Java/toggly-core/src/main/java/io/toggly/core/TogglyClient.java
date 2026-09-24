@@ -7,15 +7,16 @@ import io.toggly.core.context.EvaluationContext;
 import io.toggly.core.eval.EvaluationEngine;
 import io.toggly.core.eval.EvaluatorRegistry;
 import io.toggly.core.exception.TogglyConfigException;
-import io.toggly.core.model.EvaluatedVariantDef;
+import io.toggly.core.eval.VariantAllocator;
+import io.toggly.core.eval.VariantAssignment;
 import io.toggly.core.model.FeatureDefinition;
 import io.toggly.core.model.FeatureRequirement;
 import io.toggly.core.model.MetricDefinition;
+import io.toggly.core.model.VariantDefinition;
 import io.toggly.core.model.VariantResult;
 import io.toggly.core.snapshot.FeatureSnapshot;
 import io.toggly.core.snapshot.HttpSnapshotProvider;
 import io.toggly.core.snapshot.SnapshotProvider;
-import io.toggly.core.snapshot.VariantSnapshot;
 import io.toggly.core.telemetry.MetricsFeatureOptions;
 import io.toggly.core.telemetry.TelemetryRuntime;
 
@@ -256,38 +257,51 @@ public final class TogglyClient implements AutoCloseable {
 
     // ========== Feature Variants ==========
     //
-    // Dual-rail pattern (matches the Python SDK): definitions/definitions-signed
-    // above remain the source of truth for isEnabled. When config.enableVariants
-    // is true, the SnapshotProvider additionally fetches evaluated-variants-signed
-    // and caches it separately; these methods only read that additive rail and
-    // never influence isEnabled. This is a public assignment API, distinct from
+    // Catalog-local: variants and allocation rules are parsed directly from
+    // the same definitions/definitions-signed payload that drives isEnabled
+    // (see FeatureDefinition#getVariants / #getAllocation). Assignment runs
+    // entirely on the client via VariantAllocator, matching
+    // Microsoft.FeatureManagement's IVariantFeatureManager bit-for-bit — no
+    // separate network fetch. This is a public assignment API, distinct from
     // the "variant" label recorded by recordUsage/recordView for telemetry.
 
     /**
-     * Gets the server-evaluated variant assigned for a feature.
+     * Gets the variant assigned for a feature using the current thread context.
      *
-     * <p>Returns {@code null} unless {@code enableVariants} is true, an
-     * evaluated entry exists for the feature, that entry is enabled, and it
-     * has a non-empty variant name — matching JS/Python/.NET/Go semantics.</p>
+     * <p>Returns {@code null} when the feature has no variants configured, or
+     * when assignment resolves to no variant (e.g. no matching allocation and
+     * no default configured for the branch that ran).</p>
      *
      * @param featureKey the feature key
      * @return the assigned variant, or null if unavailable
      */
     public VariantResult getVariant(String featureKey) {
-        if (featureKey == null || featureKey.isEmpty() || !config.isEnableVariants()) {
+        return getVariant(featureKey, ContextHolder.getContext());
+    }
+
+    /**
+     * Gets the variant assigned for a feature for the given context.
+     *
+     * @param featureKey the feature key
+     * @param context the evaluation context
+     * @return the assigned variant, or null if unavailable
+     */
+    public VariantResult getVariant(String featureKey, EvaluationContext context) {
+        if (featureKey == null || featureKey.isEmpty()) {
             return null;
         }
         try {
-            VariantSnapshot snapshot = snapshotProvider.getVariantSnapshot();
-            EvaluatedVariantDef entry = snapshot.getVariant(featureKey);
-            if (entry == null || !entry.isEnabled()) {
-                return null;
-            }
-            String variant = entry.getVariant();
-            if (variant == null || variant.isEmpty()) {
-                return null;
-            }
-            return new VariantResult(variant, entry.getConfigurationValue());
+            FeatureSnapshot snapshot = snapshotProvider.getSnapshot();
+            FeatureDefinition definition = snapshot.getFeature(featureKey);
+            EvaluationContext effectiveContext = resolveContext(context);
+            boolean enabled = evaluationEngine.evaluateWithDefaults(
+                    definition,
+                    effectiveContext,
+                    featureKey,
+                    config.getFeatureDefaults(),
+                    config.getDefaultFeatureState());
+            VariantAssignment assignment = VariantAllocator.assign(definition, enabled, effectiveContext);
+            return toVariantResult(assignment);
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Error resolving variant for feature: " + featureKey, e);
             return null;
@@ -295,26 +309,39 @@ public final class TogglyClient implements AutoCloseable {
     }
 
     /**
-     * Gets the server-evaluated variant asynchronously.
+     * Gets the variant assigned for a feature asynchronously, using the
+     * current thread context.
      *
      * @param featureKey the feature key
      * @return a future that completes with the assigned variant, or null if unavailable
      */
     public CompletableFuture<VariantResult> getVariantAsync(String featureKey) {
-        if (featureKey == null || featureKey.isEmpty() || !config.isEnableVariants()) {
+        return getVariantAsync(featureKey, ContextHolder.getContext());
+    }
+
+    /**
+     * Gets the variant assigned for a feature asynchronously, for the given context.
+     *
+     * @param featureKey the feature key
+     * @param context the evaluation context
+     * @return a future that completes with the assigned variant, or null if unavailable
+     */
+    public CompletableFuture<VariantResult> getVariantAsync(String featureKey, EvaluationContext context) {
+        if (featureKey == null || featureKey.isEmpty()) {
             return CompletableFuture.completedFuture(null);
         }
-        return snapshotProvider.getVariantSnapshotAsync()
+        EvaluationContext effectiveContext = resolveContext(context);
+        return snapshotProvider.getSnapshotAsync()
                 .thenApply(snapshot -> {
-                    EvaluatedVariantDef entry = snapshot.getVariant(featureKey);
-                    if (entry == null || !entry.isEnabled()) {
-                        return null;
-                    }
-                    String variant = entry.getVariant();
-                    if (variant == null || variant.isEmpty()) {
-                        return null;
-                    }
-                    return new VariantResult(variant, entry.getConfigurationValue());
+                    FeatureDefinition definition = snapshot.getFeature(featureKey);
+                    boolean enabled = evaluationEngine.evaluateWithDefaults(
+                            definition,
+                            effectiveContext,
+                            featureKey,
+                            config.getFeatureDefaults(),
+                            config.getDefaultFeatureState());
+                    VariantAssignment assignment = VariantAllocator.assign(definition, enabled, effectiveContext);
+                    return toVariantResult(assignment);
                 })
                 .exceptionally(e -> {
                     LOGGER.log(Level.WARNING, "Async error resolving variant for feature: " + featureKey, e);
@@ -323,14 +350,36 @@ public final class TogglyClient implements AutoCloseable {
     }
 
     /**
-     * Gets the configuration value of the assigned variant for a feature.
+     * Gets the configuration value of the assigned variant for a feature,
+     * using the current thread context.
      *
      * @param featureKey the feature key
      * @return the variant's configuration value, or null if no variant is assigned
      */
     public Object getVariantValue(String featureKey) {
-        VariantResult variant = getVariant(featureKey);
+        return getVariantValue(featureKey, ContextHolder.getContext());
+    }
+
+    /**
+     * Gets the configuration value of the assigned variant for a feature,
+     * for the given context.
+     *
+     * @param featureKey the feature key
+     * @param context the evaluation context
+     * @return the variant's configuration value, or null if no variant is assigned
+     */
+    public Object getVariantValue(String featureKey, EvaluationContext context) {
+        VariantResult variant = getVariant(featureKey, context);
         return variant != null ? variant.getConfigurationValue() : null;
+    }
+
+    private VariantResult toVariantResult(VariantAssignment assignment) {
+        if (assignment == null || assignment.getVariantName() == null) {
+            return null;
+        }
+        VariantDefinition variantDefinition = assignment.getVariantDefinition();
+        Object configurationValue = variantDefinition != null ? variantDefinition.getConfigurationValue() : null;
+        return new VariantResult(assignment.getVariantName(), configurationValue, assignment.isEnabled());
     }
 
     // ========== Feature Gate ==========

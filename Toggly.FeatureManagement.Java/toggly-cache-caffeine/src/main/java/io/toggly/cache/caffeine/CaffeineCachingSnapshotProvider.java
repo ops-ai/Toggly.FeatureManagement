@@ -6,7 +6,6 @@ import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.github.benmanes.caffeine.cache.stats.CacheStats;
 import io.toggly.core.snapshot.FeatureSnapshot;
 import io.toggly.core.snapshot.SnapshotProvider;
-import io.toggly.core.snapshot.VariantSnapshot;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
@@ -145,29 +144,6 @@ public class CaffeineCachingSnapshotProvider implements SnapshotProvider {
     @Override
     public void setDefinitionCacheRecorder(io.toggly.core.telemetry.DefinitionCacheRecorder recorder) {
         delegate.setDefinitionCacheRecorder(recorder);
-    }
-
-    // ========== Evaluated variants (dual-rail; additive to definitions) ==========
-    //
-    // Variants are not cached by this Caffeine layer: the delegate (typically
-    // HttpSnapshotProvider) already keeps its own last-known-good variant
-    // snapshot with ETag-based freshness. Forwarding directly here keeps
-    // getVariant/getVariantValue working through caching wrappers instead of
-    // silently falling back to the SnapshotProvider default no-ops.
-
-    @Override
-    public VariantSnapshot getVariantSnapshot() {
-        return delegate.getVariantSnapshot();
-    }
-
-    @Override
-    public CompletableFuture<VariantSnapshot> getVariantSnapshotAsync() {
-        return delegate.getVariantSnapshotAsync();
-    }
-
-    @Override
-    public VariantSnapshot refreshVariants() {
-        return delegate.refreshVariants();
     }
 
     @Override

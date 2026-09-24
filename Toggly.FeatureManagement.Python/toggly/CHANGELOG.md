@@ -1,5 +1,48 @@
 # Changelog
 
+## 1.0.0 - 2026-09-23
+
+### Breaking Changes
+- Feature variants are now assigned **locally** from cached feature
+  definitions instead of fetched from a separate `evaluated-variants-signed`
+  endpoint. Assignment matches Microsoft.FeatureManagement 4.7.0 exactly:
+  disabled features only resolve `DefaultWhenDisabled`; enabled features
+  resolve via per-user allocation, then per-group allocation, then
+  percentile allocation, then `DefaultWhenEnabled`.
+- Removed `TogglyConfig.enable_variants`, `variant_groups`, and
+  `variant_claims`. There is no longer a separate "variants mode" — variant
+  assignment is always available for any feature that defines `variants` and
+  an `allocation` in its definition.
+- Removed the `EvaluatedVariantDef` model, the `VariantsSnapshot` cache
+  entry, and the snapshot-provider `load_variants` / `save_variants` hooks.
+  Custom `SnapshotProvider` implementations no longer need to implement
+  those methods.
+
+### Added
+- `get_variant(feature_key, *, user_id=None, groups=None)` and
+  `get_variant_value(...)` on both `TogglyClient` and `AsyncTogglyClient`,
+  with an optional per-call targeting overload (falls back to
+  `TogglyConfig.identity` when `user_id` is omitted).
+- `VariantResult.enabled` (effective enabled state after the assigned
+  variant's `StatusOverride`) and `VariantResult.assignment_reason`
+  (`"User"`, `"Group"`, `"Percentile"`, `"DefaultWhenEnabled"`,
+  `"DefaultWhenDisabled"`, or `"None"`).
+- `Variant`, `Allocation`, `UserAllocation`, `GroupAllocation`, and
+  `PercentileAllocation` models parsed from the `variants` / `allocation`
+  fields on feature definitions.
+- `assign_variant` / `VariantAssignment` in `toggly.variants`, validated
+  against the shared cross-SDK Microsoft.FeatureManagement parity corpus
+  (100% of cases pass).
+
+### Migration
+- Replace `TogglyConfig(enable_variants=True, identity=..., variant_groups=...,
+  variant_claims=...)` with plain `TogglyConfig(identity=...)`, and call
+  `client.get_variant(feature_key, user_id=..., groups=[...])` per request
+  instead of relying on client-wide variant context.
+- Feature variants must be defined on the feature itself (`variants` +
+  `allocation`) rather than fetched separately; this matches how variants are
+  authored in the Toggly dashboard.
+
 ## 0.7.2 - 2026-09-17
 
 ### Fixed

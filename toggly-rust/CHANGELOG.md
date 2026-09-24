@@ -7,6 +7,25 @@
   the Axum 0.7 adapter, so existing applications keep their dependency types
   and imports.
 
+## 0.7.0
+
+### Added
+- Catalog-local feature variants: `TogglyClient::get_variant` /
+  `get_variant_value`, `toggly::definitions::{Variant, Allocation,
+  UserAllocation, GroupAllocation, PercentileAllocation, StatusOverride}`,
+  and `toggly::eval::{assign_variant, AssignmentReason, VariantAssignment}`.
+  Assignment (user → group → percentile → `DefaultWhenEnabled` /
+  `DefaultWhenDisabled`, percentile SHA-256 hash, `StatusOverride` applied to
+  the effective enabled state) matches `Microsoft.FeatureManagement` 4.7.0
+  (`IVariantFeatureManager`) bit-for-bit; verified against the shared
+  `variant-allocator-corpus` gold corpus (18/18 cases). No dual-rail network
+  call — variants are parsed from the same definitions catalog that already
+  drives `is_enabled` [OPS-1395].
+- `TogglyConfig::variant_ignore_case` /
+  `TogglyClientBuilder::variant_ignore_case` for case-insensitive user/group
+  targeting, mirroring `TargetingEvaluationOptions.IgnoreCase` (default
+  `false`) [OPS-1395].
+
 ## 0.6.3
 
 2026-09-17

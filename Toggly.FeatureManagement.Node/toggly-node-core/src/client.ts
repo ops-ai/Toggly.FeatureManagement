@@ -6,6 +6,7 @@ import type {
   FeatureRequirement,
   EvaluationContext,
   Hook,
+  VariantResult,
 } from './types.js'
 import { DEFAULT_CONFIG, INITIAL_STATE, CACHE_KEYS } from './constants.js'
 import { HookExecutor } from './hooks.js'
@@ -43,6 +44,7 @@ import {
   type TogglyEntityContext,
 } from '@ops-ai/toggly-hooks-types'
 import {
+  allocateVariant,
   evaluateDefinitions,
   evaluateFeatureGate as evaluateLocalFeatureGate,
   indexDefinitions,
@@ -905,6 +907,45 @@ export function createTogglyClient(
     return result
   }
 
+  /**
+   * Assign a variant for a feature catalog-locally from cached definitions
+   * (`@ops-ai/toggly-eval`'s MF-parity `allocateVariant`). No hooks/usage
+   * recording here — matches the rest of the JS ecosystem's synchronous
+   * `getVariant` contract (see `VariantResult` for the null cases).
+   */
+  async function getVariant(
+    featureKey: string,
+    context?: EvaluationContext,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<VariantResult | null> {
+    const def = state.definitions.get(featureKey)
+    if (!def) {
+      return null
+    }
+
+    const evalContext = buildEvalContext(context, entity, kind)
+    const result = allocateVariant(def, evalContext, {
+      ignoreCase: config.variantIgnoreCase ?? false,
+    })
+
+    if (!result.enabled || !result.variantName) {
+      return null
+    }
+
+    return { name: result.variantName, configurationValue: result.configurationValue }
+  }
+
+  async function getVariantValue(
+    featureKey: string,
+    context?: EvaluationContext,
+    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<unknown | null> {
+    const variant = await getVariant(featureKey, context, entity, kind)
+    return variant?.configurationValue ?? null
+  }
+
   function registerContext<T>(
     kind: string,
     mapper: (entity: T) => TogglyEntityContext,
@@ -1045,6 +1086,8 @@ export function createTogglyClient(
     isFeatureOn,
     isFeatureOff,
     evaluateFeatureGate,
+    getVariant,
+    getVariantValue,
     registerContext,
     setIdentity,
     addHook,
