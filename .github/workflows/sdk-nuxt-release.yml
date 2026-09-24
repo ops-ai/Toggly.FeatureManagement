@@ -232,11 +232,11 @@ jobs:
               done
             fi
 
-            pnpm publish --access public --no-git-checks --provenance || pnpm publish --access public --no-git-checks
+            pnpm publish --access public --no-git-checks --provenance
             sleep 3
           done
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ''
 
       - name: Commit version bump
         if: needs.resolve.outputs.action == 'publish' && needs.resolve.outputs.manifest_changed == 'true'

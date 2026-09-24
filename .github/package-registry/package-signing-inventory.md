@@ -44,31 +44,18 @@ certificate `NUGET_SIGN_CERTIFICATE` has Extended Key Usage OID
 
 ## npm Trusted Publishing
 
-Packages with successful OIDC publishes (per
-[npm-governance-status.md](npm-governance-status.md)) are marked
-`oidcReady: true` in `npm-packages.json`. Their release workflows use
-empty `NODE_AUTH_TOKEN` and provenance-only publish (no soft
-`|| publish` fallback).
+All inventoried `@ops-ai/*` packages in `npm-packages.json` are marked
+`oidcReady: true`. Each has a GitHub Trusted Publisher for
+`ops-ai/Toggly.FeatureManagement`, the package’s `sdk-*-release.yml`,
+and environment `npm-publish`. Release workflows use empty
+`NODE_AUTH_TOKEN` and provenance-only publish (no soft `|| publish`
+fallback).
 
-Still pending Trusted Publisher setup (run
-`configure-npm-trusted-publishers.sh` with OTP; keep soft fallbacks):
-
-- `@ops-ai/toggly-local-gates`
-- `@ops-ai/toggly-signed-defs`
-- `@ops-ai/electron-feature-flags-toggly`
-- `@ops-ai/nuxt-toggly*` (nuxt group)
-- `@ops-ai/react-router-toggly`
-- `@ops-ai/toggly-eval`
-- `@ops-ai/solid-feature-flags-toggly`
-- `@ops-ai/toggly-nestjs`
-- `@ops-ai/toggly-sveltekit`
-- `@ops-ai/toggly-client-telemetry`
+Verified 2026-09-24 via `npm trust list` (correct file/repo/env) and
+`node .github/package-registry/verify-npm-trusted-publishing.mjs`.
 
 Contract check:
 
 ```bash
 node .github/package-registry/verify-npm-trusted-publishing.mjs
 ```
-
-Packages with `oidcReady: true` must pass; others are reported as
-pending only.
