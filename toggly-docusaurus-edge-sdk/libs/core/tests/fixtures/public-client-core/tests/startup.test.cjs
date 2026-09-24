@@ -69,6 +69,7 @@ test('identical Vite fixture already on the port cannot satisfy child readiness'
     assert.match(output, /Port 15382 is already in use/);
     assert.match(output, /Vite exited before serving/);
     const response = await fetch('http://127.0.0.1:15382');
+    await response.text();
     assert.ok(response.ok, 'the independently owned occupant remains available');
   } finally {
     clearTimeout(watchdog);
