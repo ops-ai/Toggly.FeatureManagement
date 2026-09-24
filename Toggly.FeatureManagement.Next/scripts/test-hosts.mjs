@@ -66,7 +66,7 @@ await withResources(async defer => {
     assert.notEqual(telemetryLock.link, true, 'frontend reporter must not be a workspace link')
     assert.match(telemetryLock.integrity ?? '', /^sha512-/, 'frontend reporter must retain npm SHA-512 integrity')
     if (!artifact) assert(telemetryLock.resolved?.startsWith('https://registry.npmjs.org/@ops-ai/toggly-client-telemetry/-/'), 'frontend reporter must resolve from the public npm registry')
-    for (const [name, version] of [['next', fixture.next], ['react', fixture.react], ['typescript', fixture.typescript], ['@ops-ai/nextjs-toggly-core', corePackage.version], ['@ops-ai/nextjs-toggly-edge', '1.6.0'], ['@ops-ai/nextjs-toggly-client', JSON.parse(await readFile(join(root, 'nextjs-toggly-client/package.json'), 'utf8')).version], ['@ops-ai/toggly-client-telemetry', telemetryPackage.version]]) {
+    for (const [name, version] of [['next', fixture.next], ['react', fixture.react], ['typescript', fixture.typescript], ['@ops-ai/nextjs-toggly-core', JSON.parse(await readFile(join(root, 'nextjs-toggly-core/package.json'), 'utf8')).version], ['@ops-ai/nextjs-toggly-edge', '1.6.0'], ['@ops-ai/nextjs-toggly-client', JSON.parse(await readFile(join(root, 'nextjs-toggly-client/package.json'), 'utf8')).version], ['@ops-ai/toggly-client-telemetry', telemetryPackage.version]]) {
       versions[name] = JSON.parse(await readFile(join(host, 'node_modules', name, 'package.json'), 'utf8')).version
       assert.equal(versions[name], version)
     }
