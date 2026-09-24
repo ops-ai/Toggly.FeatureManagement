@@ -53,8 +53,10 @@ export interface TogglyContextData {
     requirement?: FeatureRequirement,
     negate?: boolean
   ) => Promise<boolean>
-  getVariant: (featureKey: string) => Promise<VariantResult | null>
-  getVariantValue: (featureKey: string) => Promise<unknown>
+  /** Koa: catalog-local variant from ctx.state.toggly context. */
+  getVariant(name: string): Promise<VariantResult | null>
+  /** Koa: assigned variant configurationValue, or null. */
+  getVariantValue(name: string): Promise<unknown>
 }
 
 /**

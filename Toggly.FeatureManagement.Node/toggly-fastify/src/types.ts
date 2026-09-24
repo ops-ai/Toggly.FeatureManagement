@@ -53,8 +53,10 @@ export interface TogglyRequestData {
     requirement?: FeatureRequirement,
     negate?: boolean
   ) => Promise<boolean>
-  getVariant: (featureKey: string) => Promise<VariantResult | null>
-  getVariantValue: (featureKey: string) => Promise<unknown>
+  /** Fastify: catalog-local variant via the request-scoped EvaluationContext. */
+  getVariant(featureKey: string): Promise<VariantResult | null>
+  /** Fastify: assigned variant configurationValue, or null. */
+  getVariantValue(featureKey: string): Promise<unknown>
 }
 
 /**
