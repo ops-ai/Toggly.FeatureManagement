@@ -33,6 +33,10 @@ class DashboardController < ApplicationController
     if feature_enabled?(:new_dashboard)
       render :new_dashboard
     end
+
+    # Uses toggly_context (same ambient identity as feature_enabled?)
+    variant = feature_variant(:checkout_flow)
+    cta = feature_variant_value(:checkout_flow)
   end
 end
 ```
@@ -47,13 +51,17 @@ end
 <%= feature(:promo, negate: true) do %>
   <div class="standard">Standard offer</div>
 <% end %>
+
+<%# Catalog-local variant from ambient toggly_context %>
+<%= feature_variant_value(:checkout_flow) %>
 ```
 
 Use the same feature key and context for both blocks. `feature` captures only
 the selected block, and `negate: true` selects the complementary branch.
 `when_feature_enabled` and `when_feature_disabled` remain available as
 deprecated compatibility adapters. Boolean helpers and `feature_switch` are
-unchanged.
+unchanged. `feature_variant` / `feature_variant_value` mirror
+`feature_enabled?` and use `toggly_context` when no override is passed.
 
 ## Documentation
 

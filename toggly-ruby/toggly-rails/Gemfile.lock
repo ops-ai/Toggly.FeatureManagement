@@ -1,12 +1,12 @@
 PATH
   remote: ../toggly
   specs:
-    toggly (1.0.0)
+    toggly (1.1.0)
 
 PATH
   remote: .
   specs:
-    toggly-rails (0.3.1)
+    toggly-rails (0.4.0)
       railties (>= 7.0)
       toggly (>= 0.1, < 2.0)
 

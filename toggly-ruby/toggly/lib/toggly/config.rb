@@ -12,6 +12,14 @@ module Toggly
     # @return [String] Application key from Toggly dashboard
     attr_reader :app_key
 
+    # Default targeting userId for catalog-local +get_variant+ /
+    # +get_variant_value+ when neither a per-call +Context#identity+ nor
+    # Rails ambient context supplies one. Groups are never taken from Config.
+    # Mutable at runtime via {Client#set_identity}.
+    #
+    # @return [String, nil]
+    attr_reader :identity
+
     # @return [String] Environment name (e.g., "Production", "Staging")
     attr_accessor :environment
 
@@ -89,6 +97,7 @@ module Toggly
 
     def initialize(**options)
       @app_key = options[:app_key]
+      @identity = normalize_identity(options[:identity])
       @environment = options[:environment] || DEFAULT_ENVIRONMENT
       @base_url = normalize_url(options[:base_url] || DEFAULT_BASE_URL)
       @definitions_url = options[:definitions_url]
@@ -172,12 +181,17 @@ module Toggly
       (@app_key.nil? || @app_key.empty?) && !@defaults.empty?
     end
 
+    def identity=(value)
+      @identity = normalize_identity(value)
+    end
+
     # Convert to hash
     #
     # @return [Hash]
     def to_h
       {
         app_key: @app_key,
+        identity: @identity,
         environment: @environment,
         base_url: @base_url,
         definitions_url: @definitions_url,
@@ -207,6 +221,13 @@ module Toggly
       return url if url.nil?
 
       url.end_with?("/") ? url : "#{url}/"
+    end
+
+    def normalize_identity(value)
+      return nil if value.nil?
+
+      text = value.to_s
+      text.empty? ? nil : text
     end
   end
 end

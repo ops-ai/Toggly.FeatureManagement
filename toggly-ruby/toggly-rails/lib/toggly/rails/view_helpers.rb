@@ -30,6 +30,34 @@ module Toggly
         !feature_enabled?(feature_key, context: context)
       end
 
+      # Assigned catalog-local variant. Uses controller +toggly_context+ when
+      # +context+ is omitted (same ambient path as {#feature_enabled?}).
+      #
+      # @param feature_key [String, Symbol] Feature key
+      # @param context [Toggly::Context, nil] Optional override context
+      # @return [Toggly::VariantResult, nil]
+      def feature_variant(feature_key, context: nil)
+        if controller.respond_to?(:feature_variant, true)
+          controller.send(:feature_variant, feature_key, context: context)
+        else
+          ctx = context || view_toggly_context
+          Toggly.get_variant(feature_key, context: ctx)
+        end
+      end
+
+      # Configuration value for the assigned variant. See {#feature_variant}.
+      #
+      # @param feature_key [String, Symbol] Feature key
+      # @param context [Toggly::Context, nil] Optional override context
+      # @return [Object, nil]
+      def feature_variant_value(feature_key, context: nil)
+        if controller.respond_to?(:feature_variant_value, true)
+          controller.send(:feature_variant_value, feature_key, context: context)
+        else
+          feature_variant(feature_key, context: context)&.configuration_value
+        end
+      end
+
       # Render content when the feature evaluation matches the requested branch
       #
       # @param feature_key [String, Symbol] Feature key

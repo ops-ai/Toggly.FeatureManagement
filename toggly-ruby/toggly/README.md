@@ -47,13 +47,19 @@ bit-for-bit — verified against the shared
 `variant-allocator-corpus/cases.json` gold corpus.
 
 ```ruby
-variant = client.get_variant('checkout-flow', context: Toggly::Context.new(identity: 'user-1'))
+# Prefer ambient identity: Config#identity, Client#set_identity, or Rails
+# feature_variant (uses toggly_context). Per-call context is an override.
+client = Toggly::Client.new(app_key: '...', environment: 'Production', identity: 'user-1')
+client.set_identity('user-2') # optional runtime update
+
+variant = client.get_variant('checkout-flow') # uses client identity
+variant = client.get_variant('checkout-flow', context: Toggly::Context.new(identity: 'override'))
 variant&.name                 # assigned variant name, or nil
 variant&.configuration_value  # untyped configuration payload
 variant&.enabled               # effective enabled after StatusOverride
 variant&.reason                # "User" | "Group" | "Percentile" | "DefaultWhenEnabled" | "DefaultWhenDisabled"
 
-client.get_variant_value('checkout-flow', context: context) # shortcut for configuration_value
+client.get_variant_value('checkout-flow') # shortcut for configuration_value
 ```
 
 `enabled?` stays filter-based only. The `enable_variants` /
