@@ -17,8 +17,9 @@ async function waitForHost(server, output, spawnError, hostToken) {
     }
     try {
       const response = await fetch(origin, { signal: AbortSignal.timeout(1_000) });
+      const body = await response.text();
       if (response.ok && response.headers.get('x-toggly-host-token') === hostToken &&
-          (await response.text()).includes('Toggly client-core public acceptance')) {
+          body.includes('Toggly client-core public acceptance')) {
         if (server.exitCode === null && server.signalCode === null) return;
       }
     } catch {
