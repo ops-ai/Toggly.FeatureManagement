@@ -17,7 +17,7 @@ Companion docs:
 | NuGet | 18 `Toggly.*` packages (`sdk-dotnet-release.yml`) | Azure Key Vault `NuGetKeyVaultSignTool` on `*.nupkg` + `*.snupkg` | **Signed** |
 | NuGet / CLI release assets | GitHub Release `SHA256SUMS` + `.asc` | GPG-signed checksums | **Signed** |
 | Authenticode | DLLs / Windows `toggly-cli.exe` | Not enabled | **Gated** — needs Code Signing EKU on `NUGET_SIGN_CERTIFICATE` |
-| npm `@ops-ai/*` | 40 inventoried packages | OIDC Trusted Publisher + `--provenance` | **Partial** — proven packages hardened; remainder await Trusted Publisher OTP |
+| npm `@ops-ai/*` | 40 inventoried packages | OIDC Trusted Publisher + `--provenance` | **Ready** — all inventoried packages `oidcReady: true` |
 | Maven Central (Java / Android) | Java + Android SDKs | GPG-signed artifacts | **Signed** |
 | PyPI | Python packages | Trusted publishing / OIDC attestations | **Acceptable** |
 | RubyGems | Ruby gems | Trusted publishing | **Acceptable** |
