@@ -137,6 +137,10 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
 
+      # Keep release packed-host replay aligned with the analysis workflow.
+      - name: Pin npm for recorded consumer locks
+        run: npm install --global npm@10.2.3
+
       - name: Sync monorepo package versions
         if: needs.resolve.outputs.manifest_changed == 'true'
         run: |

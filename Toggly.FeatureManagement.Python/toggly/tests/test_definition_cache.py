@@ -21,12 +21,10 @@ from toggly.definition_cache import (
     definitions_from_signed_envelope,
     extract_raw_defs_json,
     fetched_definitions_result,
-    fetched_variants_result,
     if_none_match_headers,
     is_stale_signed_timestamp,
     normalize_revision,
     parse_definitions_payload,
-    parse_evaluated_variants_payload,
     parse_signed_definitions_envelope,
     parse_signed_timestamp,
     prepare_definitions_body,
@@ -36,7 +34,6 @@ from toggly.definition_cache import (
 )
 from toggly.enums import LoadStatus
 from toggly.exceptions import TogglyNetworkError, TogglySignatureError
-from toggly.models import EvaluatedVariantDef
 
 
 class TestDefinitionCacheHelpers:
@@ -141,10 +138,43 @@ class TestDefinitionCacheHelpers:
         )
         assert len(defs) == 1
         assert defs[0].feature_key == "feat"
+        assert defs[0].variants == []
+        assert defs[0].allocation is None
         assert parse_definitions_payload({"features": []}) == []
         assert parse_definitions_payload("bad") == []
         assert parse_definitions_payload([{"filters": []}]) == []
         assert parse_definitions_payload([None, "x"]) == []
+
+    def test_parse_definitions_payload_with_variants_and_allocation(self) -> None:
+        defs = parse_definitions_payload(
+            [
+                {
+                    "featureKey": "feat",
+                    "filters": [{"name": "AlwaysOn", "parameters": {}}],
+                    "variants": [
+                        {
+                            "name": "A",
+                            "configurationValue": {"x": 1},
+                            "statusOverride": "None",
+                        }
+                    ],
+                    "allocation": {
+                        "defaultWhenEnabled": "A",
+                        "defaultWhenDisabled": None,
+                        "seed": None,
+                        "user": [{"variant": "A", "users": ["u1"]}],
+                        "group": None,
+                        "percentile": None,
+                    },
+                }
+            ]
+        )
+        assert len(defs) == 1
+        assert defs[0].variants[0].name == "A"
+        assert defs[0].variants[0].configuration_value == {"x": 1}
+        assert defs[0].allocation is not None
+        assert defs[0].allocation.default_when_enabled == "A"
+        assert defs[0].allocation.user[0].users == ["u1"]
 
     def test_parse_signed_timestamp_and_stale(self) -> None:
         assert parse_signed_timestamp(True) is None
@@ -210,39 +240,6 @@ class TestDefinitionCacheHelpers:
         fetched = fetched_definitions_result({"z": True}, defs, etag='"e"')
         assert fetched[1] == "miss"
         assert fetched[0].status == LoadStatus.FETCHED
-
-    def test_parse_evaluated_variants_and_fetched_result(self) -> None:
-        assert parse_evaluated_variants_payload("bad") == ({}, None, None, None)
-        defs, sig, ts, kid = parse_evaluated_variants_payload(
-            {
-                "defs": {
-                    "feat": {"enabled": True, "value": "A"},
-                },
-                "signature": "s",
-                "timestamp": 3.2,
-                "kid": "k",
-            }
-        )
-        assert isinstance(defs["feat"], EvaluatedVariantDef)
-        assert sig == "s"
-        assert ts == 3
-        assert kid == "k"
-        # int timestamp path
-        _, _, ts2, _ = parse_evaluated_variants_payload({"defs": {}, "timestamp": 9})
-        assert ts2 == 9
-        _, _, ts3, _ = parse_evaluated_variants_payload({"defs": {}, "timestamp": "x"})
-        assert ts3 is None
-
-        result = fetched_variants_result(
-            {"feat": True},
-            defs,
-            etag='"v"',
-            signature="s",
-            kid="k",
-            timestamp=3,
-        )
-        assert result[1] == "miss"
-        assert result[2].etag == '"v"'
 
     def test_verify_and_parse_signed_envelope(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from toggly.definition_cache import verify_and_parse_signed_envelope

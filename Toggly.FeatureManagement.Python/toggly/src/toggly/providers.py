@@ -13,7 +13,6 @@ from threading import RLock
 from typing import Any
 
 from toggly.models import (
-    EvaluatedVariantDef,
     FeatureDefinition,
     JsonWebKey,
     JsonWebKeySet,
@@ -92,58 +91,6 @@ class DefinitionsSnapshot:
             and self.key_id
             and self.timestamp is not None
             and self.signed_defs_json is not None
-        )
-
-
-@dataclass
-class VariantsSnapshot:
-    """Snapshot of server-evaluated feature variants for caching."""
-
-    defs: dict[str, EvaluatedVariantDef] = field(default_factory=dict)
-    """Per-feature evaluated variant definitions."""
-
-    signature: str | None = None
-    """Response signature when using signed variants."""
-
-    key_id: str | None = None
-    """Signing key id (``kid`` from API)."""
-
-    timestamp: int | None = None
-    """Unix timestamp from the signed response."""
-
-    etag: str | None = None
-    """ETag for conditional GET."""
-
-    context_key: str | None = None
-    """Complete request context fingerprint; absent legacy snapshots are not reusable."""
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert snapshot to a dictionary for serialization."""
-        return {
-            "defs": {k: v.to_dict() for k, v in self.defs.items()},
-            "signature": self.signature,
-            "key_id": self.key_id,
-            "timestamp": self.timestamp,
-            "etag": self.etag,
-            "context_key": self.context_key,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> VariantsSnapshot:
-        """Create a snapshot from a dictionary."""
-        raw = data.get("defs") or {}
-        defs: dict[str, EvaluatedVariantDef] = {}
-        if isinstance(raw, dict):
-            for key, value in raw.items():
-                if isinstance(value, dict):
-                    defs[key] = EvaluatedVariantDef.from_dict(value)
-        return cls(
-            defs=defs,
-            signature=data.get("signature"),
-            key_id=data.get("key_id") or data.get("kid"),
-            timestamp=data.get("timestamp"),
-            etag=data.get("etag"),
-            context_key=data.get("context_key"),
         )
 
 
@@ -271,26 +218,6 @@ class SnapshotProvider(ABC):
         """
         pass
 
-    def load_variants(self) -> VariantsSnapshot | None:
-        """Load cached evaluated variants.
-
-        Returns:
-            Cached variants snapshot, or None if not available.
-
-        """
-        return None
-
-    def save_variants(self, snapshot: VariantsSnapshot) -> None:  # noqa: B027
-        """Persist evaluated variants snapshot.
-
-        Default implementation does nothing.
-
-        Args:
-            snapshot: Variants snapshot to save.
-
-        """
-        pass
-
 
 class MemorySnapshotProvider(SnapshotProvider):
     """In-memory snapshot provider.
@@ -301,7 +228,6 @@ class MemorySnapshotProvider(SnapshotProvider):
     def __init__(self) -> None:
         """Initialize the memory snapshot provider."""
         self._definitions: DefinitionsSnapshot | None = None
-        self._variants: VariantsSnapshot | None = None
         self._jwks: JwksSnapshot | None = None
         self._lock = RLock()
 
@@ -345,21 +271,10 @@ class MemorySnapshotProvider(SnapshotProvider):
         with self._lock:
             self._jwks = snapshot
 
-    def load_variants(self) -> VariantsSnapshot | None:
-        """Load cached evaluated variants from memory."""
-        with self._lock:
-            return self._variants
-
-    def save_variants(self, snapshot: VariantsSnapshot) -> None:
-        """Save evaluated variants to memory."""
-        with self._lock:
-            self._variants = snapshot
-
     def clear(self) -> None:
         """Clear all cached data."""
         with self._lock:
             self._definitions = None
-            self._variants = None
             self._jwks = None
 
     def clear_jwks(self) -> None:
@@ -379,7 +294,6 @@ class FileSnapshotProvider(SnapshotProvider):
         self,
         directory: str | Path | None = None,
         definitions_filename: str = "toggly_definitions.json",
-        variants_filename: str = "toggly_variants.json",
         jwks_filename: str = "toggly_jwks.json",
     ) -> None:
         """Initialize the file snapshot provider.
@@ -388,7 +302,6 @@ class FileSnapshotProvider(SnapshotProvider):
             directory: Directory for storing snapshot files.
                       Defaults to system temp directory.
             definitions_filename: Filename for definitions snapshot.
-            variants_filename: Filename for evaluated variants snapshot.
             jwks_filename: Filename for JWKS snapshot.
 
         """
@@ -396,7 +309,6 @@ class FileSnapshotProvider(SnapshotProvider):
             directory = Path(tempfile.gettempdir()) / "toggly"
         self._directory = Path(directory)
         self._definitions_path = self._directory / definitions_filename
-        self._variants_path = self._directory / variants_filename
         self._jwks_path = self._directory / jwks_filename
         self._lock = RLock()
 
@@ -423,16 +335,6 @@ class FileSnapshotProvider(SnapshotProvider):
         with self._lock:
             self._save_json(self._definitions_path, snapshot.to_dict())
 
-    def load_variants(self) -> VariantsSnapshot | None:
-        """Load cached evaluated variants from file."""
-        with self._lock:
-            return self._load_json(self._variants_path, VariantsSnapshot.from_dict)
-
-    def save_variants(self, snapshot: VariantsSnapshot) -> None:
-        """Save evaluated variants to file using atomic write."""
-        with self._lock:
-            self._save_json(self._variants_path, snapshot.to_dict())
-
     def load_jwks(self) -> JwksSnapshot | None:
         """Load cached JSON Web Key Set from file.
 
@@ -456,7 +358,7 @@ class FileSnapshotProvider(SnapshotProvider):
     def clear(self) -> None:
         """Clear all cached files."""
         with self._lock:
-            for path in [self._definitions_path, self._variants_path, self._jwks_path]:
+            for path in [self._definitions_path, self._jwks_path]:
                 with contextlib.suppress(OSError):
                     path.unlink(missing_ok=True)
 

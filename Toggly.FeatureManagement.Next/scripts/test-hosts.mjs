@@ -22,6 +22,15 @@ const hosts = [
   {next: '16.3.5', react: '19.3.0', reactTypes: '19.3.0', domTypes: '19.3.0', nodeTypes: '24.13.6', lib: 'esnext', typescript: '6.0.3', bundler: '--webpack'},
   {next: '16.3.5', react: '19.3.0', reactTypes: '19.3.0', domTypes: '19.3.0', nodeTypes: '24.13.6', lib: 'esnext', typescript: '6.0.3', bundler: '--turbopack'},
 ]
+function assertCaretRangeContains(version, range, packageName) {
+  const requested = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(range)
+  const installed = /^(\d+)\.(\d+)\.(\d+)$/.exec(version)
+  assert(requested && installed, `${packageName} must use a plain semver caret range`)
+  const [, major, minor, patch] = requested.map(Number)
+  const [, installedMajor, installedMinor, installedPatch] = installed.map(Number)
+  assert.equal(installedMajor, major, `${packageName} must satisfy ${range}`)
+  assert(installedMinor > minor || installedMinor === minor && installedPatch >= patch, `${packageName} must satisfy ${range}`)
+}
 async function files(directory) {
   const result = []
   for (const entry of await readdir(directory, {withFileTypes: true})) {
@@ -47,7 +56,17 @@ await withResources(async defer => {
     await writeFile(join(host, 'package.json'), JSON.stringify({name: 'toggly-next-packed-host', private: true, type: 'module', dependencies: {next: fixture.next, react: fixture.react, 'react-dom': fixture.react, '@ops-ai/nextjs-toggly-edge': '1.6.0'}, devDependencies: {typescript: fixture.typescript, '@types/node': fixture.nodeTypes, '@types/react': fixture.reactTypes, '@types/react-dom': fixture.domTypes, 'puppeteer-core': '25.10.0'}}))
     await run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', ...archives, ...(artifact ? [artifact] : [])], host)
     const versions = {}
-    for (const [name, version] of [['next', fixture.next], ['react', fixture.react], ['typescript', fixture.typescript], ['@ops-ai/nextjs-toggly-core', JSON.parse(await readFile(join(root, 'nextjs-toggly-core/package.json'), 'utf8')).version], ['@ops-ai/nextjs-toggly-edge', '1.6.0'], ['@ops-ai/nextjs-toggly-client', JSON.parse(await readFile(join(root, 'nextjs-toggly-client/package.json'), 'utf8')).version], ['@ops-ai/toggly-client-telemetry', '1.1.0']]) {
+    const corePackage = JSON.parse(await readFile(join(host, 'node_modules/@ops-ai/nextjs-toggly-core/package.json'), 'utf8'))
+    const telemetryRange = corePackage.dependencies['@ops-ai/toggly-client-telemetry']
+    const telemetryPackage = JSON.parse(await readFile(join(host, 'node_modules/@ops-ai/toggly-client-telemetry/package.json'), 'utf8'))
+    assertCaretRangeContains(telemetryPackage.version, telemetryRange, '@ops-ai/toggly-client-telemetry')
+    const consumerLock = JSON.parse(await readFile(join(host, 'package-lock.json'), 'utf8'))
+    const telemetryLock = consumerLock.packages['node_modules/@ops-ai/toggly-client-telemetry']
+    assert(telemetryLock, 'frontend reporter must be present in the consumer lock')
+    assert.notEqual(telemetryLock.link, true, 'frontend reporter must not be a workspace link')
+    assert.match(telemetryLock.integrity ?? '', /^sha512-/, 'frontend reporter must retain npm SHA-512 integrity')
+    if (!artifact) assert(telemetryLock.resolved?.startsWith('https://registry.npmjs.org/@ops-ai/toggly-client-telemetry/-/'), 'frontend reporter must resolve from the public npm registry')
+    for (const [name, version] of [['next', fixture.next], ['react', fixture.react], ['typescript', fixture.typescript], ['@ops-ai/nextjs-toggly-core', JSON.parse(await readFile(join(root, 'nextjs-toggly-core/package.json'), 'utf8')).version], ['@ops-ai/nextjs-toggly-edge', '1.6.0'], ['@ops-ai/nextjs-toggly-client', JSON.parse(await readFile(join(root, 'nextjs-toggly-client/package.json'), 'utf8')).version], ['@ops-ai/toggly-client-telemetry', telemetryPackage.version]]) {
       versions[name] = JSON.parse(await readFile(join(host, 'node_modules', name, 'package.json'), 'utf8')).version
       assert.equal(versions[name], version)
     }

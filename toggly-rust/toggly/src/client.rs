@@ -3,7 +3,7 @@
 use crate::cache::Cache;
 use crate::config::{TogglyConfig, TogglyConfigBuilder};
 use crate::context::EvalContext;
-use crate::eval::Engine;
+use crate::eval::{assign_variant, Engine, VariantAssignment};
 use crate::provider::DefinitionsProvider;
 use crate::telemetry::{
     MetricsFeatureOptions, TelemetryRuntime, TelemetryRuntimeConfig, TelemetrySenders,
@@ -146,6 +146,77 @@ impl TogglyClient {
         context: EvalContext,
     ) -> crate::Result<bool> {
         Ok(!self.is_enabled(feature_key, context).await?)
+    }
+
+    /// Assign a feature variant, matching `Microsoft.FeatureManagement`
+    /// (`IVariantFeatureManager`) bit-for-bit for the same definition,
+    /// enabled state, and targeting context.
+    ///
+    /// Assigns locally from the cached definitions catalog (`variants` +
+    /// `allocation`); no network call and no dependency on
+    /// `evaluated-variants-signed`. Records a usage check (variant-tagged)
+    /// when usage tracking is enabled.
+    #[instrument(skip(self, context), fields(feature = %feature_key))]
+    pub async fn get_variant(
+        &self,
+        feature_key: &str,
+        context: EvalContext,
+    ) -> crate::Result<VariantAssignment> {
+        if feature_key.is_empty() {
+            return Err(crate::Error::Config("feature_key is required".to_string()));
+        }
+
+        let provider = self.provider.read().await;
+        let definition = match provider.get(feature_key) {
+            Some(def) => def,
+            None => {
+                let enabled = self.config.enable_undefined_in_dev;
+                self.record_check(feature_key, enabled, context.identity.as_deref());
+                return Ok(VariantAssignment {
+                    variant_name: None,
+                    configuration_value: None,
+                    enabled,
+                    assignment_reason: crate::eval::AssignmentReason::None,
+                });
+            }
+        };
+        drop(provider);
+
+        let filter_enabled = self.engine.evaluate(&definition, &context)?;
+        let assignment = assign_variant(
+            &definition,
+            filter_enabled,
+            &context,
+            self.config.variant_ignore_case,
+        );
+
+        debug!(
+            feature = %feature_key,
+            variant = ?assignment.variant_name,
+            enabled = %assignment.enabled,
+            reason = %assignment.assignment_reason,
+            "Variant assigned"
+        );
+        self.record_variant_check(
+            feature_key,
+            assignment.enabled,
+            context.identity.as_deref(),
+            assignment.variant_name.as_deref(),
+        );
+        Ok(assignment)
+    }
+
+    /// Get the assigned variant's configuration payload, or `None` if no
+    /// variant was assigned.
+    pub async fn get_variant_value(
+        &self,
+        feature_key: &str,
+        context: EvalContext,
+    ) -> crate::Result<Option<serde_json::Value>> {
+        Ok(self
+            .get_variant(feature_key, context)
+            .await?
+            .configuration_value)
     }
 
     /// Evaluate a feature gate (multiple features with AND/OR logic).
@@ -317,6 +388,20 @@ impl TogglyClient {
         }
     }
 
+    fn record_variant_check(
+        &self,
+        feature_key: &str,
+        enabled: bool,
+        identity: Option<&str>,
+        variant: Option<&str>,
+    ) {
+        if let Some(tel) = &self.telemetry {
+            if tel.usage_enabled() {
+                tel.record_check(feature_key, enabled, identity, variant, false);
+            }
+        }
+    }
+
     fn cache_key(&self, feature_key: &str, context: &EvalContext) -> String {
         let identity = context.identity.as_deref().unwrap_or("");
         let groups = context.groups.join(",");
@@ -445,6 +530,12 @@ impl TogglyClientBuilder {
     /// Enable or disable business metrics export (Toggly gRPC).
     pub fn enable_metrics(mut self, enabled: bool) -> Self {
         self.config_builder = self.config_builder.enable_metrics(enabled);
+        self
+    }
+
+    /// Enable case-insensitive user/group matching for variant allocation.
+    pub fn variant_ignore_case(mut self, enabled: bool) -> Self {
+        self.config_builder = self.config_builder.variant_ignore_case(enabled);
         self
     }
 

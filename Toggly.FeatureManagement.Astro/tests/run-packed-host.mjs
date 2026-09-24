@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import semver from 'semver';
 import { createHash, webcrypto } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
@@ -91,7 +92,9 @@ const evidence = {
 };
 await writeFile(path.join(root, 'registry-evidence.json'), `${JSON.stringify(evidence, null, 2)}\n`);
 console.log(JSON.stringify(evidence));
-assert.equal(lock.packages['node_modules/@ops-ai/toggly-client-telemetry'].version, '1.1.0');
+const reporter = lock.packages['node_modules/@ops-ai/toggly-client-telemetry'];
+const reporterRange = lock.packages['node_modules/@ops-ai/astro-feature-flags-toggly'].dependencies['@ops-ai/toggly-client-telemetry'];
+assert.ok(semver.satisfies(reporter.version, reporterRange), `Reporter ${reporter.version} must satisfy SDK dependency ${reporterRange}`);
 await run(['--test', path.join(packageDir, 'tests/host-cleanup.test.mjs')], packageDir);
 // Independent Worker-compatible signer: SHA256 payload, then ECDSA SHA256.
 // Keys exist only in this test process; no Toggly account or production key is used.

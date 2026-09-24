@@ -10,7 +10,7 @@ from toggly_django.decorators import feature_flag_required, feature_gate_require
 from toggly_django.middleware import TogglyMiddleware
 from toggly_django.utils import get_client, get_context_from_request
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 __all__ = [
     "TogglyDjangoConfig",
     "TogglyMiddleware",

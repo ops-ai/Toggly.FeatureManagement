@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.0
+
+### Added
+- Catalog-local feature variants: `Toggly.get_variant/4` /
+  `Toggly.get_variant_value/4` and `Toggly.Variant` /
+  `Toggly.Variant.Assignment`. Assignment (user → group → percentile →
+  `DefaultWhenEnabled` / `DefaultWhenDisabled`, percentile SHA-256 hash,
+  `statusOverride` applied to the effective enabled state) matches
+  `Microsoft.FeatureManagement` 4.7.0 (`IVariantFeatureManager`) bit-for-bit;
+  verified against the shared `variant-allocator-corpus` gold corpus (18/18
+  cases). No dual-rail network call — variants are read from the same
+  definitions catalog map that already drives `enabled?/4` [OPS-1395].
+- `:ignore_case` option on `get_variant/4` for case-insensitive user/group
+  targeting, mirroring `TargetingEvaluationOptions.IgnoreCase` (default
+  `false`) [OPS-1395].
+- `Toggly.record_usage/4` and `Toggly.record_view/4` accept an optional
+  variant name to attribute usage/view counters to that variant instead of
+  the `enabled`/`disabled` label [OPS-1395].
+
 ## 0.2.1 — 2026-09-17
 
 ### Fixed

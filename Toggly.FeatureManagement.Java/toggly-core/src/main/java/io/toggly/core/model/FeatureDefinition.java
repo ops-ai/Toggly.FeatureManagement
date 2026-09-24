@@ -17,6 +17,8 @@ public final class FeatureDefinition {
     private final FeatureRequirement contextRequirementType;
     private final boolean securedFeature;
     private final List<MetricDefinition> metrics;
+    private final List<VariantDefinition> variants;
+    private final VariantAllocation allocation;
 
     private FeatureDefinition(Builder builder) {
         this.featureKey = builder.featureKey;
@@ -28,6 +30,10 @@ public final class FeatureDefinition {
         this.metrics = builder.metrics != null
                 ? Collections.unmodifiableList(new ArrayList<>(builder.metrics))
                 : Collections.emptyList();
+        this.variants = builder.variants != null
+                ? Collections.unmodifiableList(new ArrayList<>(builder.variants))
+                : Collections.emptyList();
+        this.allocation = builder.allocation;
     }
 
     public static Builder builder() {
@@ -62,6 +68,26 @@ public final class FeatureDefinition {
         return metrics;
     }
 
+    /**
+     * Named variants for this feature flag (A/B testing, progressive rollout),
+     * as parsed from the catalog. Empty when the feature has no variants
+     * configured — in which case the variant-assignment pipeline never runs
+     * ({@code io.toggly.core.eval.VariantAllocator} short-circuits to reason
+     * {@code None}).
+     */
+    public List<VariantDefinition> getVariants() {
+        return variants;
+    }
+
+    /**
+     * Allocation rules for variant assignment (user, group, percentile
+     * targeting), as parsed from the catalog. Null when the feature has
+     * variants but no allocation rules configured.
+     */
+    public VariantAllocation getAllocation() {
+        return allocation;
+    }
+
     public static final class Builder {
         private String featureKey;
         private List<FeatureFilter> filters = new ArrayList<>();
@@ -70,6 +96,8 @@ public final class FeatureDefinition {
         private FeatureRequirement contextRequirementType;
         private boolean securedFeature = false;
         private List<MetricDefinition> metrics;
+        private List<VariantDefinition> variants;
+        private VariantAllocation allocation;
 
         private Builder() {}
 
@@ -110,6 +138,28 @@ public final class FeatureDefinition {
 
         public Builder metrics(List<MetricDefinition> metrics) {
             this.metrics = metrics != null ? List.copyOf(metrics) : null;
+            return this;
+        }
+
+        /**
+         * Sets the named variants for this feature (A/B testing, progressive rollout).
+         *
+         * @param variants variant definitions, or null/empty for none
+         * @return this builder
+         */
+        public Builder variants(List<VariantDefinition> variants) {
+            this.variants = variants != null ? new ArrayList<>(variants) : null;
+            return this;
+        }
+
+        /**
+         * Sets the allocation rules for variant assignment.
+         *
+         * @param allocation allocation rules, or null for none
+         * @return this builder
+         */
+        public Builder allocation(VariantAllocation allocation) {
+            this.allocation = allocation;
             return this;
         }
 

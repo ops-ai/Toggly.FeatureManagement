@@ -1,17 +1,29 @@
 name: Overlay shared JS deps
 description: >-
-  Copy built in-repo shared package dist trees into node_modules after npm install
-  so PRs can test unpublished @ops-ai/* shared packages.
+  Copy built in-repo shared package dist trees into node_modules after npm/pnpm
+  install so PRs can test unpublished @ops-ai/* shared packages.
 
 inputs:
   package-dir:
-    description: SDK directory containing node_modules (relative to repo root)
-    required: true
+    description: >-
+      SDK directory containing a flat node_modules (relative to repo root).
+      Use for npm-installed SDKs. Mutually exclusive with pnpm-store-dir.
+    required: false
+    default: ''
+  pnpm-store-dir:
+    description: >-
+      Directory containing a pnpm-managed node_modules/.pnpm virtual store
+      (relative to repo root), e.g. Toggly.FeatureManagement.Node. Use for
+      pnpm workspaces where dependencies live under node_modules/.pnpm/
+      instead of a flat node_modules. Mutually exclusive with package-dir.
+    required: false
+    default: ''
 
 runs:
   using: composite
   steps:
-    - name: Overlay built shared packages into node_modules
+    - name: Overlay built shared packages (flat node_modules)
+      if: inputs.package-dir != ''
       shell: bash
       run: |
         set -euo pipefail
@@ -42,6 +54,40 @@ runs:
           rm -rf "$dest"
           cp -R "$src" "$dest"
           echo "Overlaid $src_pkg/dist -> $dest"
+        }
+
+        overlay toggly-hooks-types @ops-ai/toggly-hooks-types
+        overlay toggly-signed-defs @ops-ai/toggly-signed-defs
+        overlay toggly-eval @ops-ai/toggly-eval
+
+    - name: Overlay built shared packages (pnpm virtual store)
+      if: inputs.pnpm-store-dir != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        wd="${{ inputs.pnpm-store-dir }}"
+
+        overlay() {
+          local src_pkg="$1"
+          local npm_name="$2"
+          local src="$GITHUB_WORKSPACE/$src_pkg/dist"
+          if [[ ! -d "$src" ]]; then
+            echo "Skip overlay $npm_name (no built dist at $src)"
+            return 0
+          fi
+          # pnpm's virtual store directory-ifies the scope: @ops-ai/foo -> @ops-ai+foo
+          local scoped="${npm_name/\//+}"
+          local found=0
+          for store_dir in "$wd"/node_modules/.pnpm/"$scoped"@*/node_modules/"$npm_name"; do
+            [[ -d "$store_dir" ]] || continue
+            rm -rf "$store_dir/dist"
+            cp -R "$src" "$store_dir/dist"
+            echo "Overlaid $src_pkg/dist -> $store_dir/dist"
+            found=1
+          done
+          if [[ "$found" -eq 0 ]]; then
+            echo "Skip overlay $npm_name (no pnpm store entry under $wd)"
+          fi
         }
 
         overlay toggly-hooks-types @ops-ai/toggly-hooks-types

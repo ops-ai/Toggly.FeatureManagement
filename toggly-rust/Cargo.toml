@@ -10,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.6.3"
+version = "0.7.0"
 authors = ["Toggly <support@toggly.io>"]
 edition = "2021"
 rust-version = "1.88"
@@ -61,8 +61,12 @@ wiremock = "0.6"
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 
-# Workspace crates — pin to the latest *published* version (0.6.1 is on
-# crates.io; 0.6.2 is not yet), so cargo package/publish checks resolve
-# toggly/toggly-macros from crates.io ahead of this release landing there.
-toggly = { version = "0.6.1", path = "toggly" }
-toggly-macros = { version = "0.6.1", path = "toggly-macros" }
+# Workspace crates — path pin range covers both the last version published
+# to crates.io and the new workspace.package.version above. Downstream
+# adapter crates (e.g. toggly-axum08) run `cargo package`/`publish` in CI,
+# which resolves `toggly` against crates.io — that lags this manifest until
+# the release workflow actually publishes the bump. A bare `^X.Y.Z` caret
+# pin breaks that resolution as soon as X.Y changes here (see OPS-1247), so
+# widen the range across every published version between them instead.
+toggly = { version = ">=0.6.3, <0.8.0", path = "toggly" }
+toggly-macros = { version = ">=0.6.3, <0.8.0", path = "toggly-macros" }

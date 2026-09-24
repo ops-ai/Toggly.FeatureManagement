@@ -27,9 +27,6 @@ func (m *MemoryProvider) LoadDefinitions(ctx context.Context) (*DefinitionsSnaps
 	if m.defs.RawDefs != nil {
 		cpy.RawDefs = append(json.RawMessage(nil), m.defs.RawDefs...)
 	}
-	if m.defs.VariantRawDefs != nil {
-		cpy.VariantRawDefs = append(json.RawMessage(nil), m.defs.VariantRawDefs...)
-	}
 	return &cpy, nil
 }
 
@@ -40,9 +37,6 @@ func (m *MemoryProvider) SaveDefinitions(ctx context.Context, snap DefinitionsSn
 	cpy := snap
 	if snap.RawDefs != nil {
 		cpy.RawDefs = append(json.RawMessage(nil), snap.RawDefs...)
-	}
-	if snap.VariantRawDefs != nil {
-		cpy.VariantRawDefs = append(json.RawMessage(nil), snap.VariantRawDefs...)
 	}
 	m.defs = &cpy
 	return nil

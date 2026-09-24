@@ -1,5 +1,5 @@
 {
-  "name": "toggly-native-storage-2.2.0-3ye0Ds",
+  "name": "toggly-native-storage-2.2.0-69YCQx",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
@@ -2014,12 +2014,12 @@
       }
     },
     "node_modules/@ops-ai/react-native-toggly-core": {
-      "version": "1.9.0",
+      "version": "1.9.1",
       "resolved": "file:core.tgz",
-      "integrity": "sha512-OBOGLtHbynM1r6iLOeEhnE25/L3xCSSdqvt5dzxsMc+EoKyfN3qDLx6OjcHIMYK//DzVAlyHy0bFsixfsSfIeQ==",
+      "integrity": "sha512-iLUrSfJZIt9XldO7aDzjXbMIlDEjT8BXMYSn1AFsn9OJvc1Qx6NvJasY1QFsJK8eP6fEDWV0uk0QVugl4BA01w==",
       "license": "MIT",
       "dependencies": {
-        "@ops-ai/toggly-client-telemetry": "^1.1.0",
+        "@ops-ai/toggly-client-telemetry": "^1.1.1",
         "@ops-ai/toggly-hooks-types": "^1.4.3",
         "@ops-ai/toggly-local-gates": "^1.0.1",
         "@ops-ai/toggly-signed-defs": "^1.2.3"
@@ -2052,9 +2052,9 @@
       }
     },
     "node_modules/@ops-ai/toggly-client-telemetry": {
-      "version": "1.1.0",
-      "resolved": "https://registry.npmjs.org/@ops-ai/toggly-client-telemetry/-/toggly-client-telemetry-1.1.0.tgz",
-      "integrity": "sha512-E3J9B+Hk8blxfU49xjJer/7gYoacBMjAoGQmosn99TVxK9Mpr5cpS2mTP2PJ5PF7edRgcdvTBoeXv+hIKriTgw==",
+      "version": "1.1.1",
+      "resolved": "https://registry.npmjs.org/@ops-ai/toggly-client-telemetry/-/toggly-client-telemetry-1.1.1.tgz",
+      "integrity": "sha512-+Hub75lrc2V2Wc+v9J3ZgrIMlcMoNyLh+VzJCyHga9wug/rpyRm3zHqlIxOo17Ti93wIxmsZsocG0o5aCJQxBw==",
       "license": "MIT",
       "engines": {
         "node": ">=18.0.0"
@@ -5584,9 +5584,6 @@
       "cpu": [
         "arm64"
       ],
-      "libc": [
-        "glibc"
-      ],
       "license": "MPL-2.0",
       "optional": true,
       "os": [
@@ -5606,9 +5603,6 @@
       "integrity": "sha512-yiO5ROMuYQgXbC60yjZU5CYSFZGKXL0HFATXt9mHJn1+zW55oCtMI9NfcVhYLMFDL7gV7oBPon/EmMMGg2OvtQ==",
       "cpu": [
         "arm64"
-      ],
-      "libc": [
-        "musl"
       ],
       "license": "MPL-2.0",
       "optional": true,
@@ -5630,9 +5624,6 @@
       "cpu": [
         "x64"
       ],
-      "libc": [
-        "glibc"
-      ],
       "license": "MPL-2.0",
       "optional": true,
       "os": [
@@ -5652,9 +5643,6 @@
       "integrity": "sha512-RYiYbkokw0trfKqqzfF55lginwEPrD3OJDfTuJzFs1MK6iFnDenaz1fqLLtX4ITG3OktJQXOeTaw1awrBAlZPw==",
       "cpu": [
         "x64"
-      ],
-      "libc": [
-        "musl"
       ],
       "license": "MPL-2.0",
       "optional": true,

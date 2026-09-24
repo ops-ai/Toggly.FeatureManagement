@@ -29,12 +29,207 @@ class FeatureFilter:
             raise ValueError("Filter name cannot be empty")
 
 
+#: Variant does not affect whether the flag is considered enabled or disabled.
+VARIANT_STATUS_OVERRIDE_NONE = "None"
+#: When assigned, the feature flag is evaluated as enabled.
+VARIANT_STATUS_OVERRIDE_ENABLED = "Enabled"
+#: When assigned, the feature flag is evaluated as disabled.
+VARIANT_STATUS_OVERRIDE_DISABLED = "Disabled"
+
+
+@dataclass
+class Variant:
+    """A named variant of a feature flag (Microsoft.FeatureManagement schema)."""
+
+    name: str
+    """Unique name identifying this variant within the feature."""
+
+    configuration_value: Any = None
+    """Configuration payload for this variant (string, number, bool, or object)."""
+
+    status_override: str = VARIANT_STATUS_OVERRIDE_NONE
+    """``"None"`` | ``"Enabled"`` | ``"Disabled"`` — overrides effective enabled state."""
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Variant | None:
+        """Create a Variant from a dictionary (camelCase wire keys).
+
+        Returns ``None`` when required fields are missing so a malformed
+        catalog row cannot crash ``client.init()``.
+        """
+        name = data.get("name")
+        if not name:
+            return None
+        return cls(
+            name=str(name),
+            configuration_value=data.get(
+                "configurationValue", data.get("configuration_value")
+            ),
+            status_override=(
+                data.get("statusOverride")
+                or data.get("status_override")
+                or VARIANT_STATUS_OVERRIDE_NONE
+            ),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to a dictionary for serialization."""
+        return {
+            "name": self.name,
+            "configurationValue": self.configuration_value,
+            "statusOverride": self.status_override,
+        }
+
+
+@dataclass
+class UserAllocation:
+    """Assigns a variant to a specific list of users by identity."""
+
+    variant: str
+    users: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> UserAllocation | None:
+        """Create from a dictionary. Returns ``None`` when ``variant`` is missing."""
+        variant = data.get("variant")
+        if not variant:
+            return None
+        return cls(variant=str(variant), users=list(data.get("users") or []))
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to a dictionary for serialization."""
+        return {"variant": self.variant, "users": self.users}
+
+
+@dataclass
+class GroupAllocation:
+    """Assigns a variant to users belonging to specific groups."""
+
+    variant: str
+    groups: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> GroupAllocation | None:
+        """Create from a dictionary. Returns ``None`` when ``variant`` is missing."""
+        variant = data.get("variant")
+        if not variant:
+            return None
+        return cls(variant=str(variant), groups=list(data.get("groups") or []))
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to a dictionary for serialization."""
+        return {"variant": self.variant, "groups": self.groups}
+
+
+@dataclass
+class PercentileAllocation:
+    """Assigns a variant to users whose computed percentile falls within a range."""
+
+    variant: str
+    from_: float = 0.0
+    to: float = 100.0
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> PercentileAllocation | None:
+        """Create from a dictionary (``from`` is a reserved word on the wire).
+
+        Returns ``None`` when ``variant`` is missing. Uses explicit ``None``
+        checks for ``from``/``to`` so a boundary of ``0`` is preserved
+        (``or`` would wrongly treat ``0`` as missing).
+        """
+        variant = data.get("variant")
+        if not variant:
+            return None
+        from_raw = data.get("from", 0.0)
+        to_raw = data.get("to", 100.0)
+        return cls(
+            variant=str(variant),
+            from_=float(from_raw if from_raw is not None else 0.0),
+            to=float(to_raw if to_raw is not None else 100.0),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to a dictionary for serialization."""
+        return {"variant": self.variant, "from": self.from_, "to": self.to}
+
+
+@dataclass
+class Allocation:
+    """Defines how variants are allocated to users for a feature flag.
+
+    Mirrors the ``Microsoft.FeatureManagement`` ``VariantFeatureDefinition``
+    allocation schema: user/group/percentile targeting plus enabled/disabled
+    defaults.
+    """
+
+    default_when_enabled: str | None = None
+    """Variant to assign when enabled and no other allocation matches."""
+
+    default_when_disabled: str | None = None
+    """Variant to assign when the feature is disabled."""
+
+    seed: str | None = None
+    """Seed for percentile hashing. Defaults to ``allocation\\n{featureName}``."""
+
+    user: list[UserAllocation] = field(default_factory=list)
+    """Allocations that assign variants to specific users by identity."""
+
+    group: list[GroupAllocation] = field(default_factory=list)
+    """Allocations that assign variants to users in specific groups."""
+
+    percentile: list[PercentileAllocation] = field(default_factory=list)
+    """Allocations that assign variants based on a percentile bucket."""
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> Allocation | None:
+        """Create an Allocation from a dictionary, or None when absent."""
+        if not data:
+            return None
+        return cls(
+            default_when_enabled=data.get("defaultWhenEnabled")
+            or data.get("default_when_enabled"),
+            default_when_disabled=data.get("defaultWhenDisabled")
+            or data.get("default_when_disabled"),
+            seed=data.get("seed"),
+            user=[
+                u
+                for u in (UserAllocation.from_dict(x) for x in (data.get("user") or []))
+                if u is not None
+            ],
+            group=[
+                g
+                for g in (GroupAllocation.from_dict(x) for x in (data.get("group") or []))
+                if g is not None
+            ],
+            percentile=[
+                p
+                for p in (
+                    PercentileAllocation.from_dict(x)
+                    for x in (data.get("percentile") or [])
+                )
+                if p is not None
+            ],
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to a dictionary for serialization."""
+        return {
+            "defaultWhenEnabled": self.default_when_enabled,
+            "defaultWhenDisabled": self.default_when_disabled,
+            "seed": self.seed,
+            "user": [u.to_dict() for u in self.user],
+            "group": [g.to_dict() for g in self.group],
+            "percentile": [p.to_dict() for p in self.percentile],
+        }
+
+
 @dataclass
 class FeatureDefinition:
     """Represents a feature flag definition.
 
     Contains the feature key and all associated filters that determine
-    when the feature should be enabled.
+    when the feature should be enabled, plus optional named variants and
+    their allocation rules (catalog-local, MF-parity variant assignment).
     """
 
     feature_key: str
@@ -57,6 +252,12 @@ class FeatureDefinition:
 
     metrics: list[str] | None = None
     """Optional list of metric keys for experiments."""
+
+    variants: list[Variant] = field(default_factory=list)
+    """Named variants for this feature flag (A/B testing, progressive rollout)."""
+
+    allocation: Allocation | None = None
+    """Allocation rules for variant assignment (user, group, percentile targeting)."""
 
     def __post_init__(self) -> None:
         """Validate feature definition after initialization."""
@@ -82,6 +283,8 @@ class FeatureDefinition:
             "context_requirement_type": self.context_requirement_type,
             "secured_feature": self.secured_feature,
             "metrics": self.metrics,
+            "variants": [v.to_dict() for v in self.variants],
+            "allocation": self.allocation.to_dict() if self.allocation else None,
         }
 
     @classmethod
@@ -91,6 +294,12 @@ class FeatureDefinition:
             FeatureFilter(name=f["name"], parameters=f.get("parameters", {}))
             for f in data.get("filters", [])
         ]
+        variants = [
+            v
+            for v in (Variant.from_dict(x) for x in (data.get("variants") or []))
+            if v is not None
+        ]
+        allocation = Allocation.from_dict(data.get("allocation"))
         return cls(
             feature_key=data["feature_key"],
             filters=filters,
@@ -100,6 +309,8 @@ class FeatureDefinition:
             or data.get("contextRequirementType"),
             secured_feature=data.get("secured_feature", data.get("securedFeature", False)),
             metrics=data.get("metrics"),
+            variants=variants,
+            allocation=allocation,
         )
 
 
@@ -197,44 +408,31 @@ class DebugInfo:
 
 @dataclass
 class VariantResult:
-    """Assigned variant name and configuration for a feature (when variants are enabled)."""
+    """Assigned variant for a feature, computed locally from the catalog.
+
+    Returned by ``get_variant`` / ``get_variant_value``. Assignment follows
+    the ``Microsoft.FeatureManagement`` precedence (disabled → only
+    ``DefaultWhenDisabled``; enabled → User → Group → Percentile →
+    ``DefaultWhenEnabled``), bit-for-bit compatible with MF 4.7.0.
+    """
 
     name: str
-    """Variant name assigned by the server."""
+    """Assigned variant name."""
 
     configuration_value: Any = None
     """Optional configuration payload for the variant."""
 
+    enabled: bool = True
+    """Effective enabled state after applying the variant's ``StatusOverride``.
 
-@dataclass
-class EvaluatedVariantDef:
-    """Server-evaluated variant entry for a single feature flag."""
+    ``is_enabled()`` remains purely filter-based and does not apply
+    ``StatusOverride``; use this field when MF-identical effective-enabled
+    semantics are required.
+    """
 
-    enabled: bool
-    """Whether the feature is enabled."""
-
-    variant: str | None = None
-    """Assigned variant name, if any."""
-
-    configuration_value: Any = None
-    """Configuration value for the variant (shape depends on the feature)."""
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to a dictionary for serialization."""
-        return {
-            "enabled": self.enabled,
-            "variant": self.variant,
-            "configuration_value": self.configuration_value,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> EvaluatedVariantDef:
-        """Create from API or cache dictionary (camelCase or snake_case)."""
-        return cls(
-            enabled=bool(data.get("enabled", False)),
-            variant=data.get("variant"),
-            configuration_value=data.get("configurationValue", data.get("configuration_value")),
-        )
+    assignment_reason: str = "None"
+    """Why this variant was assigned: ``User`` | ``Group`` | ``Percentile`` |
+    ``DefaultWhenEnabled`` | ``DefaultWhenDisabled``."""
 
 
 @dataclass

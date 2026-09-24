@@ -32,6 +32,14 @@ function installAndVerify(koaVersion: string) {
     mkdirSync(corePackagesDirectory, { recursive: true })
     const koaTarball = pack(packageDirectory, koaPackagesDirectory)
     const coreTarball = pack(resolve(packageDirectory, '../toggly-node-core'), corePackagesDirectory)
+    const evalDirectory = resolve(packageDirectory, '../../toggly-eval')
+    const evalPackagesDirectory = join(packagesDirectory, 'eval')
+    mkdirSync(evalPackagesDirectory, { recursive: true })
+    // Prefer npm pack for the sibling eval package (not in the Node pnpm workspace).
+    run('npm', ['pack', '--pack-destination', evalPackagesDirectory], evalDirectory)
+    const evalTarballs = readdirSync(evalPackagesDirectory).filter((file) => file.endsWith('.tgz'))
+    assert.equal(evalTarballs.length, 1, 'Expected one eval tarball')
+    const evalTarball = join(evalPackagesDirectory, evalTarballs[0])
 
     const packageJsonPath = join(temporaryDirectory, 'package.json')
     const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'))
@@ -47,6 +55,7 @@ function installAndVerify(koaVersion: string) {
         '--no-audit',
         '--no-fund',
         '--package-lock=false',
+        evalTarball,
         coreTarball,
         koaTarball,
       ],

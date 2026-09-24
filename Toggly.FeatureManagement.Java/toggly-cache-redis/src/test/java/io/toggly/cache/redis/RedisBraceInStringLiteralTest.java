@@ -75,4 +75,42 @@ class RedisBraceInStringLiteralTest {
         assertThat(loaded.getFeature("feature-a").getFilters().get(0).getParameters())
                 .containsEntry("note", "value with { and } braces");
     }
+
+    @Test
+    void trailingEscapedBackslashInStringDoesNotTruncateFeatureParse() {
+        TogglyConfig config = TogglyConfig.builder()
+                .appKey("test-app")
+                .environment("Production")
+                .baseUrl("http://127.0.0.1:9")
+                .refreshIntervalSeconds(0)
+                .enableLiveUpdates(false)
+                .useSignedDefinitions(false)
+                .enableUsageTracking(false)
+                .enableMetrics(false)
+                .build();
+
+        http = new HttpSnapshotProvider(config);
+        redis = new RedisCachingSnapshotProvider(http, pool, "toggly:backslash:", Duration.ofMinutes(5));
+
+        // configurationValue "C:\dir\" serializes as "C:\\dir\\" — closing quote is
+        // preceded by an escaped backslash (even count), not an escaped quote.
+        String durableJson =
+                "{\"features\":{\"feature-a\":{\"featureKey\":\"feature-a\",\"requirementType\":\"Any\","
+                        + "\"filters\":[],"
+                        + "\"variants\":[{\"name\":\"A\",\"configurationValue\":\"C:\\\\dir\\\\\",\"statusOverride\":\"None\"}],"
+                        + "\"allocation\":{\"defaultWhenEnabled\":\"A\"}},"
+                        + "\"feature-b\":{\"featureKey\":\"feature-b\",\"requirementType\":\"Any\","
+                        + "\"filters\":[{\"name\":\"AlwaysOn\",\"parameters\":{}}]}},"
+                        + "\"metrics\":{},\"timestamp\":\"2026-09-08T12:00:00Z\",\"etag\":\"rev-backslash\"}";
+
+        when(pool.getResource()).thenReturn(jedis);
+        when(jedis.get(anyString())).thenReturn(durableJson);
+
+        FeatureSnapshot loaded = redis.getSnapshot();
+        assertThat(loaded.getFeatures().keySet()).containsExactlyInAnyOrder("feature-a", "feature-b");
+        assertThat(loaded.getFeature("feature-a").getVariants()).hasSize(1);
+        assertThat(loaded.getFeature("feature-a").getVariants().get(0).getConfigurationValue())
+                .isEqualTo("C:\\dir\\");
+        assertThat(loaded.getFeature("feature-b")).isNotNull();
+    }
 }

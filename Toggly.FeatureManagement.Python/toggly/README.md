@@ -331,23 +331,58 @@ MIT
 
 Visit [Toggly.io](https://toggly.io) for more information and to create your free account.
 
-## Initial context for remote variants
+## Feature Variants
 
-Requires **toggly 0.7.0** (release pending; these APIs are not in the currently published packages).
+Requires **toggly 1.0.0**. Feature variants are defined directly on the feature
+in the Toggly catalog (or in your own `FeatureDefinition` objects) and are
+assigned **locally**, from the same cached definitions used for `is_enabled` —
+there is no separate variants request or cache. Assignment matches
+[Microsoft.FeatureManagement](https://github.com/microsoft/FeatureManagement-Dotnet)
+4.7.0 bit-for-bit: disabled features only ever resolve `DefaultWhenDisabled`;
+enabled features are resolved in order — per-user allocation, then per-group
+allocation, then percentile allocation, then `DefaultWhenEnabled`.
 
 ```python
 from toggly import TogglyClient, TogglyConfig
 
-client = TogglyClient(TogglyConfig(
-    app_key="your-app-key",
-    enable_variants=True,
-    identity="user-123",              # Stable identifier for this variants client.
-    variant_groups=["beta"],           # Membership used by targeting rules.
-    variant_claims={"plan": "pro"},    # String attributes used by targeting rules.
-))
-client.init()  # The first variants request already contains this complete context.
+client = TogglyClient(TogglyConfig(app_key="your-app-key"))
+client.init()
+
+# Uses the client's configured identity (TogglyConfig.identity) and no groups.
+variant = client.get_variant("checkout-flow")
+if variant is not None and variant.enabled:
+    if variant.name == "B":
+        use_new_checkout(variant.configuration_value)
+
+# Or evaluate for a specific request/user (targeting overload).
+variant = client.get_variant(
+    "checkout-flow", user_id="user-123", groups=["beta"]
+)
+
+# Convenience accessor when you only need the configuration payload.
+config_value = client.get_variant_value(
+    "checkout-flow", user_id="user-123", groups=["beta"]
+)
 ```
 
-Startup context avoids an initial variants fetch with incomplete targeting followed by a second fetch. Use one variants client per fixed application-wide context; never change a shared server client's identity for each incoming request. These defaults do not replace request-local `EvaluationContext` for ordinary local boolean evaluation. Enabling remote variants retains the SDK's existing client-wide evaluated-flag behavior.
+`get_variant` returns `None` when the feature does not exist or has no
+variants defined; otherwise it returns a `VariantResult` with:
 
-Groups are trimmed and sent as repeated parameters. Claims must be string-to-string mappings: empty names/values are omitted, whitespace is preserved, and the first 20 claim names in sorted order are sent. Omitted or empty collections send no targeting parameters. Caller collections are copied. Variants caches and conditional validators match the complete context; legacy unscoped variants caches require a fresh fetch. Global definition caches retain their existing behavior.
+- `name` — the assigned variant's name.
+- `configuration_value` — that variant's configuration payload (any JSON value).
+- `enabled` — the *effective* enabled state after applying the variant's
+  `StatusOverride` (a variant can force a feature on or off independent of the
+  feature's own filter evaluation). `is_enabled()` remains purely filter-based
+  and never applies `StatusOverride`.
+- `assignment_reason` — one of `"User"`, `"Group"`, `"Percentile"`,
+  `"DefaultWhenEnabled"`, `"DefaultWhenDisabled"`, or `"None"`.
+
+`get_variant_value` is a convenience wrapper that returns just
+`configuration_value` (or `None`). Both async equivalents are available on
+`AsyncTogglyClient` with the same signature.
+
+Percentile allocation uses the same SHA-256-based hashing as
+Microsoft.FeatureManagement: `contextId = f"{user_id}\n{hint}"` where `hint`
+is the allocation's `seed` if set, otherwise `f"allocation\n{feature_key}"`.
+This makes bucket assignment deterministic and stable across SDKs/releases for
+the same user, feature, and seed.

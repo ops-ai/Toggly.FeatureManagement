@@ -45,7 +45,7 @@ defmodule Toggly do
             end
 
           if Keyword.get(options, :track, true),
-            do: GenServer.cast(client, {:usage, key, enabled, :check})
+            do: GenServer.cast(client, {:usage, key, enabled, :check, nil})
 
           enabled
         end
@@ -61,6 +61,52 @@ defmodule Toggly do
     end)
   end
 
+  @doc """
+  Assigns a feature variant locally from the definitions catalog (MF-parity).
+
+  Matches `Microsoft.FeatureManagement` (`IVariantFeatureManager`)
+  bit-for-bit for the same definition, enabled state, and targeting
+  context. Assigns from the same cached snapshot `enabled?/4` reads — no
+  network call and no dependency on `evaluated-variants-signed`.
+
+  Options: `:ignore_case` (default `false`, mirrors
+  `TargetingEvaluationOptions.IgnoreCase`) and `:track` (default `true`).
+  """
+  @spec get_variant(client(), String.t(), Toggly.Context.t(), keyword()) ::
+          Toggly.Variant.Assignment.t()
+  def get_variant(client, key, context \\ %{}, options \\ []) do
+    :telemetry.span([:toggly, :variant], %{client: client, feature: key}, fn ->
+      data = data(client)
+
+      assignment =
+        case Map.fetch(data.definitions, key) do
+          {:ok, definition} ->
+            Toggly.Variant.assign(definition, context, options)
+
+          :error ->
+            %Toggly.Variant.Assignment{
+              enabled: Map.get(data.defaults, key, false) == true,
+              assignment_reason: "None"
+            }
+        end
+
+      if Keyword.get(options, :track, true),
+        do:
+          GenServer.cast(
+            client,
+            {:usage, key, assignment.enabled, :check, assignment.variant_name}
+          )
+
+      {assignment, %{variant: assignment.variant_name, enabled: assignment.enabled}}
+    end)
+  end
+
+  @doc "Convenience for `get_variant/4`: the assigned variant's configuration payload, or `nil`."
+  @spec get_variant_value(client(), String.t(), Toggly.Context.t(), keyword()) :: term()
+  def get_variant_value(client, key, context \\ %{}, options \\ []) do
+    get_variant(client, key, context, options).configuration_value
+  end
+
   @doc "Fetches and verifies definitions; a failure preserves the active snapshot."
   def refresh(client), do: GenServer.call(client, :refresh, 30_000)
 
@@ -73,13 +119,19 @@ defmodule Toggly do
   @doc "Uploads queued usage counters; failed uploads retain the batch for retry."
   def flush(client), do: GenServer.call(client, :flush, 30_000)
 
-  @doc "Records feature use after application work runs, separately from a check."
-  def record_usage(client, key, enabled \\ true),
-    do: GenServer.cast(client, {:usage, key, enabled, :used})
+  @doc """
+  Records feature use after application work runs, separately from a check.
+
+  Pass the assigned variant name (e.g. `assignment.variant_name` from
+  `get_variant/4`) to attribute usage to that variant instead of the
+  `enabled`/`disabled` label.
+  """
+  def record_usage(client, key, enabled \\ true, variant \\ nil),
+    do: GenServer.cast(client, {:usage, key, enabled, :used, variant})
 
   @doc "Records a feature view in the current in-memory usage batch."
-  def record_view(client, key, enabled \\ true),
-    do: GenServer.cast(client, {:usage, key, enabled, :viewed})
+  def record_view(client, key, enabled \\ true, variant \\ nil),
+    do: GenServer.cast(client, {:usage, key, enabled, :viewed, variant})
 
   @doc "Emits a custom metric; attach an exporter to [:toggly, :metric, kind]. No implicit gRPC upload."
   def metric(client, kind, key, value, metadata \\ %{})

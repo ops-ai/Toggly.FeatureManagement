@@ -51,9 +51,6 @@ class TogglyConfig:
     use_signed_definitions: bool = False
     """Whether to verify definition signatures."""
 
-    enable_variants: bool = False
-    """When True, fetch evaluated variants from ``/evaluated-variants-signed/...``."""
-
     allowed_key_ids: list[str] | None = None
     """List of allowed signing key IDs. None allows all keys."""
 
@@ -111,17 +108,8 @@ class TogglyConfig:
     register_contexts_on_startup: bool = True
     """PUT entity context schemas to sdk/{appKey}/contexts on start (default True)."""
 
-    variant_groups: list[str] = field(default_factory=list)
-    """Application-wide groups for remote variants, not request-local booleans."""
-
-    variant_claims: dict[str, str] = field(default_factory=dict)
-    """Application-wide string claims for remote variants (at most 20 on the wire)."""
-
     def __post_init__(self) -> None:
         """Validate configuration after initialization."""
-        # Own the collections before client initialization or background work.
-        self.variant_groups = list(self.variant_groups)
-        self.variant_claims = dict(self.variant_claims)
         # Ensure base_url doesn't have trailing slash
         self.base_url = self.base_url.rstrip("/")
         self.metrics_base_url = self.metrics_base_url.rstrip("/")
@@ -221,14 +209,11 @@ class TogglyConfig:
             base_url=changes.get("base_url", self.base_url),
             definitions_url=changes.get("definitions_url", self.definitions_url),
             identity=changes.get("identity", self.identity),
-            variant_groups=changes.get("variant_groups", self.variant_groups),
-            variant_claims=changes.get("variant_claims", self.variant_claims),
             feature_defaults=changes.get("feature_defaults", self.feature_defaults.copy()),
             refresh_interval=changes.get("refresh_interval", self.refresh_interval),
             use_signed_definitions=changes.get(
                 "use_signed_definitions", self.use_signed_definitions
             ),
-            enable_variants=changes.get("enable_variants", self.enable_variants),
             allowed_key_ids=changes.get("allowed_key_ids", self.allowed_key_ids),
             connect_timeout=changes.get("connect_timeout", self.connect_timeout),
             request_timeout=changes.get("request_timeout", self.request_timeout),
@@ -273,7 +258,6 @@ class TogglyConfig:
             "base_url": self.base_url,
             "refresh_interval": self.refresh_interval,
             "use_signed_definitions": self.use_signed_definitions,
-            "enable_variants": self.enable_variants,
             "enable_usage_tracking": self.enable_usage_tracking,
             "enable_metrics": self.enable_metrics,
             "metrics_base_url": self.metrics_base_url,

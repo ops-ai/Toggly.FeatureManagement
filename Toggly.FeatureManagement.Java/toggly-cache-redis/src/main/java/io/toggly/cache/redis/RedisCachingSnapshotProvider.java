@@ -4,11 +4,14 @@ import io.toggly.core.model.FeatureDefinition;
 import io.toggly.core.model.FeatureFilter;
 import io.toggly.core.model.FeatureRequirement;
 import io.toggly.core.model.MetricDefinition;
+import io.toggly.core.model.VariantAllocation;
+import io.toggly.core.model.VariantDefinition;
 import io.toggly.core.snapshot.FeatureSnapshot;
 import io.toggly.core.snapshot.HttpSnapshotProvider;
 import io.toggly.core.snapshot.SnapshotProvider;
-import io.toggly.core.snapshot.VariantSnapshot;
 import io.toggly.core.telemetry.DefinitionCacheRecorder;
+import io.toggly.core.util.SimpleJson;
+import io.toggly.core.util.VariantJson;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.JedisPoolConfig;
@@ -199,29 +202,6 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
         delegate.setDefinitionCacheRecorder(recorder);
     }
 
-    // ========== Evaluated variants (dual-rail; additive to definitions) ==========
-    //
-    // Variants are not distributed through this Redis layer: the delegate
-    // (typically HttpSnapshotProvider) already keeps its own last-known-good
-    // variant snapshot with ETag-based freshness. Forwarding directly here
-    // keeps getVariant/getVariantValue working through caching wrappers
-    // instead of silently falling back to the SnapshotProvider default no-ops.
-
-    @Override
-    public VariantSnapshot getVariantSnapshot() {
-        return delegate.getVariantSnapshot();
-    }
-
-    @Override
-    public CompletableFuture<VariantSnapshot> getVariantSnapshotAsync() {
-        return delegate.getVariantSnapshotAsync();
-    }
-
-    @Override
-    public VariantSnapshot refreshVariants() {
-        return delegate.refreshVariants();
-    }
-
     @Override
     public void close() {
         if (pool != null && !pool.isClosed()) {
@@ -299,6 +279,16 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
                 first = false;
             }
             sb.append("]");
+        }
+
+        if (feature.getVariants() != null && !feature.getVariants().isEmpty()) {
+            sb.append(",\"variants\":")
+                    .append(SimpleJson.serialize(VariantJson.serializeVariants(feature.getVariants())));
+        }
+
+        if (feature.getAllocation() != null) {
+            sb.append(",\"allocation\":")
+                    .append(SimpleJson.serialize(VariantJson.serializeAllocation(feature.getAllocation())));
         }
 
         sb.append("}");
@@ -497,24 +487,7 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     }
 
     private int findMatchingBrace(String json, int start) {
-        int count = 0;
-        boolean inString = false;
-        for (int i = start; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c == '"' && (i == 0 || json.charAt(i - 1) != '\\')) {
-                inString = !inString;
-            } else if (!inString) {
-                if (c == '{') {
-                    count++;
-                } else if (c == '}') {
-                    count--;
-                    if (count == 0) {
-                        return i;
-                    }
-                }
-            }
-        }
-        return -1;
+        return SimpleJson.findMatchingBrace(json, start);
     }
 
     private FeatureDefinition parseFeatureDefinition(String json, String key) {
@@ -534,39 +507,41 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
                 ? null
                 : FeatureRequirement.fromString(contextReqStr);
 
+        List<VariantDefinition> variants = VariantJson.parseVariants(json);
+        VariantAllocation allocation = VariantJson.parseAllocation(json);
+
         return FeatureDefinition.builder()
                 .featureKey(featureKey)
                 .requirementType(requirement)
                 .contextKind(contextKind)
                 .contextRequirementType(contextRequirement)
                 .filters(filters)
+                .variants(variants)
+                .allocation(allocation)
                 .build();
     }
 
     private List<FeatureFilter> parseFilters(String json) {
         List<FeatureFilter> filters = new ArrayList<>();
 
-        Pattern filtersPattern = Pattern.compile("\"filters\"\\s*:\\s*\\[([^\\]]*)\\]");
-        Matcher matcher = filtersPattern.matcher(json);
-        if (!matcher.find()) return filters;
-
-        String filtersJson = matcher.group(1);
-        // Parse individual filter objects
-        int braceCount = 0;
-        int start = -1;
-        for (int i = 0; i < filtersJson.length(); i++) {
-            char c = filtersJson.charAt(i);
-            if (c == '{') {
-                if (braceCount == 0) start = i;
-                braceCount++;
-            } else if (c == '}') {
-                braceCount--;
-                if (braceCount == 0 && start >= 0) {
-                    String filterJson = filtersJson.substring(start, i + 1);
-                    FeatureFilter filter = parseFilter(filterJson);
-                    if (filter != null) filters.add(filter);
-                    start = -1;
-                }
+        String search = "\"filters\"";
+        int idx = json.indexOf(search);
+        if (idx < 0) {
+            return filters;
+        }
+        int arrayStart = json.indexOf('[', idx + search.length());
+        if (arrayStart < 0) {
+            return filters;
+        }
+        int arrayEnd = SimpleJson.findMatchingBracket(json, arrayStart);
+        if (arrayEnd <= arrayStart) {
+            return filters;
+        }
+        String filtersJson = json.substring(arrayStart + 1, arrayEnd);
+        for (String filterJson : SimpleJson.splitTopLevelObjects(filtersJson)) {
+            FeatureFilter filter = parseFilter(filterJson);
+            if (filter != null) {
+                filters.add(filter);
             }
         }
 

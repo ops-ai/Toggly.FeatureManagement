@@ -4,6 +4,16 @@ const { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mk
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { run } = require('./packed-process.cjs');
+function assertCaretRangeContains(range, version) {
+  const base = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(range);
+  const actual = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+  assert.ok(base, 'Core must declare a simple reporter caret range');
+  assert.ok(actual, 'installed reporter must have a stable semantic version');
+  const [, baseMajor, baseMinor, basePatch] = base.map(Number);
+  const [, major, minor, patch] = actual.map(Number);
+  assert.equal(major, baseMajor, 'reporter must remain in the declared major');
+  assert.ok(minor > baseMinor || (minor === baseMinor && patch >= basePatch), `${version} must satisfy ${range}`);
+}
 module.exports.verifyStorage = async function verifyStorage(packageDirectory, coreArchive, label, dependencies={}) {
   const root=mkdtempSync(join(tmpdir(), `toggly-native-storage-${label}-`));
   const env={...process.env,npm_config_cache:join(root,'npm-cache')};
@@ -35,11 +45,20 @@ module.exports.verifyStorage = async function verifyStorage(packageDirectory, co
       const bytes=readFileSync(join(root,file));assert.equal(lock.packages[`node_modules/${name}`].integrity,'sha512-'+createHash('sha512').update(bytes).digest('base64'));
       console.log(`${name} SHA256 ${createHash('sha256').update(bytes).digest('hex')}`);
     }
+    for (const [name, entry] of Object.entries(lock.packages)) {
+      if (!name || name === `node_modules/${storageName}` || name === 'node_modules/@ops-ai/react-native-toggly-core') continue;
+      assert.match(entry.resolved, /^https:\/\/registry\.npmjs\.org\//, `${name} must resolve from public npm`);
+      assert.ok(entry.integrity, `${name} must retain registry integrity`);
+    }
     await execute('npm',['ci','--ignore-scripts','--no-audit','--no-fund']);
     await execute('npm',['ls','--all']);
     const reporter=lock.packages['node_modules/@ops-ai/toggly-client-telemetry'];
-    assert.equal(reporter.version,'1.1.0');assert.match(reporter.resolved,/^https:\/\/registry\.npmjs\.org\//);
-    console.log(`Public reporter ${reporter.version} ${reporter.integrity}; host ${JSON.stringify(dependencies)}`);
+    const installedCore=JSON.parse(readFileSync(join(root,'node_modules/@ops-ai/react-native-toggly-core/package.json'),'utf8'));
+    const installedReporter=JSON.parse(readFileSync(join(root,'node_modules/@ops-ai/toggly-client-telemetry/package.json'),'utf8'));
+    assert.equal(installedReporter.version,reporter.version);
+    const reporterRange=installedCore.dependencies['@ops-ai/toggly-client-telemetry'];
+    assertCaretRangeContains(reporterRange,installedReporter.version);
+    console.log(`Public reporter ${reporter.version} ${reporterRange} ${reporter.resolved} ${reporter.integrity}; host ${JSON.stringify(dependencies)}`);
     await execute('npm',['run','typecheck']);
     console.log(await execute('npm',['run','verify']));
   } finally {
