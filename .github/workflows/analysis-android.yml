@@ -308,6 +308,26 @@ jobs:
           path: coverage-artifacts/
         continue-on-error: true
 
+      - name: Rebase Python coverage paths for Sonar
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          report = Path('coverage-artifacts/acceptance/public-telemetry-host/coverage.xml')
+          source = Path(os.environ['GITHUB_WORKSPACE']) / os.environ['SDK_ROOT'] / 'acceptance/public-telemetry-host'
+          tree = ET.parse(report)
+          roots = tree.findall('./sources/source')
+          if len(roots) != 1:
+              raise ValueError('expected one Python coverage source root')
+          for item in tree.findall('.//class'):
+              if not (source / item.attrib['filename']).is_file():
+                  raise FileNotFoundError(source / item.attrib['filename'])
+          roots[0].text = str(source)
+          tree.write(report, encoding='utf-8', xml_declaration=True)
+          PY
+
       - name: Download Dependency Check report
         uses: actions/download-artifact@v8
         with:
