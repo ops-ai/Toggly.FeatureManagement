@@ -141,9 +141,9 @@ jobs:
 
       - name: Publish to npm
         working-directory: ${{ env.SDK_ROOT }}/dist/ngx-feature-flags-toggly
-        run: npm publish --provenance --access public || npm publish --access public
+        run: npm publish --provenance --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ''
 
       - name: Commit version bump
         if: needs.resolve.outputs.manifest_changed == 'true'

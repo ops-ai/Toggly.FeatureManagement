@@ -174,12 +174,14 @@ jobs:
           pattern: toggly-cli-*
           merge-multiple: false
 
-      - name: Import GPG key for checksum signing
+      - name: Import GPG key for checksum and commit signing
         id: import_gpg
         uses: crazy-max/ghaction-import-gpg@v7
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
 
       - name: Generate and GPG-sign SHA-256 checksums
         run: |
@@ -193,12 +195,22 @@ jobs:
 
       - name: Commit version bump
         if: needs.validate.outputs.manifest_changed == 'true'
+        env:
+          GIT_AUTHOR_NAME: ${{ steps.import_gpg.outputs.name }}
+          GIT_AUTHOR_EMAIL: ${{ steps.import_gpg.outputs.email }}
+          GIT_COMMITTER_NAME: ${{ steps.import_gpg.outputs.name }}
+          GIT_COMMITTER_EMAIL: ${{ steps.import_gpg.outputs.email }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Toggly.CLI/VERSION
-          git commit -m "Bumped CLI to v${{ needs.validate.outputs.version }} (auto_bump) [skip ci]" || true
-          git push origin develop || true
+          git commit -S -m "Bump CLI to v${{ needs.validate.outputs.version }} (auto_bump) [skip ci]"
+          for attempt in 1 2 3; do
+            if git pull --rebase origin develop && git push origin HEAD:develop; then
+              break
+            fi
+            git rebase --abort 2>/dev/null || true
+            if test "$attempt" -eq 3; then exit 1; fi
+            sleep 2
+          done
 
       - name: Create Release
         uses: softprops/action-gh-release@v3
