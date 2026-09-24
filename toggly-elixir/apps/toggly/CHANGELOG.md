@@ -7,9 +7,6 @@
   and `Toggly.identity/1`. When `get_variant/4` / `get_variant_value/4` receive
   an empty context identity, the client default is merged so
   `get_variant(client, key)` works after config or `set_identity` [OPS-1407].
-- `Toggly.Phoenix.Plug.get_variant/2` and `get_variant_value/2` read
-  `conn.assigns.toggly_context` (set by the Plug) so callers need not pass
-  context maps by hand [OPS-1407].
 
 ## 0.3.0
 

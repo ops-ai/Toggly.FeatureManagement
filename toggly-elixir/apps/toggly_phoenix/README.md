@@ -2,7 +2,7 @@
 
 Phoenix/Plug integration for [Toggly](https://toggly.io), usable with a remote application or offline defaults. A feature flag selects an application branch by a stable key.
 
-Requires Elixir 1.20+, OTP 29+, Plug 1.18+. Add `{:toggly_phoenix, "~> 0.1.0"}` and supervise `{Toggly, name: MyApp.Flags, app_key: System.get_env("TOGGLY_APP_KEY")}`. See [core configuration](https://docs.toggly.io/sdks/elixir) for signed definitions, defaults, snapshots, usage and lifecycle.
+Requires Elixir 1.20+, OTP 29+, Plug 1.18+. Add `{:toggly_phoenix, "~> 0.2.0"}` and supervise `{Toggly, name: MyApp.Flags, app_key: System.get_env("TOGGLY_APP_KEY")}`. See [core configuration](https://docs.toggly.io/sdks/elixir) for signed definitions, defaults, snapshots, usage and lifecycle.
 
 ```elixir
 # Run after your authentication plug. Context remains on this connection.
