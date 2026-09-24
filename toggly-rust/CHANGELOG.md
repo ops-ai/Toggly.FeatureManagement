@@ -16,9 +16,11 @@
   `get_variant` / `get_variant_value` fill from the client default so
   `get_variant(key, EvalContext::default())` works after config or
   `set_identity` [OPS-1407].
-- Axum / Actix / Rocket `Feature` helpers: `get_variant` /
-  `get_variant_value` use the request-scoped context (headers or empty →
-  client identity) without rebuilding `EvalContext` in handlers [OPS-1407].
+- HTTP adapters: request-scoped `Feature` continues to extract identity from
+  headers into `EvalContext`; call
+  `feature.client().get_variant(key, feature.context().clone())` so empty
+  ambient identity falls through to config / `set_identity`. Actix `Feature`
+  now exposes `client()` for that pattern [OPS-1407].
 
 ## 0.7.0
 

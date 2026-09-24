@@ -46,26 +46,6 @@ impl TogglyData {
     ) -> toggly::Result<bool> {
         self.0.is_disabled(feature_key, context).await
     }
-
-    /// Assign a feature variant. Prefer request-scoped [`Feature`] when the
-    /// handler already has ambient identity; this forwards to the client so
-    /// empty context still picks up config / `set_identity`.
-    pub async fn get_variant(
-        &self,
-        feature_key: &str,
-        context: EvalContext,
-    ) -> toggly::Result<toggly::VariantAssignment> {
-        self.0.get_variant(feature_key, context).await
-    }
-
-    /// Variant configuration payload, or `None`.
-    pub async fn get_variant_value(
-        &self,
-        feature_key: &str,
-        context: EvalContext,
-    ) -> toggly::Result<Option<serde_json::Value>> {
-        self.0.get_variant_value(feature_key, context).await
-    }
 }
 
 impl std::ops::Deref for TogglyData {
@@ -152,27 +132,9 @@ impl Feature {
         !self.is_enabled(feature_key).await
     }
 
-    /// Assign a feature variant using this request's evaluation context.
-    ///
-    /// When the request has no identity header, the client's config /
-    /// `set_identity` default is used (see [`TogglyClient::get_variant`]).
-    pub async fn get_variant(
-        &self,
-        feature_key: &str,
-    ) -> toggly::Result<toggly::VariantAssignment> {
-        self.client
-            .get_variant(feature_key, self.context.clone())
-            .await
-    }
-
-    /// Variant configuration payload for this request's context, or `None`.
-    pub async fn get_variant_value(
-        &self,
-        feature_key: &str,
-    ) -> toggly::Result<Option<serde_json::Value>> {
-        self.client
-            .get_variant_value(feature_key, self.context.clone())
-            .await
+    /// Underlying client (for `get_variant` with [`Self::context`]).
+    pub fn client(&self) -> &TogglyClient {
+        self.client.get_ref()
     }
 
     /// Get the underlying context.

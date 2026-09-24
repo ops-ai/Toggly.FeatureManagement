@@ -52,4 +52,4 @@ pub use layer::{TogglyLayer, TogglyService};
 pub use state::TogglyState;
 
 // Re-export core types for convenience
-pub use toggly::{EvalContext, Requirement, TogglyClient, TogglyConfig, VariantAssignment};
+pub use toggly::{EvalContext, Requirement, TogglyClient, TogglyConfig};

@@ -48,29 +48,6 @@ impl Feature {
         !self.is_enabled(feature_key).await
     }
 
-    /// Assign a feature variant using this request's evaluation context.
-    ///
-    /// When the request has no identity header, the client's config /
-    /// `set_identity` default is used (see [`TogglyClient::get_variant`]).
-    pub async fn get_variant(
-        &self,
-        feature_key: &str,
-    ) -> toggly::Result<toggly::VariantAssignment> {
-        self.client
-            .get_variant(feature_key, self.context.clone())
-            .await
-    }
-
-    /// Variant configuration payload for this request's context, or `None`.
-    pub async fn get_variant_value(
-        &self,
-        feature_key: &str,
-    ) -> toggly::Result<Option<serde_json::Value>> {
-        self.client
-            .get_variant_value(feature_key, self.context.clone())
-            .await
-    }
-
     /// Get the underlying client.
     pub fn client(&self) -> &TogglyClient {
         &self.client

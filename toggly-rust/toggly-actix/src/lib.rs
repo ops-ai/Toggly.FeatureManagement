@@ -49,4 +49,4 @@ pub use guard::FeatureGuard;
 pub use middleware::TogglyMiddleware;
 
 // Re-export core types for convenience
-pub use toggly::{EvalContext, Requirement, TogglyClient, TogglyConfig, VariantAssignment};
+pub use toggly::{EvalContext, Requirement, TogglyClient, TogglyConfig};

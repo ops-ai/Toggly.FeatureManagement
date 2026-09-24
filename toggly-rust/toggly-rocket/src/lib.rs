@@ -7,7 +7,8 @@
 //! - Request guards for feature checks
 //! - Managed state for the client
 //! - Fairings for setup
-//! - Request-scoped `Feature::get_variant` (identity from headers or client config)
+//! - Request-scoped [`Feature`] context (identity from headers; empty falls
+//!   through to client config / `set_identity` on `get_variant`)
 //!
 //! ## Quick Start
 //!
@@ -26,9 +27,13 @@
 //! }
 //!
 //! #[get("/checkout")]
-//! async fn checkout(feature: Feature) -> String {
-//!     // Uses X-User-Id / X-Identity when present; otherwise config / set_identity.
-//!     match feature.get_variant("checkout-flow").await {
+//! async fn checkout(feature: Feature<'_>) -> String {
+//!     // Ambient identity from X-User-Id / X-Identity, else config / set_identity.
+//!     match feature
+//!         .client()
+//!         .get_variant("checkout-flow", feature.context().clone())
+//!         .await
+//!     {
 //!         Ok(a) => format!("{:?}", a.variant_name),
 //!         Err(_) => "error".into(),
 //!     }
