@@ -23,17 +23,22 @@ Recorded: 2026-08-28
 1. Add a **second company-controlled organization owner** (recovery admin). Verify login + 2FA from that account before any ownership removals.
 2. Create a least-privilege **SDK publisher team** on the org; grant publish access to public `@ops-ai/*` packages only.
 3. Inventory **granular/automation tokens** in npm and GitHub Secrets (`NPM_TOKEN`); do not revoke until every inventoried package has a verified OIDC publish (see Task 4).
-4. Configure **Trusted Publisher** per package → repository `ops-ai/Toggly.FeatureManagement`, exact `sdk-*-release.yml` filename, environment `npm-publish`. Proven: `@ops-ai/toggly-client-core` + `sdk-client-core-release.yml`.
+
+## Trusted Publisher (closed 2026-09-24)
+
+All inventoried `@ops-ai/*` packages have a GitHub Trusted Publisher for
+`ops-ai/Toggly.FeatureManagement`, the package’s `sdk-*-release.yml`, and
+environment `npm-publish`. Workflows publish with empty `NODE_AUTH_TOKEN` and
+`--provenance` only. See [package-signing-inventory.md](package-signing-inventory.md).
 
 ## Notes
 
-- Auth for CI is intended to be OIDC + `--provenance`; many workflows still pass `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}` as fallback until Task 4 completes per group.
+- Auth for CI is OIDC + `--provenance` (empty `NODE_AUTH_TOKEN`).
 - Interactive Trusted Publisher setup (requires OTP): `.github/package-registry/configure-npm-trusted-publishers.sh`
 - Do **not** revoke GitHub `NPM_TOKEN` / granular npm tokens until every inventoried package has a verified OIDC publish and an explicit OPS-727 approval comment.
 
-## 2026-08-28 publish discovery
+## 2026-08-28 publish discovery (historical)
 
 - Repository secrets do **not** include `NPM_TOKEN` (confirmed via `gh secret list`).
-- Successful releases (Angular, JS, React, Vue, Svelte, Astro, Gatsby, Remix, RN, Next, Node, hooks, hooks-types, docusaurus) used **OIDC Trusted Publisher** with empty `NODE_AUTH_TOKEN` from `${{ secrets.NPM_TOKEN }}`.
-- Failures with `ENEEDAUTH`: packages missing Trusted Publisher config (`toggly-client-core` after workflow change, `toggly-local-gates`, `toggly-signed-defs`, and any others not yet trusted).
-- **Human:** run `.github/package-registry/configure-npm-trusted-publishers.sh` (OTP required), then strip `|| npm publish` fallbacks and set `oidcReady: true` per package.
+- Successful releases (Angular, JS, React, Vue, Svelte, Astro, Gatsby, Remix, RN, Next, Node, hooks, hooks-types, docusaurus) used **OIDC Trusted Publisher** with empty `NODE_AUTH_TOKEN`.
+- At that time, `ENEEDAUTH` still hit packages missing Trusted Publisher config (`toggly-client-core`, `toggly-local-gates`, `toggly-signed-defs`, and others). Those publishers were configured and hardened on 2026-09-24.
