@@ -86,4 +86,17 @@ defmodule Toggly.IdentityVariantTest do
     assert :ok = Toggly.set_identity(client, "")
     assert Toggly.identity(client) == nil
   end
+
+  test "get_variant/4 treats nil context like empty map" do
+    client = start_variant_client(IdentityNilContextFlags, identity: "alice")
+    assert Toggly.get_variant(client, "checkout-flow", nil).variant_name == "A"
+  end
+
+  test "set_identity ignores non-stringable values without crashing" do
+    client = start_variant_client(IdentityBadTypeFlags, identity: "alice")
+    assert :ok = Toggly.set_identity(client, %{not: "an-id"})
+    assert Toggly.identity(client) == nil
+    assert :ok = Toggly.set_identity(client, 42)
+    assert Toggly.identity(client) == "42"
+  end
 end

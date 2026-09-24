@@ -188,6 +188,8 @@ defmodule Toggly do
     data
   end
 
+  defp merge_client_identity(client, nil), do: merge_client_identity(client, %{})
+
   defp merge_client_identity(client, context) when is_map(context) do
     case Map.get(context, "identity") do
       id when is_binary(id) and id != "" ->

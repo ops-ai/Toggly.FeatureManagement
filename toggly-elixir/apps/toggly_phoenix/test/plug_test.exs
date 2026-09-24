@@ -98,4 +98,10 @@ defmodule Toggly.PhoenixTest do
     assert assignment.variant_name == "A"
     assert Toggly.Phoenix.Plug.get_variant_value(conn, "checkout-flow") == %{"color" => "blue"}
   end
+
+  test "get_variant/2 raises when Plug has not run" do
+    assert_raise ArgumentError, ~r/Toggly.Phoenix.Plug/, fn ->
+      Toggly.Phoenix.Plug.get_variant(conn(:get, "/"), "checkout-flow")
+    end
+  end
 end

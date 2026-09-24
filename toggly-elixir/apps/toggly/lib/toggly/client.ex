@@ -275,9 +275,14 @@ defmodule Toggly.Client do
   defp normalize_identity(identity) when is_binary(identity) and identity != "", do: identity
   defp normalize_identity(identity) when is_binary(identity), do: nil
 
-  defp normalize_identity(identity) do
+  defp normalize_identity(identity)
+       when is_atom(identity) or is_integer(identity) or is_float(identity) do
     identity |> to_string() |> normalize_identity()
   end
+
+  # Maps, lists, tuples, PIDs, etc. are not targeting userIds — ignore rather
+  # than crash the GenServer via Protocol.UndefinedError on String.Chars.
+  defp normalize_identity(_), do: nil
 
   defp fetch_keys(state) do
     case request(state, :get, ".well-known/jwks", []) do
