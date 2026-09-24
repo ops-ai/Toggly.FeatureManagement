@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.11.0
+
+2026-09-24
+
+### Added
+- `GetVariantValueAs[T](c, ctx, featureKey, evalCtx) (T, bool)` soft-binds the
+  assigned variant configuration via JSON round-trip. Returns `(zero, false)`
+  on missing assignment, GetVariant error, or decode/shape mismatch — never a
+  wrong-typed value. Untyped `GetVariantValue` is unchanged [OPS-1365].
+
+### Changed
+- User-Agent is `toggly-go/0.11.0`.
+
 ## 0.10.0
 
 2026-09-24

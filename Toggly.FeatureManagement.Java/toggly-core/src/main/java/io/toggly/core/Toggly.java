@@ -152,6 +152,33 @@ public final class Toggly {
     }
 
     /**
+     * Soft-binds the assigned variant configuration as {@code type}.
+     * Returns {@code null} on missing assignment or bind failure.
+     *
+     * @param type the target class
+     * @param featureKey the feature key
+     * @param <T> target type
+     * @return bound value, or null
+     */
+    public static <T> T getVariantValue(Class<T> type, String featureKey) {
+        return client().getVariantValue(type, featureKey);
+    }
+
+    /**
+     * Soft-binds the assigned variant configuration as {@code type} for the
+     * given context.
+     *
+     * @param type the target class
+     * @param featureKey the feature key
+     * @param context the evaluation context
+     * @param <T> target type
+     * @return bound value, or null
+     */
+    public static <T> T getVariantValue(Class<T> type, String featureKey, EvaluationContext context) {
+        return client().getVariantValue(type, featureKey, context);
+    }
+
+    /**
      * Registers a mapper from a domain object to {@link TogglyEntityContext}.
      */
     public static void registerContext(String kind, java.util.function.Function<Object, TogglyEntityContext> mapper) {

@@ -1,6 +1,10 @@
 defmodule Toggly.ClientTest do
   use ExUnit.Case
 
+  defmodule CheckoutConfig do
+    defstruct [:color]
+  end
+
   test "local ETS evaluation defaults, gates, per-call context, subscriptions and lifecycle" do
     {:ok, sup} =
       Toggly.start_link(
@@ -133,6 +137,21 @@ defmodule Toggly.ClientTest do
 
     assert Toggly.get_variant_value(VariantFlags, "checkout-flow", %{"identity" => "carol"}) ==
              %{"color" => "green"}
+
+    assert %CheckoutConfig{color: "blue"} =
+             Toggly.get_variant_value(VariantFlags, "checkout-flow", %{"identity" => "alice"},
+               as: CheckoutConfig)
+
+    assert "blue" =
+             Toggly.get_variant_value(VariantFlags, "checkout-flow", %{"identity" => "alice"},
+               as: fn %{"color" => color} -> color end)
+
+    assert is_nil(
+             Toggly.get_variant_value(VariantFlags, "checkout-flow", %{"identity" => "alice"},
+               as: :not_a_decoder)
+           )
+
+    assert is_nil(Toggly.get_variant_value(VariantFlags, "missing-feature", %{}, as: CheckoutConfig))
 
     assert %Toggly.Variant.Assignment{variant_name: nil, enabled: false} =
              Toggly.get_variant(VariantFlags, "missing-feature")

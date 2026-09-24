@@ -128,3 +128,4 @@ export {
 export type { MetricsFeatureOptions } from './telemetry/metrics-batcher.js'
 export type { FeatureStatPayload } from './telemetry/usage-batcher.js'
 export type { MetricStatPayload } from './telemetry/metrics-batcher.js'
+export { decodeVariantValue } from './decode-variant-value.js'

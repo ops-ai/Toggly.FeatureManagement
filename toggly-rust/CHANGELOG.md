@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0
+
+### Added
+- `TogglyClient::get_variant_value_as<T: DeserializeOwned>` soft-decodes the
+  assigned variant configuration. Returns `Ok(None)` on missing assignment or
+  serde decode failure — never a wrong-typed value. Untyped
+  `get_variant_value` is unchanged [OPS-1365].
+
 ## Unreleased
 
 ### Added

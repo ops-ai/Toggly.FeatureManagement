@@ -110,6 +110,55 @@ describe('getVariant / getVariantValue (catalog-local, MF-parity)', () => {
     expect(await client.getVariantValue('does-not-exist')).toBeNull()
   })
 
+  it('getVariantValue soft-decodes with an optional type guard', async () => {
+    mockFetch.mockResolvedValueOnce(
+      defsResponse([
+        variantDef(),
+        variantDef({
+          featureKey: 'pricing-tier',
+          variants: [{ name: 'A', configurationValue: 7 }],
+          allocation: { defaultWhenEnabled: 'A' },
+        }),
+      ]),
+    )
+    const client = createTogglyClient({ appKey: 'test-app' })
+    await client.init()
+
+    const isCheckout = (v: unknown): v is { color: string } =>
+      typeof v === 'object' &&
+      v !== null &&
+      typeof (v as { color?: unknown }).color === 'string'
+
+    expect(
+      await client.getVariantValue<{ color: string }>(
+        'checkout-flow',
+        { identity: 'alice' },
+        undefined,
+        undefined,
+        isCheckout,
+      ),
+    ).toEqual({ color: 'blue' })
+    expect(
+      await client.getVariantValue<{ color: string }>(
+        'pricing-tier',
+        undefined,
+        undefined,
+        undefined,
+        isCheckout,
+      ),
+    ).toBeNull()
+    expect(
+      await client.getVariantValue<{ color: string }>(
+        'does-not-exist',
+        undefined,
+        undefined,
+        undefined,
+        isCheckout,
+      ),
+    ).toBeNull()
+    expect(await client.getVariantValue<number>('pricing-tier')).toBe(7)
+  })
+
   it('honors variantIgnoreCase for case-insensitive user matching', async () => {
     mockFetch.mockResolvedValueOnce(defsResponse([variantDef()]))
     const client = createTogglyClient({ appKey: 'test-app', variantIgnoreCase: true })

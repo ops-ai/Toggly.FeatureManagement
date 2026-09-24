@@ -9,7 +9,11 @@ export type {
   EvaluationOverrides,
   FeatureFlagOptions,
 } from './types.js';
-export { FileCacheProvider, MemoryCacheProvider } from '@ops-ai/toggly-node-core';
+export {
+  FileCacheProvider,
+  MemoryCacheProvider,
+  decodeVariantValue,
+} from '@ops-ai/toggly-node-core';
 export type {
   EvaluationContext,
   TogglyEntityContext,

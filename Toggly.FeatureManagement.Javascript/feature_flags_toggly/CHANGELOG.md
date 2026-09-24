@@ -1,3 +1,12 @@
+## 1.10.0
+
+2026-09-24
+
+### Added
+- Typed `getVariantValue<T>(featureKey, isT?)` with soft-null semantics and an
+  optional runtime type guard. Without a guard, generics are compile-time only.
+- Exported `decodeVariantValue` helper for the same soft decode policy.
+
 ## 1.9.0
 
 2026-09-19

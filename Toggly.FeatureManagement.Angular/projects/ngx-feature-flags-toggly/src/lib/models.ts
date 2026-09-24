@@ -83,7 +83,7 @@ export interface ITogglyService {
   ) => Promise<boolean>
   isFeatureOff: (featureKey: string) => Promise<boolean>
   getVariant: (featureKey: string) => Promise<VariantResult | null>
-  getVariantValue: (featureKey: string) => Promise<unknown | null>
+  getVariantValue: <T = unknown>(featureKey: string, isT?: (v: unknown) => v is T) => Promise<T | null>
   recordUsage: (featureKey: string, variant?: string) => void
   recordView: (featureKey: string, variant?: string) => void
   incrementCounter: (metricKey: string, value?: number) => void

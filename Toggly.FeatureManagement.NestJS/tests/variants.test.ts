@@ -3,7 +3,7 @@ import { afterEach, describe, it, expect } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { ContextIdFactory } from '@nestjs/core';
 import { createServer, type Server } from 'node:http';
-import { TogglyModule, TogglyProvider, TogglyService } from '../src/index.js';
+import { TogglyModule, TogglyProvider, TogglyService, decodeVariantValue } from '../src/index.js';
 
 const closers: Array<() => Promise<unknown>> = [];
 afterEach(async () => {
@@ -141,5 +141,67 @@ describe('TogglyService.getVariant / getVariantValue (catalog-local, MF-parity)'
       name: 'A',
       configurationValue: { color: 'blue' },
     });
+  });
+
+  it('getVariantValue soft-decodes with an optional type guard', async () => {
+    const transport = await fixture([
+      checkoutFlowDef,
+      {
+        featureKey: 'pricing-tier',
+        filters: [{ name: 'AlwaysOn' }],
+        variants: [{ name: 'A', configurationValue: 7 }],
+        allocation: { defaultWhenEnabled: 'A' },
+      },
+    ]);
+    const mod = await moduleFor({
+      appKey: 'fixture',
+      baseUrl: transport.baseUrl,
+      refreshInterval: 0,
+      enableStreaming: false,
+      enableUsageTracking: false,
+      enableMetrics: false,
+      registerContextsOnStartup: false,
+      contextFactory: async (req: any) => req.context,
+    });
+
+    const alice = await serviceFor(mod, { context: { identity: 'alice' } });
+    const isCheckout = (v: unknown): v is { color: string } =>
+      typeof v === 'object' && v !== null && typeof (v as { color?: unknown }).color === 'string';
+
+    expect(await alice.getVariantValue<{ color: string }>('checkout-flow', {}, isCheckout)).toEqual(
+      { color: 'blue' },
+    );
+    expect(
+      await alice.getVariantValue<{ color: string }>('pricing-tier', {}, isCheckout),
+    ).toBeNull();
+    expect(
+      await alice.getVariantValue<{ color: string }>('does-not-exist', {}, isCheckout),
+    ).toBeNull();
+    expect(await alice.getVariantValue<number>('pricing-tier')).toBe(7);
+  });
+});
+
+describe('decodeVariantValue (soft-null typed decode)', () => {
+  it('returns null for missing / nullish values', () => {
+    expect(decodeVariantValue(null)).toBeNull();
+    expect(decodeVariantValue(undefined)).toBeNull();
+  });
+
+  it('returns an object as T without a guard', () => {
+    expect(decodeVariantValue<{ x: number }>({ x: 1 })).toEqual({ x: 1 });
+  });
+
+  it('returns a scalar as T without a guard', () => {
+    expect(decodeVariantValue<number>(42)).toBe(42);
+    expect(decodeVariantValue<string>('blue')).toBe('blue');
+  });
+
+  it('soft-fails (null) when a type guard rejects', () => {
+    const isCheckout = (v: unknown): v is { x: number } =>
+      typeof v === 'object' && v !== null && typeof (v as { x?: unknown }).x === 'number';
+
+    expect(decodeVariantValue({ x: 1 }, isCheckout)).toEqual({ x: 1 });
+    expect(decodeVariantValue(7, isCheckout)).toBeNull();
+    expect(decodeVariantValue(null, isCheckout)).toBeNull();
   });
 });

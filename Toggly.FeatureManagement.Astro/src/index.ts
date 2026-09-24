@@ -83,3 +83,5 @@ export type {
 } from './types/index.js';
 
 
+
+export { decodeVariantValue } from './utils/decode-variant-value.js';

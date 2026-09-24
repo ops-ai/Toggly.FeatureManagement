@@ -114,6 +114,27 @@ if (await featureManager.IsEnabledAsync(nameof(MyFeatureFlags.FeatureU)))
 }
 ```
 
+### Typed variant configuration
+
+Microsoft.FeatureManagement assigns variants via `IVariantFeatureManager.GetVariantAsync`. Toggly adds a soft-bind helper that maps the variant's `Configuration` into a typed value:
+
+``` csharp
+IVariantFeatureManager variantManager;
+
+// Object payload
+var theme = await variantManager.GetVariantValueAsync<CheckoutTheme>("checkout-theme");
+
+// Scalar payload
+var maxItems = await variantManager.GetVariantValueAsync<int>("checkout-max-items");
+
+// With targeting context
+var themeForUser = await variantManager.GetVariantValueAsync<CheckoutTheme>(
+    "checkout-theme",
+    new TargetingContext { UserId = userId });
+```
+
+`GetVariantValueAsync<T>` returns `default` when no variant is assigned or when binding fails (for example a string that cannot convert to `int`). It never throws solely for a shape mismatch. Use `GetVariantAsync` when you need the full `Variant` (name + configuration section).
+
 ### Dependency Injection
 
 When using the feature management library with MVC, the `IFeatureManager` can be obtained through dependency injection.

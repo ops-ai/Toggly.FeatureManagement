@@ -97,9 +97,16 @@ const variant = await toggly.getVariant('checkout-flow');
 
 const color = await toggly.getVariantValue('checkout-flow');
 // variant.configurationValue, or null
+
+type Checkout = { color: string };
+const isCheckout = (v: unknown): v is Checkout =>
+  typeof v === 'object' && v !== null && typeof (v as Checkout).color === 'string';
+
+const typed = await toggly.getVariantValue<Checkout>('checkout-flow', {}, isCheckout);
+// Checkout | null — soft-null when missing or the guard rejects
 ```
 
-`getVariant(key, overrides?)` and `getVariantValue(key, overrides?)` assign a variant catalog-locally from cached definitions — no server round trip — bound to the request's resolved evaluation context (same `overrides.context`/`entity`/`kind` shape as `isFeatureOn`). Allocation order is User → Group → Percentile → Default, matching `Microsoft.FeatureManagement`'s `AssignVariantAsync` bit-for-bit (percentile hashing included), verified against the shared `variant-allocator-corpus`. Both return `null` when the feature is unknown, disabled for this context, or has no variants configured. `variantIgnoreCase` on the module config controls case sensitivity for user/group/percentile matching (defaults to `false`, matching MF's own default — this differs from Toggly's own `Targeting` filter, which defaults to case-insensitive).
+`getVariant(key, overrides?)` and `getVariantValue<T>(key, overrides?, isT?)` assign a variant catalog-locally from cached definitions — no server round trip — bound to the request's resolved evaluation context (same `overrides.context`/`entity`/`kind` shape as `isFeatureOn`). Allocation order is User → Group → Percentile → Default, matching `Microsoft.FeatureManagement`'s `AssignVariantAsync` bit-for-bit (percentile hashing included), verified against the shared `variant-allocator-corpus`. Both return `null` when the feature is unknown, disabled for this context, or has no variants configured. Typed `getVariantValue` soft-decodes with an optional runtime type guard (and re-exports `decodeVariantValue` for the same policy). `variantIgnoreCase` on the module config controls case sensitivity for user/group/percentile matching (defaults to `false`, matching MF's own default — this differs from Toggly's own `Targeting` filter, which defaults to case-insensitive).
 
 ## Reliability, lifecycle and telemetry
 

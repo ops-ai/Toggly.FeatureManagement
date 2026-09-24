@@ -53,10 +53,15 @@ defmodule Toggly.Phoenix.Plug do
     Toggly.get_variant(client, key, context, options)
   end
 
-  @doc "Convenience for `get_variant/3`: the assigned configuration payload, or `nil`."
+  @doc "Convenience for `get_variant/3`: the assigned configuration payload, or `nil`.
+
+  Pass `as:` in `options` for soft-typed decode (see `Toggly.get_variant_value/4`).
+  "
   @spec get_variant_value(Plug.Conn.t(), String.t(), keyword()) :: term()
   def get_variant_value(conn, key, options \\ []) do
-    get_variant(conn, key, options).configuration_value
+    client = require_toggly_client!(conn)
+    context = Map.get(conn.assigns, :toggly_context, %{})
+    Toggly.get_variant_value(client, key, context, options)
   end
 
   defp require_toggly_client!(conn) do

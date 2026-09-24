@@ -166,8 +166,37 @@ module Toggly
     # @param feature_key [String, Symbol] The feature key
     # @param context [Context, nil] Optional targeting context (userId + groups)
     # @return [Object, nil]
-    def get_variant_value(feature_key, context: nil)
-      get_variant(feature_key, context: context)&.configuration_value
+    def get_variant_value(feature_key, context: nil, as: nil, &block)
+      value = get_variant(feature_key, context: context)&.configuration_value
+      return value if as.nil? && !block
+
+      return nil if value.nil?
+
+      begin
+        if block
+          block.call(value)
+        elsif !as.nil? && value.is_a?(as)
+          value
+        elsif as.respond_to?(:new) && value.is_a?(Hash)
+          as.new(**value.transform_keys(&:to_sym))
+        elsif as.respond_to?(:json_create) && value.is_a?(Hash)
+          as.json_create(value)
+        elsif as == Hash && value.is_a?(Hash)
+          value
+        elsif as == String
+          value.is_a?(String) ? value : nil
+        elsif as == Integer
+          value.is_a?(Integer) && !value.is_a?(TrueClass) && !value.is_a?(FalseClass) ? value : nil
+        elsif as == Float
+          value.is_a?(Numeric) && !value.is_a?(TrueClass) && !value.is_a?(FalseClass) ? value.to_f : nil
+        elsif as == TrueClass || as == FalseClass || as == :boolean
+          [true, false].include?(value) ? value : nil
+        else
+          nil
+        end
+      rescue StandardError
+        nil
+      end
     end
 
     # Default targeting userId used by {#get_variant} / {#get_variant_value}

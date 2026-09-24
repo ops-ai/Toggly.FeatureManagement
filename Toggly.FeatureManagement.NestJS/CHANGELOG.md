@@ -1,3 +1,16 @@
+## 0.3.0
+
+2026-09-24
+
+### Added
+
+- Typed `getVariantValue<T>(…, isT?)` with soft-null decode and optional runtime type guard.
+- Exported `decodeVariantValue` helper for the same soft decode policy.
+
+### Notes
+
+- Requires `@ops-ai/toggly-node-core` 0.11.0 or newer (typed soft-null `getVariantValue` / `decodeVariantValue`).
+
 # Changelog
 
 ## 0.2.0 — 2026-09-23

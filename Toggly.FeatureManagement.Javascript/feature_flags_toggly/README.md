@@ -27,6 +27,19 @@ await Toggly.init({
 const showNewDashboard = Toggly.isFeatureOn('NewDashboard');
 ```
 
+## Typed variant values
+
+Requires **1.10.0 or later** and `enableVariants: true`.
+
+```typescript
+type Checkout = { color: string }
+const isCheckout = (v: unknown): v is Checkout =>
+  typeof v === 'object' && v !== null && typeof (v as Checkout).color === 'string'
+
+const cfg = Toggly.getVariantValue<Checkout>('checkout-flow', isCheckout)
+// Checkout | null — soft-null when missing or guard fails
+```
+
 Passing context during initialization avoids an intermediate request followed
 by a refreshing `setContext` call. Omitted fields reuse persisted context;
 omitting identity also generates an identifier when none exists. Explicit

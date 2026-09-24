@@ -58,6 +58,7 @@ import {
   registerEntityContextsAtStartup,
 } from './entity-context-registration.js'
 import { TelemetryRuntime } from './telemetry/index.js'
+import { decodeVariantValue } from './decode-variant-value.js'
 
 /**
  * Create a new Toggly client
@@ -936,14 +937,15 @@ export function createTogglyClient(
     return { name: result.variantName, configurationValue: result.configurationValue }
   }
 
-  async function getVariantValue(
+  async function getVariantValue<T = unknown>(
     featureKey: string,
     context?: EvaluationContext,
     entity?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
-  ): Promise<unknown | null> {
+    isT?: (v: unknown) => v is T,
+  ): Promise<T | null> {
     const variant = await getVariant(featureKey, context, entity, kind)
-    return variant?.configurationValue ?? null
+    return decodeVariantValue(variant?.configurationValue, isT)
   }
 
   function registerContext<T>(

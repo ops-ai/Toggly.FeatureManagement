@@ -255,6 +255,22 @@ impl TogglyClient {
             .configuration_value)
     }
 
+    /// Soft-decode the assigned variant configuration as `T`.
+    /// Returns `Ok(None)` when missing or when serde cannot deserialize the payload.
+    pub async fn get_variant_value_as<T: serde::de::DeserializeOwned>(
+        &self,
+        feature_key: &str,
+        context: EvalContext,
+    ) -> crate::Result<Option<T>> {
+        match self.get_variant_value(feature_key, context).await? {
+            None => Ok(None),
+            Some(value) => match serde_json::from_value(value) {
+                Ok(decoded) => Ok(Some(decoded)),
+                Err(_) => Ok(None),
+            },
+        }
+    }
+
     /// Evaluate a feature gate (multiple features with AND/OR logic).
     #[instrument(skip(self, context), fields(features = ?feature_keys))]
     pub async fn evaluate_gate(

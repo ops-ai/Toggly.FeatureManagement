@@ -31,6 +31,7 @@ import {
 } from '@ops-ai/toggly-local-gates';
 import { HookExecutor } from './hooks';
 import type { EvaluatedVariantDef, VariantResult } from '../variant.types';
+import { decodeVariantValue } from '../utils/decode-variant-value';
 import {
   buildWebSocketUrl,
   getNextReconnectDelayMs,
@@ -363,7 +364,7 @@ export interface TogglyService {
     kind?: string,
   ) => Promise<boolean>
   getVariant: (featureKey: string) => VariantResult | null
-  getVariantValue: (featureKey: string) => unknown | null
+  getVariantValue: <T = unknown>(featureKey: string, isT?: (v: unknown) => v is T) => T | null
   subscribeFeaturesRefresh: (listener: () => void) => () => void
   setLocalGates: (gates: LocalGate[]) => void
   notifyLocalGatesChanged: () => void
@@ -946,9 +947,12 @@ export class Toggly implements TogglyService {
   /**
    * Configuration payload for the assigned variant, if any.
    */
-  getVariantValue(featureKey: string): unknown | null {
+  getVariantValue<T = unknown>(
+    featureKey: string,
+    isT?: (v: unknown) => v is T,
+  ): T | null {
     const variant = this.getVariant(featureKey)
-    return variant?.configurationValue ?? null
+    return decodeVariantValue(variant?.configurationValue, isT)
   }
 
   /**

@@ -2,6 +2,7 @@ export * from './contexts'
 export * from './services'
 export * from './components'
 export { useVariant } from './hooks/useVariant'
+export { decodeVariantValue } from './utils/decode-variant-value'
 export {
   useFeatureFlag,
   useFeatureGate,

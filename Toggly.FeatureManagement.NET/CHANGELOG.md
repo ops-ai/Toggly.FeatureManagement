@@ -1,5 +1,13 @@
 # Changelog
 
+## All .NET SDK packages 3.11.0 - 2026-09-24
+
+### Added
+- `IVariantFeatureManager.GetVariantValueAsync<T>` soft-binds the assigned
+  variant's `Configuration` to `T` (object or scalar). Returns `default` when
+  no variant is assigned or binding fails; does not throw for shape mismatch.
+  Existing Microsoft.FeatureManagement `GetVariantAsync` APIs are unchanged.
+
 ## All .NET SDK packages 3.10.0 - 2026-09-19
 
 ### Added

@@ -19,3 +19,4 @@ export {
 export type { EvaluatedDefinitions, TogglyEntityContext } from './plugins/toggly.service'
 export { isEntityGate, mapEntityContext, registerContext } from './plugins/toggly.service'
 export { default as FeatureGateBuilder } from './components/FeatureGateBuilder.vue'
+export { decodeVariantValue } from './utils/decode-variant-value'

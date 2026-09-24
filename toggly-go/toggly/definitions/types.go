@@ -73,8 +73,8 @@ type VariantDefinition struct {
 	Name string `json:"name"`
 
 	// ConfigurationValue is the untyped wire configuration payload for this variant
-	// (object, array, scalar, or null). Callers needing typed access should
-	// decode this themselves (see OPS-1365 for typed getVariantValue<T> follow-up).
+	// (object, array, scalar, or null). Prefer package-level GetVariantValueAs[T]
+	// for typed soft-bind access.
 	ConfigurationValue interface{} `json:"configurationValue"`
 
 	// StatusOverride optionally forces the feature's effective enabled state

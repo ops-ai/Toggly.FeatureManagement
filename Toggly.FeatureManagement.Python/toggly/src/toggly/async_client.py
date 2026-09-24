@@ -6,7 +6,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Optional, TypeVar, overload
 
 from toggly.config import TogglyConfig
 from toggly.context import EvaluationContext
@@ -45,7 +45,10 @@ from toggly.providers import (
 )
 from toggly.telemetry.client_api import TelemetryClientMixin
 from toggly.telemetry.runtime import TelemetryRuntime
+from toggly.variant_value import decode_variant_value
 from toggly.variants import assign_variant
+
+T = TypeVar("T")
 
 logger = logging.getLogger("toggly")
 
@@ -379,18 +382,43 @@ class AsyncTogglyClient(TelemetryClientMixin, DefinitionRefreshMixin):
             assignment_reason=assignment.reason,
         )
 
+    @overload
+    async def get_variant_value(
+        self,
+        feature_key: str,
+        *,
+        user_id: Optional[str] = None,
+        groups: Optional[list[str]] = None,
+        type: None = None,
+    ) -> Any: ...
+
+    @overload
+    async def get_variant_value(
+        self,
+        feature_key: str,
+        *,
+        user_id: Optional[str] = None,
+        groups: Optional[list[str]] = None,
+        type: type[T],
+    ) -> Optional[T]: ...
+
     async def get_variant_value(
         self,
         feature_key: str,
         *,
         user_id: str | None = None,
         groups: list[str] | None = None,
+        type: type[T] | None = None,
     ) -> Any:
-        """Return the configuration value for the locally-assigned variant, if any."""
+        """Return the configuration value for the locally-assigned variant, if any.
+
+        Without ``type``, returns the untyped wire value. With ``type``, soft-binds
+        (pydantic ``TypeAdapter`` when available) and returns ``None`` on mismatch.
+        """
         variant = await self.get_variant(feature_key, user_id=user_id, groups=groups)
         if variant is None:
             return None
-        return variant.configuration_value
+        return decode_variant_value(variant.configuration_value, type)
 
     async def get_feature_state(
         self,

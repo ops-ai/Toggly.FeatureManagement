@@ -8,6 +8,7 @@ export * from './lib/models'
 
 // Service
 export * from './lib/toggly.service'
+export { decodeVariantValue } from './lib/decode-variant-value'
 
 // Components & Directives (standalone)
 export * from './lib/feature-gate-builder.directive'

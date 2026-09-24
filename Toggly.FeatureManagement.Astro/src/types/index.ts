@@ -179,7 +179,7 @@ export interface TogglyClient {
   /**
    * Configuration payload for the assigned variant, if any.
    */
-  getVariantValue(featureKey: string): Promise<unknown | null>;
+  getVariantValue<T = unknown>(featureKey: string, isT?: (v: unknown) => v is T): Promise<T | null>;
 }
 
 /**

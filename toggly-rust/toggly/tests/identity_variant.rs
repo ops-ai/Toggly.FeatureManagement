@@ -114,6 +114,86 @@ async fn get_variant_value_uses_client_identity() {
     client.close().await;
 }
 
+#[derive(Debug, PartialEq, Eq, serde::Deserialize)]
+struct CheckoutConfig {
+    color: String,
+}
+
+#[tokio::test]
+async fn get_variant_value_as_object() {
+    let server = MockServer::start().await;
+    let client = client_against(&server, Some("alice")).await;
+
+    let value = client
+        .get_variant_value_as::<CheckoutConfig>("checkout-flow", EvalContext::default())
+        .await
+        .unwrap();
+    assert_eq!(
+        value,
+        Some(CheckoutConfig {
+            color: "blue".into()
+        })
+    );
+    client.close().await;
+}
+
+#[tokio::test]
+async fn get_variant_value_as_mismatch_and_missing() {
+    let server = MockServer::start().await;
+    let client = client_against(&server, Some("alice")).await;
+
+    let mismatch = client
+        .get_variant_value_as::<String>("checkout-flow", EvalContext::default())
+        .await
+        .unwrap();
+    assert_eq!(mismatch, None);
+
+    let missing = client
+        .get_variant_value_as::<CheckoutConfig>("unknown", EvalContext::default())
+        .await
+        .unwrap();
+    assert_eq!(missing, None);
+    client.close().await;
+}
+
+#[tokio::test]
+async fn get_variant_value_as_scalar() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path_regex(r"^/definitions/"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([{
+            "featureKey": "banner",
+            "filters": [{"name": "AlwaysOn"}],
+            "variants": [{"name": "A", "configurationValue": "hello"}],
+            "allocation": {"defaultWhenEnabled": "A"}
+        }])))
+        .mount(&server)
+        .await;
+
+    let client = TogglyClient::new(
+        TogglyConfig::builder()
+            .app_key("test-app")
+            .environment("Production")
+            .definitions_url(format!("{}/", server.uri()))
+            .use_signed_definitions(false)
+            .disable_background_refresh(true)
+            .enable_live_updates(false)
+            .enable_usage_tracking(false)
+            .enable_metrics(false)
+            .disable_entity_context_registration(true)
+            .build(),
+    )
+    .await
+    .expect("client");
+
+    let value = client
+        .get_variant_value_as::<String>("banner", EvalContext::default())
+        .await
+        .unwrap();
+    assert_eq!(value, Some("hello".into()));
+    client.close().await;
+}
+
 #[tokio::test]
 async fn identity_round_trip() {
     let server = MockServer::start().await;
