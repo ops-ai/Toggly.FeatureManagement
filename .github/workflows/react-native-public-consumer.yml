@@ -1,0 +1,57 @@
+name: React Native public consumer
+
+on:
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'Toggly.FeatureManagement.ReactNative/tests/fixtures/public-native/**'
+      - '.github/workflows/react-native-public-consumer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-consumer-js:
+    name: Public RN lock, JS tests, Metro bundles
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: Toggly.FeatureManagement.ReactNative/tests/fixtures/public-native
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: Toggly.FeatureManagement.ReactNative/tests/fixtures/public-native/package-lock.json
+      - name: Clean registry install
+        run: npm ci
+      - name: Reject non-registry resolution
+        run: |
+          set -euo pipefail
+          if grep -E '(file|link|workspace):|react-native-url-polyfill' package.json package-lock.json; then
+            echo 'Forbidden: file/link/workspace resolution or url-polyfill in acceptance lock' >&2
+            exit 1
+          fi
+          node -e "
+            const lock = require('./package-lock.json');
+            const pkgs = ['@ops-ai/react-native-toggly', '@ops-ai/react-native-toggly-core', '@ops-ai/react-native-toggly-storage-mmkv4', '@ops-ai/toggly-client-telemetry'];
+            for (const name of pkgs) {
+              const entry = lock.packages['node_modules/' + name];
+              if (!entry) throw new Error('missing ' + name);
+              if (!String(entry.resolved || '').startsWith('https://registry.npmjs.org/')) {
+                throw new Error(name + ' not from registry: ' + entry.resolved);
+              }
+              console.log(name, entry.version, entry.integrity);
+            }
+          "
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test -- --runInBand --detectOpenHandles
+      - run: npm run bundle:ios
+      - run: npm run bundle:android
+
+# Native Hermes iOS/Android simulator proof stays local (see public-native/EVIDENCE.md).
+# Hosted runners do not run Xcode/Android emulator for this fixture due to capacity.
