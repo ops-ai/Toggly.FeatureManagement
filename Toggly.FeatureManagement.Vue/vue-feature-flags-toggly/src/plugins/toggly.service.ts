@@ -945,14 +945,14 @@ export class Toggly implements TogglyService {
   }
 
   /**
-   * Configuration payload for the assigned variant, if any.
+   * Soft-decode the assigned variant's configurationValue as `T`.
+   * Optional `isT` type guard returns null on mismatch (never throws).
    */
   getVariantValue<T = unknown>(
     featureKey: string,
     isT?: (v: unknown) => v is T,
   ): T | null {
-    const variant = this.getVariant(featureKey)
-    return decodeVariantValue(variant?.configurationValue, isT)
+    return decodeVariantValue(this.getVariant(featureKey)?.configurationValue, isT)
   }
 
   /**

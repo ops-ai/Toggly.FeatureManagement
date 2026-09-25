@@ -36,6 +36,9 @@ def decode_variant_value(value: Any, type_: type[T] | None) -> Any:
     return _decode_without_pydantic(value, type_)
 
 
+_PRIMITIVE_TYPES = (bool, int, float, str, bytes, complex)
+
+
 def _decode_without_pydantic(value: Any, type_: type[T]) -> T | None:
     try:
         # bool is a subclass of int — do not treat True/False as int/float.
@@ -52,7 +55,13 @@ def _decode_without_pydantic(value: Any, type_: type[T]) -> T | None:
             kwargs = {f.name: value[f.name] for f in fields(type_) if f.name in value}
             return cast(T, type_(**kwargs))
 
-        if callable(type_) and isinstance(value, dict):
+        # Never call builtins with **dict — int()/str()/bool() yield defaults
+        # (0, "", False) instead of soft-null on shape mismatch.
+        if (
+            callable(type_)
+            and isinstance(value, dict)
+            and type_ not in _PRIMITIVE_TYPES
+        ):
             return cast(T, type_(**value))
 
         return None

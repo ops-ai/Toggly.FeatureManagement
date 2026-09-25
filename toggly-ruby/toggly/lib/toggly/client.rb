@@ -357,22 +357,36 @@ module Toggly
 
     def decode_variant_configuration(value, as, &block)
       if block
-        block.call(value)
-      elsif !as.nil? && value.is_a?(as)
-        value
-      elsif as.respond_to?(:new) && value.is_a?(Hash)
-        as.new(**value.transform_keys(&:to_sym))
-      elsif as.respond_to?(:json_create) && value.is_a?(Hash)
-        as.json_create(value)
-      elsif as == String
-        value.is_a?(String) ? value : nil
-      elsif as == Integer
-        value.is_a?(Integer) && !value.is_a?(TrueClass) && !value.is_a?(FalseClass) ? value : nil
-      elsif as == Float
-        value.is_a?(Numeric) && !value.is_a?(TrueClass) && !value.is_a?(FalseClass) ? value.to_f : nil
-      elsif [TrueClass, FalseClass, :boolean].include?(as)
-        [true, false].include?(value) ? value : nil
+        return block.call(value)
       end
+      return nil if as.nil?
+
+      # Scalars / :boolean before Class#new — String.new({}) would soft-fail to "".
+      if as == String
+        return value.is_a?(String) ? value : nil
+      end
+      if as == Integer
+        return value.is_a?(Integer) && !value.is_a?(TrueClass) && !value.is_a?(FalseClass) ? value : nil
+      end
+      if as == Float
+        return value.is_a?(Numeric) && !value.is_a?(TrueClass) && !value.is_a?(FalseClass) ? value.to_f : nil
+      end
+      if [TrueClass, FalseClass, :boolean].include?(as)
+        return [true, false].include?(value) ? value : nil
+      end
+
+      # is_a? requires a Module; symbols like :boolean are handled above.
+      if as.is_a?(Module) && value.is_a?(as)
+        return value
+      end
+      if as.respond_to?(:new) && value.is_a?(Hash)
+        return as.new(**value.transform_keys(&:to_sym))
+      end
+      if as.respond_to?(:json_create) && value.is_a?(Hash)
+        return as.json_create(value)
+      end
+
+      nil
     rescue StandardError
       nil
     end

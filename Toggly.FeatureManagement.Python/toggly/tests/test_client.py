@@ -456,6 +456,10 @@ class TestTogglyClientVariants:
             assert client.get_variant_value(
                 "checkout-flow", user_id="alice", type=str
             ) is None
+            # Object config + primitive type must not call int()/str() defaults.
+            assert client.get_variant_value(
+                "checkout-flow", user_id="alice", type=int
+            ) is None
         finally:
             client.close()
 

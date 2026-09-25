@@ -386,6 +386,22 @@ RSpec.describe Toggly::Client do
         ).to be_nil
       end
 
+      it "soft-binds :boolean without raising on is_a?" do
+        seeded = described_class.new(
+          app_key: app_key,
+          environment: environment,
+          disable_background_refresh: true
+        )
+        allow(seeded).to receive(:get_variant).and_return(
+          Toggly::VariantResult.new(name: "A", configuration_value: true, enabled: true, reason: "DefaultWhenEnabled")
+        )
+        expect(seeded.get_variant_value("flag", as: :boolean)).to eq(true)
+        allow(seeded).to receive(:get_variant).and_return(
+          Toggly::VariantResult.new(name: "A", configuration_value: "nope", enabled: true, reason: "DefaultWhenEnabled")
+        )
+        expect(seeded.get_variant_value("flag", as: :boolean)).to be_nil
+      end
+
       it "returns nil on typed missing assignment" do
         expect(client.get_variant_value("no-variants-feature", as: String)).to be_nil
       end
