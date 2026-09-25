@@ -97,4 +97,5 @@ POST /api/frontend/telemetry
 
 ## Candidate SHA
 
-_Filled after freeze commit._
+`d4083dacde769a601459317cd971e36111da587c` (signed freeze that added this fixture;
+subsequent tip commits may only amend this evidence pointer).
