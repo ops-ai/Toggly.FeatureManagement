@@ -1,3 +1,9 @@
+## 1.5.0 — 2026-09-24
+
+### Added
+- Typed `getVariantValue<T>(…, isT?)` on `useToggly()`, matching core's soft-null decode and optional runtime type guard.
+- Re-exported `decodeVariantValue` from `@ops-ai/nuxt-toggly-core/browser`.
+
 ## 1.4.0 — 2026-09-22
 
 ### Added

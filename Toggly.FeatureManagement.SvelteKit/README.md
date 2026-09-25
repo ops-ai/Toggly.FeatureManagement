@@ -112,7 +112,7 @@ const toggly = createToggly(data.toggly, {
   enableVariants: true,
 });
 const variant = toggly.getVariant('checkout-flow'); // { name, configurationValue? } | null
-const configurationValue = toggly.getVariantValue('checkout-flow'); // unknown | null
+const configurationValue = toggly.getVariantValue<{ color: string }>('checkout-flow'); // soft-typed; optional isT guard
 ```
 
 `getVariant(key)` returns `null` when variants are disabled, the flag is off (including via local gates), or no variant name was assigned; otherwise it returns `{ name, configurationValue? }`. `getVariantValue(key)` returns `configurationValue ?? null`. `isEnabled` / `gate` / `Feature.svelte` keep evaluating the boolean `enabled` value regardless of `enableVariants`, so existing gating code is unaffected. Both server and browser must set `enableVariants` consistently to keep SSR and hydration on the same branch.

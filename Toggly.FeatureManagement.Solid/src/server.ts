@@ -120,7 +120,7 @@ export function createTogglyRequest(options: ServerRequestOptions) {
             'User-Agent': context.request?.userAgent ?? '',
             'Accept-Language': context.request?.acceptLanguage ?? '',
             'X-Toggly-Sdk': 'solidstart',
-            'X-Toggly-Sdk-Version': '0.4.0',
+            'X-Toggly-Sdk-Version': '0.5.0',
           },
         },
       );

@@ -17,6 +17,7 @@ export {
   HookExecutor,
   evaluateGate,
   normalizeFeatureKeys,
+  decodeVariantValue,
 } from '@ops-ai/nuxt-toggly-core/browser'
 
 // Client types

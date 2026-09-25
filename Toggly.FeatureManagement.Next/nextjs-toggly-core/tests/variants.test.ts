@@ -79,6 +79,10 @@ describe('enableVariants / getVariant / getVariantValue', () => {
       configurationValue: { color: 'blue' },
     })
     expect(client.getVariantValue('new-checkout')).toEqual({ color: 'blue' })
+    const isColor = (v: unknown): v is { color: string } =>
+      typeof v === 'object' && v !== null && typeof (v as { color?: unknown }).color === 'string'
+    expect(client.getVariantValue('new-checkout', isColor)).toEqual({ color: 'blue' })
+    expect(client.getVariantValue('new-checkout', (v): v is number => typeof v === 'number')).toBeNull()
 
     // Boolean snapshot still reflects `enabled` for existing isFeatureOn / features consumers.
     expect(await client.isFeatureOn('new-checkout')).toBe(true)

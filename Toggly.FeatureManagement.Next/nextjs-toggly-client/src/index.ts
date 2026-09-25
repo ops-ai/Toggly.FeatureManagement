@@ -45,3 +45,5 @@ export type {
   VariantResult,
   EvaluatedVariantDef,
 } from '@ops-ai/nextjs-toggly-core'
+
+export { decodeVariantValue } from '@ops-ai/nextjs-toggly-core'

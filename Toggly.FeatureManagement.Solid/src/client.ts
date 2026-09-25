@@ -24,9 +24,11 @@ import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions } from '@ops-ai/togg
 import { applyLocalGate, buildFlagGateIndex, type LocalGate } from '@ops-ai/toggly-local-gates';
 import { createTelemetryReporter, type TelemetryOptions } from '@ops-ai/toggly-client-telemetry';
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
+import { decodeVariantValue } from './decode-variant-value.js';
 
 export type { TogglyEntityContext, TogglyEvaluationContext, EvaluatedDefinitions, LocalGate };
 export type { EvaluatedVariantDef, VariantResult } from './variant.js';
+export { decodeVariantValue } from './decode-variant-value.js';
 export interface TogglyOptions extends TogglyEvaluationContext {
   /** Host-minted browser token; takes precedence over user targeting and telemetry. */
   instanceId?: string;
@@ -154,7 +156,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
     }
   };
   const flags = () => ({ ...state.definitions });
-  const headers = { 'X-Toggly-Sdk': 'solidjs', 'X-Toggly-Sdk-Version': '0.4.0' };
+  const headers = { 'X-Toggly-Sdk': 'solidjs', 'X-Toggly-Sdk-Version': '0.5.0' };
 
   /**
    * Current variant assignment for a feature (requires {@link TogglyOptions.enableVariants}
@@ -310,7 +312,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
     );
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     url.searchParams.set('sdk', 'solidjs');
-    url.searchParams.set('sdkVersion', '0.4.0');
+    url.searchParams.set('sdkVersion', '0.5.0');
     if (revision) url.searchParams.set('rev', revision);
     try {
       socket = new WebSocket(url);
@@ -447,8 +449,12 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
       });
     },
     getVariant,
-    getVariantValue(featureKey: string): unknown | null {
-      return getVariant(featureKey)?.configurationValue ?? null;
+    /**
+     * Configuration payload for the assigned variant, if any.
+     * Optional `isT` type guard soft-fails to null on mismatch.
+     */
+    getVariantValue<T = unknown>(featureKey: string, isT?: (v: unknown) => v is T): T | null {
+      return decodeVariantValue(getVariant(featureKey)?.configurationValue, isT);
     },
     async setContext(next: TogglyEvaluationContext & { instanceId?: string }) {
       if (disposed) return;

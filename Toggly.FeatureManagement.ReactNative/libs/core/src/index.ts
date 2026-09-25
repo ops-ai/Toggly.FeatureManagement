@@ -1,6 +1,9 @@
 // Models and types
 export * from './models';
 
+// Soft-null typed variant decode (matches JS / Vue / Next / Nuxt)
+export { decodeVariantValue } from './decode-variant-value';
+
 // Services
 export { TogglyService } from './services/TogglyService';
 export { HookExecutor } from './services/HookExecutor';

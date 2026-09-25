@@ -66,6 +66,10 @@ describe('enableVariants', () => {
     expect(client.getVariant('Off')).toBeNull()
     expect(client.getVariantValue('Checkout')).toEqual({ color: 'blue' })
     expect(client.getVariantValue('Off')).toBeNull()
+    const isColor = (v: unknown): v is { color: string } =>
+      typeof v === 'object' && v !== null && typeof (v as { color?: unknown }).color === 'string'
+    expect(client.getVariantValue('Checkout', isColor)).toEqual({ color: 'blue' })
+    expect(client.getVariantValue('Checkout', (v): v is number => typeof v === 'number')).toBeNull()
 
     client.destroy()
   })

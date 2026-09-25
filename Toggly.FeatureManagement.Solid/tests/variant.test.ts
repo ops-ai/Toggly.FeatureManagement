@@ -78,6 +78,12 @@ describe('client variants (enabled)', () => {
     await client.refresh();
     expect(client.getVariant('On')).toEqual({ name: 'blue', configurationValue: 42 });
     expect(client.getVariantValue('On')).toBe(42);
+    expect(client.getVariantValue<number>('On', (v): v is number => typeof v === 'number')).toBe(
+      42,
+    );
+    expect(
+      client.getVariantValue<{ x: number }>('On', (v): v is { x: number } => false),
+    ).toBeNull();
     client.dispose();
   });
 

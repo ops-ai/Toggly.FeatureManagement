@@ -45,4 +45,4 @@ export type {
 } from '@ops-ai/react-native-toggly-core';
 
 // Re-export core service for advanced usage
-export { TogglyService, MemoryStorage } from '@ops-ai/react-native-toggly-core';
+export { TogglyService, MemoryStorage, decodeVariantValue } from '@ops-ai/react-native-toggly-core';
