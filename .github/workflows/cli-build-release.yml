@@ -272,7 +272,13 @@ jobs:
           git add Toggly.CLI/VERSION
           git commit -S -m "Bump CLI to v${CLI_VERSION} (auto_bump) [skip ci]"
           for attempt in 1 2 3; do
-            if git pull --rebase origin develop && git push origin HEAD:develop; then
+            # Explicit --gpg-sign: rebase rewrites the tip and must keep ruleset
+            # 8368 (required_signatures) happy — commit.gpgsign alone is not
+            # enough to rely on across git/pull versions.
+            if git fetch origin develop \
+              && git rebase --gpg-sign origin/develop \
+              && git verify-commit HEAD \
+              && git push origin HEAD:develop; then
               break
             fi
             git rebase --abort 2>/dev/null || true
