@@ -422,6 +422,14 @@ class TogglyService(
      */
     suspend fun getVariantValue(featureKey: String): Any? = getVariant(featureKey)?.configurationValue
 
+    /**
+     * Soft-decodes the assigned variant configuration as [clazz].
+     * Prefer the reified [getVariantValue] extension from Kotlin.
+     * Missing assignment or decode failure returns null (never throws for shape alone).
+     */
+    suspend fun <T : Any> getVariantValue(featureKey: String, clazz: Class<T>): T? =
+        decodeVariantValue(getVariant(featureKey)?.configurationValue, clazz)
+
     private data class VariantSnapshot(
         val entry: EvaluatedVariantDef?,
         val enabled: Boolean,

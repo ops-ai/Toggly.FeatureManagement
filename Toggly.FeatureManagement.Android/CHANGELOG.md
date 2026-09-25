@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.9.0
+
+2026-09-25
+
+### Added
+- Typed soft-null `getVariantValue<T>()` reified extension and
+  `getVariantValue(featureKey, Class<T>)` on Core and the global facade.
+  Missing assignment or decode failure returns `null` without throwing; the
+  untyped `getVariantValue(featureKey): Any?` overload is unchanged.
+
 ## 1.8.0
 
 2026-09-22

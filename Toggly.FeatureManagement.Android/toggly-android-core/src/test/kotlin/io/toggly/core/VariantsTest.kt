@@ -358,6 +358,68 @@ class VariantsTest {
         }
     }
 
+    @Test
+    fun `typed getVariantValue soft-decodes maps and soft-nulls mismatches`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"feature-a":{"enabled":true,"variant":"B","configurationValue":{"color":"blue"}}}"""
+                )
+            )
+            val service = TogglyService(config(server))
+            try {
+                service.init()
+                val typed = service.getVariantValue<PricingConfig>("feature-a")
+                assertEquals(PricingConfig(color = "blue"), typed)
+                assertEquals(
+                    PricingConfig(color = "blue"),
+                    service.getVariantValue("feature-a", PricingConfig::class.java)
+                )
+                assertNull(service.getVariantValue<String>("feature-a"))
+                assertNull(service.getVariantValue("feature-a", String::class.java))
+                assertNull(service.getVariantValue<PricingConfig>("missing"))
+            } finally {
+                service.dispose()
+            }
+        }
+    }
+
+    @Test
+    fun `typed getVariantValue returns scalars when types match`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"banner":{"enabled":true,"variant":"A","configurationValue":"hello"}}"""
+                )
+            )
+            val service = TogglyService(config(server))
+            try {
+                service.init()
+                assertEquals("hello", service.getVariantValue<String>("banner"))
+                assertNull(service.getVariantValue<Long>("banner"))
+            } finally {
+                service.dispose()
+            }
+        }
+    }
+
+    @Test
+    fun `typed getVariantValue does not trust erased List is-checks`() {
+        // Raw list from JSON parse — elements are not typed as String at runtime.
+        val raw: Any? = listOf(1L, 2L)
+        assertNull(decodeVariantValue<List<String>>(raw))
+        assertEquals(listOf("a", "b"), decodeVariantValue<List<String>>(listOf("a", "b")))
+    }
+
+    @Test
+    fun `typed getVariantValue ignores unknown object keys`() {
+        val raw: Any? = mapOf("color" to "blue", "extra" to 1L)
+        assertEquals(PricingConfig(color = "blue"), decodeVariantValue<PricingConfig>(raw))
+    }
+
+    @kotlinx.serialization.Serializable
+    private data class PricingConfig(val color: String)
+
     private fun createKey(): TestKey {
         val generator = KeyPairGenerator.getInstance("EC")
         generator.initialize(ECGenParameterSpec("secp256r1"))

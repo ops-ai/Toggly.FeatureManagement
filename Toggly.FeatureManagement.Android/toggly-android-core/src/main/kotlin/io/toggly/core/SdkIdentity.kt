@@ -4,7 +4,7 @@ import java.net.URLEncoder
 
 object SdkIdentity {
     const val SDK_ID = "android"
-    const val SDK_VERSION = "1.7.1"
+    const val SDK_VERSION = "1.9.0"
 
     fun userAgent(): String = "toggly-$SDK_ID/$SDK_VERSION"
 
