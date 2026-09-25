@@ -1,4 +1,4 @@
-# NuGet / package signing status (OPS-943)
+# NuGet / package signing status (OPS-943 / OPS-1411)
 
 ## NuGet package signing (enabled)
 
@@ -11,29 +11,34 @@ GitHub Releases for the .NET SDK and CLI attach `SHA256SUMS` plus a
 detached GPG signature (`SHA256SUMS.asc`) using the existing
 `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE` secrets.
 
-## Authenticode (not enabled)
+## Authenticode for Windows CLI (enabled)
 
-Authenticode signing of packed DLLs and Windows `toggly-cli.exe` is **gated
-on a human Key Vault certificate EKU check** and is **not enabled** in this
-change.
+`cli-build-release.yml` signs Windows `toggly-cli.exe` with `AzureSignTool`
+after `dotnet publish` and before the release zip, using the same
+`NUGET_SIGN_*` Key Vault credentials as NuGet signing.
 
-Required EKU for Authenticode / AzureSignTool code signing:
+Verified 2026-09-24 against the issued certificate in
+`https://opsaikubevault.vault.azure.net/` (`opsAISigningCert`):
 
-- OID `1.3.6.1.5.5.7.3.3` (Code Signing)
+- Issuer: GlobalSign GCC R45 CodeSigning CA 2020
+- Subject: Opsai LLC
+- Extended Key Usage: Code Signing (`1.3.6.1.5.5.7.3.3`)
+- Valid through 2027-08-18
 
-This environment could not inspect the Key Vault certificate’s Extended Key
-Usage. Until a human confirms that OID is present on the existing
-`NUGET_SIGN_CERTIFICATE`:
+Note: Key Vault *certificate policy* metadata for this cert still lists
+Server/Client Authentication EKUs. That policy blob is stale relative to
+the issued GlobalSign leaf — trust the downloaded certificate, not the
+policy EKUs, when re-checking.
 
-1. Do **not** wire AzureSignTool into `sdk-dotnet-release.yml` or
-   `cli-build-release.yml`.
-2. Do **not** invent a new certificate or secret store.
+The Windows job fails the release if `Get-AuthenticodeSignature` does not
+report `Valid`.
 
-If the EKU check passes, enable Authenticode with the same vault URL /
-client / tenant / secret / certificate already used for NuGet signing.
+## Authenticode for packed .NET DLLs (not enabled)
 
-If the EKU check fails (certificate is NuGet signing only), keep this
-document as the record and leave Authenticode out of scope.
+Authenticode signing of NuGet-packed DLLs remains out of scope. NuGet
+package signatures already cover those artifacts for the NuGet ecosystem;
+Authenticode on every packed DLL adds little for library consumers and is
+not wired into `sdk-dotnet-release.yml`.
 
 ## Explicit non-goals
 

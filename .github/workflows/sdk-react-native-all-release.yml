@@ -163,7 +163,7 @@ jobs:
             else
               PACKAGE_DIR="$GITHUB_WORKSPACE/${{ env.SDK_ROOT }}/$dir" SKIP_IMPORT=true \
                 node "$GITHUB_WORKSPACE/.github/actions/verify-package-tarball/verify.mjs"
-              npm publish --provenance --access public || npm publish --access public
+              npm publish --provenance --access public
             fi
           }
 
@@ -173,7 +173,7 @@ jobs:
           publish_pkg storage-mmkv @ops-ai/react-native-toggly-storage-mmkv true
           publish_pkg storage-mmkv4 @ops-ai/react-native-toggly-storage-mmkv4 true
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ''
 
       - name: Commit version bump
         if: needs.validate.outputs.manifest_changed == 'true'

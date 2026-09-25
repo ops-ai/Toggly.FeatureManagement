@@ -129,7 +129,7 @@ jobs:
       - name: Publish manifest version
         run: npm publish --access public --provenance
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ''
 
       - name: Commit version bump
         if: needs.resolve.outputs.manifest_changed == 'true'

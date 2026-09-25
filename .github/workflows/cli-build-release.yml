@@ -134,6 +134,68 @@ jobs:
             exit 1
           fi
 
+      - name: Install AzureSignTool
+        if: matrix.rid == 'win-x64'
+        shell: bash
+        run: |
+          dotnet tool install --global AzureSignTool
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Sign Windows CLI with Authenticode
+        if: matrix.rid == 'win-x64'
+        shell: bash
+        env:
+          AZURE_KEY_VAULT_URL: ${{ secrets.NUGET_SIGN_VAULT_URL }}
+          AZURE_KEY_VAULT_CLIENT_ID: ${{ secrets.NUGET_SIGN_CLIENT_ID }}
+          AZURE_KEY_VAULT_CLIENT_SECRET: ${{ secrets.NUGET_SIGN_CLIENT_SECRET }}
+          AZURE_KEY_VAULT_TENANT_ID: ${{ secrets.NUGET_SIGN_TENANT_ID }}
+          AZURE_KEY_VAULT_CERTIFICATE: ${{ secrets.NUGET_SIGN_CERTIFICATE }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for required in \
+            AZURE_KEY_VAULT_URL \
+            AZURE_KEY_VAULT_CLIENT_ID \
+            AZURE_KEY_VAULT_CLIENT_SECRET \
+            AZURE_KEY_VAULT_TENANT_ID \
+            AZURE_KEY_VAULT_CERTIFICATE
+          do
+            if [ -z "${!required}" ]; then
+              echo "Missing required NUGET_SIGN_* secret mapped to $required"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+          EXE="./publish/${{ matrix.rid }}/${{ matrix.binary-name }}"
+          test -f "$EXE"
+
+          AzureSignTool sign \
+            --azure-key-vault-url "$AZURE_KEY_VAULT_URL" \
+            --azure-key-vault-client-id "$AZURE_KEY_VAULT_CLIENT_ID" \
+            --azure-key-vault-client-secret "$AZURE_KEY_VAULT_CLIENT_SECRET" \
+            --azure-key-vault-tenant-id "$AZURE_KEY_VAULT_TENANT_ID" \
+            --azure-key-vault-certificate "$AZURE_KEY_VAULT_CERTIFICATE" \
+            --file-digest sha256 \
+            --timestamp-rfc3161 http://timestamp.digicert.com \
+            --timestamp-digest sha256 \
+            --description "Toggly CLI" \
+            --description-url "https://docs.toggly.io/docs/using-toggly/cli" \
+            --verbose \
+            "$EXE"
+
+      - name: Verify Authenticode signature
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          $sig = Get-AuthenticodeSignature -FilePath "./publish/${{ matrix.rid }}/${{ matrix.binary-name }}"
+          $sig | Format-List Status, StatusMessage, SignerCertificate
+          if ($sig.Status -ne 'Valid') {
+            throw "Authenticode status was $($sig.Status): $($sig.StatusMessage)"
+          }
+
       - name: Create archive (Linux/macOS)
         if: runner.os != 'Windows'
         shell: bash
@@ -160,12 +222,15 @@ jobs:
     needs: [build, validate]
     if: needs.validate.outputs.action == 'publish'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
+          fetch-depth: 0
 
       - name: Download all artifacts
         uses: actions/download-artifact@v8
@@ -174,12 +239,14 @@ jobs:
           pattern: toggly-cli-*
           merge-multiple: false
 
-      - name: Import GPG key for checksum signing
+      - name: Import GPG key for checksum and commit signing
         id: import_gpg
         uses: crazy-max/ghaction-import-gpg@v7
         with:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
 
       - name: Generate and GPG-sign SHA-256 checksums
         run: |
@@ -193,12 +260,31 @@ jobs:
 
       - name: Commit version bump
         if: needs.validate.outputs.manifest_changed == 'true'
+        env:
+          GIT_AUTHOR_NAME: ${{ steps.import_gpg.outputs.name }}
+          GIT_AUTHOR_EMAIL: ${{ steps.import_gpg.outputs.email }}
+          GIT_COMMITTER_NAME: ${{ steps.import_gpg.outputs.name }}
+          GIT_COMMITTER_EMAIL: ${{ steps.import_gpg.outputs.email }}
+          CLI_VERSION: ${{ needs.validate.outputs.version }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # validate wrote VERSION on a different runner; re-apply here before commit
+          printf '%s\n' "$CLI_VERSION" > Toggly.CLI/VERSION
           git add Toggly.CLI/VERSION
-          git commit -m "Bumped CLI to v${{ needs.validate.outputs.version }} (auto_bump) [skip ci]" || true
-          git push origin develop || true
+          git commit -S -m "Bump CLI to v${CLI_VERSION} (auto_bump) [skip ci]"
+          for attempt in 1 2 3; do
+            # Explicit --gpg-sign: rebase rewrites the tip and must keep ruleset
+            # 8368 (required_signatures) happy — commit.gpgsign alone is not
+            # enough to rely on across git/pull versions.
+            if git fetch origin develop \
+              && git rebase --gpg-sign origin/develop \
+              && git verify-commit HEAD \
+              && git push origin HEAD:develop; then
+              break
+            fi
+            git rebase --abort 2>/dev/null || true
+            if test "$attempt" -eq 3; then exit 1; fi
+            sleep 2
+          done
 
       - name: Create Release
         uses: softprops/action-gh-release@v3
@@ -211,8 +297,8 @@ jobs:
             See the [CLI documentation](https://docs.toggly.io/docs/using-toggly/cli) for installation instructions.
 
             Release assets include `SHA256SUMS` and `SHA256SUMS.asc` (GPG-signed).
-            Authenticode for Windows `toggly-cli.exe` is not enabled yet — see
-            `.github/package-registry/nuget-signing-status.md`.
+            Windows `toggly-cli.exe` is Authenticode-signed with the Opsai LLC
+            GlobalSign code-signing certificate (Azure Key Vault / AzureSignTool).
           files: |
             artifacts/**/*.tar.gz
             artifacts/**/*.zip
