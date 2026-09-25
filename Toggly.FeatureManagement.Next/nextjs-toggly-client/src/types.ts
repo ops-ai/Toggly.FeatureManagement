@@ -74,8 +74,14 @@ export interface TogglyContextValue {
    * the effective flag is off.
    */
   getVariant: (featureKey: string) => VariantResult | null
-  /** Configuration payload for the assigned variant, if any. */
-  getVariantValue: (featureKey: string) => unknown | null
+  /**
+   * Configuration payload for the assigned variant, if any.
+   * Optional `isT` type guard soft-fails to null on mismatch.
+   */
+  getVariantValue: <T = unknown>(
+    featureKey: string,
+    isT?: (v: unknown) => v is T,
+  ) => T | null
 }
 
 /**

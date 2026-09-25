@@ -3,9 +3,9 @@
   "type": "module",
   "dependencies": {
     "@ops-ai/nuxt-toggly": "file:artifacts/ops-ai-nuxt-toggly-1.4.0.tgz",
-    "@ops-ai/nuxt-toggly-client": "file:artifacts/ops-ai-nuxt-toggly-client-1.4.0.tgz",
-    "@ops-ai/nuxt-toggly-core": "file:artifacts/ops-ai-nuxt-toggly-core-1.14.0.tgz",
-    "@ops-ai/nuxt-toggly-server": "file:artifacts/ops-ai-nuxt-toggly-server-1.8.0.tgz",
+    "@ops-ai/nuxt-toggly-client": "file:artifacts/ops-ai-nuxt-toggly-client-1.5.0.tgz",
+    "@ops-ai/nuxt-toggly-core": "file:artifacts/ops-ai-nuxt-toggly-core-1.15.0.tgz",
+    "@ops-ai/nuxt-toggly-server": "file:artifacts/ops-ai-nuxt-toggly-server-1.9.0.tgz",
     "@ops-ai/toggly-signed-defs": "1.2.7",
     "nuxt": "4.5.2",
     "playwright": "1.58.2",

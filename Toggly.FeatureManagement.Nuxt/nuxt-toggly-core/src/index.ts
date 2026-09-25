@@ -84,6 +84,7 @@ export { createTogglyClient } from './trusted-client'
 
 // Variant helpers (server packages parse evaluated-variants-signed payloads)
 export { parseVariantDefsPayload, variantDefsToFlags } from './parse-evaluated-payload'
+export { decodeVariantValue } from './decode-variant-value'
 
 // Entity context helpers, re-exported so wrapper packages share one implementation
 export {

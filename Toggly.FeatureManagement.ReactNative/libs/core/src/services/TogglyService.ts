@@ -38,6 +38,7 @@ import type {
   VariantResult,
 } from '../models';
 import { HookExecutor } from './HookExecutor';
+import { decodeVariantValue } from '../decode-variant-value';
 import { EventEmitter } from './EventEmitter';
 import { MemoryStorage } from './MemoryStorage';
 import {
@@ -1307,9 +1308,13 @@ export class TogglyService {
 
   /**
    * Configuration payload for the assigned variant, if any.
+   * Optional `isT` type guard soft-fails to null on mismatch.
    */
-  getVariantValue(featureKey: string): unknown | null {
-    return this.getVariant(featureKey)?.configurationValue ?? null;
+  getVariantValue<T = unknown>(
+    featureKey: string,
+    isT?: (v: unknown) => v is T,
+  ): T | null {
+    return decodeVariantValue(this.getVariant(featureKey)?.configurationValue, isT);
   }
 
   /**

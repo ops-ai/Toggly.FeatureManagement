@@ -73,6 +73,10 @@ describe('enableVariants', () => {
 
     expect(service.getVariant('onFeature')).toEqual({ name: 'treatment', configurationValue: { color: 'blue' } });
     expect(service.getVariantValue('onFeature')).toEqual({ color: 'blue' });
+    const isColor = (v: unknown): v is { color: string } =>
+      typeof v === 'object' && v !== null && typeof (v as { color?: unknown }).color === 'string';
+    expect(service.getVariantValue('onFeature', isColor)).toEqual({ color: 'blue' });
+    expect(service.getVariantValue('onFeature', (v): v is number => typeof v === 'number')).toBeNull();
   });
 
   it('getVariant returns null when the feature is disabled, unknown, or variants are off', async () => {

@@ -62,8 +62,12 @@ export interface UseTogglyResult extends Pick<TogglyService, 'recordUsage' | 're
 
   /**
    * Configuration payload for the assigned variant, if any.
+   * Optional `isT` type guard soft-fails to null on mismatch.
    */
-  getVariantValue: (featureKey: string) => unknown | null;
+  getVariantValue: <T = unknown>(
+    featureKey: string,
+    isT?: (v: unknown) => v is T,
+  ) => T | null;
 
   /**
    * Refresh feature flags from the server
@@ -188,7 +192,13 @@ export function useToggly(): UseTogglyResult {
   );
 
   const getVariantValue = useCallback(
-    (featureKey: string): unknown | null => toggly.getVariantValue(featureKey),
+    <T = unknown>(
+      featureKey: string,
+      isT?: (v: unknown) => v is T,
+    ): T | null =>
+      isT === undefined
+        ? toggly.getVariantValue(featureKey)
+        : toggly.getVariantValue(featureKey, isT),
     [toggly]
   );
 

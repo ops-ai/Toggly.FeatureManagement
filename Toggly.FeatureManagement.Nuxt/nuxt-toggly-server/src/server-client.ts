@@ -373,9 +373,13 @@ export function getServerVariant(featureKey: string): VariantResult | null {
 
 /**
  * Configuration payload for the server-assigned variant, if any.
+ * Optional `isT` type guard soft-fails to null on mismatch.
  */
-export function getServerVariantValue(featureKey: string): unknown | null {
-  return serverClient?.getVariantValue(featureKey) ?? null
+export function getServerVariantValue<T = unknown>(
+  featureKey: string,
+  isT?: (v: unknown) => v is T,
+): T | null {
+  return serverClient?.getVariantValue(featureKey, isT) ?? null
 }
 
 /**

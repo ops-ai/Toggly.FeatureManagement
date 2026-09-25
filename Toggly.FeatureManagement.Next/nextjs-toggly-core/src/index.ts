@@ -14,6 +14,7 @@ export {
   isServer,
   isEdgeRuntime,
 } from './utils'
+export { decodeVariantValue } from './decode-variant-value'
 
 // Constants
 export { DEFAULT_CONFIG, API_ENDPOINTS } from './constants'

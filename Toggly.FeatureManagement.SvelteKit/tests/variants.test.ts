@@ -31,6 +31,10 @@ it('returns the assigned variant name and configuration value when the flag is e
   const t = createToggly(baseSnapshot, { enableVariants: true });
   expect(t.getVariant('feature')).toEqual({ name: 'B', configurationValue: { color: 'blue' } });
   expect(t.getVariantValue('feature')).toEqual({ color: 'blue' });
+  const isColor = (v: unknown): v is { color: string } =>
+    typeof v === 'object' && v !== null && typeof (v as { color?: unknown }).color === 'string';
+  expect(t.getVariantValue('feature', isColor)).toEqual({ color: 'blue' });
+  expect(t.getVariantValue('feature', (v): v is number => typeof v === 'number')).toBeNull();
   t.dispose();
 });
 

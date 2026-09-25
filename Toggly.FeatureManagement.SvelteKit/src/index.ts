@@ -12,7 +12,9 @@ import {
   type TogglySnapshot,
   type VariantResult,
 } from './types.js';
+import { decodeVariantValue } from './decode-variant-value.js';
 export type * from './types.js';
+export { decodeVariantValue } from './decode-variant-value.js';
 
 /** A layout-owned store: synchronous SSR/hydration, no module-level identity or store. */
 export function createToggly(initial: TogglySnapshot, options: BrowserOptions = {}) {
@@ -119,9 +121,14 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
     if (!enabled || !entry?.variant) return null;
     return { name: entry.variant, configurationValue: entry.configurationValue };
   };
-  /** Configuration payload for the assigned variant, if any. */
-  const getVariantValue = (featureKey: string): unknown | null =>
-    getVariant(featureKey)?.configurationValue ?? null;
+  /**
+   * Configuration payload for the assigned variant, if any.
+   * Optional `isT` type guard soft-fails to null on mismatch.
+   */
+  const getVariantValue = <T = unknown>(
+    featureKey: string,
+    isT?: (v: unknown) => v is T,
+  ): T | null => decodeVariantValue(getVariant(featureKey)?.configurationValue, isT);
   const start = async (): Promise<void> => {
     if (disposed || typeof window === 'undefined') return;
     mounted = true;

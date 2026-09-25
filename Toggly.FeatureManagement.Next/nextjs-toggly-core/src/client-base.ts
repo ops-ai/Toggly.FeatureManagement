@@ -14,6 +14,7 @@ import type {
 import { HookExecutor } from './hooks'
 import { DEFAULT_CONFIG, API_ENDPOINTS } from './constants'
 import { generateUUID, evaluateGate, isEdgeRuntime } from './utils'
+import { decodeVariantValue } from './decode-variant-value'
 import {
   applyLocalGate,
   buildFlagGateIndex,
@@ -1422,8 +1423,11 @@ export function createClient(
       return { name: entry.variant, configurationValue: entry.configurationValue }
     },
 
-    getVariantValue(featureKey: string): unknown | null {
-      return client.getVariant(featureKey)?.configurationValue ?? null
+    getVariantValue<T = unknown>(
+      featureKey: string,
+      isT?: (v: unknown) => v is T,
+    ): T | null {
+      return decodeVariantValue(client.getVariant(featureKey)?.configurationValue, isT)
     },
 
     addHook(hook: Hook): void {

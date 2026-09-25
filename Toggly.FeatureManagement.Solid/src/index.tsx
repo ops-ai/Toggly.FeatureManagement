@@ -49,7 +49,7 @@ export interface Toggly {
   ) => boolean;
   /** Requires {@link TogglyOptions.enableVariants}. Null when off/disabled/missing. */
   getVariant: (featureKey: string) => VariantResult | null;
-  getVariantValue: (featureKey: string) => unknown | null;
+  getVariantValue: <T = unknown>(featureKey: string, isT?: (v: unknown) => v is T) => T | null;
 }
 
 const retiredClients = new WeakSet<TogglyClient>();
@@ -132,9 +132,11 @@ export function createToggly(
       definitions();
       return created.getVariant(featureKey);
     },
-    getVariantValue(featureKey) {
+    getVariantValue(featureKey, isT) {
       definitions();
-      return created.getVariantValue(featureKey);
+      return isT === undefined
+        ? created.getVariantValue(featureKey)
+        : created.getVariantValue(featureKey, isT);
     },
   };
 }

@@ -19,6 +19,7 @@ export type {
 } from './types'
 export { HookExecutor } from './hooks'
 export { normalizeFeatureKeys, evaluateGate } from './utils'
+export { decodeVariantValue } from './decode-variant-value'
 import { createTogglyClient as createBaseClient } from './client'
 import type { TogglyConfig } from './types'
 /** Browser ownership is explicit even when telemetry is opted out or during SSR. */

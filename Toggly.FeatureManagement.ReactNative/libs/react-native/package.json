@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/react-native-toggly",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Feature flags SDK for React Native and Expo applications. Provides hooks, context, and components for feature flag management. Can be used with or without Toggly.io.",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -57,7 +57,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@ops-ai/react-native-toggly-core": "^1.9.0",
+    "@ops-ai/react-native-toggly-core": "^1.10.0",
     "@ops-ai/toggly-hooks-types": "^1.4.3"
   },
   "devDependencies": {

@@ -1,3 +1,12 @@
+## 1.6.0 — 2026-09-24
+
+### Added
+- Typed `getVariantValue<T>(…, isT?)` on `useToggly()`, matching Core's soft-null decode and optional runtime type guard.
+- Re-exported `decodeVariantValue` from Core.
+
+### Changed
+- Depends on `@ops-ai/react-native-toggly-core` `^1.10.0`.
+
 ## 1.5.0 — 2026-09-22
 
 ### Added

@@ -12,7 +12,7 @@
     "@solidjs/start": "2.0.5",
     "@solidjs/router": "1.0.0",
     "solid-js": "^1.9.15",
-    "@ops-ai/solid-feature-flags-toggly": "0.4.0"
+    "@ops-ai/solid-feature-flags-toggly": "0.5.0"
   },
   "devDependencies": {
     "vite": "^8.0.0",

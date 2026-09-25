@@ -281,7 +281,13 @@ function TogglyProviderOwner({
   )
 
   const getVariantValue = useCallback(
-    (featureKey: string): unknown | null => client.getVariantValue(featureKey),
+    <T = unknown>(
+      featureKey: string,
+      isT?: (v: unknown) => v is T,
+    ): T | null =>
+      isT === undefined
+        ? client.getVariantValue(featureKey)
+        : client.getVariantValue(featureKey, isT),
     [client]
   )
 

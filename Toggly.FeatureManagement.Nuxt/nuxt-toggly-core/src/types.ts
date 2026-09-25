@@ -388,8 +388,12 @@ export interface TogglyClient {
 
   /**
    * Configuration payload for the assigned variant, if any.
+   * Optional `isT` type guard soft-fails to null on mismatch.
    */
-  getVariantValue(featureKey: string): unknown | null
+  getVariantValue<T = unknown>(
+    featureKey: string,
+    isT?: (v: unknown) => v is T,
+  ): T | null
 
   /** Set user identity */
   setIdentity(identity: string): Promise<void>

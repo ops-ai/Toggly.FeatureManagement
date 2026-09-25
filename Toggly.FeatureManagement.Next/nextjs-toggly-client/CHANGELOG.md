@@ -1,3 +1,12 @@
+## 1.7.0
+
+2026-09-24
+
+### Added
+
+- Typed `getVariantValue<T>(…, isT?)` on the Toggly context, matching core's soft-null decode and optional runtime type guard.
+- Re-exported `decodeVariantValue` from `@ops-ai/nextjs-toggly-core`.
+
 ## 1.6.0
 
 2026-09-22
