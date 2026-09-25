@@ -10,19 +10,29 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.serializer
+import kotlin.reflect.typeOf
+
+/** Soft-decode JSON used for typed variant values (unknown keys ignored). */
+val variantValueJson: Json = Json {
+    ignoreUnknownKeys = true
+    isLenient = false
+}
 
 /**
  * Soft-decode a variant configuration value as [T].
  *
  * - Missing / null → null
- * - Runtime value already is [T] → value
+ * - Runtime value already is [T] for non-parameterized types → value
+ *   (`is T` is skipped when [T] has type arguments — JVM erasure would
+ *   otherwise accept `List<*>` as `List<String>` and leak wrong-typed elements)
  * - Otherwise rebuild JSON and decode with [serializer]; failure → null
  */
 inline fun <reified T> decodeVariantValue(value: Any?): T? {
     if (value == null) return null
-    if (value is T) return value
+    // Erasure-safe shortcut only when T has no type arguments.
+    if (typeOf<T>().arguments.isEmpty() && value is T) return value
     return try {
-        Json.Default.decodeFromJsonElement(serializer<T>(), kotlinValueToJsonElement(value))
+        variantValueJson.decodeFromJsonElement(serializer<T>(), kotlinValueToJsonElement(value))
     } catch (_: Exception) {
         null
     }
@@ -36,10 +46,11 @@ inline fun <reified T> decodeVariantValue(value: Any?): T? {
 @Suppress("UNCHECKED_CAST")
 fun <T : Any> decodeVariantValue(value: Any?, clazz: Class<T>): T? {
     if (value == null) return null
+    // Class tokens are always raw (no type args); isInstance is erasure-safe here.
     if (clazz.isInstance(value)) return clazz.cast(value)
     return try {
         val ser = clazz.kotlin.serializer() as KSerializer<T>
-        Json.Default.decodeFromJsonElement(ser, kotlinValueToJsonElement(value))
+        variantValueJson.decodeFromJsonElement(ser, kotlinValueToJsonElement(value))
     } catch (_: Exception) {
         null
     }

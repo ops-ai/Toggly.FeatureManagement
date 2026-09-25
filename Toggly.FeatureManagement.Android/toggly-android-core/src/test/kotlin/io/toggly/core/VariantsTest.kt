@@ -403,6 +403,20 @@ class VariantsTest {
         }
     }
 
+    @Test
+    fun `typed getVariantValue does not trust erased List is-checks`() {
+        // Raw list from JSON parse — elements are not typed as String at runtime.
+        val raw: Any? = listOf(1L, 2L)
+        assertNull(decodeVariantValue<List<String>>(raw))
+        assertEquals(listOf("a", "b"), decodeVariantValue<List<String>>(listOf("a", "b")))
+    }
+
+    @Test
+    fun `typed getVariantValue ignores unknown object keys`() {
+        val raw: Any? = mapOf("color" to "blue", "extra" to 1L)
+        assertEquals(PricingConfig(color = "blue"), decodeVariantValue<PricingConfig>(raw))
+    }
+
     @kotlinx.serialization.Serializable
     private data class PricingConfig(val color: String)
 
