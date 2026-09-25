@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.0
+
+2026-09-24
+
+### Added
+- Typed soft-bind overloads `getVariantValue(Class<T>, featureKey[, context])`
+  and `getVariantValueOptional(...)` on `TogglyClient` / `Toggly`. Missing
+  assignment or Jackson bind failure returns `null` / `Optional.empty()` —
+  never throws solely for shape mismatch. Untyped `getVariantValue` unchanged.
+  Jackson is used when on the classpath (test scope already includes it;
+  add `jackson-databind` at runtime for POJO binding) [OPS-1365].
+
 ## 2.0.0
 
 2026-09-23

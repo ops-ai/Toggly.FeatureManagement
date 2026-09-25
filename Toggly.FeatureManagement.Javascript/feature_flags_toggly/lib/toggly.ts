@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
 import { FeatureRequirement, StorageKeys, TogglyConfig, VariantResult, EvaluatedVariantDef } from './models';
+import { decodeVariantValue } from './decode-variant-value';
 import { HookExecutor } from './hooks';
 import type { Hook, TogglyEvaluationContext, EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 import {
@@ -825,10 +826,16 @@ export class Toggly {
   /**
    * Get the configuration value of the assigned variant for a feature flag.
    * Returns null if no variant is assigned or no configuration value is set.
+   *
+   * Pass an optional type guard for runtime soft-null on shape mismatch.
+   * Without a guard, TypeScript generics are compile-time only.
    */
-  static getVariantValue(featureKey: string): unknown | null {
+  static getVariantValue<T = unknown>(
+    featureKey: string,
+    isT?: (v: unknown) => v is T,
+  ): T | null {
     const variant = Toggly.getVariant(featureKey);
-    return variant?.configurationValue ?? null;
+    return decodeVariantValue(variant?.configurationValue, isT);
   }
 
   static fetchFeatureFlags(): Promise<{ [key: string]: boolean }> {

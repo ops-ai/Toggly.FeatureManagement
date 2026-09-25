@@ -10,6 +10,7 @@ import {
 } from './models'
 import { TogglyOptions } from './toggly-options'
 import { HookExecutor } from './hooks'
+import { decodeVariantValue } from './decode-variant-value'
 import type {
   CacheLruIndex,
   EvaluatedDefinitions,
@@ -835,9 +836,12 @@ export class TogglyService implements ITogglyService, OnDestroy {
   /**
    * Returns the configuration value of the assigned variant, or null if none.
    */
-  getVariantValue = async (featureKey: string): Promise<unknown | null> => {
+  getVariantValue = async <T = unknown>(
+    featureKey: string,
+    isT?: (v: unknown) => v is T,
+  ): Promise<T | null> => {
     const variant = await this.getVariant(featureKey)
-    return variant?.configurationValue ?? null
+    return decodeVariantValue(variant?.configurationValue, isT)
   }
 
   /** Record explicit usage without evaluating the feature. */

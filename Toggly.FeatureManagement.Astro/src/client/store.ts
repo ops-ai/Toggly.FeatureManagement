@@ -27,6 +27,7 @@ import {
   type LocalGate,
 } from '@ops-ai/toggly-local-gates';
 import { HookExecutor } from './hooks.js';
+import { decodeVariantValue } from '../utils/decode-variant-value.js';
 import { parseVariantDefsPayload, variantDefsToFlags } from '../variant-helpers.js';
 import { buildDefinitionFetchHeaders } from '../sdk-identity.js';
 import {
@@ -839,9 +840,12 @@ export function getVariant(featureKey: string): VariantResult | null {
 /**
  * Configuration payload for the assigned variant, if any.
  */
-export function getVariantValue(featureKey: string): unknown | null {
+export function getVariantValue<T = unknown>(
+  featureKey: string,
+  isT?: (v: unknown) => v is T,
+): T | null {
   const variant = getVariant(featureKey);
-  return variant?.configurationValue ?? null;
+  return decodeVariantValue(variant?.configurationValue, isT);
 }
 
 /** Nanostores keeps unobserved atoms warm for one second; those projections

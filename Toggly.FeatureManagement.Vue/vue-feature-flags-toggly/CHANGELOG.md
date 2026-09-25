@@ -1,3 +1,11 @@
+## 1.11.0
+
+2026-09-24
+
+### Added
+- Typed `getVariantValue<T>(…, isT?)` with soft-null decode and optional runtime type guard.
+- Exported `decodeVariantValue` helper for the same soft decode policy.
+
 ## 1.10.0
 
 2026-09-20

@@ -166,8 +166,13 @@ module Toggly
     # @param feature_key [String, Symbol] The feature key
     # @param context [Context, nil] Optional targeting context (userId + groups)
     # @return [Object, nil]
-    def get_variant_value(feature_key, context: nil)
-      get_variant(feature_key, context: context)&.configuration_value
+    def get_variant_value(feature_key, context: nil, as: nil, &block)
+      value = get_variant(feature_key, context: context)&.configuration_value
+      return value if as.nil? && !block
+
+      return nil if value.nil?
+
+      decode_variant_configuration(value, as, &block)
     end
 
     # Default targeting userId used by {#get_variant} / {#get_variant_value}
@@ -349,6 +354,34 @@ module Toggly
     end
 
     private
+
+    def decode_variant_configuration(value, as, &block)
+      return block.call(value) if block
+      return nil if as.nil?
+
+      # Scalars / :boolean before Class#new — String.new({}) would soft-fail to "".
+      if as == String
+        return value.is_a?(String) ? value : nil
+      end
+      if as == Integer
+        return value.is_a?(Integer) && !value.is_a?(TrueClass) && !value.is_a?(FalseClass) ? value : nil
+      end
+      if as == Float
+        return value.is_a?(Numeric) && !value.is_a?(TrueClass) && !value.is_a?(FalseClass) ? value.to_f : nil
+      end
+      if [TrueClass, FalseClass, :boolean].include?(as)
+        return [true, false].include?(value) ? value : nil
+      end
+
+      # is_a? requires a Module; symbols like :boolean are handled above.
+      return value if as.is_a?(Module) && value.is_a?(as)
+      return as.new(**value.transform_keys(&:to_sym)) if as.respond_to?(:new) && value.is_a?(Hash)
+      return as.json_create(value) if as.respond_to?(:json_create) && value.is_a?(Hash)
+
+      nil
+    rescue StandardError
+      nil
+    end
 
     # `definitions` / `definitions-signed` → local rule eval. The sole
     # source of truth for `enabled?`; also carries `variants` / `allocation`

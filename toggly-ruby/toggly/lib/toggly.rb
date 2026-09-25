@@ -123,10 +123,10 @@ module Toggly
     # @param feature_key [String, Symbol]
     # @param context [Context, nil]
     # @return [Object, nil]
-    def get_variant_value(feature_key, context: nil)
+    def get_variant_value(feature_key, context: nil, as: nil, &)
       raise Error, "Toggly not configured. Call Toggly.configure first." unless @client
 
-      @client.get_variant_value(feature_key, context: context)
+      @client.get_variant_value(feature_key, context: context, as: as, &)
     end
 
     # Reset the global client (mainly for testing)

@@ -5,6 +5,7 @@ import type {
   FeatureRequirement,
   VariantResult,
 } from '@ops-ai/toggly-node-core';
+import { decodeVariantValue } from '@ops-ai/toggly-node-core';
 import { TogglyProvider } from './provider.js';
 import { TOGGLY_OPTIONS, type EvaluationOverrides, type TogglyModuleOptions } from './types.js';
 
@@ -83,13 +84,18 @@ export class TogglyService {
   }
 
   /** Convenience wrapper: the assigned variant's `configurationValue`, or `null`. */
-  async getVariantValue(key: string, overrides: EvaluationOverrides = {}): Promise<unknown | null> {
-    return this.provider.client.getVariantValue(
+  async getVariantValue<T = unknown>(
+    key: string,
+    overrides: EvaluationOverrides = {},
+    isT?: (v: unknown) => v is T,
+  ): Promise<T | null> {
+    const value = await this.provider.client.getVariantValue(
       key,
       await this.evaluationContext(overrides),
       overrides.entity,
       overrides.kind,
     );
+    return decodeVariantValue(value, isT);
   }
 
   /** Attribute usage to this request identity rather than the process identity. */

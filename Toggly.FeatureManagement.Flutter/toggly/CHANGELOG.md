@@ -1,3 +1,10 @@
+## 1.13.0
+
+2026-09-24
+
+### Added
+- Typed `getVariantValue<T>(featureKey, [fromJson])` with soft-null decode when a mapper is supplied.
+
 ## 1.12.0
 
 2026-09-19

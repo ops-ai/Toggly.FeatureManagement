@@ -1278,9 +1278,23 @@ class Toggly with WidgetsBindingObserver {
       _localGatesChangedController?.stream ?? const Stream.empty();
 
   /// Returns [VariantResult.configurationValue] for [featureKey], or null if none.
-  static Future<dynamic> getVariantValue(String featureKey) async {
+  ///
+  /// When [fromJson] is provided, soft-decodes the payload; returns null when
+  /// missing, not a [Map], or [fromJson] throws.
+  static Future<T?> getVariantValue<T>(
+    String featureKey, [
+    T Function(Map<String, dynamic>)? fromJson,
+  ]) async {
     final r = await getVariant(featureKey);
-    return r.configurationValue;
+    final value = r.configurationValue;
+    if (value == null) return null;
+    if (fromJson == null) return value as T?;
+    if (value is! Map) return null;
+    try {
+      return fromJson(Map<String, dynamic>.from(value));
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Records explicit use of a feature without evaluating it.

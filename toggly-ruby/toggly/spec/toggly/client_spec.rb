@@ -273,6 +273,14 @@ RSpec.describe Toggly::Client do
             "enabled" => true
           },
           {
+            "featureKey" => "string-variant",
+            "enabled" => true,
+            "variants" => [
+              { "name" => "A", "configurationValue" => "hello", "statusOverride" => "None" }
+            ],
+            "allocation" => { "defaultWhenEnabled" => "A" }
+          },
+          {
             "featureKey" => "killswitch-feature",
             "enabled" => false,
             "variants" => [
@@ -344,6 +352,58 @@ RSpec.describe Toggly::Client do
 
       it "returns nil when there is no assigned variant" do
         expect(client.get_variant_value("no-variants-feature")).to be_nil
+      end
+
+      it "soft-binds an object when as: is a class" do
+        checkout_config = Class.new do
+          attr_reader :cta
+
+          def initialize(cta:)
+            @cta = cta
+          end
+        end
+
+        bound = client.get_variant_value(
+          "checkout-flow",
+          context: Toggly::Context.new(identity: "alice"),
+          as: checkout_config
+        )
+        expect(bound).to be_a(checkout_config)
+        expect(bound.cta).to eq("Buy now")
+      end
+
+      it "soft-binds a scalar when as: matches" do
+        expect(client.get_variant_value("string-variant", as: String)).to eq("hello")
+      end
+
+      it "returns nil on typed mismatch" do
+        expect(
+          client.get_variant_value(
+            "checkout-flow",
+            context: Toggly::Context.new(identity: "alice"),
+            as: String
+          )
+        ).to be_nil
+      end
+
+      it "soft-binds :boolean without raising on is_a?" do
+        seeded = described_class.new(
+          app_key: app_key,
+          environment: environment,
+          disable_background_refresh: true
+        )
+        allow(seeded).to receive(:get_variant).and_return(
+          Toggly::VariantResult.new(name: "A", configuration_value: true, enabled: true, reason: "DefaultWhenEnabled")
+        )
+        expect(seeded.get_variant_value("flag", as: :boolean)).to eq(true)
+        allow(seeded).to receive(:get_variant).and_return(
+          Toggly::VariantResult.new(name: "A", configuration_value: "nope", enabled: true, reason: "DefaultWhenEnabled")
+        )
+        expect(seeded.get_variant_value("flag", as: :boolean)).to be_nil
+      end
+
+      it "returns nil on typed missing assignment" do
+        expect(client.get_variant_value("no-variants-feature", as: String)).to be_nil
       end
     end
 

@@ -96,15 +96,32 @@ const variant = await client.getVariant('checkout-flow', { identity: 'alice' })
 
 const value = await client.getVariantValue('checkout-flow', { identity: 'alice' })
 // { color: 'blue' } | null
+
+type Checkout = { color: string }
+const isCheckout = (v: unknown): v is Checkout =>
+  typeof v === 'object' && v !== null && typeof (v as Checkout).color === 'string'
+
+const typed = await client.getVariantValue<Checkout>(
+  'checkout-flow',
+  { identity: 'alice' },
+  undefined,
+  undefined,
+  isCheckout,
+)
+// Checkout | null — soft-null when missing or the guard rejects
 ```
 
 `getVariant` returns `null` when the feature is unknown, disabled for this
 context, or has no assignable variant — matching the `getVariant` null
 contract used across the rest of the Toggly JS ecosystem
-(React/Vue/Solid/Next.js/Nuxt/SvelteKit). Pass `variantIgnoreCase: true` in
-the client config for case-insensitive user/group matching (`false` by
-default, matching `Microsoft.FeatureManagement`'s own
-`TargetingEvaluationOptions.IgnoreCase` default).
+(React/Vue/Solid/Next.js/Nuxt/SvelteKit). Typed `getVariantValue<T>(…, isT?)`
+soft-decodes: missing/null → `null`; with `isT` → `null` when the guard
+fails; without a guard the value is returned as `T` (compile-time only).
+The same policy is available as the exported `decodeVariantValue` helper.
+Pass `variantIgnoreCase: true` in the client config for case-insensitive
+user/group matching (`false` by default, matching
+`Microsoft.FeatureManagement`'s own `TargetingEvaluationOptions.IgnoreCase`
+default).
 
 ## License
 

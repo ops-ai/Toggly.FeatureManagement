@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.0 - 2026-09-24
+
+### Added
+- Optional typed soft-bind on `get_variant_value(..., type=T)` for sync and
+  async clients. Without `type`, behavior is unchanged (untyped `Any`). With
+  `type`, binds via pydantic `TypeAdapter` when pydantic is importable,
+  otherwise a best-effort local decode. Missing assignment or decode/bind
+  failure returns `None` — never raises solely for shape mismatch [OPS-1365].
+
 ## 1.0.0 - 2026-09-23
 
 ### Breaking Changes

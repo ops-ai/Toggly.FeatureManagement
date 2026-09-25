@@ -1,5 +1,5 @@
 export const SDK_ID = 'svelte';
-export const SDK_VERSION = '1.4.1';
+export const SDK_VERSION = '1.12.0';
 
 export const SDK_HEADER_ID = 'X-Toggly-Sdk';
 export const SDK_HEADER_VERSION = 'X-Toggly-Sdk-Version';

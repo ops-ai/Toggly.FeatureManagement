@@ -120,11 +120,66 @@ defmodule Toggly do
     end)
   end
 
-  @doc "Convenience for `get_variant/4`: the assigned variant's configuration payload, or `nil`."
+  @doc """
+  Convenience for `get_variant/4`: the assigned variant's configuration payload,
+  or `nil`.
+
+  Pass `as: Module` (with `new/1`) or `as: &decoder/1` in `options` to soft-decode
+  the payload. Decode failures and missing assignments return `nil`.
+  """
   @spec get_variant_value(client(), String.t(), Toggly.Context.t(), keyword()) :: term()
   def get_variant_value(client, key, context \\ %{}, options \\ []) do
-    get_variant(client, key, context, options).configuration_value
+    value = get_variant(client, key, context, options).configuration_value
+    decode_variant_value(value, Keyword.get(options, :as))
   end
+
+  defp decode_variant_value(value, nil), do: value
+  defp decode_variant_value(nil, _as), do: nil
+
+  defp decode_variant_value(value, as) when is_function(as, 1) do
+    try do
+      as.(value)
+    rescue
+      _ -> nil
+    end
+  end
+
+  defp decode_variant_value(value, as) when is_atom(as) do
+    cond do
+      function_exported?(as, :new, 1) and is_map(value) ->
+        try do
+          as.new(value)
+        rescue
+          _ -> nil
+        end
+
+      function_exported?(as, :__struct__, 0) and is_map(value) ->
+        try do
+          attrs =
+            as.__struct__()
+            |> Map.from_struct()
+            |> Map.keys()
+            |> Enum.reduce(%{}, fn key, acc ->
+              str = Atom.to_string(key)
+
+              cond do
+                is_map_key(value, key) -> Map.put(acc, key, Map.get(value, key))
+                is_map_key(value, str) -> Map.put(acc, key, Map.get(value, str))
+                true -> acc
+              end
+            end)
+
+          struct!(as, attrs)
+        rescue
+          _ -> nil
+        end
+
+      true ->
+        nil
+    end
+  end
+
+  defp decode_variant_value(_value, _as), do: nil
 
   @doc "Fetches and verifies definitions; a failure preserves the active snapshot."
   def refresh(client), do: GenServer.call(client, :refresh, 30_000)

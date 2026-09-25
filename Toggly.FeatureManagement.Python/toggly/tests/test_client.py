@@ -412,6 +412,62 @@ class TestTogglyClientVariants:
         finally:
             client.close()
 
+    def test_get_variant_value_typed_object(self) -> None:
+        """Typed object bind returns a dataclass instance on shape match."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class CheckoutConfig:
+            color: str
+
+        client = self._client_with_variant_feature()
+        try:
+            typed = client.get_variant_value(
+                "checkout-flow", user_id="alice", type=CheckoutConfig
+            )
+            assert typed == CheckoutConfig(color="blue")
+        finally:
+            client.close()
+
+    def test_get_variant_value_typed_scalar(self) -> None:
+        """Typed scalar bind returns the value when types match."""
+        provider = MemorySnapshotProvider()
+        provider.save_definitions(DefinitionsSnapshot(
+            definitions=[
+                FeatureDefinition(
+                    feature_key="banner",
+                    filters=[FeatureFilter(name="AlwaysOn")],
+                    variants=[Variant(name="A", configuration_value="hello")],
+                    allocation=Allocation(default_when_enabled="A"),
+                )
+            ]
+        ))
+        client = TogglyClient(TogglyConfig(snapshot_provider=provider))
+        client.init()
+        try:
+            assert client.get_variant_value("banner", type=str) == "hello"
+        finally:
+            client.close()
+
+    def test_get_variant_value_typed_mismatch_returns_none(self) -> None:
+        """Shape mismatch soft-returns None (never a wrong-typed value)."""
+        client = self._client_with_variant_feature()
+        try:
+            assert client.get_variant_value(
+                "checkout-flow", user_id="alice", type=str
+            ) is None
+            # Object config + primitive type must not call int()/str() defaults.
+            assert client.get_variant_value(
+                "checkout-flow", user_id="alice", type=int
+            ) is None
+        finally:
+            client.close()
+
+    def test_get_variant_value_typed_missing_returns_none(self) -> None:
+        """Missing assignment soft-returns None for typed access."""
+        client = TogglyClient()
+        assert client.get_variant_value("unknown", type=str) is None
+
     def test_get_variant_falls_back_to_default_when_enabled(self) -> None:
         """No user/group/percentile match falls back to defaultWhenEnabled."""
         client = self._client_with_variant_feature()
@@ -520,8 +576,30 @@ class TestAsyncTogglyClientVariants:
 
             value = await client.get_variant_value("checkout-flow", user_id="alice")
             assert value == {"color": "blue"}
+
+            from dataclasses import dataclass
+
+            @dataclass
+            class CheckoutConfig:
+                color: str
+
+            typed = await client.get_variant_value(
+                "checkout-flow", user_id="alice", type=CheckoutConfig
+            )
+            assert typed == CheckoutConfig(color="blue")
+            assert (
+                await client.get_variant_value(
+                    "checkout-flow", user_id="alice", type=str
+                )
+                is None
+            )
         finally:
             await client.close()
+
+    async def test_get_variant_value_typed_missing_returns_none(self) -> None:
+        """Missing assignment soft-returns None for typed async access."""
+        client = AsyncTogglyClient()
+        assert await client.get_variant_value("unknown", type=dict) is None
 
     async def test_get_variant_none_for_unknown_feature(self) -> None:
         """Unknown feature key returns None (async)."""

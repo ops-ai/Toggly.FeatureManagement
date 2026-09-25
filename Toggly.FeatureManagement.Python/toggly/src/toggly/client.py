@@ -8,7 +8,7 @@ import threading
 import time
 from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
-from typing import Any, Iterator
+from typing import Any, Iterator, Optional, TypeVar, overload
 from urllib.parse import urlencode
 
 try:
@@ -57,8 +57,11 @@ from toggly.providers import (
 )
 from toggly.telemetry.client_api import TelemetryClientMixin
 from toggly.telemetry.runtime import TelemetryRuntime
+from toggly.variant_value import decode_variant_value
 from toggly.variants import assign_variant
 from toggly.version import __version__
+
+T = TypeVar("T")
 
 logger = logging.getLogger("toggly")
 
@@ -431,28 +434,54 @@ class TogglyClient(TelemetryClientMixin, DefinitionRefreshMixin):
             assignment_reason=assignment.reason,
         )
 
+    @overload
+    def get_variant_value(
+        self,
+        feature_key: str,
+        *,
+        user_id: Optional[str] = None,
+        groups: Optional[list[str]] = None,
+        type: None = None,
+    ) -> Any: ...
+
+    @overload
+    def get_variant_value(
+        self,
+        feature_key: str,
+        *,
+        user_id: Optional[str] = None,
+        groups: Optional[list[str]] = None,
+        type: type[T],
+    ) -> Optional[T]: ...
+
     def get_variant_value(
         self,
         feature_key: str,
         *,
         user_id: str | None = None,
         groups: list[str] | None = None,
+        type: type[T] | None = None,
     ) -> Any:
         """Return the configuration value for the locally-assigned variant, if any.
+
+        Without ``type``, returns the untyped wire value (or ``None``). With
+        ``type``, soft-binds via pydantic ``TypeAdapter`` when available, else
+        a best-effort local decode — ``None`` on missing assignment or mismatch.
 
         Args:
             feature_key: Feature key.
             user_id: Targeting user id (see ``get_variant``).
             groups: Targeting groups (see ``get_variant``).
+            type: Optional Python type to bind the configuration value as.
 
         Returns:
-            The variant ``configuration_value``, or ``None`` when unavailable.
+            Untyped value, bound ``T``, or ``None`` when unavailable / mismatched.
 
         """
         variant = self.get_variant(feature_key, user_id=user_id, groups=groups)
         if variant is None:
             return None
-        return variant.configuration_value
+        return decode_variant_value(variant.configuration_value, type)
 
     def get_feature_state(
         self,

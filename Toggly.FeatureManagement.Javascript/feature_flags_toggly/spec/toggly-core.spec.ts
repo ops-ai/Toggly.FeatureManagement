@@ -2473,6 +2473,34 @@ describe('Toggly Core', () => {
       expect(Toggly.getVariantValue('F1')).toBeNull();
       expect(Toggly.getVariantValue('Unknown')).toBeNull();
     });
+
+    it('getVariantValue should soft-decode with an optional type guard', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () =>
+          Promise.resolve({
+            F1: { enabled: true, variant: 'A', configurationValue: { x: 1 } },
+            F2: { enabled: true, variant: 'B', configurationValue: 7 },
+          }),
+      });
+
+      await Toggly.init({
+        appKey: 'test-app-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+      });
+
+      const isCheckout = (v: unknown): v is { x: number } =>
+        typeof v === 'object' && v !== null && typeof (v as { x?: unknown }).x === 'number';
+
+      expect(Toggly.getVariantValue<{ x: number }>('F1', isCheckout)).toEqual({ x: 1 });
+      expect(Toggly.getVariantValue<{ x: number }>('F2', isCheckout)).toBeNull();
+      expect(Toggly.getVariantValue<{ x: number }>('Missing', isCheckout)).toBeNull();
+      expect(Toggly.getVariantValue<{ x: number }>('F1')).toEqual({ x: 1 });
+    });
   });
 
   // ───────────────────────────────────────────────

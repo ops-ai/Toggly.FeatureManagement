@@ -2,6 +2,7 @@ package toggly
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 
@@ -162,6 +163,33 @@ func (c *Client) GetVariantValue(ctx context.Context, featureKey string, evalCtx
 		return nil, err
 	}
 	return v.ConfigurationValue, nil
+}
+
+// GetVariantValueAs soft-binds the assigned variant configuration as T.
+// Returns (zero, false) when no variant is assigned, GetVariant errors, or
+// the payload cannot be decoded as T (JSON round-trip). Never returns a
+// wrong-typed value.
+func GetVariantValueAs[T any](c *Client, ctx context.Context, featureKey string, evalCtx Context) (T, bool) {
+	var zero T
+	if c == nil {
+		return zero, false
+	}
+	raw, err := c.GetVariantValue(ctx, featureKey, evalCtx)
+	if err != nil || raw == nil {
+		return zero, false
+	}
+	if typed, ok := raw.(T); ok {
+		return typed, true
+	}
+	data, err := json.Marshal(raw)
+	if err != nil {
+		return zero, false
+	}
+	var out T
+	if err := json.Unmarshal(data, &out); err != nil {
+		return zero, false
+	}
+	return out, true
 }
 
 // SetIdentity updates the client's default targeting userId used when neither

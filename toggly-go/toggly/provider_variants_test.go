@@ -190,3 +190,73 @@ func TestClient_GetVariantValue(t *testing.T) {
 		t.Fatalf("expected nil value/no error, got value=%#v err=%v", value, err)
 	}
 }
+
+type checkoutConfig struct {
+	Color string `json:"color"`
+}
+
+func TestGetVariantValueAs_Object(t *testing.T) {
+	c := newCatalogVariantsClient(t)
+
+	cfg, ok := GetVariantValueAs[checkoutConfig](c, context.Background(), "checkout-flow", Context{Identity: "alice"})
+	if !ok {
+		t.Fatal("expected typed bind to succeed")
+	}
+	if cfg.Color != "blue" {
+		t.Fatalf("expected color=blue, got %#v", cfg)
+	}
+}
+
+func TestGetVariantValueAs_Mismatch(t *testing.T) {
+	c := newCatalogVariantsClient(t)
+
+	_, ok := GetVariantValueAs[string](c, context.Background(), "checkout-flow", Context{Identity: "alice"})
+	if ok {
+		t.Fatal("expected mismatch to soft-fail")
+	}
+}
+
+func TestGetVariantValueAs_Missing(t *testing.T) {
+	c := newCatalogVariantsClient(t)
+
+	_, ok := GetVariantValueAs[checkoutConfig](c, context.Background(), "does-not-exist", Context{})
+	if ok {
+		t.Fatal("expected missing assignment to soft-fail")
+	}
+}
+
+func TestGetVariantValueAs_Scalar(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"v1"`)
+		_, _ = w.Write([]byte(`[
+		  {
+		    "featureKey": "banner",
+		    "filters": [{"name": "AlwaysOn", "parameters": {}}],
+		    "variants": [{"name": "A", "configurationValue": "hello"}],
+		    "allocation": {"defaultWhenEnabled": "A"}
+		  }
+		]`))
+	}))
+	t.Cleanup(srv.Close)
+
+	c, err := NewClient(Config{
+		AppKey:                   "app",
+		Environment:              "env",
+		DefinitionsURL:           srv.URL + "/",
+		HTTPTimeout:              2 * time.Second,
+		RefreshInterval:          time.Hour,
+		DisableBackgroundRefresh: true,
+	})
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	t.Cleanup(func() { _ = c.Close() })
+	if err := c.provider.refresh(context.Background(), time.Second, false); err != nil {
+		t.Fatalf("refresh: %v", err)
+	}
+
+	got, ok := GetVariantValueAs[string](c, context.Background(), "banner", Context{})
+	if !ok || got != "hello" {
+		t.Fatalf("expected hello, got %q ok=%v", got, ok)
+	}
+}

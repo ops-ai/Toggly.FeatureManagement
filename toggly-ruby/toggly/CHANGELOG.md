@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-09-24
+
+### Added
+
+- Soft-typed `get_variant_value(feature, as: Klass)` (and optional block form).
+  Missing assignment or bind failure returns `nil` — never raises solely for
+  shape mismatch. Untyped `get_variant_value` (no `as:`) is unchanged
+  [OPS-1365].
+
 ## [1.1.0] - 2026-09-23
 
 ### Added

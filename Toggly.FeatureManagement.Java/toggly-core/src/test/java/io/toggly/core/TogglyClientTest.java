@@ -239,6 +239,70 @@ class TogglyClientTest {
     }
 
     @Test
+    void shouldSoftBindTypedVariantValueObject() {
+        InMemorySnapshotProvider provider = new InMemorySnapshotProvider();
+        Map<String, Object> config = new HashMap<>();
+        config.put("color", "blue");
+        FeatureDefinition definition = FeatureDefinition.builder()
+                .featureKey("checkout")
+                .filters(List.of(FeatureFilter.alwaysOn()))
+                .variants(List.of(new VariantDefinition("A", config, VariantStatusOverride.NONE)))
+                .allocation(VariantAllocation.builder().defaultWhenEnabled("A").build())
+                .build();
+        provider.setFeatures(Map.of("checkout", definition));
+        TogglyClient variantClient = new TogglyClient(defaultConfig(), provider);
+
+        CheckoutConfig bound = variantClient.getVariantValue(CheckoutConfig.class, "checkout");
+        assertNotNull(bound);
+        assertEquals("blue", bound.color);
+        assertTrue(variantClient.getVariantValueOptional(CheckoutConfig.class, "checkout").isPresent());
+
+        variantClient.close();
+    }
+
+    @Test
+    void shouldSoftBindTypedVariantValueScalar() {
+        InMemorySnapshotProvider provider = new InMemorySnapshotProvider();
+        FeatureDefinition definition = FeatureDefinition.builder()
+                .featureKey("banner")
+                .filters(List.of(FeatureFilter.alwaysOn()))
+                .variants(List.of(new VariantDefinition("A", "hello", VariantStatusOverride.NONE)))
+                .allocation(VariantAllocation.builder().defaultWhenEnabled("A").build())
+                .build();
+        provider.setFeatures(Map.of("banner", definition));
+        TogglyClient variantClient = new TogglyClient(defaultConfig(), provider);
+
+        assertEquals("hello", variantClient.getVariantValue(String.class, "banner"));
+
+        variantClient.close();
+    }
+
+    @Test
+    void shouldReturnNullOnTypedVariantMismatchOrMissing() {
+        InMemorySnapshotProvider provider = new InMemorySnapshotProvider();
+        Map<String, Object> config = new HashMap<>();
+        config.put("color", "blue");
+        FeatureDefinition definition = FeatureDefinition.builder()
+                .featureKey("checkout")
+                .filters(List.of(FeatureFilter.alwaysOn()))
+                .variants(List.of(new VariantDefinition("A", config, VariantStatusOverride.NONE)))
+                .allocation(VariantAllocation.builder().defaultWhenEnabled("A").build())
+                .build();
+        provider.setFeatures(Map.of("checkout", definition));
+        TogglyClient variantClient = new TogglyClient(defaultConfig(), provider);
+
+        assertNull(variantClient.getVariantValue(String.class, "checkout"));
+        assertTrue(variantClient.getVariantValueOptional(String.class, "checkout").isEmpty());
+        assertNull(variantClient.getVariantValue(CheckoutConfig.class, "missing"));
+
+        variantClient.close();
+    }
+
+    public static class CheckoutConfig {
+        public String color;
+    }
+
+    @Test
     void shouldReturnDefaultWhenDisabledVariant() {
         InMemorySnapshotProvider provider = new InMemorySnapshotProvider();
         Map<String, FeatureDefinition> features = new HashMap<>();

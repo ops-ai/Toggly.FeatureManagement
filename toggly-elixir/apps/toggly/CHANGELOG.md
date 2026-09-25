@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+### Added
+- Soft-typed `get_variant_value/4` via `as: Module` (struct or `new/1`) or
+  `as: &decoder/1`. Missing assignment or decode failure returns `nil` —
+  never raises solely for shape mismatch. Untyped calls unchanged [OPS-1365].
+- `Toggly.Phoenix.Plug.get_variant_value/3` forwards `as:` to the core API.
+
 ## 0.4.0
 
 ### Added

@@ -292,12 +292,13 @@ export interface TogglyClient {
     kind?: string,
   ): Promise<VariantResult | null>
   /** Convenience wrapper: the assigned variant's `configurationValue`, or `null`. */
-  getVariantValue(
+  getVariantValue<T = unknown>(
     featureKey: string,
     context?: EvaluationContext,
     entity?: TogglyEntityContext | Record<string, unknown> | null,
     kind?: string,
-  ): Promise<unknown | null>
+    isT?: (v: unknown) => v is T,
+  ): Promise<T | null>
   registerContext<T>(
     kind: string,
     mapper: (entity: T) => TogglyEntityContext,

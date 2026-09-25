@@ -36,6 +36,7 @@ import {
   parseEvaluatedResponseBody,
   readResponseBody,
 } from '../signed-response.js';
+import { decodeVariantValue } from '../utils/decode-variant-value.js';
 import {
   UsageTelemetryRuntime,
   resolveTelemetryEnableFlag,
@@ -489,9 +490,12 @@ export class TogglyServer implements TogglyClient {
   /**
    * Configuration payload for the assigned variant, if any.
    */
-  async getVariantValue(featureKey: string): Promise<unknown | null> {
+  async getVariantValue<T = unknown>(
+    featureKey: string,
+    isT?: (v: unknown) => v is T,
+  ): Promise<T | null> {
     const variant = await this.getVariant(featureKey);
-    return variant?.configurationValue ?? null;
+    return decodeVariantValue(variant?.configurationValue, isT);
   }
 }
 

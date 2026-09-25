@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 — 2026-09-24
+
+### Added
+- `get_variant_value/3` forwards `as:` soft-typed decode to
+  `Toggly.get_variant_value/4` [OPS-1365].
+
 ## 0.2.0 — 2026-09-23
 
 ### Added

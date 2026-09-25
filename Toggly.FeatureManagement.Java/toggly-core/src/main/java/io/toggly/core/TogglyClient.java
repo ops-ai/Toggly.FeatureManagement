@@ -19,9 +19,11 @@ import io.toggly.core.snapshot.HttpSnapshotProvider;
 import io.toggly.core.snapshot.SnapshotProvider;
 import io.toggly.core.telemetry.MetricsFeatureOptions;
 import io.toggly.core.telemetry.TelemetryRuntime;
+import io.toggly.core.util.VariantValueCodec;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
@@ -371,6 +373,64 @@ public final class TogglyClient implements AutoCloseable {
     public Object getVariantValue(String featureKey, EvaluationContext context) {
         VariantResult variant = getVariant(featureKey, context);
         return variant != null ? variant.getConfigurationValue() : null;
+    }
+
+    /**
+     * Soft-binds the assigned variant configuration as {@code type}.
+     *
+     * <p>Returns {@code null} when no variant is assigned or the payload cannot
+     * be bound as {@code type} (never throws solely for shape mismatch). Uses
+     * Jackson when on the classpath; otherwise only {@link Class#isInstance}
+     * casts succeed.</p>
+     *
+     * @param type the target class
+     * @param featureKey the feature key
+     * @param <T> target type
+     * @return bound value, or null
+     */
+    public <T> T getVariantValue(Class<T> type, String featureKey) {
+        return getVariantValue(type, featureKey, ContextHolder.getContext());
+    }
+
+    /**
+     * Soft-binds the assigned variant configuration as {@code type} for the
+     * given context. See {@link #getVariantValue(Class, String)}.
+     *
+     * @param type the target class
+     * @param featureKey the feature key
+     * @param context the evaluation context
+     * @param <T> target type
+     * @return bound value, or null
+     */
+    public <T> T getVariantValue(Class<T> type, String featureKey, EvaluationContext context) {
+        return VariantValueCodec.decode(getVariantValue(featureKey, context), type);
+    }
+
+    /**
+     * Soft-binds the assigned variant configuration as {@code type}.
+     *
+     * @param type the target class
+     * @param featureKey the feature key
+     * @param <T> target type
+     * @return optional of bound value, or empty on missing / mismatch
+     */
+    public <T> Optional<T> getVariantValueOptional(Class<T> type, String featureKey) {
+        return getVariantValueOptional(type, featureKey, ContextHolder.getContext());
+    }
+
+    /**
+     * Soft-binds the assigned variant configuration as {@code type} for the
+     * given context.
+     *
+     * @param type the target class
+     * @param featureKey the feature key
+     * @param context the evaluation context
+     * @param <T> target type
+     * @return optional of bound value, or empty on missing / mismatch
+     */
+    public <T> Optional<T> getVariantValueOptional(
+            Class<T> type, String featureKey, EvaluationContext context) {
+        return VariantValueCodec.decodeOptional(getVariantValue(featureKey, context), type);
     }
 
     private VariantResult toVariantResult(VariantAssignment assignment) {

@@ -333,7 +333,7 @@ Visit [Toggly.io](https://toggly.io) for more information and to create your fre
 
 ## Feature Variants
 
-Requires **toggly 1.0.0**. Feature variants are defined directly on the feature
+Requires **toggly 1.1.0**. Feature variants are defined directly on the feature
 in the Toggly catalog (or in your own `FeatureDefinition` objects) and are
 assigned **locally**, from the same cached definitions used for `is_enabled` —
 there is no separate variants request or cache. Assignment matches
@@ -363,6 +363,20 @@ variant = client.get_variant(
 config_value = client.get_variant_value(
     "checkout-flow", user_id="user-123", groups=["beta"]
 )
+
+# Typed soft-bind (optional): pass `type=` to decode the payload as a Python
+# type. Uses pydantic TypeAdapter when pydantic is installed; otherwise a
+# best-effort local decode. Missing assignment or shape mismatch → None
+# (never raises solely for mismatch, never returns a wrong-typed value).
+from dataclasses import dataclass
+
+@dataclass
+class CheckoutConfig:
+    color: str
+
+typed = client.get_variant_value(
+    "checkout-flow", user_id="user-123", type=CheckoutConfig
+)
 ```
 
 `get_variant` returns `None` when the feature does not exist or has no
@@ -378,8 +392,9 @@ variants defined; otherwise it returns a `VariantResult` with:
   `"DefaultWhenEnabled"`, `"DefaultWhenDisabled"`, or `"None"`.
 
 `get_variant_value` is a convenience wrapper that returns just
-`configuration_value` (or `None`). Both async equivalents are available on
-`AsyncTogglyClient` with the same signature.
+`configuration_value` (or `None`). Pass optional `type=` for a soft-typed
+bind. Both async equivalents are available on `AsyncTogglyClient` with the
+same signature.
 
 Percentile allocation uses the same SHA-256-based hashing as
 Microsoft.FeatureManagement: `contextId = f"{user_id}\n{hint}"` where `hint`

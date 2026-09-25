@@ -4,7 +4,7 @@ import { Toggly, type TogglyOptions } from '../services/toggly.service';
 const SDK_FETCH_OPTIONS = expect.objectContaining({
   headers: expect.objectContaining({
     'X-Toggly-Sdk': 'svelte',
-    'X-Toggly-Sdk-Version': '1.4.1',
+    'X-Toggly-Sdk-Version': '1.12.0',
   }),
 });
 
@@ -961,13 +961,13 @@ describe('Toggly Service', () => {
       const s = new Toggly({ appKey: 'mykey', environment: 'Prod', enableTelemetry: false });
       s.startWebSocket();
       expect(mockWsInstances).toHaveLength(1);
-      expect(mockWsInstances[0].url).toBe('wss://definitions.toggly.io/mykey/ws?sdk=svelte&sdkVersion=1.4.1');
+      expect(mockWsInstances[0].url).toBe('wss://definitions.toggly.io/mykey/ws?sdk=svelte&sdkVersion=1.12.0');
     });
 
     it('should build ws:// URL from http:// baseURI', () => {
       const s = new Toggly({ appKey: 'mykey', baseURI: 'http://local.test', environment: 'Prod', enableTelemetry: false });
       s.startWebSocket();
-      expect(mockWsInstances[0].url).toBe('ws://local.test/mykey/ws?sdk=svelte&sdkVersion=1.4.1');
+      expect(mockWsInstances[0].url).toBe('ws://local.test/mykey/ws?sdk=svelte&sdkVersion=1.12.0');
     });
 
     it('should set _wsConnected on onopen', () => {

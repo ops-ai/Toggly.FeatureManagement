@@ -86,22 +86,48 @@ mkdirSync(artifactsDirectory, { recursive: true })
     })
     rmSync(join(fixtureDirectory, 'node_modules'), { recursive: true, force: true })
     rmSync(join(fixtureDirectory, 'dist'), { recursive: true, force: true })
+    const fixtureLockPath = join(fixtureDirectory, 'package-lock.json')
+    const fixtureLock = JSON.parse(readFileSync(fixtureLockPath, 'utf8'))
     if (localSignedDefinitionsArtifact) {
-      const fixtureLockPath = join(fixtureDirectory, 'package-lock.json')
-      const fixtureLock = JSON.parse(readFileSync(fixtureLockPath, 'utf8'))
-      fixtureLock.packages['node_modules/@ops-ai/toggly-signed-defs'].resolved = 'file:../artifacts/toggly-signed-defs.tgz'
-      writeFileSync(fixtureLockPath, `${JSON.stringify(fixtureLock, null, 2)}\n`)
+      const signedDefs = fixtureLock.packages['node_modules/@ops-ai/toggly-signed-defs']
+      if (signedDefs) {
+        signedDefs.resolved = 'file:../artifacts/toggly-signed-defs.tgz'
+        delete signedDefs.integrity
+      }
     }
+    // Drop stale integrity for the packed SDK so a version bump (new tarball
+    // bytes) does not fail npm ci before --package-lock-only can refresh it.
+    const reactSdk = fixtureLock.packages['node_modules/@ops-ai/react-feature-flags-toggly']
+    if (reactSdk) {
+      reactSdk.version = packageManifest.version
+      delete reactSdk.integrity
+    }
+    const reactSdkDep = fixtureLock.dependencies?.['@ops-ai/react-feature-flags-toggly']
+    if (reactSdkDep) {
+      reactSdkDep.version = packageManifest.version
+      delete reactSdkDep.integrity
+    }
+    writeFileSync(fixtureLockPath, `${JSON.stringify(fixtureLock, null, 2)}\n`)
 
+
+    // Refresh lock metadata for the freshly packed SDK (and optional local
+    // telemetry) so version bumps do not EINTEGRITY against a stale hash.
+    const lockOnlyArgs = [
+      'install',
+      '--package-lock-only',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      packedArtifact,
+    ]
     if (localTelemetryArtifact) {
       assert.ok(existsSync(localTelemetryArtifact), `Missing telemetry artifact: ${localTelemetryArtifact}`)
-      // Resolve real artifact metadata only in this disposable consumer. Final
-      // release verification still uses the committed registry lock via npm ci.
-      await runCommand('npm', ['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund', packedArtifact, localTelemetryArtifact], {
-        cwd: fixtureDirectory, env: npmEnvironment, stdio: 'inherit',
-      })
+      lockOnlyArgs.push(localTelemetryArtifact)
       console.log('LOCAL INTEGRATION ARTIFACT: telemetry; registry acceptance remains pending')
     }
+    await runCommand('npm', lockOnlyArgs, {
+      cwd: fixtureDirectory, env: npmEnvironment, stdio: 'inherit',
+    })
 
     await runCommand(
       'npm',
