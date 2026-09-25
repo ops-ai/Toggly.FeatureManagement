@@ -188,7 +188,9 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     },
 
     getVariantValue<T = unknown>(featureKey: string, isT?: (v: unknown) => v is T) {
-      return client.getVariantValue(featureKey, isT)
+      return isT === undefined
+        ? client.getVariantValue(featureKey)
+        : client.getVariantValue(featureKey, isT)
     },
   }
 

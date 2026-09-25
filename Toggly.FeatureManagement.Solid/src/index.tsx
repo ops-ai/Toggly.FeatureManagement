@@ -134,7 +134,9 @@ export function createToggly(
     },
     getVariantValue(featureKey, isT) {
       definitions();
-      return created.getVariantValue(featureKey, isT);
+      return isT === undefined
+        ? created.getVariantValue(featureKey)
+        : created.getVariantValue(featureKey, isT);
     },
   };
 }

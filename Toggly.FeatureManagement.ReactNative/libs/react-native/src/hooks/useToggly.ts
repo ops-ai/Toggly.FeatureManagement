@@ -195,7 +195,10 @@ export function useToggly(): UseTogglyResult {
     <T = unknown>(
       featureKey: string,
       isT?: (v: unknown) => v is T,
-    ): T | null => toggly.getVariantValue(featureKey, isT),
+    ): T | null =>
+      isT === undefined
+        ? toggly.getVariantValue(featureKey)
+        : toggly.getVariantValue(featureKey, isT),
     [toggly]
   );
 

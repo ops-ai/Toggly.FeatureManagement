@@ -6,6 +6,7 @@
 
 ### Added
 - Typed `getServerVariantValue<T>(…, isT?)` with soft-null decode and optional runtime type guard, matching core.
+- Re-exported `decodeVariantValue` from `@ops-ai/nuxt-toggly-core`.
 
 ## 1.8.0
 
