@@ -110,6 +110,38 @@ final class VariantsTests: XCTestCase {
         await service.dispose()
     }
 
+    private struct PricingConfig: Decodable, Equatable {
+        let color: String
+    }
+
+    func testTypedGetVariantValueSoftDecodesMapsAndSoftNullsMismatches() async {
+        let service = makeService(responseBody: """
+        {"checkout": {"enabled": true, "variant": "Treatment", "configurationValue": {"color": "blue"}}}
+        """)
+        await service.initialize()
+
+        let typed: PricingConfig? = await service.getVariantValue("checkout")
+        XCTAssertEqual(typed, PricingConfig(color: "blue"))
+        let asString: String? = await service.getVariantValue("checkout")
+        XCTAssertNil(asString)
+        let missing: PricingConfig? = await service.getVariantValue("missing")
+        XCTAssertNil(missing)
+        await service.dispose()
+    }
+
+    func testTypedGetVariantValueReturnsScalarsWhenTypesMatch() async {
+        let service = makeService(responseBody: """
+        {"banner": {"enabled": true, "variant": "A", "configurationValue": "hello"}}
+        """)
+        await service.initialize()
+
+        let typed: String? = await service.getVariantValue("banner")
+        XCTAssertEqual(typed, "hello")
+        let asInt: Int? = await service.getVariantValue("banner")
+        XCTAssertNil(asInt)
+        await service.dispose()
+    }
+
     func testGetVariantReturnsNilWhenDisabled() async {
         let service = makeService(responseBody: """
         {"checkout": {"enabled": false, "variant": "Treatment"}}

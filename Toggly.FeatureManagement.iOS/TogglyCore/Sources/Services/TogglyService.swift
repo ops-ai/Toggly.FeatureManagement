@@ -383,6 +383,15 @@ public actor TogglyService {
         await getVariant(featureKey)?.configurationValue
     }
 
+    /// Soft-decodes the assigned variant configuration as `T`.
+    /// Missing assignment or decode failure returns `nil` (never throws for shape alone).
+    public func getVariantValue<T: Decodable>(
+        _ featureKey: String,
+        as type: T.Type = T.self
+    ) async -> T? {
+        VariantValueDecoder.decode(await getVariantValue(featureKey), as: type)
+    }
+
     // MARK: - Identity
 
     /// Set user identity for targeting.

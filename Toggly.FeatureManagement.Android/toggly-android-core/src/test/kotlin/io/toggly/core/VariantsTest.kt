@@ -358,6 +358,54 @@ class VariantsTest {
         }
     }
 
+    @Test
+    fun `typed getVariantValue soft-decodes maps and soft-nulls mismatches`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"feature-a":{"enabled":true,"variant":"B","configurationValue":{"color":"blue"}}}"""
+                )
+            )
+            val service = TogglyService(config(server))
+            try {
+                service.init()
+                val typed = service.getVariantValue<PricingConfig>("feature-a")
+                assertEquals(PricingConfig(color = "blue"), typed)
+                assertEquals(
+                    PricingConfig(color = "blue"),
+                    service.getVariantValue("feature-a", PricingConfig::class.java)
+                )
+                assertNull(service.getVariantValue<String>("feature-a"))
+                assertNull(service.getVariantValue("feature-a", String::class.java))
+                assertNull(service.getVariantValue<PricingConfig>("missing"))
+            } finally {
+                service.dispose()
+            }
+        }
+    }
+
+    @Test
+    fun `typed getVariantValue returns scalars when types match`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"banner":{"enabled":true,"variant":"A","configurationValue":"hello"}}"""
+                )
+            )
+            val service = TogglyService(config(server))
+            try {
+                service.init()
+                assertEquals("hello", service.getVariantValue<String>("banner"))
+                assertNull(service.getVariantValue<Long>("banner"))
+            } finally {
+                service.dispose()
+            }
+        }
+    }
+
+    @kotlinx.serialization.Serializable
+    private data class PricingConfig(val color: String)
+
     private fun createKey(): TestKey {
         val generator = KeyPairGenerator.getInstance("EC")
         generator.initialize(ECGenParameterSpec("secp256r1"))

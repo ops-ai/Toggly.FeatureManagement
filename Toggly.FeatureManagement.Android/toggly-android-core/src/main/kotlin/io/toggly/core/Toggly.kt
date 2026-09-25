@@ -161,6 +161,12 @@ object Toggly {
     /** Returns [VariantResult.configurationValue] for [featureKey], or null. */
     suspend fun getVariantValue(featureKey: String): Any? = shared.getVariantValue(featureKey)
 
+    /**
+     * Soft-decodes the assigned variant configuration as [clazz] (Java-friendly).
+     */
+    suspend fun <T : Any> getVariantValue(featureKey: String, clazz: Class<T>): T? =
+        shared.getVariantValue(featureKey, clazz)
+
     fun registerContext(kind: String, mapper: EntityContextMapper) {
         shared.registerContext(kind, mapper)
     }

@@ -2,6 +2,15 @@
 
 All notable changes to the Toggly iOS SDK are documented in this file.
 
+## 1.7.0
+
+2026-09-25
+
+### Added
+- Typed soft-null `getVariantValue(_:as:)` on `TogglyService` for any `Decodable`
+  configuration type. Missing assignment or decode failure returns `nil`; the
+  untyped `getVariantValue(_:)` → `Any?` overload is unchanged.
+
 ## 1.6.1
 
 2026-09-23
