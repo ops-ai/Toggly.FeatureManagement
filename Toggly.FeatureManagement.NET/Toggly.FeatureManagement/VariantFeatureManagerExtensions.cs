@@ -21,11 +21,12 @@ namespace Toggly.FeatureManagement
         /// <param name="feature">Feature name to evaluate.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>
-        /// The bound value, or <c>null</c>/<c>default</c> when no variant is assigned
-        /// or binding fails. Does not throw solely for a bind mismatch; existing MF
-        /// APIs are unchanged.
+        /// The bound value, or <c>default</c> when no variant is assigned or binding fails
+        /// (null for reference types). Soft-null uses <c>default(T)</c> rather than
+        /// <c>T?</c> so the helper stays valid on netstandard2.1 / netcoreapp3.1
+        /// (CS8627). Existing MF APIs are unchanged.
         /// </returns>
-        public static Task<T?> GetVariantValueAsync<T>(
+        public static Task<T> GetVariantValueAsync<T>(
             this IVariantFeatureManager manager,
             string feature,
             CancellationToken cancellationToken = default)
@@ -50,11 +51,12 @@ namespace Toggly.FeatureManagement
         /// <param name="context">Targeting context used for variant assignment.</param>
         /// <param name="cancellationToken">Cancellation token.</param>
         /// <returns>
-        /// The bound value, or <c>null</c>/<c>default</c> when no variant is assigned
-        /// or binding fails. Does not throw solely for a bind mismatch; existing MF
-        /// APIs are unchanged.
+        /// The bound value, or <c>default</c> when no variant is assigned or binding fails
+        /// (null for reference types). Soft-null uses <c>default(T)</c> rather than
+        /// <c>T?</c> so the helper stays valid on netstandard2.1 / netcoreapp3.1
+        /// (CS8627). Existing MF APIs are unchanged.
         /// </returns>
-        public static Task<T?> GetVariantValueAsync<T>(
+        public static Task<T> GetVariantValueAsync<T>(
             this IVariantFeatureManager manager,
             string feature,
             ITargetingContext context,
@@ -70,19 +72,19 @@ namespace Toggly.FeatureManagement
             return BindVariantValueAsync<T>(manager.GetVariantAsync(feature, context, cancellationToken));
         }
 
-        private static async Task<T?> BindVariantValueAsync<T>(ValueTask<Variant> variantTask)
+        private static async Task<T> BindVariantValueAsync<T>(ValueTask<Variant> variantTask)
         {
             var variant = await variantTask.ConfigureAwait(false);
             if (variant?.Configuration == null)
-                return default;
+                return default!;
 
             try
             {
-                return variant.Configuration.Get<T>();
+                return variant.Configuration.Get<T>()!;
             }
             catch
             {
-                return default;
+                return default!;
             }
         }
     }

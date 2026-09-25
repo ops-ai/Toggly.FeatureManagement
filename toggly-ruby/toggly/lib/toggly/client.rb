@@ -356,9 +356,7 @@ module Toggly
     private
 
     def decode_variant_configuration(value, as, &block)
-      if block
-        return block.call(value)
-      end
+      return block.call(value) if block
       return nil if as.nil?
 
       # Scalars / :boolean before Class#new — String.new({}) would soft-fail to "".
@@ -376,15 +374,9 @@ module Toggly
       end
 
       # is_a? requires a Module; symbols like :boolean are handled above.
-      if as.is_a?(Module) && value.is_a?(as)
-        return value
-      end
-      if as.respond_to?(:new) && value.is_a?(Hash)
-        return as.new(**value.transform_keys(&:to_sym))
-      end
-      if as.respond_to?(:json_create) && value.is_a?(Hash)
-        return as.json_create(value)
-      end
+      return value if as.is_a?(Module) && value.is_a?(as)
+      return as.new(**value.transform_keys(&:to_sym)) if as.respond_to?(:new) && value.is_a?(Hash)
+      return as.json_create(value) if as.respond_to?(:json_create) && value.is_a?(Hash)
 
       nil
     rescue StandardError
