@@ -144,7 +144,7 @@ describe('createToggly', () => {
     const refreshCalls = setIntervalSpy.mock.calls.filter(
       (call) => typeof call[1] === 'number' && call[1] > 1000
     );
-    expect(refreshCalls.length).toBe(0);
+    expect(refreshCalls).toHaveLength(0);
   });
 
   it('should handle refresh errors gracefully', async () => {

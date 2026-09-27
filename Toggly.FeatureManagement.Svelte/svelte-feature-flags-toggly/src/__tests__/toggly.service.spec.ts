@@ -977,29 +977,15 @@ describe('Toggly Service', () => {
       expect(s._wsConnected).toBe(true);
     });
 
-    it('should refresh features on JSON flags-updated message', () => {
+    it.each([
+      ['flags-updated', {}],
+      ['update', {}],
+      ['sync', { etag: 'new-rev' }],
+    ])('should refresh features on JSON %s message', (type, message) => {
       const s = new Toggly({ appKey: 'k', environment: 'Prod', enableTelemetry: false });
       s.startWebSocket();
       fetchSpy.mockClear();
-      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'flags-updated' }) });
-      vi.advanceTimersByTime(350);
-      expect(fetchSpy).toHaveBeenCalled();
-    });
-
-    it('should refresh features on JSON update message', () => {
-      const s = new Toggly({ appKey: 'k', environment: 'Prod', enableTelemetry: false });
-      s.startWebSocket();
-      fetchSpy.mockClear();
-      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'update' }) });
-      vi.advanceTimersByTime(350);
-      expect(fetchSpy).toHaveBeenCalled();
-    });
-
-    it('should refresh features on JSON sync message', () => {
-      const s = new Toggly({ appKey: 'k', environment: 'Prod', enableTelemetry: false });
-      s.startWebSocket();
-      fetchSpy.mockClear();
-      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'sync', etag: 'new-rev' }) });
+      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type, ...message }) });
       vi.advanceTimersByTime(350);
       expect(fetchSpy).toHaveBeenCalled();
     });

@@ -144,11 +144,12 @@ describe('HookExecutor', () => {
     });
 
     it('should skip hooks without afterEvaluation', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       executor.addHook({
         getMetadata: () => ({ name: 'NoAfterHook', version: '1.0.0' }),
       });
-      // Should not throw
       await executor.executeAfterEvaluation('flag1', new Map(), true);
+      expect(errorSpy).not.toHaveBeenCalled();
     });
 
     it('should handle errors without failing', async () => {
@@ -213,11 +214,12 @@ describe('HookExecutor', () => {
     });
 
     it('should skip hooks without afterIdentify', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       executor.addHook({
         getMetadata: () => ({ name: 'NoAfterIdHook', version: '1.0.0' }),
       });
-      // Should not throw
       await executor.executeAfterIdentify('user-123', new Map());
+      expect(errorSpy).not.toHaveBeenCalled();
     });
 
     it('should handle errors without failing', async () => {
@@ -244,11 +246,12 @@ describe('HookExecutor', () => {
     });
 
     it('should skip hooks without afterRefresh', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       executor.addHook({
         getMetadata: () => ({ name: 'NoRefreshHook', version: '1.0.0' }),
       });
-      // Should not throw
       await executor.executeAfterRefresh({ F1: true });
+      expect(errorSpy).not.toHaveBeenCalled();
     });
 
     it('should handle errors without failing', async () => {

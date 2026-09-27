@@ -62,6 +62,12 @@ function getRevisionCacheKey(appKey: string, environment: string, contextKey = '
   return `${REVISION_CACHE_PREFIX}${appKey}:${environment}:${contextKey}`
 }
 
+function unquoteRevision(revision: string): string {
+  return revision.startsWith('"') && revision.endsWith('"')
+    ? revision.slice(1, -1)
+    : revision
+}
+
 function isTrackedCacheKey(key: string): boolean {
   return key.startsWith(CACHE_PREFIX) || key.startsWith(VARIANTS_CACHE_PREFIX)
 }
@@ -283,6 +289,8 @@ export interface TogglyOptions {
   onError?: (message: string, error?: unknown) => void
 }
 
+type TogglyContextInput = TogglyEntityContext | Record<string, unknown> | null
+
 export interface TogglyService {
   shouldShowFeatureDuringEvaluation: boolean
   _loadFeatures: (forceRefresh?: boolean) => Promise<EvaluatedDefinitions | null>
@@ -297,17 +305,17 @@ export interface TogglyService {
     featureKeys: string[],
     requirement?: string,
     negate?: boolean,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: TogglyContextInput,
     kind?: string,
   ) => Promise<boolean>
   isFeatureOn: (
     featureKey: string,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: TogglyContextInput,
     kind?: string,
   ) => Promise<boolean>
   isFeatureOff: (
     featureKey: string,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: TogglyContextInput,
     kind?: string,
   ) => Promise<boolean>
   refreshFlags: () => Promise<void>
@@ -345,10 +353,10 @@ export class Toggly implements TogglyService {
   private _generation = 0
   private _loadingFeatures: boolean = false
   private _lastFetchTime: number = 0
-  private _hookExecutor = new HookExecutor()
+  private readonly _hookExecutor = new HookExecutor()
   private _localGates: LocalGate[] = []
   private _localGateIndex: FlagGateIndex = new Map()
-  private _localGatesChangedListeners = new Set<() => void>()
+  private readonly _localGatesChangedListeners = new Set<() => void>()
   private _lastError: string | undefined
   private _groups: string[] = []
   private _claims: Record<string, string> = {}
@@ -361,8 +369,8 @@ export class Toggly implements TogglyService {
   _cachedDefinitionsRevision: string | null = null
   _pendingDefinitionsPin: string | null = null
   _lastFallbackRefresh: number = 0
-  private _fallbackRefreshInterval: number = 20 * 60 * 1000
-  private _jwks = new InMemoryJwksCache()
+  private readonly _fallbackRefreshInterval: number = 20 * 60 * 1000
+  private readonly _jwks = new InMemoryJwksCache()
   private _telemetry: TelemetryReporter | null = null
   private _detachTelemetry: (() => void) | null = null
   private _telemetryFailed = false
@@ -545,17 +553,15 @@ export class Toggly implements TogglyService {
           'Toggly --- A valid application key is required to connect to your Toggly.io application for evaluating your features.',
         )
       }
-    } else {
-      if (!config.environment) {
-        config.environment = 'Production'
+    } else if (!config.environment) {
+      config.environment = 'Production'
 
-        console.warn(
-          'Toggly --- Using Production environment as no environment provided when initializing the Toggly',
-        )
-      }
+      console.warn(
+        'Toggly --- Using Production environment as no environment provided when initializing the Toggly',
+      )
     }
 
-    this._config = Object.assign({}, this._config, config)
+    this._config = { ...this._config, ...config }
     this.shouldShowFeatureDuringEvaluation = this._config.showFeatureDuringEvaluation ?? false
     
     // Register initial hooks
@@ -632,9 +638,16 @@ export class Toggly implements TogglyService {
     const key = this._contextCacheKey()
     const app = this._config.appKey ?? ''
     const env = this._config.environment ?? 'Production'
-    this._variants = this._canPersist && this._config.enableVariants ? readCachedVariants(app, env, key, this._config.maxCacheKeys) : null
-    this._features = this._variants ? variantDefsToFlags(this._variants) :
-      (this._canPersist ? readCachedFlags(app, env, key, this._config.maxCacheKeys) : null) ?? { ...this._config.featureDefaults }
+    const cachedVariants = this._canPersist && this._config.enableVariants
+      ? readCachedVariants(app, env, key, this._config.maxCacheKeys)
+      : null
+    const cachedFlags = this._canPersist
+      ? readCachedFlags(app, env, key, this._config.maxCacheKeys)
+      : null
+    this._variants = cachedVariants
+    this._features = cachedVariants
+      ? variantDefsToFlags(cachedVariants)
+      : cachedFlags ?? { ...this._config.featureDefaults }
     this.notifyFeaturesRefresh()
     try {
       await this._loadFeatures(true, { strict: true })
@@ -722,7 +735,7 @@ export class Toggly implements TogglyService {
       )
       if (this._disposed || generation !== this._generation) return this._features
       if (loaded.notModified) {
-        if (loaded.revision) this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
+        if (loaded.revision) this._cacheDefinitionsRevision(unquoteRevision(loaded.revision))
         this._lastFetchTime = Date.now()
         return this._features
       }
@@ -746,7 +759,7 @@ export class Toggly implements TogglyService {
       }
 
       // Persist validators only after their mode-scoped bodies have been written.
-      if (loaded.revision) this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
+      if (loaded.revision) this._cacheDefinitionsRevision(unquoteRevision(loaded.revision))
 
       if (this._features) {
         this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
@@ -853,7 +866,7 @@ export class Toggly implements TogglyService {
     featureKeys: string[],
     requirement = 'all',
     negate = false,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: TogglyContextInput,
     kind?: string,
   ) => {
     await this._featuresLoaded()
@@ -872,7 +885,7 @@ export class Toggly implements TogglyService {
 
   isFeatureOn = async (
     featureKey: string,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: TogglyContextInput,
     kind?: string,
   ) => {
     await this._featuresLoaded()
@@ -886,7 +899,7 @@ export class Toggly implements TogglyService {
 
   isFeatureOff = async (
     featureKey: string,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: TogglyContextInput,
     kind?: string,
   ) => {
     await this._featuresLoaded()
