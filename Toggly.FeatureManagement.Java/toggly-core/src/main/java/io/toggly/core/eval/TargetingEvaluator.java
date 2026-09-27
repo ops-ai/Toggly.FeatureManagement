@@ -109,8 +109,8 @@ public final class TargetingEvaluator implements FilterEvaluator {
 
         if (value == null) return 0;
 
-        if (value instanceof Number) {
-            return ((Number) value).doubleValue();
+        if (value instanceof Number number) {
+            return number.doubleValue();
         }
 
         try {

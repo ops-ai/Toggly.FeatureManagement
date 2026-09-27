@@ -5,7 +5,6 @@ import io.toggly.core.model.FeatureFilter;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 
 /**

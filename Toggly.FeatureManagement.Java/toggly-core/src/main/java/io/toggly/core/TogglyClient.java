@@ -212,7 +212,7 @@ public final class TogglyClient implements AutoCloseable {
             recordCheck(featureKey, enabled, effectiveContext);
             return enabled;
         } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Error evaluating feature: " + featureKey, e);
+            LOGGER.log(Level.WARNING, e, () -> "Error evaluating feature: " + featureKey);
             return config.getDefaultFeatureState();
         }
     }
@@ -252,7 +252,7 @@ public final class TogglyClient implements AutoCloseable {
                     return enabled;
                 })
                 .exceptionally(e -> {
-                    LOGGER.log(Level.WARNING, "Async error evaluating feature: " + featureKey, e);
+                    LOGGER.log(Level.WARNING, e, () -> "Async error evaluating feature: " + featureKey);
                     return config.getDefaultFeatureState();
                 });
     }
@@ -305,7 +305,7 @@ public final class TogglyClient implements AutoCloseable {
             VariantAssignment assignment = VariantAllocator.assign(definition, enabled, effectiveContext);
             return toVariantResult(assignment);
         } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Error resolving variant for feature: " + featureKey, e);
+            LOGGER.log(Level.WARNING, e, () -> "Error resolving variant for feature: " + featureKey);
             return null;
         }
     }
@@ -346,7 +346,7 @@ public final class TogglyClient implements AutoCloseable {
                     return toVariantResult(assignment);
                 })
                 .exceptionally(e -> {
-                    LOGGER.log(Level.WARNING, "Async error resolving variant for feature: " + featureKey, e);
+                    LOGGER.log(Level.WARNING, e, () -> "Async error resolving variant for feature: " + featureKey);
                     return null;
                 });
     }
