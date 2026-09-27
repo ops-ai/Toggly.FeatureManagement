@@ -501,6 +501,37 @@ export class TogglyServerClient {
    * request-local snapshot for its identity.
    */
   async init(identity?: string): Promise<FeatureFlags> {
+    if (this.config.enableVariants) {
+      // Variants are remote-evaluated; identity must be bound before fetch so
+      // `/evaluated-variants-signed` receives the correct `userId`.
+      const previousIdentity = this.identity;
+      const wasWarm = this.initialized && this.variants !== null;
+      const identityChanged = previousIdentity !== identity;
+
+      this.identity = identity;
+      if (!wasWarm || identityChanged) {
+        // Do not join an in-flight fetch started under a different identity.
+        if (identityChanged && this.definitionsFetchInFlight) {
+          await this.definitionsFetchInFlight.catch(() => undefined);
+        }
+        await this.fetchFlags();
+        this.initialized = true;
+        if (!wasWarm) {
+          this.startWebSocket();
+          if (identity) {
+            await this.executeBeforeIdentify(identity);
+            await this.executeAfterIdentify(identity);
+          }
+        }
+      }
+
+      this.flags = this.snapshotFlags({ identity });
+      if (wasWarm && !identityChanged) {
+        this.logger.debug('Client already initialized; re-snapshotted for identity.');
+      }
+      return this.flags;
+    }
+
     const wasWarm = this.initialized && this.definitions.size > 0;
 
     if (!wasWarm) {

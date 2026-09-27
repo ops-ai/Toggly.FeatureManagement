@@ -489,6 +489,29 @@ describe('TogglyServer', () => {
       });
     });
 
+    it('merges flagDefaults into variant flags for getFlag and evaluateGate', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockOkResponse({
+          defs: {
+            FromApi: { enabled: true, variant: 'A' },
+          },
+        }),
+      );
+
+      const server = new TogglyServer({
+        appKey: 'test-key',
+        enableVariants: true,
+        flagDefaults: { DefaultOnly: true },
+      });
+
+      expect(await server.getFlag('DefaultOnly')).toBe(true);
+      expect(await server.evaluateGate(['DefaultOnly', 'FromApi'], 'all')).toBe(true);
+      expect(await server.getFlags()).toMatchObject({
+        DefaultOnly: true,
+        FromApi: true,
+      });
+    });
+
     it('should log in debug mode during build override', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: true }));

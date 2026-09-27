@@ -187,7 +187,10 @@ export class TogglyServer implements TogglyServerClient {
 
       if (enableVariants) {
         variantDefs = parseVariantDefinitions(unwrapDefsPayload(payload));
-        flags = variantDefsToFlags(variantDefs);
+        flags = {
+          ...this.config.flagDefaults,
+          ...variantDefsToFlags(variantDefs),
+        };
       } else {
         definitions = parseDefinitionsPayload(payload);
         flags = {
@@ -360,7 +363,11 @@ export class TogglyServer implements TogglyServerClient {
     if (this.config.enableVariants) {
       const results = keys.map((key) => {
         const value = cache.flags[key];
-        return typeof value === 'boolean' ? value : false;
+        if (typeof value === 'boolean') {
+          return value;
+        }
+        const fallback = this.config.flagDefaults[key];
+        return typeof fallback === 'boolean' ? fallback : false;
       });
       const passed = requirement === 'any' ? results.some(Boolean) : results.every(Boolean);
       return negate ? !passed : passed;

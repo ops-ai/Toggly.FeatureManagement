@@ -342,7 +342,11 @@ export class ElectronTogglyClient {
       }
       url.searchParams.set('i', this.instanceId)
     } else {
-      appendEvaluationContext(url, { identity: this.identity, groups: this.groups, claims: this.claims }, 'evaluated')
+      appendEvaluationContext(
+        url,
+        { identity: this.identity, groups: this.groups, claims: this.claims },
+        this.config.enableVariants ? 'variants' : 'evaluated',
+      )
     }
     return url.toString()
   }

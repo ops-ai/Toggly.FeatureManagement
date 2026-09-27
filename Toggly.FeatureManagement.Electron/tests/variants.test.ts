@@ -68,6 +68,26 @@ describe('enableVariants', () => {
     expect(url).not.toContain('/evaluated-signed/')
   })
 
+  it('sends userId (not u) for identity when enableVariants is on', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      mockResponse(200, {
+        onFeature: { enabled: true, variant: 'treatment' },
+      }),
+    )
+    await initToggly({
+      enableTelemetry: false,
+      appKey: 'app-userid',
+      userDataPath,
+      fetch: fetchImpl,
+      enableLiveUpdates: false,
+      enableVariants: true,
+      identity: 'user@example.com',
+    })
+    const url = new URL(String(fetchImpl.mock.calls[0][0]))
+    expect(url.searchParams.get('userId')).toBe('user@example.com')
+    expect(url.searchParams.get('u')).toBeNull()
+  })
+
   it('uses /evaluated-signed when disabled (default)', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(mockResponse(200, { onFeature: true }))
     await initToggly({

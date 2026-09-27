@@ -456,7 +456,10 @@ class TogglyClientInstance {
       let variantDefs: Record<string, EvaluatedVariantDef> | null;
       if (enableVariants) {
         variantDefs = parseVariantDefinitions(unwrapDefsPayload(payload));
-        flags = variantDefsToFlags(variantDefs);
+        flags = {
+          ...this.config.flagDefaults,
+          ...variantDefsToFlags(variantDefs),
+        };
       } else {
         flags = unwrapDefsPayload(payload) as Flags;
         variantDefs = null;

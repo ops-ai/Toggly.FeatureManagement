@@ -1240,6 +1240,60 @@ describe('enableVariants', () => {
     expect(client.getVariant('Missing')).toBeNull();
   });
 
+  it('binds identity before the cold-start variants fetch', async () => {
+    const bodyFor = (name: string) =>
+      JSON.stringify({
+        defs: {
+          Checkout: {
+            enabled: true,
+            variant: name,
+            configurationValue: { who: name },
+          },
+        },
+      });
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(bodyFor('alice-variant')),
+        json: () => Promise.resolve(JSON.parse(bodyFor('alice-variant'))),
+        headers: { get: () => null },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(bodyFor('bob-variant')),
+        json: () => Promise.resolve(JSON.parse(bodyFor('bob-variant'))),
+        headers: { get: () => null },
+      });
+
+    const client = new TogglyServerClient({
+      appKey: 'test-key',
+      environment: 'Production',
+      enableVariants: true,
+      enableUsageTracking: false,
+      enableMetrics: false,
+    });
+
+    const alice = await client.init('alice');
+    expect(String(mockFetch.mock.calls[0]?.[0])).toContain('userId=alice');
+    expect(alice.Checkout).toBe(true);
+    expect(client.getVariant('Checkout')).toEqual({
+      name: 'alice-variant',
+      configurationValue: { who: 'alice-variant' },
+    });
+
+    const bob = await client.init('bob');
+    expect(String(mockFetch.mock.calls[1]?.[0])).toContain('userId=bob');
+    expect(bob.Checkout).toBe(true);
+    expect(client.getVariant('Checkout')).toEqual({
+      name: 'bob-variant',
+      configurationValue: { who: 'bob-variant' },
+    });
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps local definitions-signed evaluation when enableVariants is unset', async () => {
     mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ Plain: true }));
 
