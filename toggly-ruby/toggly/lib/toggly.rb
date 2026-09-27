@@ -71,6 +71,8 @@ require_relative "toggly/client"
 #     }
 #   )
 module Toggly
+  NOT_CONFIGURED_ERROR = "Toggly not configured. Call Toggly.configure first."
+
   class << self
     # Global client instance
     attr_accessor :client
@@ -92,7 +94,7 @@ module Toggly
     # @param context [Context, nil] Optional evaluation context
     # @return [Boolean]
     def enabled?(feature_key, context: nil)
-      raise Error, "Toggly not configured. Call Toggly.configure first." unless @client
+      raise Error, NOT_CONFIGURED_ERROR unless @client
 
       @client.enabled?(feature_key, context: context)
     end
@@ -113,7 +115,7 @@ module Toggly
     # @param context [Context, nil]
     # @return [VariantResult, nil]
     def get_variant(feature_key, context: nil)
-      raise Error, "Toggly not configured. Call Toggly.configure first." unless @client
+      raise Error, NOT_CONFIGURED_ERROR unless @client
 
       @client.get_variant(feature_key, context: context)
     end
@@ -124,7 +126,7 @@ module Toggly
     # @param context [Context, nil]
     # @return [Object, nil]
     def get_variant_value(feature_key, context: nil, as: nil, &)
-      raise Error, "Toggly not configured. Call Toggly.configure first." unless @client
+      raise Error, NOT_CONFIGURED_ERROR unless @client
 
       @client.get_variant_value(feature_key, context: context, as: as, &)
     end

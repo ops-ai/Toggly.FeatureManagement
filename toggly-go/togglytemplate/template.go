@@ -53,30 +53,30 @@ func FuncMap(e Evaluator, ctxFromData func(any) toggly.Context) template.FuncMap
 		return enabled
 	}
 
-	featureAny := func(data any, keys ...string) bool {
-		for _, k := range keys {
-			if feature(data, k) {
-				return true
-			}
-		}
-		return false
-	}
-
-	featureAll := func(data any, keys ...string) bool {
-		if len(keys) == 0 {
-			return false
-		}
-		for _, k := range keys {
-			if !feature(data, k) {
-				return false
-			}
-		}
-		return true
-	}
-
 	return template.FuncMap{
 		"feature":    feature,
-		"featureAny": featureAny,
-		"featureAll": featureAll,
+		"featureAny": func(data any, keys ...string) bool { return anyFeature(feature, data, keys) },
+		"featureAll": func(data any, keys ...string) bool { return allFeatures(feature, data, keys) },
 	}
+}
+
+func anyFeature(feature func(any, string) bool, data any, keys []string) bool {
+	for _, key := range keys {
+		if feature(data, key) {
+			return true
+		}
+	}
+	return false
+}
+
+func allFeatures(feature func(any, string) bool, data any, keys []string) bool {
+	if len(keys) == 0 {
+		return false
+	}
+	for _, key := range keys {
+		if !feature(data, key) {
+			return false
+		}
+	}
+	return true
 }

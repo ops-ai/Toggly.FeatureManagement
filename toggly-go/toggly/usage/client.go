@@ -68,7 +68,7 @@ func (c *Client) RecordUsed(feature string, enabled bool, identity string) {
 }
 
 // RecordView records a feature view (rendered/displayed).
-func (c *Client) RecordView(feature string, identity string) {
+func (c *Client) RecordView(feature, identity string) {
 	c.batcher.RecordView(feature, identity)
 }
 

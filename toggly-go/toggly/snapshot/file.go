@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+const (
+	definitionsSnapshotFile = "definitions.json"
+	jwksSnapshotFile        = "jwks.json"
+)
+
 // FileProvider stores snapshots as JSON files.
 //
 // Files:
@@ -24,7 +29,7 @@ func NewFileProvider(dir string) *FileProvider { return &FileProvider{dir: dir} 
 
 func (f *FileProvider) LoadDefinitions(ctx context.Context) (*DefinitionsSnapshot, error) {
 	_ = ctx
-	b, err := os.ReadFile(filepath.Join(f.dir, "definitions.json"))
+	b, err := os.ReadFile(filepath.Join(f.dir, definitionsSnapshotFile))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -47,19 +52,19 @@ func (f *FileProvider) SaveDefinitions(ctx context.Context, snap DefinitionsSnap
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(f.dir, "definitions.json"), b, 0o644)
+	return os.WriteFile(filepath.Join(f.dir, definitionsSnapshotFile), b, 0o644)
 }
 
 func (f *FileProvider) Clear(ctx context.Context) error {
 	_ = ctx
-	_ = os.Remove(filepath.Join(f.dir, "definitions.json"))
-	_ = os.Remove(filepath.Join(f.dir, "jwks.json"))
+	_ = os.Remove(filepath.Join(f.dir, definitionsSnapshotFile))
+	_ = os.Remove(filepath.Join(f.dir, jwksSnapshotFile))
 	return nil
 }
 
 func (f *FileProvider) LoadJWKS(ctx context.Context) (*JWKSnap, error) {
 	_ = ctx
-	b, err := os.ReadFile(filepath.Join(f.dir, "jwks.json"))
+	b, err := os.ReadFile(filepath.Join(f.dir, jwksSnapshotFile))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -98,5 +103,5 @@ func (f *FileProvider) SaveJWKS(ctx context.Context, snap JWKSnap) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(f.dir, "jwks.json"), b, 0o644)
+	return os.WriteFile(filepath.Join(f.dir, jwksSnapshotFile), b, 0o644)
 }

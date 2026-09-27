@@ -27,17 +27,25 @@ extension UIView {
     /// The feature flag key associated with this view's visibility.
     public var featureFlagKey: String? {
         get { objc_getAssociatedObject(self, &AssociatedKeys.featureFlagKey) as? String }
-        set { objc_setAssociatedObject(self, &AssociatedKeys.featureFlagKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
+        set {
+            objc_setAssociatedObject(self, &AssociatedKeys.featureFlagKey, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
     }
 
     private var visibilityBinding: FeatureFlagBinding? {
         get { objc_getAssociatedObject(self, &AssociatedKeys.visibilityBinding) as? FeatureFlagBinding }
-        set { objc_setAssociatedObject(self, &AssociatedKeys.visibilityBinding, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
+        set {
+            objc_setAssociatedObject(
+                self, &AssociatedKeys.visibilityBinding, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC
+            )
+        }
     }
 
     fileprivate var enabledBinding: FeatureFlagBinding? {
         get { objc_getAssociatedObject(self, &AssociatedKeys.enabledBinding) as? FeatureFlagBinding }
-        set { objc_setAssociatedObject(self, &AssociatedKeys.enabledBinding, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC) }
+        set {
+            objc_setAssociatedObject(self, &AssociatedKeys.enabledBinding, newValue, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        }
     }
 
     /// Bind this view's visibility to a feature flag, replacing its previous visibility binding.

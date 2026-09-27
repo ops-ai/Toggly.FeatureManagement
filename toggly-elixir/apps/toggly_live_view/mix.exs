@@ -20,7 +20,7 @@ defmodule TogglyLiveView.MixProject do
         local_dependency(:toggly_phoenix),
         {:phoenix_live_view, "~> 1.2"},
         {:phoenix_html, "~> 4.3"},
-        {:lazy_html, ">= 0.1.0", only: :test}
+        {:lazy_html, "~> 0.1.13", only: :test}
       ]
     ] ++ shared_paths()
   end

@@ -78,6 +78,19 @@ RSpec.describe Toggly do
     end
   end
 
+  describe "global feature access before configuration" do
+    it "uses the same actionable error for every global entry point" do
+      Toggly.reset!
+      message = "Toggly not configured. Call Toggly.configure first."
+
+      aggregate_failures do
+        expect { Toggly.enabled?("test") }.to raise_error(Toggly::Error, message)
+        expect { Toggly.get_variant("test") }.to raise_error(Toggly::Error, message)
+        expect { Toggly.get_variant_value("test") }.to raise_error(Toggly::Error, message)
+      end
+    end
+  end
+
   describe ".disabled?" do
     before do
       stub_definitions_api(

@@ -11,6 +11,10 @@ import (
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 )
 
+const (
+	postgresLoadDefinitionsError = "failed to load definitions: %v"
+)
+
 func getPostgresDB(t *testing.T) *sql.DB {
 	t.Helper()
 	connStr := os.Getenv("POSTGRES_TEST_URL")
@@ -96,7 +100,7 @@ func TestPostgresProvider_SaveAndLoadDefinitions(t *testing.T) {
 	// Load
 	snap, err := provider.LoadDefinitions(ctx)
 	if err != nil {
-		t.Fatalf("failed to load definitions: %v", err)
+		t.Fatalf(postgresLoadDefinitionsError, err)
 	}
 
 	if snap == nil {
@@ -163,7 +167,7 @@ func TestPostgresProvider_SaveDefinitions_Updates(t *testing.T) {
 	// Load and verify
 	snap, err := provider.LoadDefinitions(ctx)
 	if err != nil {
-		t.Fatalf("failed to load definitions: %v", err)
+		t.Fatalf(postgresLoadDefinitionsError, err)
 	}
 
 	if len(snap.Defs) != 1 {
@@ -332,7 +336,7 @@ func TestPostgresProvider_RoundTrip(t *testing.T) {
 
 	loadedDefs, err := provider.LoadDefinitions(ctx)
 	if err != nil {
-		t.Fatalf("failed to load definitions: %v", err)
+		t.Fatalf(postgresLoadDefinitionsError, err)
 	}
 	loadedJWKS, err := provider.LoadJWKS(ctx)
 	if err != nil {

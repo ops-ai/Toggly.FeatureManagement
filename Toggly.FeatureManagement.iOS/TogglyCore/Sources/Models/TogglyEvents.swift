@@ -78,4 +78,8 @@ public enum TogglyEvent: Sendable {
 public typealias TogglyEventListener = @Sendable (TogglyEvent) -> Void
 
 /// Handler for feature state changes.
-public typealias FeatureStateChangeHandler = @Sendable (_ featureKey: String, _ previousValue: Bool?, _ newValue: Bool?) -> Void
+public typealias FeatureStateChangeHandler = @Sendable (
+    _ featureKey: String,
+    _ previousValue: Bool?,
+    _ newValue: Bool?
+) -> Void

@@ -92,7 +92,9 @@ public actor TogglyService {
         self.instanceId = Self.normalizedToken(config.instanceId)
         self.config = config
         self.storage = config.storage ?? MemoryStorage()
-        if config.enableTelemetry, let key = config.appKey, !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if config.enableTelemetry,
+           let key = config.appKey,
+           !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             if let transport = config.telemetryTransport {
                 self.telemetry = TelemetryReporter(
                     appKey: key, environment: config.environment,
@@ -333,7 +335,9 @@ public actor TogglyService {
 
     /// Subscribe to immutable cached checks, captured before host callbacks run.
     @discardableResult
-    public func addFeatureCheckHandler(_ handler: @escaping @Sendable (FeatureCheckSnapshot) -> Void) -> @Sendable () -> Void {
+    public func addFeatureCheckHandler(
+        _ handler: @escaping @Sendable (FeatureCheckSnapshot) -> Void
+    ) -> @Sendable () -> Void {
         let id = UUID()
         checkHandlers[id] = handler
         return { [weak self] in Task { await self?.removeCheckHandler(id) } }
@@ -638,7 +642,9 @@ public actor TogglyService {
 
             // Store ETag
             if let newEtag = httpResponse.value(forHTTPHeaderField: "ETag") {
-                await mutateCache(generation: snapshot.generation) { await self.storage.set(snapshot.revisionKey, value: newEtag) }
+                await mutateCache(generation: snapshot.generation) {
+                    await self.storage.set(snapshot.revisionKey, value: newEtag)
+                }
                 guard snapshot.generation == contextGeneration else { return obsolete }
                 eTag = newEtag
             }
@@ -675,7 +681,8 @@ public actor TogglyService {
         var components = URLComponents(string: config.baseURI)!
         components.path = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let route = config.enableVariants ? "evaluated-variants-signed" : "evaluated-signed"
-        components.path = "/" + (components.path.isEmpty ? "" : components.path + "/") + "\(route)/\(config.appKey ?? "")/\(config.environment)"
+        components.path = "/" + (components.path.isEmpty ? "" : components.path + "/")
+            + "\(route)/\(config.appKey ?? "")/\(config.environment)"
         var items = (components.queryItems ?? []).filter {
             $0.name != "i" && $0.name != "u" && $0.name != "g" && !$0.name.hasPrefix("claim.") &&
                 (!config.enableVariants || $0.name != "userId")
@@ -702,11 +709,28 @@ public actor TogglyService {
     private var contextIdentity: String {
         if let instanceId {
             let tokenHash = SHA256.hash(data: Data(instanceId.utf8)).map { String(format: "%02x", $0) }.joined()
-            return String(data: try! JSONEncoder().encode([[config.baseURI, config.appKey ?? "", config.environment], ["instanceIdHash", tokenHash]]), encoding: .utf8)!
+            let parts = [
+                [config.baseURI, config.appKey ?? "", config.environment],
+                ["instanceIdHash", tokenHash]
+            ]
+            return serializedContextIdentity(parts)
         }
         let parts = [[config.baseURI, config.appKey ?? "", config.environment, identity ?? ""],
                      groups, claims.flatMap { [$0.name, $0.value ?? ""] }]
-        return String(data: try! JSONEncoder().encode(parts), encoding: .utf8)!
+        return serializedContextIdentity(parts)
+    }
+
+    /// JSON keeps cache identities stable and distinguishes otherwise ambiguous context fields.
+    private func serializedContextIdentity(_ parts: [[String]]) -> String {
+        do {
+            return String(decoding: try JSONEncoder().encode(parts), as: UTF8.self)
+        } catch {
+            // Arrays of strings are always encodable today, but keep an unambiguous fallback
+            // so a future encoder failure cannot make unrelated contexts share a cache entry.
+            return "encoding-failure:" + parts.map { fields in
+                fields.map { "\($0.utf8.count):\($0)" }.joined(separator: ",")
+            }.joined(separator: ";")
+        }
     }
 
     private var contextHash: String {
@@ -716,7 +740,9 @@ public actor TogglyService {
     /// Segregates cached bodies by mode: boolean/gate defs and variant defs use the
     /// same underlying cache struct but are not interchangeable.
     private var cacheKeyModeSuffix: String { config.enableVariants ? "variants:" : "evaluated:" }
-    private var featureCacheKey: String { TogglyStorageKeys.featureFlagsCache + "v3:" + cacheKeyModeSuffix + contextHash }
+    private var featureCacheKey: String {
+        TogglyStorageKeys.featureFlagsCache + "v3:" + cacheKeyModeSuffix + contextHash
+    }
     private var revisionCacheKey: String { TogglyStorageKeys.etag + "v3:" + cacheKeyModeSuffix + contextHash }
 
     /// Parse definitions response. When `verifySignatures` is enabled, verify ES256
@@ -914,7 +940,11 @@ public actor TogglyService {
         var variantDefs: EvaluatedVariantDefs? = nil
     }
 
-    private func applySnapshot(_ defs: EvaluatedDefinitions, flags: FeatureFlags, variantDefs: EvaluatedVariantDefs? = nil) {
+    private func applySnapshot(
+        _ defs: EvaluatedDefinitions,
+        flags: FeatureFlags,
+        variantDefs: EvaluatedVariantDefs? = nil
+    ) {
         definitions = defs
         features = flags
         self.variantDefs = variantDefs
@@ -925,7 +955,11 @@ public actor TogglyService {
             return CachedDefinitions(definitions: definitions, flags: features, variantDefs: variantDefs)
         }
         if let features {
-            return CachedDefinitions(definitions: fromBooleanDefaults(features), flags: features, variantDefs: variantDefs)
+            return CachedDefinitions(
+                definitions: fromBooleanDefaults(features),
+                flags: features,
+                variantDefs: variantDefs
+            )
         }
 
         let expectedGeneration = contextGeneration
@@ -945,7 +979,8 @@ public actor TogglyService {
               let data = cached.data(using: .utf8),
               let cacheData = try? JSONDecoder().decode(TogglyFeatureFlagsCache.self, from: data),
               cacheData.identity == expectedIdentity || expectedInstanceId != nil,
-              cacheData.evaluationContext == expectedContext || (cacheData.evaluationContext == nil && instanceId == nil && groups.isEmpty && claims.isEmpty) else {
+              cacheData.evaluationContext == expectedContext ||
+                  (cacheData.evaluationContext == nil && instanceId == nil && groups.isEmpty && claims.isEmpty) else {
             return CachedDefinitions(
                 definitions: fromBooleanDefaults(config.featureDefaults),
                 flags: config.featureDefaults

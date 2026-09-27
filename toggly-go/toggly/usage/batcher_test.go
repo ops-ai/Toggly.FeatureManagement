@@ -2,16 +2,22 @@ package usage
 
 import (
 	"testing"
+
+	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/usage/usagepb"
+)
+
+const (
+	usageBatchUserOne = "user-1"
 )
 
 func TestBatcher_CheckUsedViewed_VariantStats(t *testing.T) {
 	b := NewBatcher("app", "Production", "inst-1", "1.0.0")
 
-	b.RecordCheck("FeatA", true, "user-1")
+	b.RecordCheck("FeatA", true, usageBatchUserOne)
 	b.RecordCheck("FeatA", false, "user-2")
-	b.RecordUsed("FeatA", true, "user-1")
-	b.RecordView("FeatA", "user-1")
-	b.RecordView("FeatA", "user-1") // same identity → one unique viewed hash
+	b.RecordUsed("FeatA", true, usageBatchUserOne)
+	b.RecordView("FeatA", usageBatchUserOne)
+	b.RecordView("FeatA", usageBatchUserOne) // same identity → one unique viewed hash
 	b.RecordView("FeatA", "user-3")
 
 	msg := b.buildAndReset()
@@ -25,7 +31,22 @@ func TestBatcher_CheckUsedViewed_VariantStats(t *testing.T) {
 		t.Fatalf("expected 1 feature stat, got %d", len(msg.Stats))
 	}
 
-	st := msg.Stats[0]
+	assertUsageFeatureStat(t, msg.Stats[0])
+
+	// App-level uniques: user-1, user-2, user-3
+	if msg.TotalUniqueUsers != 3 || len(msg.UniqueUserHashes) != 3 {
+		t.Fatalf("app uniques: total=%d hashes=%v", msg.TotalUniqueUsers, msg.UniqueUserHashes)
+	}
+
+	// Flush reset — second build should be empty
+	empty := b.buildAndReset()
+	if len(empty.Stats) != 0 || empty.TotalUniqueUsers != 0 {
+		t.Fatalf("expected empty after reset, got %+v", empty)
+	}
+}
+
+func assertUsageFeatureStat(t *testing.T, st *usagepb.StatMessage) {
+	t.Helper()
 	if st.Feature != "FeatA" {
 		t.Fatalf("feature = %q", st.Feature)
 	}
@@ -52,17 +73,6 @@ func TestBatcher_CheckUsedViewed_VariantStats(t *testing.T) {
 	dis := st.VariantStats["disabled"]
 	if dis == nil || dis.CheckCount != 1 {
 		t.Fatalf("disabled variantStats: %+v", dis)
-	}
-
-	// App-level uniques: user-1, user-2, user-3
-	if msg.TotalUniqueUsers != 3 || len(msg.UniqueUserHashes) != 3 {
-		t.Fatalf("app uniques: total=%d hashes=%v", msg.TotalUniqueUsers, msg.UniqueUserHashes)
-	}
-
-	// Flush reset — second build should be empty
-	empty := b.buildAndReset()
-	if len(empty.Stats) != 0 || empty.TotalUniqueUsers != 0 {
-		t.Fatalf("expected empty after reset, got %+v", empty)
 	}
 }
 

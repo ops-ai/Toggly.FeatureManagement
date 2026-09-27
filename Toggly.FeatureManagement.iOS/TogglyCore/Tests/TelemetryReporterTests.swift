@@ -684,6 +684,27 @@ final class TelemetryReporterTests: XCTestCase {
         }
     }
 
+    func testSplitCounterPreservesCollisionPacketsAndQueueOrder() async throws {
+        let requests = Requests()
+        let reporter = TelemetryReporter(appKey: "test-app") { request in
+            await requests.append(request)
+            return HTTPURLResponse(url: request.url!, statusCode: 202, httpVersion: nil, headerFields: nil)!
+        }
+        await reporter.incrementCounter("orders", value: 1_000_000)
+        await reporter.incrementCounter("orders", value: 1)
+        await reporter.flushTelemetry()
+
+        let captured = await requests.requests
+        XCTAssertEqual(captured.count, 2)
+        XCTAssertTrue(captured.allSatisfy { ($0.httpBody?.count ?? .max) <= 49_152 })
+        let values = try captured.map { request -> Int in
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
+            return try XCTUnwrap((body["m"] as? [String: NSNumber])?["orders"]).intValue
+        }
+        XCTAssertEqual(values, [1_000_000, 1])
+        await reporter.dispose()
+    }
+
     func testBufferRejectsEntryBeyondTwoThousandWithoutLosingAcceptedEntries() async throws {
         let requests = Requests()
         let reporter = TelemetryReporter(appKey: "test-app") { request in

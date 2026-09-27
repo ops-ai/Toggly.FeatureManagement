@@ -9,6 +9,10 @@ import (
 	"testing"
 )
 
+const (
+	hashTestUser = "user-123"
+)
+
 func TestComputePercentile_Golden(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
@@ -39,9 +43,9 @@ func TestComputePercentile_Golden(t *testing.T) {
 }
 
 func TestComputePercentile_StickyAcrossFeatures(t *testing.T) {
-	a := ComputePercentile("user-123", "demo-feature")
-	b := ComputePercentile("user-123", "demo-feature")
-	c := ComputePercentile("user-123", "other-flag")
+	a := ComputePercentile(hashTestUser, "demo-feature")
+	b := ComputePercentile(hashTestUser, "demo-feature")
+	c := ComputePercentile(hashTestUser, "other-flag")
 	if a != b {
 		t.Fatalf("not sticky: %v vs %v", a, b)
 	}
