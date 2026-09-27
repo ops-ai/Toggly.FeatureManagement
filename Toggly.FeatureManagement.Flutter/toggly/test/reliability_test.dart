@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -301,6 +302,190 @@ void main() {
     expect(errors, contains('Error fetching JWKs'));
 
     HttpService.getInstance.http.interceptors.remove(interceptor);
+  });
+
+  test('offline init keeps signed cached flags verified with persisted JWKs',
+      () async {
+    final provider = _MemoryCacheProvider();
+    final fixture = _buildSignedFlagsFixture();
+    var jwksRequests = 0;
+    final interceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (options.path.endsWith('/.well-known/jwks')) {
+          jwksRequests++;
+        }
+        handler.reject(
+          DioException(
+            requestOptions: options,
+            error: 'offline',
+          ),
+        );
+      },
+    );
+    HttpService.getInstance.http.interceptors.add(interceptor);
+    provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-1',
+      flags: fixture.defsJson,
+      timestamp: fixture.timestamp,
+      signature: fixture.signature,
+      keyId: fixture.kid,
+    );
+    provider.jwks = jsonEncode({
+      ...fixture.jwks,
+      '_expiresAt': 0,
+    });
+
+    await Toggly.init(
+      appKey: 'app',
+      identity: 'user-1',
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        enableTelemetry: false,
+        enableLiveUpdates: false,
+        baseURI: 'https://example.test',
+        cacheProvider: provider,
+      ),
+    );
+
+    expect(Toggly.featureFlagsSnapshot['FeatureA'], isTrue);
+    expect(await Toggly.cachedFeatureFlags, {'FeatureA': true});
+    expect(provider.deletedFlags, 0);
+    expect(jwksRequests, 0);
+  });
+
+  test('fresh signed fetch refreshes expired persisted JWKs', () async {
+    final provider = _MemoryCacheProvider();
+    final fixture = _buildSignedFlagsFixture();
+    var jwksRequests = 0;
+    final interceptor = InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (options.path.endsWith('/.well-known/jwks')) {
+          jwksRequests++;
+          handler.resolve(Response<dynamic>(
+            requestOptions: options,
+            data: fixture.jwks,
+            statusCode: 200,
+          ));
+          return;
+        }
+        handler.resolve(Response<dynamic>(
+          requestOptions: options,
+          data: fixture.rawBody,
+          statusCode: 200,
+        ));
+      },
+    );
+    HttpService.getInstance.http.interceptors.add(interceptor);
+    provider.jwks = jsonEncode({
+      ...fixture.jwks,
+      '_expiresAt': 0,
+    });
+
+    await Toggly.init(
+      appKey: 'app',
+      identity: 'user-1',
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        enableTelemetry: false,
+        enableLiveUpdates: false,
+        baseURI: 'https://example.test',
+        cacheProvider: provider,
+      ),
+    );
+
+    expect(Toggly.featureFlagsSnapshot['FeatureA'], isTrue);
+    expect(jwksRequests, 1);
+    expect(jsonDecode(provider.jwks!)['_expiresAt'], greaterThan(0));
+  });
+
+  test('a superseded init cannot replace the latest cached flag state',
+      () async {
+    final firstRequestStarted = Completer<void>();
+    final completeFirstRequest = Completer<void>();
+    final interceptor = InterceptorsWrapper(
+      onRequest: (options, handler) async {
+        if (options.queryParameters['u'] == 'first') {
+          firstRequestStarted.complete();
+          await completeFirstRequest.future;
+          handler.resolve(Response<dynamic>(
+            requestOptions: options,
+            data: {
+              'defs': {'FeatureA': true}
+            },
+            statusCode: 200,
+          ));
+          return;
+        }
+        handler.resolve(Response<dynamic>(
+          requestOptions: options,
+          data: {
+            'defs': {'FeatureA': false}
+          },
+          statusCode: 200,
+        ));
+      },
+    );
+    HttpService.getInstance.http.interceptors.add(interceptor);
+
+    final firstInit = Toggly.init(
+      appKey: 'app',
+      identity: 'first',
+      useSignedDefinitions: false,
+      flagDefaults: {'FeatureA': false},
+      config: const TogglyConfig(
+        enableTelemetry: false,
+        enableLiveUpdates: false,
+        baseURI: 'https://example.test',
+      ),
+    );
+    await firstRequestStarted.future;
+
+    await Toggly.init(
+      appKey: 'app',
+      identity: 'second',
+      useSignedDefinitions: false,
+      flagDefaults: {'FeatureA': true},
+      config: const TogglyConfig(
+        enableTelemetry: false,
+        enableLiveUpdates: false,
+        baseURI: 'https://example.test',
+      ),
+    );
+    completeFirstRequest.complete();
+    await firstInit;
+
+    expect(Toggly.featureFlagsSnapshot['FeatureA'], isFalse);
+    expect(await Toggly.cachedFeatureFlags, {'FeatureA': false});
+  });
+
+  test(
+      'init without an app key starts from defaults before lazily reading cache',
+      () async {
+    final provider = _MemoryCacheProvider();
+    provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-1',
+      flags: '{"FeatureA":true}',
+      timestamp: null,
+      signature: null,
+      keyId: null,
+    );
+
+    final result = await Toggly.init(
+      identity: 'user-1',
+      useSignedDefinitions: false,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        enableTelemetry: false,
+        enableLiveUpdates: false,
+        cacheProvider: provider,
+      ),
+    );
+
+    expect(result.status, TogglyLoadFeatureFlagsResponse.defaults);
+    expect(Toggly.featureFlagsSnapshot['FeatureA'], isFalse);
+    expect(await Toggly.cachedFeatureFlags, {'FeatureA': true});
   });
 
   test('clears cache when persisted signature verification fails', () async {

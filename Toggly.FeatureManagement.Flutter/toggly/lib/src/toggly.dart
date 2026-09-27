@@ -14,6 +14,25 @@ import 'package:rxdart/rxdart.dart';
 import 'entity_gate.dart' as entity_gate;
 import 'services/telemetry_reporter.dart';
 
+enum _CachedFlagsVerification {
+  verified,
+  unavailable,
+  rejected,
+  stale,
+}
+
+class _CachedFeatureFlags {
+  _CachedFeatureFlags({
+    required this.cache,
+    required this.definitions,
+    required this.flags,
+  });
+
+  final TogglyFeatureFlagsCache cache;
+  final Map<String, dynamic> definitions;
+  final Map<String, bool> flags;
+}
+
 /// Static class providing feature flags support.
 ///
 /// Allows enabling and disabling of features easily. Can be used with or without Toggly.io.
@@ -541,130 +560,130 @@ class Toggly with WidgetsBindingObserver {
   static Future<Map<String, bool>> get cachedFeatureFlags async {
     final generation = _generation;
     try {
-      // Return in-memory flags if available.
-      if (_inMemoryFlags != null) {
-        return _inMemoryFlags!;
+      final inMemoryFlags = _inMemoryFlags;
+      if (inMemoryFlags != null) return inMemoryFlags;
+
+      final cached = await _readCachedFeatureFlags(generation);
+      if (cached == null) return _defaultFlags();
+
+      final verification = await _verifyCachedFeatureFlags(cached, generation);
+      if (generation != _generation ||
+          verification == _CachedFlagsVerification.rejected ||
+          verification == _CachedFlagsVerification.stale) {
+        return _defaultFlags();
       }
 
-      // No persistence backend — fall back to defaults.
-      final cache = await Toggly._cache?.readFlags(Toggly._contextCacheKey);
-      if (generation != _generation) {
-        return Map<String, bool>.from(_flagDefaults);
-      }
-
-      if (cache == null) {
-        // If no cache exists, return defaults
-        return Map<String, bool>.from(Toggly._flagDefaults);
-      }
-
-      final TogglyFeatureFlagsCache flagsCache = cache;
-
-      if (flagsCache.identity != Toggly._contextCacheKey) {
-        _reportError(
-          'Cached feature flags identity mismatch',
-          Exception('Cached identity does not match current identity'),
-          StackTrace.current,
-        );
-        if (generation != _generation) {
-          return Map<String, bool>.from(_flagDefaults);
-        }
-        await clearFeatureFlagsCache();
-        if (generation != _generation) {
-          return Map<String, bool>.from(_flagDefaults);
-        }
-        return Map<String, bool>.from(Toggly._flagDefaults);
-      }
-
-      final raw = jsonDecode(flagsCache.flags);
-      if (raw is! Map) throw const FormatException('Invalid cached flags body');
-      final parsed = entity_gate.parseEvaluatedDefinitions(raw);
-      final parsedFlags = entity_gate.toBooleanDefinitions(parsed);
-
-      var verifiedForConditionalFetch = true;
-      // Check if the cache is signed and if the timestamp and signature are present
-      if (Toggly._useSignedDefinitions) {
-        if (flagsCache.timestamp == null ||
-            flagsCache.signature == null ||
-            flagsCache.keyId == null) {
-          _reportError(
-            'Cached feature flags missing signature metadata',
-            Exception(
-                'Timestamp, signature and keyId are required for signed definitions'),
-            StackTrace.current,
-          );
-          if (generation != _generation) {
-            return Map<String, bool>.from(_flagDefaults);
-          }
-          await clearFeatureFlagsCache();
-          if (generation != _generation) {
-            return Map<String, bool>.from(_flagDefaults);
-          }
-          return Map<String, bool>.from(Toggly._flagDefaults);
-        }
-
-        // Re-verify persisted flags before trusting them. Invalid signatures
-        // fail closed (clear cache). Transient JWKS/network failures keep
-        // last-known-good flags for offline restart.
-        try {
-          final isValid = await _verifySignature(
-              flagsCache.flags,
-              flagsCache.signature!,
-              flagsCache.timestamp!,
-              true,
-              flagsCache.keyId!);
-          if (generation != _generation) {
-            return Map<String, bool>.from(_flagDefaults);
-          }
-
-          if (!isValid) {
-            _reportError(
-              _signatureVerificationFailed,
-              Exception('Invalid signature'),
-              StackTrace.current,
-            );
-            if (generation != _generation) {
-              return Map<String, bool>.from(_flagDefaults);
-            }
-            await clearFeatureFlagsCache();
-            if (generation != _generation) {
-              return Map<String, bool>.from(_flagDefaults);
-            }
-            return Map<String, bool>.from(Toggly._flagDefaults);
-          }
-        } catch (_) {
-          verifiedForConditionalFetch = false;
-          // Cached definitions were previously accepted when written. If
-          // offline validation cannot be performed now because of transient
-          // JWK issues, keep the last-known-good cached flags.
-        }
-      }
-
-      if (generation != _generation) {
-        return Map<String, bool>.from(_flagDefaults);
-      }
-      _flagsRevision = verifiedForConditionalFetch
-          ? _matchingBodyRevision(flagsCache.revision, flagsCache.appKey,
-              flagsCache.environment, flagsCache.signed)
-          : null;
-      _inMemoryDefinitions = parsed;
-      _inMemoryFlags = parsedFlags;
-      _featureFlagsSubject?.add(Map<String, bool>.from(_inMemoryFlags!));
-      return _inMemoryFlags!;
+      return _publishCachedFeatureFlags(
+        cached,
+        verifiedForConditionalFetch:
+            verification == _CachedFlagsVerification.verified,
+      );
     } catch (e, stackTrace) {
-      if (generation != _generation) {
-        return Map<String, bool>.from(_flagDefaults);
-      }
+      if (generation != _generation) return _defaultFlags();
       _reportError('Error fetching cached feature flags', e, stackTrace);
-      if (generation != _generation) {
-        return Map<String, bool>.from(_flagDefaults);
-      }
-      await clearFeatureFlagsCache();
-      if (generation != _generation) {
-        return Map<String, bool>.from(_flagDefaults);
-      }
+      await _clearCachedFeatureFlagsIfCurrent(generation);
     }
 
-    return Map<String, bool>.from(Toggly._flagDefaults);
+    return _defaultFlags();
+  }
+
+  static Map<String, bool> _defaultFlags() =>
+      Map<String, bool>.from(Toggly._flagDefaults);
+
+  static Future<_CachedFeatureFlags?> _readCachedFeatureFlags(
+      int generation) async {
+    final cache = await Toggly._cache?.readFlags(Toggly._contextCacheKey);
+    if (generation != _generation || cache == null) return null;
+
+    if (cache.identity != Toggly._contextCacheKey) {
+      _reportError(
+        'Cached feature flags identity mismatch',
+        Exception('Cached identity does not match current identity'),
+        StackTrace.current,
+      );
+      await _clearCachedFeatureFlagsIfCurrent(generation);
+      return null;
+    }
+
+    final raw = jsonDecode(cache.flags);
+    if (raw is! Map) throw const FormatException('Invalid cached flags body');
+    final definitions = entity_gate.parseEvaluatedDefinitions(raw);
+    return _CachedFeatureFlags(
+      cache: cache,
+      definitions: definitions,
+      flags: entity_gate.toBooleanDefinitions(definitions),
+    );
+  }
+
+  static Future<_CachedFlagsVerification> _verifyCachedFeatureFlags(
+    _CachedFeatureFlags cached,
+    int generation,
+  ) async {
+    if (!Toggly._useSignedDefinitions) {
+      return _CachedFlagsVerification.verified;
+    }
+
+    final cache = cached.cache;
+    if (cache.timestamp == null ||
+        cache.signature == null ||
+        cache.keyId == null) {
+      _reportError(
+        'Cached feature flags missing signature metadata',
+        Exception(
+            'Timestamp, signature and keyId are required for signed definitions'),
+        StackTrace.current,
+      );
+      await _clearCachedFeatureFlagsIfCurrent(generation);
+      return _CachedFlagsVerification.rejected;
+    }
+
+    try {
+      final isValid = await _verifySignature(
+        cache.flags,
+        cache.signature!,
+        cache.timestamp!,
+        true,
+        cache.keyId!,
+      );
+      if (generation != _generation) return _CachedFlagsVerification.stale;
+      if (isValid) return _CachedFlagsVerification.verified;
+
+      _reportError(
+        _signatureVerificationFailed,
+        Exception('Invalid signature'),
+        StackTrace.current,
+      );
+      await _clearCachedFeatureFlagsIfCurrent(generation);
+      return _CachedFlagsVerification.rejected;
+    } catch (_) {
+      // Cached definitions were previously accepted when written. If offline
+      // validation cannot run due to transient JWK issues, keep the
+      // last-known-good cache but do not use its revision conditionally.
+      return _CachedFlagsVerification.unavailable;
+    }
+  }
+
+  static Future<void> _clearCachedFeatureFlagsIfCurrent(int generation) async {
+    if (generation == _generation) await clearFeatureFlagsCache();
+  }
+
+  static Map<String, bool> _publishCachedFeatureFlags(
+    _CachedFeatureFlags cached, {
+    required bool verifiedForConditionalFetch,
+  }) {
+    final cache = cached.cache;
+    _flagsRevision = verifiedForConditionalFetch
+        ? _matchingBodyRevision(
+            cache.revision,
+            cache.appKey,
+            cache.environment,
+            cache.signed,
+          )
+        : null;
+    _inMemoryDefinitions = cached.definitions;
+    _inMemoryFlags = cached.flags;
+    _featureFlagsSubject?.add(Map<String, bool>.from(cached.flags));
+    return cached.flags;
   }
 
   /// Stores the provided [featureFlags] into cache.
