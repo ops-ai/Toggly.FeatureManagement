@@ -106,17 +106,24 @@ export function createBrowserTelemetry(config: TogglyConfig) {
       context = {identity: next.identity, instanceId: next.instanceId};
       reporter?.setContext(context);
     },
-    captureCheck(): (key: string, result: boolean) => void {
+    captureCheck(): (key: string, result: boolean | string) => void {
       if (disposed || !usage) return () => {};
+      const toVariant = (result: boolean | string) =>
+        typeof result === 'string' ? result : result ? 'enabled' : 'disabled';
       if (active) {
         const record = getReporter().captureCheck();
-        return (key, result) => record(key, result ? 'enabled' : 'disabled');
+        return (key, result) => record(key, toVariant(result));
       }
       const attribution = context;
       const capturedPartition = partition;
-      return (key, result) => feature(key, result ? 'enabled' : 'disabled', 0, attribution, capturedPartition);
+      return (key, result) => feature(key, toVariant(result), 0, attribution, capturedPartition);
     },
-    recordCheck: (key: string, result: boolean) => feature(key, result ? 'enabled' : 'disabled', 0),
+    recordCheck: (key: string, result: boolean | string) =>
+      feature(
+        key,
+        typeof result === 'string' ? result : result ? 'enabled' : 'disabled',
+        0,
+      ),
     activate() {
       if (disposed || active) return;
       active = true;

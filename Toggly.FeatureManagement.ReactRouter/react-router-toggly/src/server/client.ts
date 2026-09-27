@@ -216,12 +216,13 @@ export class TogglyServerClient {
     featureKey: string,
     enabled: boolean,
     identityOverride?: IdentityContext,
+    variant?: string,
   ): void {
     if (!this.telemetry?.usageEnabled) {
       return;
     }
     const identity = identityOverride?.identity ?? this.identity;
-    this.telemetry.recordCheck(featureKey, enabled, identity);
+    this.telemetry.recordCheck(featureKey, enabled, identity, variant);
   }
 
   /** Soft-fail wrapper — definition refresh must not throw from telemetry. */
@@ -766,7 +767,12 @@ export class TogglyServerClient {
       this.localGates,
       this.localGateIndex,
     );
-    this.recordCheckForKey(featureKey, enabled);
+    this.recordCheckForKey(
+      featureKey,
+      enabled,
+      undefined,
+      enabled && entry?.variant ? entry.variant : 'disabled',
+    );
     if (!enabled || !entry?.variant) return null;
     return { name: entry.variant, configurationValue: entry.configurationValue };
   }

@@ -454,7 +454,7 @@ function TogglyProviderOwner({
         localGateIndexRef.current,
       );
       const record = telemetry.captureCheck();
-      record(featureKey, enabled);
+      record(featureKey, enabled && entry?.variant ? entry.variant : 'disabled');
       if (!enabled || !entry?.variant) return null;
       return { name: entry.variant, configurationValue: entry.configurationValue };
     },
