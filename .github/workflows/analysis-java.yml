@@ -209,16 +209,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          mvn -B verify -Pcoverage sonar:sonar \
+          mvn -B verify -Pcoverage org.sonarsource.scanner.maven:sonar-maven-plugin:5.5.0.6356:sonar \
             -Dsonar.projectKey=toggly-sdks-java \
             -Dsonar.organization=ops-ai \
             -Dsonar.projectName="Toggly SDKs - Java" \
             -Dsonar.host.url=https://sonarcloud.io \
             -Dsonar.token="${SONAR_TOKEN}" \
+            -Dsonar.qualitygate.wait=true \
             -Dsonar.exclusions="**/target/**,**/test/**,**/host-fixtures/**" \
             -Dsonar.test.inclusions="**/test/**" \
-            --file pom.xml || true
-        continue-on-error: true
+            --file pom.xml
 
       - name: Download Dependency Check report (for SonarQube Server)
         uses: actions/download-artifact@v8
@@ -232,16 +232,16 @@ jobs:
           SONAR_SERVER_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          mvn -B verify -Pcoverage sonar:sonar \
+          mvn -B verify -Pcoverage org.sonarsource.scanner.maven:sonar-maven-plugin:5.5.0.6356:sonar \
             -Dsonar.projectKey=toggly-sdks-java \
             -Dsonar.projectName="Toggly SDKs - Java" \
             -Dsonar.host.url="${SONAR_HOST_URL}" \
             -Dsonar.token="${SONAR_SERVER_TOKEN}" \
+            -Dsonar.qualitygate.wait=true \
             -Dsonar.exclusions="**/target/**,**/test/**,**/host-fixtures/**" \
             -Dsonar.test.inclusions="**/test/**" \
             -Dsonar.dependencyCheck.reportPath="${GITHUB_WORKSPACE}/dependency-check-reports/dependency-check-report.xml" \
-            --file pom.xml || true
-        continue-on-error: true
+            --file pom.xml
 
   dependency-check:
     name: OWASP Dependency Check
