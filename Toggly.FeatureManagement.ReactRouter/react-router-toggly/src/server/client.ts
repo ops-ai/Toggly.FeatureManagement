@@ -500,38 +500,52 @@ export class TogglyServerClient {
    * Concurrent cold starts share one fetch; each caller still receives a
    * request-local snapshot for its identity.
    */
+  /**
+   * Initialize the client and optionally bind identity.
+   * Concurrent cold starts share one fetch; each caller still receives a
+   * request-local snapshot for its identity.
+   */
   async init(identity?: string): Promise<FeatureFlags> {
     if (this.config.enableVariants) {
-      // Variants are remote-evaluated; identity must be bound before fetch so
-      // `/evaluated-variants-signed` receives the correct `userId`.
-      const previousIdentity = this.identity;
-      const wasWarm = this.initialized && this.variants !== null;
-      const identityChanged = previousIdentity !== identity;
+      return this.initWithVariants(identity);
+    }
+    return this.initWithLocalDefinitions(identity);
+  }
 
-      this.identity = identity;
-      if (!wasWarm || identityChanged) {
-        // Do not join an in-flight fetch started under a different identity.
-        if (identityChanged && this.definitionsFetchInFlight) {
-          await this.definitionsFetchInFlight.catch(() => undefined);
-        }
-        await this.fetchFlags();
-        this.initialized = true;
-        if (!wasWarm) {
-          this.startWebSocket();
-          if (identity) {
-            await this.executeBeforeIdentify(identity);
-            await this.executeAfterIdentify(identity);
-          }
+  /**
+   * Variants are remote-evaluated; identity must be bound before fetch so
+   * `/evaluated-variants-signed` receives the correct `userId`.
+   */
+  private async initWithVariants(identity?: string): Promise<FeatureFlags> {
+    const previousIdentity = this.identity;
+    const wasWarm = this.initialized && this.variants !== null;
+    const identityChanged = previousIdentity !== identity;
+
+    this.identity = identity;
+    if (!wasWarm || identityChanged) {
+      // Do not join an in-flight fetch started under a different identity.
+      if (identityChanged && this.definitionsFetchInFlight) {
+        await this.definitionsFetchInFlight.catch(() => undefined);
+      }
+      await this.fetchFlags();
+      this.initialized = true;
+      if (!wasWarm) {
+        this.startWebSocket();
+        if (identity) {
+          await this.executeBeforeIdentify(identity);
+          await this.executeAfterIdentify(identity);
         }
       }
-
-      this.flags = this.snapshotFlags({ identity });
-      if (wasWarm && !identityChanged) {
-        this.logger.debug('Client already initialized; re-snapshotted for identity.');
-      }
-      return this.flags;
     }
 
+    this.flags = this.snapshotFlags({ identity });
+    if (wasWarm && !identityChanged) {
+      this.logger.debug('Client already initialized; re-snapshotted for identity.');
+    }
+    return this.flags;
+  }
+
+  private async initWithLocalDefinitions(identity?: string): Promise<FeatureFlags> {
     const wasWarm = this.initialized && this.definitions.size > 0;
 
     if (!wasWarm) {
