@@ -25,6 +25,25 @@ beforeEach(() => {
 afterEach(() => {clients.forEach(value => value.dispose()); vi.restoreAllMocks(); vi.unstubAllGlobals()})
 
 describe('response-mode bodies and validators', () => {
+  it.each([
+    ['strong', '"strong"', '"strong"'],
+    ['weak', 'W/"weak"', 'W/"weak"'],
+    ['repeated quote', '"""repeated"""', '"""repeated"""'],
+    ['long', '"validator-abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"', '"validator-abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"'],
+  ])('sends the exact %s HTTP validator on a subsequent conditional fetch', async (_kind, responseValidator, expectedHeader) => {
+    definitions.mockResolvedValueOnce(reply({On: true}, responseValidator))
+    const writer = client(false, {enableTelemetry: false})
+    await writer._loadFeatures()
+    writer.dispose()
+
+    definitions.mockImplementationOnce(async (_url, init) => {
+      expect(init?.headers?.['If-None-Match']).toBe(expectedHeader)
+      return new Response(null, {status: 304, headers: {etag: responseValidator}})
+    })
+    const reader = client(false, {enableTelemetry: false})
+    expect(await reader._loadFeatures(true, {strict: true})).toEqual({On: true})
+  })
+
   it.each([false, true])('does not recreate evicted %s variant validators when a live owner receives 304', async variants => {
     let time = 0; vi.spyOn(Date, 'now').mockImplementation(() => ++time)
     definitions.mockResolvedValueOnce(reply(variants ? variantBody : {On: true}, 'retired-cache'))

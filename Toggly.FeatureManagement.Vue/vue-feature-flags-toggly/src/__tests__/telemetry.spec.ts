@@ -306,7 +306,7 @@ describe('Vue frontend telemetry', () => {
     const a=service.setContext({identity:'alice'}); await flushPromises();
     const b=service.setContext({identity:'bob'}); await flushPromises();
     const c=service.setContext({identity:'alice'}); await flushPromises();
-    expect(pending.length).toBe(3);
+    expect(pending).toHaveLength(3);
     const response=(defs:any)=>({ok:true,status:200,text:async()=>JSON.stringify(defs)});
     pending[2]?.(response({Current:true})); await c;
     pending[0]?.(response({Stale:true})); pending[1]?.(response({Stale:true})); await Promise.all([a,b]);

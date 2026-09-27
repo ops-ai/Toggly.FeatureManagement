@@ -63,6 +63,10 @@ const VARIANTS_CACHE_PREFIX = 'toggly:variants:'
 const REVISION_CACHE_PREFIX = 'toggly:revision:'
 const CACHE_LRU_KEY = 'toggly:cache-lru'
 
+type FeatureLoadOptions = {
+  strict?: boolean
+}
+
 function getCacheKey(appKey: string, environment: string, contextKey = '', variants = false): string {
   const suffix = contextKey ? `:${contextKey}` : ''
   return `${variants ? VARIANT_FLAGS_CACHE_PREFIX : CACHE_PREFIX}${appKey}:${environment}${suffix}`
@@ -81,28 +85,52 @@ function isTrackedCacheKey(key: string): boolean {
   return key.startsWith(CACHE_PREFIX) || key.startsWith(VARIANT_FLAGS_CACHE_PREFIX) || key.startsWith(VARIANTS_CACHE_PREFIX)
 }
 
+function getCachePrefix(bodyKey: string): string {
+  if (bodyKey.startsWith(CACHE_PREFIX)) {
+    return CACHE_PREFIX
+  }
+  if (bodyKey.startsWith(VARIANT_FLAGS_CACHE_PREFIX)) {
+    return VARIANT_FLAGS_CACHE_PREFIX
+  }
+  return VARIANTS_CACHE_PREFIX
+}
+
+function getRevisionModes(cachePrefix: string): string[] {
+  if (cachePrefix === CACHE_PREFIX) {
+    return ['v3:evaluated', 'v2:evaluated', 'v2:variants']
+  }
+  if (cachePrefix === VARIANTS_CACHE_PREFIX) {
+    return ['v3:variants', 'v2:variants']
+  }
+  return ['v3:variants']
+}
+
+function isPairedRevisionKey(revisionKey: string, bodyKey: string, prefix: string, modes: string[]): boolean {
+  for (const mode of modes) {
+    const marker = `:${mode}:`
+    let position = revisionKey.indexOf(marker, REVISION_CACHE_PREFIX.length)
+    while (position !== -1) {
+      const route = revisionKey.slice(REVISION_CACHE_PREFIX.length, position)
+      const context = revisionKey.slice(position + marker.length)
+      // Match the entire key: app/environment and legacy identities can contain ':'.
+      if (`${prefix}${route}${context ? `:${context}` : ''}` === bodyKey) {
+        return true
+      }
+      position = revisionKey.indexOf(marker, position + 1)
+    }
+  }
+  return false
+}
+
 /** Evict validators with their required body, without adding slots to the body LRU. */
 function removePairedRevisions(bodyKey: string): void {
-  const prefix = bodyKey.startsWith(CACHE_PREFIX) ? CACHE_PREFIX
-    : bodyKey.startsWith(VARIANT_FLAGS_CACHE_PREFIX) ? VARIANT_FLAGS_CACHE_PREFIX : VARIANTS_CACHE_PREFIX
-  const modes = prefix === CACHE_PREFIX ? ['v3:evaluated', 'v2:evaluated', 'v2:variants']
-    : prefix === VARIANTS_CACHE_PREFIX ? ['v3:variants', 'v2:variants'] : ['v3:variants']
+  const prefix = getCachePrefix(bodyKey)
+  const modes = getRevisionModes(prefix)
   const keys = Array.from({length: localStorage.length}, (_, index) => localStorage.key(index))
   for (const key of keys) {
     if (!key?.startsWith(REVISION_CACHE_PREFIX)) continue
-    for (const mode of modes) {
-      const marker = `:${mode}:`
-      let position = key.indexOf(marker, REVISION_CACHE_PREFIX.length)
-      while (position !== -1) {
-        const route = key.slice(REVISION_CACHE_PREFIX.length, position)
-        const context = key.slice(position + marker.length)
-        // Match the entire key: app/environment and legacy identities can contain ':'.
-        if (`${prefix}${route}${context ? `:${context}` : ''}` === bodyKey) {
-          localStorage.removeItem(key)
-          break
-        }
-        position = key.indexOf(marker, position + 1)
-      }
+    if (isPairedRevisionKey(key, bodyKey, prefix, modes)) {
+      localStorage.removeItem(key)
     }
   }
 }
@@ -693,7 +721,7 @@ export class Toggly implements TogglyService {
 
   _loadFeatures = async (
     forceRefresh = false,
-    options?: { strict?: boolean },
+    options?: FeatureLoadOptions,
   ) => {
     const generation = this._generation
     if (this._disposed) return this._booleanFeatures()
@@ -764,7 +792,7 @@ export class Toggly implements TogglyService {
       )
       if (generation !== this._generation || this._disposed) return null
       if (loaded.notModified) {
-        if (loaded.revision) this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
+        if (loaded.revision) this._cacheDefinitionsRevision(loaded.revision)
         if (isInitialLoad) this.startWebSocket()
         return this._booleanFeatures()
       }
@@ -787,7 +815,7 @@ export class Toggly implements TogglyService {
       }
 
       // Persist a validator only after its mode-specific body has been written.
-      if (loaded.revision) this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
+      if (loaded.revision) this._cacheDefinitionsRevision(loaded.revision)
 
       // Trigger afterRefresh hooks
       if (this._features) {
