@@ -165,7 +165,7 @@ jobs:
           cache: 'maven'
 
       - name: Run tests with JaCoCo coverage
-        run: mvn -B verify -Pcoverage --file pom.xml
+        run: mvn -B verify --file pom.xml
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
@@ -176,13 +176,13 @@ jobs:
             ${{ env.SDK_ROOT }}/**/target/site/jacoco/jacoco.xml
             ${{ env.SDK_ROOT }}/**/target/jacoco.exec
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   sonar:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
     needs: [coverage, dependency-check]
-    if: ${{ always() && (github.event_name != 'workflow_call' || inputs.run_reporting) }}
+    if: ${{ always() && (github.event_name != 'workflow_call' || inputs.run_reporting) && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
 
     steps:
       - name: Checkout code
@@ -202,25 +202,26 @@ jobs:
         with:
           name: java-coverage
           path: coverage-artifacts/
-        continue-on-error: true
 
       - name: Build and run SonarCloud analysis
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          mvn -B verify -Pcoverage sonar:sonar \
+          test -n "${SONAR_TOKEN}" || { echo "SonarCloud token is required"; exit 1; }
+          mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:5.5.0.6356:sonar \
             -Dsonar.projectKey=toggly-sdks-java \
             -Dsonar.organization=ops-ai \
             -Dsonar.projectName="Toggly SDKs - Java" \
             -Dsonar.host.url=https://sonarcloud.io \
             -Dsonar.token="${SONAR_TOKEN}" \
+            -Dsonar.qualitygate.wait=true \
             -Dsonar.exclusions="**/target/**,**/test/**,**/host-fixtures/**" \
             -Dsonar.test.inclusions="**/test/**" \
-            --file pom.xml || true
-        continue-on-error: true
+            --file pom.xml
 
       - name: Download Dependency Check report (for SonarQube Server)
+        if: ${{ success() || failure() }}
         uses: actions/download-artifact@v8
         with:
           name: dependency-check-report-java
@@ -228,25 +229,27 @@ jobs:
         continue-on-error: true
 
       - name: Run SonarQube Server analysis
+        if: ${{ success() || failure() }}
         env:
           SONAR_SERVER_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
-          mvn -B verify -Pcoverage sonar:sonar \
+          test -n "${SONAR_SERVER_TOKEN}" && test -n "${SONAR_HOST_URL}" || { echo "SonarQube Server credentials are required"; exit 1; }
+          mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:5.5.0.6356:sonar \
             -Dsonar.projectKey=toggly-sdks-java \
             -Dsonar.projectName="Toggly SDKs - Java" \
             -Dsonar.host.url="${SONAR_HOST_URL}" \
             -Dsonar.token="${SONAR_SERVER_TOKEN}" \
+            -Dsonar.qualitygate.wait=true \
             -Dsonar.exclusions="**/target/**,**/test/**,**/host-fixtures/**" \
             -Dsonar.test.inclusions="**/test/**" \
             -Dsonar.dependencyCheck.reportPath="${GITHUB_WORKSPACE}/dependency-check-reports/dependency-check-report.xml" \
-            --file pom.xml || true
-        continue-on-error: true
+            --file pom.xml
 
   dependency-check:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_call' || inputs.run_reporting }}
+    if: ${{ (github.event_name != 'workflow_call' || inputs.run_reporting) && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
 
     steps:
       - name: Checkout code
@@ -309,7 +312,8 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: build,current-hosts,smoke-test,code-quality,coverage,dependency-check
+          required-jobs: build,current-hosts,smoke-test,code-quality,coverage,sonar,dependency-check
+          allow-skipped: ${{ (github.event_name == 'workflow_call' && !inputs.run_reporting || github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork) && 'dependency-check,sonar' || 'none' }}
 
       - name: Generate summary
         run: |
