@@ -222,4 +222,42 @@ class RoomStorageTest {
         assertEquals("newValue", copy.value)
         assertEquals(100L, copy.updatedAt)
     }
+
+    @Test
+    fun `context constructor and factory share persistent database contents`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val name = "toggly-room-${System.nanoTime()}.db"
+        try {
+            val first = RoomStorage(context, name)
+            first.set("persisted", "yes")
+
+            val second = createRoomStorage(context, name)
+            assertEquals("yes", second.get("persisted"))
+            assertEquals(1, second.size())
+        } finally {
+            TogglyDatabase.clearInstance()
+            context.deleteDatabase(name)
+        }
+    }
+
+    @Test
+    fun `clearing singleton permits a new database with independent contents`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val firstName = "toggly-room-first-${System.nanoTime()}.db"
+        val secondName = "toggly-room-second-${System.nanoTime()}.db"
+        try {
+            val first = TogglyDatabase.getInstance(context, firstName)
+            RoomStorage(first).set("first-only", "value")
+            assertSame(first, TogglyDatabase.getInstance(context, firstName))
+
+            TogglyDatabase.clearInstance()
+            val second = TogglyDatabase.getInstance(context, secondName)
+            assertNotSame(first, second)
+            assertNull(RoomStorage(second).get("first-only"))
+        } finally {
+            TogglyDatabase.clearInstance()
+            context.deleteDatabase(firstName)
+            context.deleteDatabase(secondName)
+        }
+    }
 }

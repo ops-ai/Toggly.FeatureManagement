@@ -6,6 +6,8 @@ import io.toggly.core.models.TogglyStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+private const val DEFAULT_DATABASE_NAME = "toggly.db"
+
 /**
  * Room entity for key-value storage.
  */
@@ -65,7 +67,7 @@ abstract class TogglyDatabase : RoomDatabase() {
          */
         fun getInstance(
             context: Context,
-            name: String = "toggly.db"
+            name: String = DEFAULT_DATABASE_NAME
         ): TogglyDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -110,7 +112,7 @@ class RoomStorage(
      */
     constructor(
         context: Context,
-        databaseName: String = "toggly.db"
+        databaseName: String = DEFAULT_DATABASE_NAME
     ) : this(TogglyDatabase.getInstance(context, databaseName))
 
     override suspend fun get(key: String): String? = withContext(Dispatchers.IO) {
@@ -153,7 +155,7 @@ class RoomStorage(
  */
 fun createRoomStorage(
     context: Context,
-    databaseName: String = "toggly.db"
+    databaseName: String = DEFAULT_DATABASE_NAME
 ): RoomStorage {
     return RoomStorage(context, databaseName)
 }
