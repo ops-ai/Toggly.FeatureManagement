@@ -82,6 +82,20 @@ describe('extractRawJsonProperty', () => {
       '{"data":{"defs":{"innocent":true}},"defs":{"Evil":true},"signature":"x","timestamp":1,"kid":"k"}'
     expect(extractRawJsonProperty(body, 'defs')).toBe('{"Evil":true}')
   })
+
+  it('does not treat a nested defs property as signed definitions', () => {
+    const body =
+      '{"data":{"defs":{"unsigned":true}},"signature":"x","timestamp":1,"kid":"k"}'
+
+    expect(extractRawJsonProperty(body, 'defs')).toBeNull()
+  })
+
+  it('extracts top-level defs after nested strings contain escaped structural characters', () => {
+    const body =
+      '{"metadata":{"message":"brace } bracket ] and escaped quote \\" stay nested"},"defs":[{"featureKey":"safe"}],"signature":"x","timestamp":1,"kid":"k"}'
+
+    expect(extractRawJsonProperty(body, 'defs')).toBe('[{"featureKey":"safe"}]')
+  })
 })
 
 describe('verifySignedDefinitions', () => {

@@ -82,55 +82,52 @@ export interface JwkSet {
 export function extractRawJsonProperty(text: string, key: string): string | null {
   let index = 0
   let depth = 0
-  let inString = false
-  let escape = false
 
   while (index < text.length) {
     const character = text[index]!
-    if (inString) {
-      if (escape) {
-        escape = false
-      } else if (character === '\\') {
-        escape = true
-      } else if (character === '"') {
-        inString = false
+    if (character === '"') {
+      const property = depth === 1 ? readTopLevelProperty(text, index) : null
+      if (property) {
+        if (property.name === key) {
+          return extractJsonValue(text, property.valueStart)
+        }
+        index = property.nextIndex
+        continue
       }
-      index += 1
-      continue
-    }
 
-    if (character === '"' && depth === 1) {
-      const property = readTopLevelProperty(text, index)
-      if (!property) {
+      const nextStringIndex = skipJsonString(text, index)
+      if (nextStringIndex == null) {
         return null
       }
-      if (property.name === key) {
-        return extractJsonValue(text, property.valueStart)
-      }
-      index = property.nextIndex
+      index = nextStringIndex
       continue
     }
 
-    if (character === '"') {
-      inString = true
-      index += 1
-      continue
-    }
-
-    if (character === '{' || character === '[') {
-      depth += 1
-    } else if (character === '}' || character === ']') {
-      depth -= 1
-    }
+    depth = updateContainerDepth(depth, character)
     index += 1
   }
 
   return null
 }
 
+function skipJsonString(text: string, startQuote: number): number | null {
+  const end = findStringEnd(text, startQuote)
+  return end == null ? null : end + 1
+}
+
+function updateContainerDepth(depth: number, character: string): number {
+  if (character === '{' || character === '[') {
+    return depth + 1
+  }
+  if (character === '}' || character === ']') {
+    return depth - 1
+  }
+  return depth
+}
+
 function skipWhitespace(text: string, start: number): number {
   let index = start
-  while (index < text.length && /\s/.test(text[index]!)) {
+  while (index < text.length && /\s/.test(text[index])) {
     index += 1
   }
   return index
@@ -201,7 +198,7 @@ function extractContainerValue(text: string, start: number): string | null {
   let inString = false
   let escape = false
   for (let index = start; index < text.length; index++) {
-    const character = text[index]!
+    const character = text[index]
     if (inString) {
       if (escape) {
         escape = false
