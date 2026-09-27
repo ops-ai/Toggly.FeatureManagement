@@ -107,8 +107,9 @@ class SpringMvcIntegrationTest {
         FeatureArgumentResolver resolver = new FeatureArgumentResolver(client);
         assertEquals(false, resolver.resolveArgument(parameter("boxed"), null, null, null));
         assertNull(resolver.resolveArgument(parameter("plain"), null, null, null));
+        MethodParameter invalidParameter = parameter("wrongType");
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
-                () -> resolver.resolveArgument(parameter("wrongType"), null, null, null));
+                () -> resolver.resolveArgument(invalidParameter, null, null, null));
         assertTrue(error.getMessage().contains("java.lang.String"));
     }
 
@@ -143,27 +144,49 @@ class SpringMvcIntegrationTest {
         return new MethodParameter(ControllerParameters.class.getMethod(name, type), 0);
     }
 
+    private static AssertionError unexpectedControllerCall() {
+        return new AssertionError("Controller metadata fixture must not execute");
+    }
+
     private record GateResult(boolean allowed, int status) {}
 
-    static class PlainController { public void plain() {} }
+    static class PlainController {
+        public void plain() {
+            throw unexpectedControllerCall();
+        }
+    }
 
     static class MethodController {
         @FeatureGate(value = {"preview", "beta"}, matchAll = false, negate = true, status = 403)
-        public void preview() {}
+        public void preview() {
+            throw unexpectedControllerCall();
+        }
     }
 
     @FeatureGate("general")
     static class ClassController {
-        public void plain() {}
+        public void plain() {
+            throw unexpectedControllerCall();
+        }
 
         @FeatureGate(value = {"preview", "beta"}, matchAll = false, negate = true, status = 403)
-        public void preview() {}
+        public void preview() {
+            throw unexpectedControllerCall();
+        }
     }
 
     static class ControllerParameters {
-        public void enabled(@FeatureArgumentResolver.FeatureFlag("preview") boolean enabled) {}
-        public void boxed(@FeatureArgumentResolver.FeatureFlag("preview") Boolean enabled) {}
-        public void wrongType(@FeatureArgumentResolver.FeatureFlag("preview") String value) {}
-        public void plain(boolean enabled) {}
+        public void enabled(@FeatureArgumentResolver.FeatureFlag("preview") boolean enabled) {
+            throw unexpectedControllerCall();
+        }
+        public void boxed(@FeatureArgumentResolver.FeatureFlag("preview") Boolean enabled) {
+            throw unexpectedControllerCall();
+        }
+        public void wrongType(@FeatureArgumentResolver.FeatureFlag("preview") String value) {
+            throw unexpectedControllerCall();
+        }
+        public void plain(boolean enabled) {
+            throw unexpectedControllerCall();
+        }
     }
 }
