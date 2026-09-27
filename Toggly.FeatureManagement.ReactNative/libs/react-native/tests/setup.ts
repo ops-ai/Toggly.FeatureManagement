@@ -29,8 +29,8 @@ Object.defineProperty(global, 'crypto', {
       digest: jest.fn().mockImplementation(async (_algorithm: string, data: ArrayBuffer) => {
         const view = new Uint8Array(data);
         let hash = 0;
-        for (let i = 0; i < view.length; i++) {
-          hash = ((hash << 5) - hash + view[i]) | 0;
+        for (const byte of view) {
+          hash = Math.trunc((hash << 5) - hash + byte);
         }
         const result = new Uint8Array(32);
         for (let i = 0; i < 32; i++) {
@@ -54,7 +54,7 @@ if (typeof TextEncoder === 'undefined') {
     encode(input: string): Uint8Array {
       const bytes: number[] = [];
       for (let i = 0; i < input.length; i++) {
-        bytes.push(input.charCodeAt(i) & 0xff);
+        bytes.push((input.codePointAt(i) ?? 0) & 0xff);
       }
       return new Uint8Array(bytes);
     }
