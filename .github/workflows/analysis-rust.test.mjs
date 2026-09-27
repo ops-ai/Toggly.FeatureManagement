@@ -10,6 +10,7 @@ import { test } from 'node:test';
 
 const rustWorkflow = readFileSync(new URL('./analysis-rust.yml', import.meta.url), 'utf8');
 const javaWorkflow = readFileSync(new URL('./analysis-java.yml', import.meta.url), 'utf8');
+const iosWorkflow = readFileSync(new URL('./analysis-ios.yml', import.meta.url), 'utf8');
 
 /**
  * Extract the raw YAML block for a named step, starting at its
@@ -47,4 +48,26 @@ test('rust Analysis Summary requires the security (cargo-audit) job', () => {
 test('java Run tests step does not swallow failures with continue-on-error', () => {
   const block = stepBlock(javaWorkflow, 'Run tests');
   assert.doesNotMatch(block, /continue-on-error/);
+});
+
+test('iOS SonarCloud and Server scans wait for distinct quality gates', () => {
+    const cloud = stepBlock(iosWorkflow, 'SonarCloud Scan');
+    const server = stepBlock(iosWorkflow, 'SonarQube Server Scan');
+
+    assert.match(cloud, /SONAR_HOST_URL: https:\/\/sonarcloud\.io/);
+    assert.match(cloud, /-Dsonar\.organization=ops-ai/);
+    assert.match(cloud, /-Dsonar\.qualitygate\.wait=true/);
+    assert.doesNotMatch(cloud, /continue-on-error/);
+
+    assert.match(server, /SONAR_HOST_URL: \$\{\{ secrets\.SONAR_HOST_URL \}\}/);
+    assert.doesNotMatch(server, /-Dsonar\.organization=ops-ai/);
+    assert.match(server, /-Dsonar\.qualitygate\.wait=true/);
+    assert.doesNotMatch(server, /continue-on-error/);
+});
+
+test('iOS Analysis Summary requires the Sonar job', () => {
+    const summary = iosWorkflow.slice(iosWorkflow.indexOf('\n  summary:'));
+    const requiredJobs = summary.match(/required-jobs: ([^\n]+)/)?.[1];
+    assert.ok(requiredJobs, 'analysis summary must verify required jobs');
+    assert.match(requiredJobs, /\bsonar\b/);
 });

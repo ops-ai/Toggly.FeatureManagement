@@ -713,11 +713,24 @@ public actor TogglyService {
                 [config.baseURI, config.appKey ?? "", config.environment],
                 ["instanceIdHash", tokenHash]
             ]
-            return String(data: try! JSONEncoder().encode(parts), encoding: .utf8)!
+            return serializedContextIdentity(parts)
         }
         let parts = [[config.baseURI, config.appKey ?? "", config.environment, identity ?? ""],
                      groups, claims.flatMap { [$0.name, $0.value ?? ""] }]
-        return String(data: try! JSONEncoder().encode(parts), encoding: .utf8)!
+        return serializedContextIdentity(parts)
+    }
+
+    /// JSON keeps cache identities stable and distinguishes otherwise ambiguous context fields.
+    private func serializedContextIdentity(_ parts: [[String]]) -> String {
+        do {
+            return String(decoding: try JSONEncoder().encode(parts), as: UTF8.self)
+        } catch {
+            // Arrays of strings are always encodable today, but keep an unambiguous fallback
+            // so a future encoder failure cannot make unrelated contexts share a cache entry.
+            return "encoding-failure:" + parts.map { fields in
+                fields.map { "\($0.utf8.count):\($0)" }.joined(separator: ",")
+            }.joined(separator: ";")
+        }
     }
 
     private var contextHash: String {

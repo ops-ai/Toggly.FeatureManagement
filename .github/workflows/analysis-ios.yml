@@ -260,7 +260,7 @@ jobs:
             -Dsonar.exclusions=**/.build/**,**/Package.resolved
             -Dsonar.coverageReportPaths=sonar-reports/coverage-generic.xml
             -Dsonar.swift.swiftlint.report=sonar-reports/swiftlint-report.txt
-        continue-on-error: true
+            -Dsonar.qualitygate.wait=true
 
       - name: SonarQube Server Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.1
@@ -280,7 +280,7 @@ jobs:
             -Dsonar.coverageReportPaths=sonar-reports/coverage-generic.xml
             -Dsonar.swift.swiftlint.report=sonar-reports/swiftlint-report.txt
             -Dsonar.dependencyCheck.reportPath=sonar-reports/dependency-check-report.xml
-        continue-on-error: true
+            -Dsonar.qualitygate.wait=true
 
   build-platforms:
     runs-on: macos-15
@@ -322,4 +322,4 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: build-and-test,lint,smoke-test,dependency-check,build-platforms
+          required-jobs: build-and-test,lint,smoke-test,dependency-check,sonar,build-platforms

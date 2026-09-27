@@ -145,6 +145,48 @@ final class InitialEvaluationContextTests: XCTestCase {
         }
     }
 
+    func testKnownV3CacheKeysKeepUserAndMintedContextsSeparate() async throws {
+        let storage = MemoryStorage()
+        let userContext = #"[["https:\/\/context.invalid","app-key","Production","alice"],[],[]]"#
+        let mintedContext = #"[["https:\/\/context.invalid","app-key","Production"],["instanceIdHash","29f6a98b280cbb73247e044a3e261a77ab9caa2fbe14e17b6dd699e2827badf9"]]"#
+        let userKey = TogglyStorageKeys.featureFlagsCache
+            + "v3:evaluated:32127d6ce6cde72ee7991bf03fd108a0d056f19af4d39a014c2d300c9b5e0917"
+        let mintedKey = TogglyStorageKeys.featureFlagsCache
+            + "v3:evaluated:035b09c5cb2022993a92333df1b5f9c360c2a37610a99b348c0d8a92baf06ef4"
+        XCTAssertNotEqual(userKey, mintedKey)
+
+        let userCache = TogglyFeatureFlagsCache(
+            identity: "alice", flags: #"{"userOnly":true,"mintedOnly":false}"#,
+            evaluationContext: userContext
+        )
+        let mintedCache = TogglyFeatureFlagsCache(
+            identity: "ignored-for-minted-context", flags: #"{"userOnly":false,"mintedOnly":true}"#,
+            evaluationContext: mintedContext
+        )
+        await storage.set(userKey, value: try encodedCache(userCache))
+        await storage.set(mintedKey, value: try encodedCache(mintedCache))
+
+        let user = TogglyService(config: TogglyConfig(
+            appKey: "app-key", baseURI: "https://context.invalid", identity: "alice",
+            featureDefaults: [:], refreshInterval: 0, storage: storage,
+            enableLiveUpdates: false, enableTelemetry: false
+        ))
+        await user.setNetworkState(.disconnected)
+        let userResponse = await user.initialize()
+        XCTAssertEqual(userResponse.flags, ["userOnly": true, "mintedOnly": false])
+        await user.dispose()
+
+        let minted = TogglyService(config: TogglyConfig(
+            appKey: "app-key", baseURI: "https://context.invalid", identity: "alice",
+            featureDefaults: [:], refreshInterval: 0, storage: storage,
+            enableLiveUpdates: false, enableTelemetry: false, instanceId: "minted-token"
+        ))
+        await minted.setNetworkState(.disconnected)
+        let mintedResponse = await minted.initialize()
+        XCTAssertEqual(mintedResponse.flags, ["userOnly": false, "mintedOnly": true])
+        await minted.dispose()
+    }
+
     func testLateInvalidCacheCleanupCannotDeleteNewerATokenCacheAfterABA() async throws {
         let tokenHash = SHA256.hash(data: Data("a".utf8)).map { String(format: "%02x", $0) }.joined()
         let context = String(data: try JSONEncoder().encode([["https://initial-context.invalid", "app", "Production"], ["instanceIdHash", tokenHash]]), encoding: .utf8)!
@@ -173,6 +215,11 @@ final class InitialEvaluationContextTests: XCTestCase {
         let flags = await service.currentFeatures
         XCTAssertEqual(flags?["targeted"], true)
         await service.dispose()
+    }
+
+    private func encodedCache(_ cache: TogglyFeatureFlagsCache) throws -> String {
+        let data = try JSONEncoder().encode(cache)
+        return try XCTUnwrap(String(data: data, encoding: .utf8))
     }
 
     func testDisposeDuringDeviceIdentityResolutionCannotRestartLifecycle() async {
