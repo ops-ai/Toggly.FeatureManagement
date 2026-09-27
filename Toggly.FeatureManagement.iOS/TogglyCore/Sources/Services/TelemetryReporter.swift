@@ -15,9 +15,16 @@ public actor TelemetryReporter {
         init(instanceId: String? = nil, identity: String? = nil) {
             let token = instanceId?.trimmingCharacters(in: .whitespacesAndNewlines)
             let user = identity?.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let token, !token.isEmpty { field = "i"; value = token }
-            else if let user, !user.isEmpty { field = "u"; value = user }
-            else { field = nil; value = nil }
+            if let token, !token.isEmpty {
+                field = "i"
+                value = token
+            } else if let user, !user.isEmpty {
+                field = "u"
+                value = user
+            } else {
+                field = nil
+                value = nil
+            }
         }
     }
 
@@ -72,7 +79,9 @@ public actor TelemetryReporter {
     private(set) var packetizationPeakBytes = 0
     private(set) var packetizationCount = 0
     private var disposed = false
-    private var isEnabled: Bool { enabled && !appKey.isEmpty && endpoint != nil && (30_000...60_000).contains(interval) }
+    private var isEnabled: Bool {
+        enabled && !appKey.isEmpty && endpoint != nil && (30_000...60_000).contains(interval)
+    }
 
     /// Creates an owner-scoped reporter. Invalid keys, URLs, or intervals disable it.
     public init(
@@ -314,7 +323,10 @@ public actor TelemetryReporter {
     }
 
     private func recordFeature(_ key: String, variant: String, index: Int) {
-        guard !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { diagnose("telemetry_invalid_name"); return }
+        guard !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            diagnose("telemetry_invalid_name")
+            return
+        }
         let bytes = variant.utf8
         guard !bytes.isEmpty, bytes.count <= 64,
               bytes.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) ||
@@ -329,16 +341,29 @@ public actor TelemetryReporter {
         case 1: guard updated.used < Int64.max else { return }; updated.used += 1
         default: guard updated.viewed < Int64.max else { return }; updated.viewed += 1
         }
-        guard singleFeatureFits(key, variant: variant, delta: updated) else { diagnose("telemetry_oversized_entry"); return }
+        guard singleFeatureFits(key, variant: variant, delta: updated) else {
+            diagnose("telemetry_oversized_entry")
+            return
+        }
         accept({ features[key, default: [:]][variant] = updated }, undo: {
-            if let old { features[key, default: [:]][variant] = old }
-            else { features[key]?.removeValue(forKey: variant); if features[key]?.isEmpty == true { features.removeValue(forKey: key) } }
+            if let old {
+                features[key, default: [:]][variant] = old
+            } else {
+                features[key]?.removeValue(forKey: variant)
+                if features[key]?.isEmpty == true { features.removeValue(forKey: key) }
+            }
         })
     }
 
-    public func recordCheck(_ featureKey: String, variant: String) { recordFeature(featureKey, variant: variant, index: 0) }
-    public func recordUsage(_ featureKey: String, variant: String = "enabled") { recordFeature(featureKey, variant: variant, index: 1) }
-    public func recordView(_ featureKey: String, variant: String = "enabled") { recordFeature(featureKey, variant: variant, index: 2) }
+    public func recordCheck(_ featureKey: String, variant: String) {
+        recordFeature(featureKey, variant: variant, index: 0)
+    }
+    public func recordUsage(_ featureKey: String, variant: String = "enabled") {
+        recordFeature(featureKey, variant: variant, index: 1)
+    }
+    public func recordView(_ featureKey: String, variant: String = "enabled") {
+        recordFeature(featureKey, variant: variant, index: 2)
+    }
 
     public func incrementCounter(_ metricKey: String, value: Double = 1) {
         guard !metricKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -400,6 +425,51 @@ public actor TelemetryReporter {
         var metrics: [String: Double] = [:]
         var metricKinds: [String: Bool] = [:]
         var entries = 0
+
+        func collides(with item: Item) -> Bool {
+            switch item {
+            case .feature(let key, let variant, _):
+                return features[key]?[variant] != nil || (features[key]?.count ?? 0) >= 16
+            case .metric(let key, _, _):
+                return metrics[key] != nil
+            }
+        }
+
+        mutating func insert(_ item: Item) {
+            switch item {
+            case .feature(let key, let variant, let delta):
+                features[key, default: [:]][variant] = delta
+            case .metric(let key, let value, let counter):
+                metrics[key] = value
+                metricKinds[key] = counter
+            }
+            entries += 1
+        }
+
+        mutating func remove(_ item: Item) {
+            switch item {
+            case .feature(let key, let variant, _):
+                features[key]?.removeValue(forKey: variant)
+                if features[key]?.isEmpty == true { features.removeValue(forKey: key) }
+            case .metric(let key, _, _):
+                metrics.removeValue(forKey: key)
+                metricKinds.removeValue(forKey: key)
+            }
+            entries -= 1
+        }
+    }
+
+    private struct PacketizationState {
+        var packet = Packet()
+        var entries = 0
+        var bytes = 0
+        var packets = 0
+    }
+
+    private struct PacketizationResult {
+        let entries: Int
+        let bytes: Int
+        let valid: Bool
     }
 
     private var headerByteCount: Int {
@@ -500,7 +570,11 @@ public actor TelemetryReporter {
             while let variant = nextKey(features[key] ?? [:], after: previousVariant) {
                 guard var delta = features[key]?[variant] else { return false }
                 while delta.checks > 0 || delta.used > 0 || delta.viewed > 0 {
-                    let piece = Delta(checks: min(delta.checks, 1_000_000), used: min(delta.used, 1_000_000), viewed: min(delta.viewed, 1_000_000))
+                    let piece = Delta(
+                        checks: min(delta.checks, 1_000_000),
+                        used: min(delta.used, 1_000_000),
+                        viewed: min(delta.viewed, 1_000_000)
+                    )
                     guard visit(.feature(key, variant, piece)) else { return false }
                     delta.checks -= piece.checks; delta.used -= piece.used; delta.viewed -= piece.viewed
                 }
@@ -531,71 +605,77 @@ public actor TelemetryReporter {
             for (variant, delta) in variants {
                 guard var original = features[key]?[variant] else { continue }
                 original.checks -= delta.checks; original.used -= delta.used; original.viewed -= delta.viewed
-                if max(original.checks, original.used, original.viewed) == 0 { features[key]?.removeValue(forKey: variant) }
-                else { features[key]?[variant] = original }
+                if max(original.checks, original.used, original.viewed) == 0 {
+                    features[key]?.removeValue(forKey: variant)
+                } else {
+                    features[key]?[variant] = original
+                }
             }
             if features[key]?.isEmpty == true { features.removeValue(forKey: key) }
         }
         for (key, value) in packet.metrics {
-            if case .counter(let original)? = metrics[key], original > Int64(value) { metrics[key] = .counter(original - Int64(value)) }
-            else { metrics.removeValue(forKey: key) }
+            if case .counter(let original)? = metrics[key], original > Int64(value) {
+                metrics[key] = .counter(original - Int64(value))
+            } else {
+                metrics.removeValue(forKey: key)
+            }
         }
+    }
+
+    private func finishPacket(
+        _ state: inout PacketizationState,
+        consume shouldConsume: Bool,
+        createdAt: TimeInterval
+    ) {
+        guard state.packet.entries > 0 else { return }
+        let bytes = packetBytes(state.packet)
+        state.entries += state.packet.entries
+        state.bytes += bytes + state.packet.metricKinds.keys.reduce(0) { $0 + $1.utf8.count + 1 }
+        if shouldConsume {
+            let data = encodePacket(state.packet, bytes: bytes)
+            consume(state.packet)
+            queued.append(
+                Batch(
+                    data: data,
+                    entries: state.packet.entries,
+                    createdAt: createdAt,
+                    metricKinds: state.packet.metricKinds
+                )
+            )
+        }
+        state.packets += 1
+        state.packet = Packet()
     }
 
     /// Exact admission/inspection is a size-only walk. Transfer encodes one envelope
     /// at a time, removes its source values, and immediately gives the queue ownership.
     @discardableResult
-    private func packetize(consume shouldConsume: Bool, maxPackets: Int = .max) -> (entries: Int, bytes: Int, valid: Bool) {
-        var packet = Packet()
-        var totalEntries = 0
-        var totalBytes = 0
-        var packets = 0
+    private func packetize(
+        consume shouldConsume: Bool,
+        maxPackets: Int = .max
+    ) -> PacketizationResult {
+        var state = PacketizationState()
         let createdAt = pendingCreatedAt ?? clock()
-        func finish() {
-            guard packet.entries > 0 else { return }
-            let bytes = packetBytes(packet)
-            totalEntries += packet.entries
-            totalBytes += bytes + packet.metricKinds.keys.reduce(0) { $0 + $1.utf8.count + 1 }
-            if shouldConsume {
-                let data = encodePacket(packet, bytes: bytes)
-                consume(packet)
-                queued.append(Batch(data: data, entries: packet.entries, createdAt: createdAt, metricKinds: packet.metricKinds))
-            }
-            packets += 1
-            packet = Packet()
-        }
         let valid = visitPendingItems { item in
-            let collision: Bool
-            switch item {
-            case .feature(let key, let variant, _): collision = packet.features[key]?[variant] != nil || (packet.features[key]?.count ?? 0) >= 16
-            case .metric(let key, _, _): collision = packet.metrics[key] != nil
+            if state.packet.collides(with: item) {
+                finishPacket(&state, consume: shouldConsume, createdAt: createdAt)
             }
-            if collision { finish() }
-            guard packets < maxPackets else { return false }
-            func insert() {
-                switch item {
-                case .feature(let key, let variant, let delta): packet.features[key, default: [:]][variant] = delta
-                case .metric(let key, let value, let counter): packet.metrics[key] = value; packet.metricKinds[key] = counter
-                }
-                packet.entries += 1
+            guard state.packets < maxPackets else { return false }
+            state.packet.insert(item)
+            if packetBytes(state.packet) > 49_152 || state.packet.entries > 2_000 {
+                state.packet.remove(item)
+                finishPacket(&state, consume: shouldConsume, createdAt: createdAt)
+                guard state.packets < maxPackets else { return false }
+                state.packet.insert(item)
             }
-            insert()
-            if packetBytes(packet) > 49_152 || packet.entries > 2_000 {
-                switch item {
-                case .feature(let key, let variant, _):
-                    packet.features[key]?.removeValue(forKey: variant)
-                    if packet.features[key]?.isEmpty == true { packet.features.removeValue(forKey: key) }
-                case .metric(let key, _, _): packet.metrics.removeValue(forKey: key); packet.metricKinds.removeValue(forKey: key)
-                }
-                packet.entries -= 1
-                finish()
-                guard packets < maxPackets else { return false }
-                insert()
-            }
-            return packetBytes(packet) <= 49_152 && totalEntries + packet.entries <= 2_000
+            return packetBytes(state.packet) <= 49_152 && state.entries + state.packet.entries <= 2_000
         }
-        if valid { finish() }
-        return (totalEntries, totalBytes, valid || packets == maxPackets)
+        if valid { finishPacket(&state, consume: shouldConsume, createdAt: createdAt) }
+        return PacketizationResult(
+            entries: state.entries,
+            bytes: state.bytes,
+            valid: valid || state.packets == maxPackets
+        )
     }
 
     /// Sends queued deltas in request order; failures never affect flag evaluation.

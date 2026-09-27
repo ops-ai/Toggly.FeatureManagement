@@ -127,7 +127,8 @@ class TestNativeGrpcPath:
         }
         msg = feature_stat_from_payload(payload)
         raw = msg.SerializeToString()
-        assert isinstance(raw, bytes) and len(raw) > 0
+        assert isinstance(raw, bytes)
+        assert len(raw) > 0
         assert msg.appKey == "app"
         assert msg.stats[0].feature == "FeatureA"
         assert msg.stats[0].variantStats["enabled"].checkCount == 2
@@ -147,7 +148,8 @@ class TestNativeGrpcPath:
         assert msg.definitionCacheHits == 3
         assert msg.definitionCacheMisses == 1
         raw = msg.SerializeToString()
-        assert isinstance(raw, bytes) and len(raw) > 0
+        assert isinstance(raw, bytes)
+        assert len(raw) > 0
 
     def test_metric_stat_native_protobuf_serialization(self) -> None:
         payload = {
@@ -172,7 +174,8 @@ class TestNativeGrpcPath:
         }
         msg = metric_stat_from_payload(payload)
         raw = msg.SerializeToString()
-        assert isinstance(raw, bytes) and len(raw) > 0
+        assert isinstance(raw, bytes)
+        assert len(raw) > 0
         assert msg.stats[0].metric == "revenue"
         assert msg.stats[0].variantValues["enabled"] == pytest.approx(9.5)
         assert msg.counters[0].metric == "clicks"
@@ -248,8 +251,9 @@ class TestNativeGrpcPath:
     def test_uppercase_ua_rejected_by_grpcio_regression(self) -> None:
         # grpcio may raise ValueError (client validate) or RpcError INTERNAL
         # "Invalid metadata" depending on version/platform.
+        invalid_metadata = (("UA", resolve_user_agent()),)
         with pytest.raises((ValueError, grpc.RpcError)) as exc_info:
-            _invoke_with_metadata((("UA", resolve_user_agent()),))
+            _invoke_with_metadata(invalid_metadata)
         err = str(exc_info.value).lower()
         assert "metadata" in err or "illegal header" in err or "invalid" in err
 

@@ -116,7 +116,7 @@ describe('Toggly WebSocket', () => {
       });
 
       expect(latestWs()).toBeDefined();
-      expect(latestWs().url).toBe('wss://definitions.toggly.io/my-app-key/ws?sdk=javascript&sdkVersion=1.10.0');
+      expect(latestWs().url).toBe('wss://definitions.toggly.io/my-app-key/ws?sdk=javascript&sdkVersion=1.10.1');
     });
 
     it('sets wsConnected to true on open', async () => {
@@ -264,7 +264,7 @@ describe('Toggly WebSocket', () => {
       jest.advanceTimersByTime(300);
       await Promise.resolve();
 
-      expect(mockFetch.mock.calls.length).toBe(before);
+      expect(mockFetch.mock.calls).toHaveLength(before);
     });
 
     it('triggers refresh on sync when no cached revision exists', async () => {
@@ -289,7 +289,7 @@ describe('Toggly WebSocket', () => {
       latestWs().triggerMessage(JSON.stringify({ type: 'ping' }));
       await Promise.resolve();
 
-      expect(mockFetch.mock.calls.length).toBe(before);
+      expect(mockFetch.mock.calls).toHaveLength(before);
     });
 
     it('ignores unrecognized JSON message without throwing', async () => {
@@ -350,7 +350,7 @@ describe('Toggly WebSocket', () => {
       jest.advanceTimersByTime(300);
       await Promise.resolve();
 
-      expect(mockFetch.mock.calls.length).toBe(before);
+      expect(mockFetch.mock.calls).toHaveLength(before);
     });
 
     it('cancels pending debounced refresh on stopWebSocket', async () => {
@@ -362,7 +362,7 @@ describe('Toggly WebSocket', () => {
       jest.advanceTimersByTime(300);
       await Promise.resolve();
 
-      expect(mockFetch.mock.calls.length).toBe(before);
+      expect(mockFetch.mock.calls).toHaveLength(before);
     });
 
     it('does not cache WS etag before HTTP confirms', async () => {
@@ -484,7 +484,7 @@ describe('Toggly WebSocket', () => {
 
       jest.advanceTimersByTime(5100); // timer fires, but should be cancelled
 
-      expect(instances.length).toBe(countAfterInit); // no new WebSocket created
+      expect(instances).toHaveLength(countAfterInit); // no new WebSocket created
     });
   });
 
@@ -506,7 +506,7 @@ describe('Toggly WebSocket', () => {
       // Advance past one interval — should be skipped because WS is connected
       jest.advanceTimersByTime(1500);
 
-      expect(mockFetch.mock.calls.length).toBe(countAfterOpen);
+      expect(mockFetch.mock.calls).toHaveLength(countAfterOpen);
     });
   });
 });

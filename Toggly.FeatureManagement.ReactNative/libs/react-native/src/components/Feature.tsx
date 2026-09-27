@@ -84,7 +84,7 @@ export function Feature({
   contextKind,
   children,
   loading = null,
-}: FeatureProps): React.ReactElement | null {
+}: Readonly<FeatureProps>): React.ReactElement | null {
   const { toggly, isReady } = useTogglyContext();
 
   const [shouldShow, setShouldShow] = useState<boolean | null>(null);

@@ -67,8 +67,8 @@ export interface MMKVStorageAdapterOptions {
  * ```
  */
 export class MMKVStorageAdapter implements TogglyStorage {
-  private mmkv: MMKV;
-  private keyPrefix: string;
+  private readonly mmkv: MMKV;
+  private readonly keyPrefix: string;
 
   constructor(options: MMKVStorageAdapterOptions = {}) {
     const {

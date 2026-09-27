@@ -854,9 +854,9 @@
       }
     },
     "node_modules/@ops-ai/react-native-toggly-core": {
-      "version": "1.10.0",
+      "version": "1.10.1",
       "resolved": "file:core.tgz",
-      "integrity": "sha512-pi/qYyfcEFx1Z+4HVTdNhpmKyd7YXDlok1tqxlkqGL7V1aYGcbjhoYkP/J9k/Z3KC2eGPWp87af4fkoYN1rzfg==",
+      "integrity": "sha512-qhUNjVWlIyKdeaXJ8mXwOKCTU88bFtHELiIp//va+WLwPRFL8wU+fwYRxsCJZXLAV58Vbxc2EXdshqRV8+qRHQ==",
       "license": "MIT",
       "dependencies": {
         "@ops-ai/toggly-client-telemetry": "^1.1.1",
@@ -879,7 +879,7 @@
     "node_modules/@ops-ai/react-native-toggly-storage-mmkv": {
       "version": "1.1.3",
       "resolved": "file:storage.tgz",
-      "integrity": "sha512-tjDXZfr9YfxsEeaEZzvswn1+OFX7dI3Hjf/t4O2UyiD+Fc67HOQVyyEsCRHkv3L3xUm/MPF+YnuS4FyLZuFYOw==",
+      "integrity": "sha512-3QJj9fnfLCOranpq7WAoYNG9mGzhciny0+rMX4iivKzOJwFFzYWEhvam0ed4NAYJY/kJyHp2yT/a1jAPrLWGXQ==",
       "license": "MIT",
       "dependencies": {
         "@ops-ai/react-native-toggly-core": "^1.7.1"

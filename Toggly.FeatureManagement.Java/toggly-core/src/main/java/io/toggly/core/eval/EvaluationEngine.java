@@ -63,19 +63,23 @@ public final class EvaluationEngine {
         String featureKey = definition.getFeatureKey();
 
         if (!entityFilters.isEmpty()) {
-            if (context == null || context.getEntity() == null) {
-                return false;
-            }
-            if (!ContextPropertyEvaluator.evaluateEntityFilters(definition, context.getEntity())) {
-                return false;
-            }
-            if (userFilters.isEmpty()) {
-                return true;
-            }
-            return evaluateFilterGroup(userFilters, definition.getRequirementType(), featureKey, context);
+            return evaluateEntityAndUserFilters(definition, userFilters, featureKey, context);
         }
 
         return evaluateFilterGroup(userFilters, definition.getRequirementType(), featureKey, context);
+    }
+
+    private boolean evaluateEntityAndUserFilters(
+            FeatureDefinition definition,
+            List<FeatureFilter> userFilters,
+            String featureKey,
+            EvaluationContext context) {
+        if (context == null || context.getEntity() == null
+                || !ContextPropertyEvaluator.evaluateEntityFilters(definition, context.getEntity())) {
+            return false;
+        }
+        return userFilters.isEmpty()
+                || evaluateFilterGroup(userFilters, definition.getRequirementType(), featureKey, context);
     }
 
     private boolean evaluateFilterGroup(

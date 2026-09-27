@@ -76,34 +76,16 @@ impl Engine {
         requirement: RequirementType,
         context: &EvalContext,
     ) -> crate::Result<bool> {
-        match requirement {
-            RequirementType::All => {
-                for filter in filters {
-                    let evaluator = match self.registry.get(&filter.name) {
-                        Some(e) => e,
-                        None => return Ok(false),
-                    };
-                    match evaluator.evaluate(feature_key, filter, context) {
-                        Ok(true) => continue,
-                        Ok(false) => return Ok(false),
-                        Err(_) => return Ok(false),
-                    }
-                }
-                Ok(true)
-            }
-            RequirementType::Any => {
-                for filter in filters {
-                    let evaluator = match self.registry.get(&filter.name) {
-                        Some(e) => e,
-                        None => continue,
-                    };
-                    if let Ok(true) = evaluator.evaluate(feature_key, filter, context) {
-                        return Ok(true);
-                    }
-                }
-                Ok(false)
+        let any = matches!(requirement, RequirementType::Any);
+        for filter in filters {
+            let enabled = self.registry.get(&filter.name).is_some_and(|evaluator| {
+                matches!(evaluator.evaluate(feature_key, filter, context), Ok(true))
+            });
+            if enabled == any {
+                return Ok(any);
             }
         }
+        Ok(!any)
     }
 }
 
@@ -198,7 +180,7 @@ fn compare_context(
         "gt" | "gte" | "lt" | "lte" => compare_ordered(actual, expected, value_type, op),
         "in" => expected
             .split(',')
-            .map(|s| s.trim())
+            .map(str::trim)
             .filter(|s| !s.is_empty())
             .any(|c| c.eq_ignore_ascii_case(&actual_s)),
         "contains" => {

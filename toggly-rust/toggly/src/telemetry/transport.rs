@@ -39,7 +39,9 @@ impl std::fmt::Debug for TelemetrySenders {
 
 #[cfg(feature = "telemetry")]
 mod native {
-    use super::*;
+    use super::{
+        FeatureStatPayload, MetricStatPayload, MetricsSender, TelemetrySenders, UsageSender,
+    };
     use crate::telemetry::hash::{grpc_target, resolve_user_agent};
     use crate::telemetry::pb::metrics::metrics_client::MetricsClient;
     use crate::telemetry::pb::metrics::{
@@ -47,6 +49,8 @@ mod native {
     };
     use crate::telemetry::pb::usage::usage_client::UsageClient;
     use crate::telemetry::pb::usage::{FeatureStat, StatMessage, VariantStats};
+    use async_trait::async_trait;
+    use std::sync::Arc;
     use tonic::metadata::MetadataValue;
     use tonic::transport::{Channel, ClientTlsConfig};
     use tonic::Request;

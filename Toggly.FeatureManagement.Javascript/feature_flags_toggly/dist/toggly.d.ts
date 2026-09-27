@@ -1,20 +1,20 @@
 import { FeatureRequirement, TogglyConfig, VariantResult, EvaluatedVariantDef } from './models';
-import type { Hook, TogglyEvaluationContext, EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
+import { type Hook, type TogglyEvaluationContext, type EvaluatedDefinitions, type TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 import { type LocalGate } from '@ops-ai/toggly-local-gates';
 export declare class Toggly {
     private static _config;
     private static _generation;
     private static _active;
     private static _instanceId;
-    private static _requests;
-    private static _contextMemory;
-    private static _contextMemoryOnly;
+    private static readonly _requests;
+    private static readonly _contextMemory;
+    private static readonly _contextMemoryOnly;
     private static _refreshInterval;
-    private static _hookExecutor;
+    private static readonly _hookExecutor;
     private static _localGates;
     private static _inMemoryJwks;
     private static _localGateIndex;
-    private static _localGatesChangedListeners;
+    private static readonly _localGatesChangedListeners;
     private static _inMemoryFlags;
     private static _inMemoryVariants;
     private static _hasLoadedFlags;
@@ -119,8 +119,11 @@ export declare class Toggly {
     /**
      * Get the configuration value of the assigned variant for a feature flag.
      * Returns null if no variant is assigned or no configuration value is set.
+     *
+     * Pass an optional type guard for runtime soft-null on shape mismatch.
+     * Without a guard, TypeScript generics are compile-time only.
      */
-    static getVariantValue(featureKey: string): unknown | null;
+    static getVariantValue<T = unknown>(featureKey: string, isT?: (v: unknown) => v is T): T | null;
     static fetchFeatureFlags(): Promise<{
         [key: string]: boolean;
     }>;
@@ -155,6 +158,7 @@ export declare class Toggly {
      * Subscribe to local gate changes. Returns an unsubscribe function.
      */
     static subscribeLocalGatesChanged(listener: () => void): () => void;
+    private static handleWebSocketMessage;
     static startWebSocket(): void;
     static stopWebSocket(): void;
     private static stopDefinitionResources;

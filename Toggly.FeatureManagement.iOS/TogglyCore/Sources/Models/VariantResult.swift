@@ -48,7 +48,11 @@ func parseEvaluatedVariantDefs(from data: Data) throws -> EvaluatedVariantDefs {
         }
         let enabled = (entry["enabled"] as? Bool) ?? false
         let variant = (entry["variant"] as? String).flatMap { $0.isEmpty ? nil : $0 }
-        result[key] = EvaluatedVariantDef(enabled: enabled, variant: variant, configurationValue: entry["configurationValue"])
+        result[key] = EvaluatedVariantDef(
+            enabled: enabled,
+            variant: variant,
+            configurationValue: entry["configurationValue"]
+        )
     }
     return result
 }

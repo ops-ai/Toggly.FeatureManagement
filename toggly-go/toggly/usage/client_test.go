@@ -106,3 +106,32 @@ func TestClient_Close_WaitsForInFlightAutoFlush(t *testing.T) {
 		t.Fatal("Close did not return after auto-flush released")
 	}
 }
+
+func TestDialNormalizesTargetAndRecordsUsage(t *testing.T) {
+	for _, tc := range []struct{ input, want string }{
+		{"https://metrics.example.com/", "metrics.example.com:443"},
+		{"https://localhost:8443/", "localhost:8443"},
+	} {
+		if got, err := grpcTarget(tc.input); err != nil || got != tc.want {
+			t.Fatalf("grpcTarget(%q) = %q, %v; want %q", tc.input, got, err, tc.want)
+		}
+	}
+	if _, err := grpcTarget("%invalid"); err == nil {
+		t.Fatal("grpcTarget accepted malformed URL")
+	}
+	client, err := Dial("https://localhost:8443/", "app", "Production", "instance", "1.0", "toggly-go/test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	client.RecordUsed("checkout", true, "user-1")
+	client.RecordView("checkout", "user-1")
+	if client.batcher == nil || client.api == nil {
+		t.Fatal("Dial did not initialize usage transport and batcher")
+	}
+	if got := client.batcher.perFeature["checkout"]; got == nil || got.usedCount != 1 || got.viewedCount != 1 {
+		t.Fatalf("recorded usage = %#v, want one use and one view", got)
+	}
+	// The transport is deliberately unreachable; discard queued test records.
+	client.batcher = nil
+}

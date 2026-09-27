@@ -20,6 +20,12 @@ import (
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 )
 
+const (
+	rawDefsSaveError     = "save: %v"
+	rawDefsSaveJWKSError = "save jwks: %v"
+	rawDefsClearError    = "clear: %v"
+)
+
 func TestMemoryProvider_RawDefsRoundTripAndVerify(t *testing.T) {
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -60,7 +66,7 @@ func TestMemoryProvider_RawDefsRoundTripAndVerify(t *testing.T) {
 		ETag:      `"rev-1"`,
 	}
 	if err := provider.SaveDefinitions(ctx, input); err != nil {
-		t.Fatalf("save: %v", err)
+		t.Fatalf(rawDefsSaveError, err)
 	}
 
 	loaded, err := provider.LoadDefinitions(ctx)
@@ -101,11 +107,11 @@ func TestMemoryProvider_Clear(t *testing.T) {
 		Set:    definitions.JWKSet{},
 		Expiry: time.Now().Add(time.Hour),
 	}); err != nil {
-		t.Fatalf("save jwks: %v", err)
+		t.Fatalf(rawDefsSaveJWKSError, err)
 	}
 
 	if err := provider.Clear(ctx); err != nil {
-		t.Fatalf("clear: %v", err)
+		t.Fatalf(rawDefsClearError, err)
 	}
 
 	defs, err := provider.LoadDefinitions(ctx)
@@ -139,7 +145,7 @@ func TestFileProvider_RawDefsAndClear(t *testing.T) {
 		ETag:      "e1",
 	}
 	if err := provider.SaveDefinitions(ctx, input); err != nil {
-		t.Fatalf("save: %v", err)
+		t.Fatalf(rawDefsSaveError, err)
 	}
 	loaded, err := provider.LoadDefinitions(ctx)
 	if err != nil || loaded == nil {
@@ -150,10 +156,10 @@ func TestFileProvider_RawDefsAndClear(t *testing.T) {
 	}
 
 	if err := provider.SaveJWKS(ctx, JWKSnap{Expiry: time.Now().Add(time.Hour)}); err != nil {
-		t.Fatalf("save jwks: %v", err)
+		t.Fatalf(rawDefsSaveJWKSError, err)
 	}
 	if err := provider.Clear(ctx); err != nil {
-		t.Fatalf("clear: %v", err)
+		t.Fatalf(rawDefsClearError, err)
 	}
 	loaded, err = provider.LoadDefinitions(ctx)
 	if err != nil {
@@ -181,7 +187,7 @@ func TestSQLiteProvider_RawDefsAndClear(t *testing.T) {
 		ETag:      "etag-sq",
 	}
 	if err := provider.SaveDefinitions(ctx, input); err != nil {
-		t.Fatalf("save: %v", err)
+		t.Fatalf(rawDefsSaveError, err)
 	}
 	loaded, err := provider.LoadDefinitions(ctx)
 	if err != nil || loaded == nil {
@@ -198,10 +204,10 @@ func TestSQLiteProvider_RawDefsAndClear(t *testing.T) {
 		Set:    definitions.JWKSet{Keys: []definitions.JWK{{Kid: "k"}}},
 		Expiry: time.Now().Add(time.Hour),
 	}); err != nil {
-		t.Fatalf("save jwks: %v", err)
+		t.Fatalf(rawDefsSaveJWKSError, err)
 	}
 	if err := provider.Clear(ctx); err != nil {
-		t.Fatalf("clear: %v", err)
+		t.Fatalf(rawDefsClearError, err)
 	}
 	loaded, err = provider.LoadDefinitions(ctx)
 	if err != nil {

@@ -2,6 +2,15 @@
 
 All notable changes to the Toggly iOS SDK are documented in this file.
 
+## 1.7.1
+
+2026-09-27
+
+### Fixed
+- Combine event and feature-change publishers now create one listener when
+  downstream requests more demand. Cancelling during setup also removes the
+  listener, so feature changes are not delivered more than once.
+
 ## 1.7.0
 
 2026-09-25

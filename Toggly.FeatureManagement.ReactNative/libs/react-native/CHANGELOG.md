@@ -1,3 +1,9 @@
+## 1.6.1 — 2026-09-27
+
+### Fixed
+- Preserve the message from service errors delivered as objects instead of showing `[object Object]` in provider state.
+- Keep provider context references stable when the owning service and visible state are unchanged, avoiding unnecessary consumer rerenders.
+
 ## 1.6.0 — 2026-09-24
 
 ### Added

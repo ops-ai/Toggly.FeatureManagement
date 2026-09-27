@@ -5,8 +5,8 @@ import type { TogglyEvent, TogglyEventListener, TogglyEventType } from '../model
  * Allows subscribing to various lifecycle events.
  */
 export class EventEmitter {
-  private listeners: Map<TogglyEventType, Set<TogglyEventListener>> = new Map();
-  private allListeners: Set<TogglyEventListener> = new Set();
+  private readonly listeners: Map<TogglyEventType, Set<TogglyEventListener>> = new Map();
+  private readonly allListeners: Set<TogglyEventListener> = new Set();
 
   /**
    * Subscribe to a specific event type

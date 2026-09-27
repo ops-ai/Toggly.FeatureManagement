@@ -5,18 +5,25 @@ import (
 	"time"
 )
 
+const (
+	builtinTestUser        = "user-123"
+	builtinTestFeature     = "demo-feature"
+	builtinAudienceRollout = "Audience.DefaultRolloutPercentage"
+	builtinErrorFormat     = "err: %v"
+)
+
 func TestTargetingEvaluator_UserAndGroup(t *testing.T) {
 	e := TargetingEvaluator{}
 
 	params := map[string]any{
-		"Audience.Users:0":                  "alice",
-		"Audience.Groups:0":                 "beta",
-		"Audience.DefaultRolloutPercentage": float64(0),
+		"Audience.Users:0":     "alice",
+		"Audience.Groups:0":    "beta",
+		builtinAudienceRollout: float64(0),
 	}
 
 	on, err := e.Evaluate("f", params, Context{Identity: "alice"})
 	if err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf(builtinErrorFormat, err)
 	}
 	if !on {
 		t.Fatalf("expected alice to be targeted")
@@ -24,7 +31,7 @@ func TestTargetingEvaluator_UserAndGroup(t *testing.T) {
 
 	on, err = e.Evaluate("f", params, Context{Identity: "bob", Groups: []string{"beta"}})
 	if err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf(builtinErrorFormat, err)
 	}
 	if !on {
 		t.Fatalf("expected beta group to be targeted")
@@ -34,14 +41,14 @@ func TestTargetingEvaluator_UserAndGroup(t *testing.T) {
 func TestTargetingEvaluator_ExclusionUserWins(t *testing.T) {
 	e := TargetingEvaluator{}
 	params := map[string]any{
-		"Audience.Users:0":                  "alice",
-		"Audience.Exclusion.Users:0":        "alice",
-		"Audience.DefaultRolloutPercentage": float64(100),
+		"Audience.Users:0":           "alice",
+		"Audience.Exclusion.Users:0": "alice",
+		builtinAudienceRollout:       float64(100),
 	}
 
 	on, err := e.Evaluate("f", params, Context{Identity: "alice"})
 	if err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf(builtinErrorFormat, err)
 	}
 	if on {
 		t.Fatalf("expected excluded alice to be off")
@@ -49,7 +56,7 @@ func TestTargetingEvaluator_ExclusionUserWins(t *testing.T) {
 
 	on, err = e.Evaluate("f", params, Context{Identity: "bob"})
 	if err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf(builtinErrorFormat, err)
 	}
 	if !on {
 		t.Fatalf("expected bob to pass default rollout")
@@ -59,13 +66,13 @@ func TestTargetingEvaluator_ExclusionUserWins(t *testing.T) {
 func TestTargetingEvaluator_ExclusionGroupWins(t *testing.T) {
 	e := TargetingEvaluator{}
 	params := map[string]any{
-		"Audience.Exclusion.Groups:0":       "banned",
-		"Audience.DefaultRolloutPercentage": float64(100),
+		"Audience.Exclusion.Groups:0": "banned",
+		builtinAudienceRollout:        float64(100),
 	}
 
 	on, err := e.Evaluate("f", params, Context{Identity: "u", Groups: []string{"banned"}})
 	if err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf(builtinErrorFormat, err)
 	}
 	if on {
 		t.Fatalf("expected banned group to be excluded")
@@ -75,13 +82,13 @@ func TestTargetingEvaluator_ExclusionGroupWins(t *testing.T) {
 func TestTargetingEvaluator_MicrosoftAliasAndColonKeys(t *testing.T) {
 	e := TargetingEvaluator{}
 	params := map[string]any{
-		"Audience:Users:0":                  "alice",
-		"Audience.DefaultRolloutPercentage": float64(0),
+		"Audience:Users:0":     "alice",
+		builtinAudienceRollout: float64(0),
 	}
 
 	on, err := e.Evaluate("f", params, Context{Identity: "alice"})
 	if err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf(builtinErrorFormat, err)
 	}
 	if !on {
 		t.Fatalf("expected colon-form inclusion for alice")
@@ -94,19 +101,19 @@ func TestTargetingEvaluator_MicrosoftAliasAndColonKeys(t *testing.T) {
 	}
 	on, err = ev.Evaluate("f", params, Context{Identity: "alice"})
 	if err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf(builtinErrorFormat, err)
 	}
 	if !on {
 		t.Fatalf("expected Microsoft.Targeting alias to evaluate")
 	}
 
 	excl := map[string]any{
-		"Audience:Exclusion:Users:0":        "alice",
-		"Audience.DefaultRolloutPercentage": float64(100),
+		"Audience:Exclusion:Users:0": "alice",
+		builtinAudienceRollout:       float64(100),
 	}
 	on, err = e.Evaluate("f", excl, Context{Identity: "alice"})
 	if err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf(builtinErrorFormat, err)
 	}
 	if on {
 		t.Fatalf("expected colon-form exclusion for alice")
@@ -120,21 +127,21 @@ func TestTargetingEvaluator_DefaultRolloutDeterministic(t *testing.T) {
 
 	bucket := ComputePercentile(identity, featureKey)
 	params := map[string]any{
-		"Audience.DefaultRolloutPercentage": bucket + 0.01,
+		builtinAudienceRollout: bucket + 0.01,
 	}
 
 	on, err := e.Evaluate(featureKey, params, Context{Identity: identity})
 	if err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf(builtinErrorFormat, err)
 	}
 	if !on {
 		t.Fatalf("expected enabled when pct just above bucket")
 	}
 
-	params["Audience.DefaultRolloutPercentage"] = bucket - 0.01
+	params[builtinAudienceRollout] = bucket - 0.01
 	off, err := e.Evaluate(featureKey, params, Context{Identity: identity})
 	if err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf(builtinErrorFormat, err)
 	}
 	if off {
 		t.Fatalf("expected disabled when pct just below bucket")
@@ -152,7 +159,7 @@ func TestTimeWindowEvaluator(t *testing.T) {
 
 	on, err := e.Evaluate("f", params, Context{})
 	if err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf(builtinErrorFormat, err)
 	}
 	if !on {
 		t.Fatalf("expected in-window to be enabled")
@@ -188,20 +195,20 @@ func TestTimeWindowEvaluator_OpenEnded(t *testing.T) {
 func TestPercentageEvaluator_StickyFeatureKey(t *testing.T) {
 	e := PercentageEvaluator{}
 	params := map[string]any{"Value": float64(50)}
-	ctx := Context{Identity: "user-123"}
+	ctx := Context{Identity: builtinTestUser}
 
 	// demo-feature bucket ~60.1 → false at 50
-	a, err := e.Evaluate("demo-feature", params, ctx)
+	a, err := e.Evaluate(builtinTestFeature, params, ctx)
 	if err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf(builtinErrorFormat, err)
 	}
 	if a {
 		t.Fatalf("expected demo-feature disabled at 50%%")
 	}
 
-	b, err := e.Evaluate("demo-feature", map[string]any{"Value": float64(61)}, ctx)
+	b, err := e.Evaluate(builtinTestFeature, map[string]any{"Value": float64(61)}, ctx)
 	if err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf(builtinErrorFormat, err)
 	}
 	if !b {
 		t.Fatalf("expected demo-feature enabled at 61%%")
@@ -210,10 +217,10 @@ func TestPercentageEvaluator_StickyFeatureKey(t *testing.T) {
 	// Feature key changes the bucket
 	c, err := e.Evaluate("other-flag", params, ctx)
 	if err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf(builtinErrorFormat, err)
 	}
 	_ = c
-	if ComputePercentile("user-123", "demo-feature") == ComputePercentile("user-123", "other-flag") {
+	if ComputePercentile(builtinTestUser, builtinTestFeature) == ComputePercentile(builtinTestUser, "other-flag") {
 		t.Fatalf("expected different buckets across features")
 	}
 }

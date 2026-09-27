@@ -138,11 +138,11 @@ internal object SignedDefsVerify {
         if (maxAge <= 0L) {
             return
         }
-        if (timestamp > nowSeconds + maxClockSkewSeconds) {
-            throw IllegalArgumentException("signature timestamp is in the future")
+        require(timestamp <= nowSeconds + maxClockSkewSeconds) {
+            "signature timestamp is in the future"
         }
-        if (nowSeconds - timestamp > maxAge) {
-            throw IllegalArgumentException("signature timestamp exceeded maxSignatureAgeSeconds")
+        require(nowSeconds - timestamp <= maxAge) {
+            "signature timestamp exceeded maxSignatureAgeSeconds"
         }
     }
 
@@ -162,9 +162,7 @@ internal object SignedDefsVerify {
         val verifier = Signature.getInstance("NONEwithECDSA")
         verifier.initVerify(key)
         verifier.update(digest)
-        if (!verifier.verify(derSignature)) {
-            throw IllegalArgumentException("Invalid signature")
-        }
+        require(verifier.verify(derSignature)) { "Invalid signature" }
     }
 
     internal fun fetchJwks(response: Response): String {

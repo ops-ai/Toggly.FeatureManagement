@@ -11,6 +11,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+const (
+	mongoLoadDefinitionsError = "failed to load definitions: %v"
+	mongoCountDocumentsError  = "failed to count documents: %v"
+	mongoLoadJWKSError        = "failed to load JWKS: %v"
+)
+
 func getMongoCollection(t *testing.T, collectionName string) *mongo.Collection {
 	t.Helper()
 	uri := os.Getenv("MONGO_TEST_URI")
@@ -96,7 +102,7 @@ func TestMongoDBProvider_SaveAndLoadDefinitions(t *testing.T) {
 	// Load
 	snap, err := provider.LoadDefinitions(ctx)
 	if err != nil {
-		t.Fatalf("failed to load definitions: %v", err)
+		t.Fatalf(mongoLoadDefinitionsError, err)
 	}
 
 	if snap == nil {
@@ -158,7 +164,7 @@ func TestMongoDBProvider_SaveDefinitions_Updates(t *testing.T) {
 	// Load and verify
 	snap, err := provider.LoadDefinitions(ctx)
 	if err != nil {
-		t.Fatalf("failed to load definitions: %v", err)
+		t.Fatalf(mongoLoadDefinitionsError, err)
 	}
 
 	if len(snap.Defs) != 1 {
@@ -174,7 +180,7 @@ func TestMongoDBProvider_SaveDefinitions_Updates(t *testing.T) {
 	// Verify only one document exists
 	count, err := collection.CountDocuments(ctx, map[string]interface{}{"_id": "toggly_definitions"})
 	if err != nil {
-		t.Fatalf("failed to count documents: %v", err)
+		t.Fatalf(mongoCountDocumentsError, err)
 	}
 	if count != 1 {
 		t.Errorf("expected 1 document, got %d", count)
@@ -236,7 +242,7 @@ func TestMongoDBProvider_SaveAndLoadJWKS(t *testing.T) {
 	// Load
 	snap, err := provider.LoadJWKS(ctx)
 	if err != nil {
-		t.Fatalf("failed to load JWKS: %v", err)
+		t.Fatalf(mongoLoadJWKSError, err)
 	}
 
 	if snap == nil {
@@ -289,7 +295,7 @@ func TestMongoDBProvider_SaveJWKS_Updates(t *testing.T) {
 	// Load and verify
 	snap, err := provider.LoadJWKS(ctx)
 	if err != nil {
-		t.Fatalf("failed to load JWKS: %v", err)
+		t.Fatalf(mongoLoadJWKSError, err)
 	}
 
 	if snap.Set.Keys[0].Kid != "key-2" {
@@ -321,7 +327,7 @@ func TestMongoDBProvider_CustomOptions(t *testing.T) {
 	// Verify document was saved with custom ID
 	count, err := collection.CountDocuments(ctx, map[string]interface{}{"_id": "custom_defs"})
 	if err != nil {
-		t.Fatalf("failed to count documents: %v", err)
+		t.Fatalf(mongoCountDocumentsError, err)
 	}
 	if count != 1 {
 		t.Errorf("expected 1 document with custom ID, got %d", count)
@@ -396,11 +402,11 @@ func TestMongoDBProvider_RoundTrip(t *testing.T) {
 
 	loadedDefs, err := provider.LoadDefinitions(ctx)
 	if err != nil {
-		t.Fatalf("failed to load definitions: %v", err)
+		t.Fatalf(mongoLoadDefinitionsError, err)
 	}
 	loadedJWKS, err := provider.LoadJWKS(ctx)
 	if err != nil {
-		t.Fatalf("failed to load JWKS: %v", err)
+		t.Fatalf(mongoLoadJWKSError, err)
 	}
 
 	if len(loadedDefs.Defs) != 2 {
@@ -413,7 +419,7 @@ func TestMongoDBProvider_RoundTrip(t *testing.T) {
 	// Verify both documents exist
 	count, err := collection.CountDocuments(ctx, map[string]interface{}{})
 	if err != nil {
-		t.Fatalf("failed to count documents: %v", err)
+		t.Fatalf(mongoCountDocumentsError, err)
 	}
 	if count != 2 {
 		t.Errorf("expected 2 documents, got %d", count)
@@ -439,7 +445,7 @@ func TestMongoDBProvider_EmptyDefinitions(t *testing.T) {
 
 	snap, err := provider.LoadDefinitions(ctx)
 	if err != nil {
-		t.Fatalf("failed to load definitions: %v", err)
+		t.Fatalf(mongoLoadDefinitionsError, err)
 	}
 	if snap == nil {
 		t.Fatal("expected non-nil snapshot")

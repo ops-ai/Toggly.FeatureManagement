@@ -6,7 +6,9 @@ public actor MemoryStorage: TogglyStorage {
     private var storage: [String: String] = [:]
 
     /// Creates a new in-memory storage instance.
-    public init() {}
+    public init() {
+        // The actor's dictionary is initialized in its property declaration.
+    }
 
     /// Retrieve a value from storage.
     public func get(_ key: String) async -> String? {

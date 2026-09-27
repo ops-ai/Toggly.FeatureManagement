@@ -118,7 +118,7 @@ public final class FeatureFilter {
     public double getDoubleParameter(String key, double defaultValue) {
         Object value = parameters.get(key);
         if (value == null) return defaultValue;
-        if (value instanceof Number) return ((Number) value).doubleValue();
+        if (value instanceof Number number) return number.doubleValue();
         try {
             return Double.parseDouble(value.toString());
         } catch (NumberFormatException e) {
@@ -136,7 +136,7 @@ public final class FeatureFilter {
     public int getIntParameter(String key, int defaultValue) {
         Object value = parameters.get(key);
         if (value == null) return defaultValue;
-        if (value instanceof Number) return ((Number) value).intValue();
+        if (value instanceof Number number) return number.intValue();
         try {
             return Integer.parseInt(value.toString());
         } catch (NumberFormatException e) {

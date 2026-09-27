@@ -88,11 +88,9 @@ class TestDefinitionCacheHelpers:
             is None
         )
 
+        unavailable = probe_http_cache(503, None, {})
         with pytest.raises(TogglyNetworkError, match="evaluated variants"):
-            resolve_conditional_get(
-                probe_http_cache(503, None, {}),
-                resource_label="evaluated variants",
-            )
+            resolve_conditional_get(unavailable, resource_label="evaluated variants")
 
     def test_cached_flags_and_hit_result(self) -> None:
         resp = cached_flags_response({"f": True})

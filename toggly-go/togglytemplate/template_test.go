@@ -52,3 +52,33 @@ func TestFuncMap_FeatureAnyAll(t *testing.T) {
 		t.Fatalf("expected %q, got %q", "any|", got)
 	}
 }
+
+func TestFuncMapEmptyAndCompleteGates(t *testing.T) {
+	funcs := FuncMap(fakeEval{on: map[string]bool{"A": true, "B": true}}, nil)
+	featureAny := funcs["featureAny"].(func(any, ...string) bool)
+	featureAll := funcs["featureAll"].(func(any, ...string) bool)
+	if featureAny(nil) || featureAll(nil) || !featureAny(nil, "A", "missing") || !featureAll(nil, "A", "B") || featureAll(nil, "A", "missing") {
+		t.Fatal("featureAny/featureAll returned the wrong result for empty, complete, or mixed sets")
+	}
+	if funcs := FuncMap(nil, nil); funcs["feature"].(func(any, string) bool)(nil, "A") {
+		t.Fatal("nil evaluator enabled a feature")
+	}
+}
+
+func TestContextFromDataHandlesValuesPointersAndProviders(t *testing.T) {
+	value := toggly.Context{Identity: "direct"}
+	for _, tc := range []struct {
+		data any
+		want string
+	}{
+		{value, "direct"},
+		{&value, "direct"},
+		{(*toggly.Context)(nil), ""},
+		{pageData{UserID: "provider"}, "provider"},
+		{struct{}{}, ""},
+	} {
+		if got := ContextFromData(tc.data).Identity; got != tc.want {
+			t.Errorf("ContextFromData(%T) = %q, want %q", tc.data, got, tc.want)
+		}
+	}
+}
