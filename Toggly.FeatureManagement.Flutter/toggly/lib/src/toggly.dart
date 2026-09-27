@@ -1215,6 +1215,10 @@ class Toggly with WidgetsBindingObserver {
       _variantsRevision = _matchingBodyRevision(
           vc.revision, vc.appKey, vc.environment, vc.signed);
       return defs;
+    } on _JwksUnavailableException {
+      // Match signed flag-cache policy: keep unverifiable variants so a later
+      // usable JWK can validate them instead of wiping offline assignments.
+      return {};
     } catch (e, stackTrace) {
       if (generation != _generation) return {};
       _reportError('Error loading cached variant definitions', e, stackTrace);

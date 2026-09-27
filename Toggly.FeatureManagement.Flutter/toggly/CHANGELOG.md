@@ -10,6 +10,8 @@
   callback fails during JWK retrieval, so they can be verified later.
 - Remove identity-mismatched flag caches before notifying an error callback.
 - Keep flag-loading recovery when a consumer `onError` callback throws.
+- Preserve signed variant caches when JWKs are temporarily unavailable,
+  matching signed feature-flag offline behavior.
 
 ## 1.13.0
 
