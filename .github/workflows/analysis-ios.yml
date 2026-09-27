@@ -63,13 +63,25 @@ jobs:
         working-directory: ${{ env.SDK_ROOT }}
         run: swift test -v
 
+      - name: Provision iOS simulator for coverage
+        if: matrix.xcode == '16.4'
+        run: |
+          runtime="$(xcrun simctl list runtimes -j | python3 -c 'import json, sys; print(next((r["identifier"] for r in json.load(sys.stdin)["runtimes"] if ".SimRuntime.iOS-" in r["identifier"] and r.get("isAvailable")), ""))')"
+          if [ -z "$runtime" ]; then
+            xcodebuild -downloadPlatform iOS
+            runtime="$(xcrun simctl list runtimes -j | python3 -c 'import json, sys; print(next((r["identifier"] for r in json.load(sys.stdin)["runtimes"] if ".SimRuntime.iOS-" in r["identifier"] and r.get("isAvailable")), ""))')"
+          fi
+          test -n "$runtime"
+          device="$(xcrun simctl create 'Toggly Coverage iPhone' 'iPhone 16' "$runtime")"
+          echo "IOS_COVERAGE_DEVICE_ID=$device" >> "$GITHUB_ENV"
+
       - name: Run iOS simulator tests with coverage
         if: matrix.xcode == '16.4'
         working-directory: ${{ env.SDK_ROOT }}
         run: |
           xcodebuild test \
             -scheme Toggly-Package \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' \
+            -destination "platform=iOS Simulator,id=$IOS_COVERAGE_DEVICE_ID" \
             -enableCodeCoverage YES \
             -derivedDataPath "$RUNNER_TEMP/ios-derived" \
             -resultBundlePath "$RUNNER_TEMP/ios-coverage.xcresult" \
