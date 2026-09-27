@@ -21,6 +21,10 @@ export interface BrowserSession {
   persistence: Map<string, ReturnType<typeof createPersistence>>;
 }
 
+function createBrowserSession(): BrowserSession {
+  return { timestamps: new Map(), keys: new Map(), persistence: new Map() };
+}
+
 /** Layout-owned lifecycle around the shared evaluated-signed transport; no rule evaluator here. */
 export function connectBrowser(
   snapshot: TogglySnapshot,
@@ -30,13 +34,14 @@ export function connectBrowser(
     verification?: Pick<TogglySnapshot, 'signedTimestamp' | 'signingKey'>,
     variants?: Record<string, EvaluatedVariantDef>,
   ) => void,
-  session: BrowserSession = { timestamps: new Map(), keys: new Map(), persistence: new Map() },
+  session?: BrowserSession,
 ): () => void {
   if (!options.appKey) return () => {};
+  const browserSession = session ?? createBrowserSession();
   const baseURI = options.baseURI ?? 'https://definitions.toggly.io';
   const appKey = options.appKey;
   const mode: 'evaluated' | 'variants' = options.enableVariants ? 'variants' : 'evaluated';
-  const { timestamps, keys: observedKeys } = session;
+  const { timestamps, keys: observedKeys } = browserSession;
   const url = buildBrowserDefinitionsUrl(
     baseURI,
     appKey,
@@ -47,10 +52,10 @@ export function connectBrowser(
   let jwks = new InMemoryJwksCache();
   const endpoint = baseURI.replace(/\/$/, '');
   // Retirement failure belongs to the layout, not a disposable route connection.
-  let persistence = session.persistence.get(endpoint);
+  let persistence = browserSession.persistence.get(endpoint);
   if (!persistence) {
     persistence = createPersistence(options.storage, baseURI);
-    session.persistence.set(endpoint, persistence);
+    browserSession.persistence.set(endpoint, persistence);
   }
   // Authoritative SSR/manual state must never be replaced by an older cache.
   let mayRestore = snapshot.source === 'defaults';
@@ -108,8 +113,9 @@ export function connectBrowser(
     if (!revision || unconditional)
       throw new Error('Unexpected 304 without a matching verified snapshot');
   };
+  const isCurrentRequest = (ownRequest: number) => !disposed && ownRequest === requestId;
   const refresh = async (unconditional = false, pin?: string): Promise<void> => {
-    if (disposed) return;
+    if (!isCurrentRequest(requestId)) return;
     active?.abort();
     if (activeTimeout) clearTimeout(activeTimeout);
     const controller = new AbortController();
@@ -120,7 +126,7 @@ export function connectBrowser(
     try {
       const restored = restoreCached(ownRequest);
       if (restored) await restored;
-      if (disposed || ownRequest !== requestId) return;
+      if (!isCurrentRequest(ownRequest)) return;
       const fetcher: typeof fetch = (input, init) =>
         fetch(input, { ...init, cache: 'no-store', signal: controller.signal });
       const capture = captureEvaluatedResponse(fetcher);
@@ -139,7 +145,7 @@ export function connectBrowser(
         },
         { revision: unconditional ? null : revision },
       );
-      if (disposed || ownRequest !== requestId) return;
+      if (!isCurrentRequest(ownRequest)) return;
       if (result.notModified) {
         validateUnchangedResponse(unconditional);
         return;
@@ -153,7 +159,7 @@ export function connectBrowser(
       if (!body) throw new Error('Missing signed envelope');
       const keys = await requestKeys.get({ ...options, baseURI, fetchImpl: fetcher });
       const verified = await verifyEnvelope(body, keys, options, timestamps.get(url) ?? 0, mode);
-      if (disposed || ownRequest !== requestId) return;
+      if (!isCurrentRequest(ownRequest)) return;
       timestamps.set(url, verified.timestamp);
       observedKeys.set(baseURI, structuredClone(keys));
       persistence.write(url, body, verified.keys);
@@ -168,7 +174,7 @@ export function connectBrowser(
         verified.variants,
       );
     } catch (cause) {
-      if (!disposed && ownRequest === requestId) report(cause);
+      if (isCurrentRequest(ownRequest)) report(cause);
     } finally {
       clearTimeout(timeout);
       if (active === controller) {

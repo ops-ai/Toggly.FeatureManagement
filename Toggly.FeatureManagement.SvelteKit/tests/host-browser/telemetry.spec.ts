@@ -117,14 +117,15 @@ test('packed browser telemetry preserves hydration, route queues, lifecycle and 
     encoding: null,
   });
   const retired = await state();
+  const completed = retired.completed;
   await request.post(definitions + '/control', {
     data: { release: true, delayUser: '', delayBrowserUser: '' },
   });
+  await expect.poll(async () => (await state()).completed).toBeGreaterThan(completed);
   await evaluate(page, () => {
     document.dispatchEvent(new Event('visibilitychange'));
     window.dispatchEvent(new PageTransitionEvent('pagehide'));
   });
-  await page.waitForTimeout(350);
   expect((await state()).telemetry).toHaveLength(before + 1);
   expect((await state()).connections).toBe(retired.connections);
   expect((await state()).requests).toHaveLength(retired.requests.length);

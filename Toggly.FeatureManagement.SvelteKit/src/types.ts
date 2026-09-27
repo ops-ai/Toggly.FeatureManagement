@@ -1,12 +1,17 @@
 import type { TelemetryDiagnostic } from '@ops-ai/toggly-client-telemetry';
 import type { Jwk } from '@ops-ai/toggly-signed-defs';
+export type {
+  EvaluatedDefinitions,
+  TogglyEntityContext,
+  TogglyEvaluationContext,
+} from '@ops-ai/toggly-hooks-types';
+export type { LocalGate } from '@ops-ai/toggly-local-gates';
 import type {
   EvaluatedDefinitions,
   TogglyEntityContext,
   TogglyEvaluationContext,
 } from '@ops-ai/toggly-hooks-types';
 import type { LocalGate } from '@ops-ai/toggly-local-gates';
-export type { EvaluatedDefinitions, TogglyEntityContext, TogglyEvaluationContext, LocalGate };
 
 /**
  * Raw evaluated entry from `/evaluated-variants-signed`.
