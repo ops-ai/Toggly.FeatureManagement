@@ -221,6 +221,12 @@ func TestMongoDBProvider_DriverV2Integration(t *testing.T) {
 	defer func() { _ = collection.Drop(context.Background()) }()
 
 	provider := NewMongoDBProvider(MongoDBOptions{Collection: collection})
+	definitionsInput, jwksInput := assertMongoDBSnapshotRoundTrip(t, ctx, provider)
+	assertMongoDBFailurePaths(t, ctx, collection, provider, definitionsInput, jwksInput)
+}
+
+func assertMongoDBSnapshotRoundTrip(t *testing.T, ctx context.Context, provider *MongoDBProvider) (snapshot.DefinitionsSnapshot, snapshot.JWKSnap) {
+	t.Helper()
 	definitionsInput := snapshot.DefinitionsSnapshot{
 		Defs:      []definitions.FeatureDefinitionModel{{FeatureKey: "checkout"}},
 		Signature: "signature",
@@ -263,7 +269,11 @@ func TestMongoDBProvider_DriverV2Integration(t *testing.T) {
 	if err != nil || jwksOutput != nil {
 		t.Fatalf("JWKS after clear = %#v, %v; want nil, nil", jwksOutput, err)
 	}
+	return definitionsInput, jwksInput
+}
 
+func assertMongoDBFailurePaths(t *testing.T, ctx context.Context, collection *mongo.Collection, provider *MongoDBProvider, definitionsInput snapshot.DefinitionsSnapshot, jwksInput snapshot.JWKSnap) {
+	t.Helper()
 	// A malformed persisted document must not be promoted into a snapshot.
 	if _, err := collection.InsertOne(ctx, mongoDocument{ID: "toggly_definitions", Data: "invalid-json"}); err != nil {
 		t.Fatalf("insert malformed definitions document: %v", err)
