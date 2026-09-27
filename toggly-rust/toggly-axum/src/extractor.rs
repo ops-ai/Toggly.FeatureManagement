@@ -199,4 +199,22 @@ mod tests {
         let response = rejection.into_response();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
+
+    #[test]
+    fn test_feature_rejection_server_errors_and_enabled_feature_key() {
+        let feature = FeatureEnabled {
+            feature_key: "beta".to_string(),
+        };
+        assert_eq!(feature.feature_key(), "beta");
+
+        for rejection in [
+            FeatureRejection::ClientNotFound,
+            FeatureRejection::EvaluationError,
+        ] {
+            assert_eq!(
+                rejection.into_response().status(),
+                StatusCode::INTERNAL_SERVER_ERROR
+            );
+        }
+    }
 }
