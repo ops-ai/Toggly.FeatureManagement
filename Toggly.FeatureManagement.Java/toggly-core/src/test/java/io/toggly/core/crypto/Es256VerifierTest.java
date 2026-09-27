@@ -3,7 +3,6 @@ package io.toggly.core.crypto;
 import io.toggly.core.exception.TogglySignatureException;
 import org.junit.jupiter.api.Test;
 
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -19,6 +18,7 @@ import java.util.Locale;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class Es256VerifierTest {
@@ -104,19 +104,59 @@ class Es256VerifierTest {
         assertThatCode(() -> Es256Verifier.verify(defs, ts, signature, kid, jwks, Set.of(kid)))
                 .doesNotThrowAnyException();
 
+        Set<String> disallowedKids = Set.of("nope");
         assertThatThrownBy(() -> Es256Verifier.verify(
-                defs, ts, signature, kid, jwks, Set.of("nope")))
+                defs, ts, signature, kid, jwks, disallowedKids))
                 .isInstanceOf(TogglySignatureException.class)
                 .hasMessageContaining("kid not allowed");
     }
 
     @Test
-    void verifyFailsWhenKidMissingFromJwks() throws Exception {
+    void verifyFailsWhenKidMissingFromJwks() {
         JsonWebKeySet jwks = new JsonWebKeySet(Collections.emptyList());
+        String signature = Base64.getEncoder().encodeToString(new byte[64]);
         assertThatThrownBy(() -> Es256Verifier.verify(
-                "[]", 1L, Base64.getEncoder().encodeToString(new byte[64]), "missing", jwks, null))
+                "[]", 1L, signature, "missing", jwks, null))
                 .isInstanceOf(TogglySignatureException.class)
                 .hasMessageContaining("No matching JWK");
+    }
+
+    @Test
+    void rejectsMissingEnvelopeFieldsAndUnsupportedKeyParameters() {
+        JsonWebKey invalid = new JsonWebKey("EC", "kid", "P-384", "x", "y", "ES384", "sig", null);
+        JsonWebKeySet jwks = new JsonWebKeySet(List.of(invalid));
+        String signature = Base64.getEncoder().encodeToString(new byte[64]);
+
+        assertThatThrownBy(() -> Es256Verifier.verify(null, 1L, signature, "kid", jwks, null))
+                .isInstanceOf(TogglySignatureException.class).hasMessageContaining("Missing signed defs");
+        assertThatThrownBy(() -> Es256Verifier.verify("[]", 1L, null, "kid", jwks, null))
+                .isInstanceOf(TogglySignatureException.class).hasMessageContaining("Missing signature");
+        assertThatThrownBy(() -> Es256Verifier.verify("[]", 1L, signature, "", jwks, null))
+                .isInstanceOf(TogglySignatureException.class).hasMessageContaining("Missing key id");
+        assertThatThrownBy(() -> Es256Verifier.verify("[]", 1L, signature, "kid", null, null))
+                .isInstanceOf(TogglySignatureException.class).hasMessageContaining("Missing JWKS");
+        assertThatThrownBy(() -> Es256Verifier.verify("[]", 1L, signature, "kid", jwks, null))
+                .isInstanceOf(TogglySignatureException.class).hasMessageContaining("Unsupported alg");
+
+        JsonWebKey wrongCurve = new JsonWebKey("EC", "kid", "P-384", "x", "y", "ES256", "sig", null);
+        JsonWebKeySet wrongCurveSet = new JsonWebKeySet(List.of(wrongCurve));
+        assertThatThrownBy(() -> Es256Verifier.verify("[]", 1L, signature, "kid", wrongCurveSet, null))
+                .isInstanceOf(TogglySignatureException.class).hasMessageContaining("Unsupported crv");
+    }
+
+    @Test
+    void p1363EncodingRejectsInvalidLengthAndPreservesPositiveIntegers() {
+        assertThatThrownBy(() -> Es256Verifier.p1363ToDer(new byte[63]))
+                .isInstanceOf(IllegalArgumentException.class);
+        byte[] raw = new byte[64];
+        raw[0] = (byte) 0x80;
+        raw[32] = 1;
+
+        byte[] der = Es256Verifier.p1363ToDer(raw);
+
+        assertThat(der[0]).isEqualTo((byte) 0x30);
+        assertThat(der[4]).isZero();
+        assertThat(der[5]).isEqualTo((byte) 0x80);
     }
 
     private static KeyPair generateP256KeyPair() throws Exception {
@@ -182,10 +222,6 @@ class Es256VerifierTest {
         byte[] out = new byte[32];
         System.arraycopy(unsigned, 0, out, 32 - unsigned.length, unsigned.length);
         return out;
-    }
-
-    private static byte[] pad32(BigInteger value) {
-        return pad32(value.toByteArray());
     }
 
     private static String computeKid(byte[] x, byte[] y) throws Exception {

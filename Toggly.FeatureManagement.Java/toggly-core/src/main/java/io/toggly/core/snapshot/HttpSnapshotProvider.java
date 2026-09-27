@@ -340,54 +340,9 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     private FetchResult fetchDefinitions() {
         HttpURLConnection connection = null;
         try {
-            URL url = new URL(definitionsUrl);
-            connection = (HttpURLConnection) url.openConnection();
-            connection.setRequestMethod("GET");
-            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
-            connection.setReadTimeout(READ_TIMEOUT_MS);
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("User-Agent", SdkIdentity.userAgent());
-
-            String previousEtag = lastEtag.get();
-            if (previousEtag != null) {
-                connection.setRequestProperty("If-None-Match", previousEtag);
-            }
-
-            int responseCode = connection.getResponseCode();
-
-            if (responseCode == HttpURLConnection.HTTP_NOT_MODIFIED) {
-                return FetchResult.hit(currentSnapshot.get(), false);
-            }
-
-            if (responseCode != HttpURLConnection.HTTP_OK) {
-                throw new TogglyNetworkException(
-                        "Failed to fetch definitions: HTTP " + responseCode,
-                        responseCode);
-            }
-
-            String newEtag = connection.getHeaderField("ETag");
-
-            // HTTP 200 whose revision/etag matches existing (CDN replay) — cache hit.
-            if (etagsMatch(previousEtag, newEtag)) {
-                if (newEtag != null) {
-                    lastEtag.set(newEtag);
-                }
-                return FetchResult.hit(currentSnapshot.get(), false);
-            }
-
-            if (newEtag != null) {
-                lastEtag.set(newEtag);
-            }
-
-            String responseBody = readResponse(connection.getInputStream());
-            FeatureSnapshot parsed = parseDefinitions(responseBody, newEtag);
-
-            // Older signed timestamp keeps last-known-good — treat as hit.
-            if (parsed == currentSnapshot.get()) {
-                return FetchResult.hit(parsed, false);
-            }
-
-            return FetchResult.miss(parsed);
+            connection = (HttpURLConnection) new URL(definitionsUrl).openConnection();
+            configureDefinitionsConnection(connection);
+            return readDefinitionsResponse(connection);
 
         } catch (TogglyNetworkException | TogglySignatureException e) {
             throw e;
@@ -398,6 +353,49 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
                 connection.disconnect();
             }
         }
+    }
+
+    private void configureDefinitionsConnection(HttpURLConnection connection) throws IOException {
+        connection.setRequestMethod("GET");
+        connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+        connection.setReadTimeout(READ_TIMEOUT_MS);
+        connection.setRequestProperty("Accept", "application/json");
+        connection.setRequestProperty("User-Agent", SdkIdentity.userAgent());
+        String previousEtag = lastEtag.get();
+        if (previousEtag != null) {
+            connection.setRequestProperty("If-None-Match", previousEtag);
+        }
+    }
+
+    private FetchResult readDefinitionsResponse(HttpURLConnection connection) throws IOException {
+        int responseCode = connection.getResponseCode();
+        if (responseCode == HttpURLConnection.HTTP_NOT_MODIFIED) {
+            return FetchResult.hit(currentSnapshot.get(), false);
+        }
+        if (responseCode != HttpURLConnection.HTTP_OK) {
+            throw new TogglyNetworkException(
+                    "Failed to fetch definitions: HTTP " + responseCode,
+                    responseCode);
+        }
+
+        String previousEtag = lastEtag.get();
+        String newEtag = connection.getHeaderField("ETag");
+        // HTTP 200 whose revision/etag matches existing (CDN replay) — cache hit.
+        if (etagsMatch(previousEtag, newEtag)) {
+            if (newEtag != null) {
+                lastEtag.set(newEtag);
+            }
+            return FetchResult.hit(currentSnapshot.get(), false);
+        }
+        if (newEtag != null) {
+            lastEtag.set(newEtag);
+        }
+
+        FeatureSnapshot parsed = parseDefinitions(readResponse(connection.getInputStream()), newEtag);
+        // Older signed timestamp keeps last-known-good — treat as hit.
+        return parsed == currentSnapshot.get()
+                ? FetchResult.hit(parsed, false)
+                : FetchResult.miss(parsed);
     }
 
     private static boolean etagsMatch(String left, String right) {
@@ -472,63 +470,67 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     private FeatureSnapshot parseDefinitions(String json, String etag) {
         Map<String, FeatureDefinition> features = new HashMap<>();
         Map<String, MetricDefinition> metrics = new HashMap<>();
-
-        String signedDefsJson = null;
-        String signature = null;
-        String kid = null;
-        Long signedTs = null;
-
+        SignedEnvelope signed = SignedEnvelope.empty();
         if (config.isUseSignedDefinitions()) {
-            signedDefsJson = extractRawJsonValue(json, "defs");
-            signature = extractStringValue(json, "signature");
-            kid = extractStringValue(json, "kid");
-            signedTs = extractLongValue(json, "timestamp");
-
-            if (signedDefsJson == null) {
-                throw new TogglySignatureException("Signed response missing defs");
-            }
-            if (signature == null || signature.isEmpty()) {
-                throw new TogglySignatureException("Signed response missing signature");
-            }
-            if (kid == null || kid.isEmpty()) {
-                throw new TogglySignatureException("Signed response missing kid");
-            }
-            if (signedTs == null) {
-                throw new TogglySignatureException("Signed response missing timestamp");
-            }
-            if (signedTs < lastSignedTimestamp.get() && lastSignedTimestamp.get() > 0) {
-                LOGGER.log(Level.FINE, "Ignoring older signed definitions timestamp");
+            signed = parseSignedFeatures(json, features);
+            if (signed == null) {
                 return currentSnapshot.get();
             }
-
-            JsonWebKeySet keySet = loadOrFetchJwks();
-            Es256Verifier.verify(
-                    signedDefsJson,
-                    signedTs,
-                    signature,
-                    kid,
-                    keySet,
-                    config.getAllowedKeyIds());
-
-            String arrayContent = signedDefsJson.trim();
-            if (arrayContent.startsWith("[") && arrayContent.endsWith("]")) {
-                arrayContent = arrayContent.substring(1, arrayContent.length() - 1);
-            }
-            parseFeatures(arrayContent, features);
         } else {
-            String featuresJson = null;
-            for (String key : new String[]{"defs", "feature_flags"}) {
-                featuresJson = extractArrayByKey(json, key);
-                if (featuresJson != null) break;
-            }
-            if (featuresJson == null && json.trim().startsWith("[")) {
-                featuresJson = json.trim().substring(1, json.trim().length() - 1);
-            }
-            if (featuresJson != null) {
-                parseFeatures(featuresJson, features);
-            }
+            parseUnsignedFeatures(json, features);
         }
 
+        parseMetricsFromResponse(json, metrics);
+        return new FeatureSnapshot(
+                features, metrics, Instant.now(), etag,
+                signed.signature(), signed.kid(), signed.timestamp(), signed.defsJson());
+    }
+
+    private SignedEnvelope parseSignedFeatures(String json, Map<String, FeatureDefinition> features) {
+        String defsJson = extractRawJsonValue(json, "defs");
+        String signature = extractStringValue(json, "signature");
+        String kid = extractStringValue(json, "kid");
+        Long signedTs = extractLongValue(json, "timestamp");
+        if (defsJson == null) {
+            throw new TogglySignatureException("Signed response missing defs");
+        }
+        if (signature == null || signature.isEmpty()) {
+            throw new TogglySignatureException("Signed response missing signature");
+        }
+        if (kid == null || kid.isEmpty()) {
+            throw new TogglySignatureException("Signed response missing kid");
+        }
+        if (signedTs == null) {
+            throw new TogglySignatureException("Signed response missing timestamp");
+        }
+        if (signedTs < lastSignedTimestamp.get() && lastSignedTimestamp.get() > 0) {
+            LOGGER.log(Level.FINE, "Ignoring older signed definitions timestamp");
+            return null;
+        }
+        Es256Verifier.verify(defsJson, signedTs, signature, kid, loadOrFetchJwks(), config.getAllowedKeyIds());
+        String arrayContent = defsJson.trim();
+        if (arrayContent.startsWith("[") && arrayContent.endsWith("]")) {
+            arrayContent = arrayContent.substring(1, arrayContent.length() - 1);
+        }
+        parseFeatures(arrayContent, features);
+        return new SignedEnvelope(signature, kid, signedTs, defsJson);
+    }
+
+    private void parseUnsignedFeatures(String json, Map<String, FeatureDefinition> features) {
+        String featuresJson = null;
+        for (String key : new String[]{"defs", "feature_flags"}) {
+            featuresJson = extractArrayByKey(json, key);
+            if (featuresJson != null) break;
+        }
+        if (featuresJson == null && json.trim().startsWith("[")) {
+            featuresJson = json.trim().substring(1, json.trim().length() - 1);
+        }
+        if (featuresJson != null) {
+            parseFeatures(featuresJson, features);
+        }
+    }
+
+    private void parseMetricsFromResponse(String json, Map<String, MetricDefinition> metrics) {
         Pattern metricsPattern = Pattern.compile(
                 "\"metrics\"\\s*:\\s*\\[([^\\]]*)]",
                 Pattern.DOTALL);
@@ -536,10 +538,12 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         if (metricsMatcher.find()) {
             parseMetrics(metricsMatcher.group(1), metrics);
         }
+    }
 
-        return new FeatureSnapshot(
-                features, metrics, Instant.now(), etag,
-                signature, kid, signedTs, signedDefsJson);
+    private record SignedEnvelope(String signature, String kid, Long timestamp, String defsJson) {
+        static SignedEnvelope empty() {
+            return new SignedEnvelope(null, null, null, null);
+        }
     }
 
     private JsonWebKeySet loadOrFetchJwks() {

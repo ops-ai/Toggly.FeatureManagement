@@ -88,4 +88,41 @@ class SimpleJsonTest {
         assertTrue(objects.get(0).contains("has } brace"));
         assertTrue(objects.get(1).contains("\"featureKey\":\"b\""));
     }
+
+    @Test
+    void parseAndSerializePreserveNestedScalarTypesAndEscapes() {
+        String json = "{\"items\":[true,false,null,-12,2.5,1e2,\"\\\"quoted\\\"\\n\\t\\u0041\",{}],\"other\":[]}";
+        Object parsed = SimpleJson.parseValue(json, new int[]{0});
+
+        assertInstanceOf(Map.class, parsed);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> object = (Map<String, Object>) parsed;
+        assertEquals(List.of(), object.get("other"));
+        @SuppressWarnings("unchecked")
+        List<Object> items = (List<Object>) object.get("items");
+        assertEquals(Boolean.TRUE, items.get(0));
+        assertEquals(Boolean.FALSE, items.get(1));
+        assertNull(items.get(2));
+        assertEquals(-12L, items.get(3));
+        assertEquals(2.5, items.get(4));
+        assertEquals(100.0, items.get(5));
+        assertEquals("\"quoted\"\n\tA", items.get(6));
+        assertEquals(Map.of(), items.get(7));
+        assertEquals(object, SimpleJson.parseValue(SimpleJson.serialize(object), new int[]{0}));
+    }
+
+    @Test
+    void scanningAndMalformedInputsTerminateWithoutCrossingStringBoundaries() {
+        assertEquals(-1, SimpleJson.findMatchingBrace("{\"open\":1", 0));
+        assertEquals(-1, SimpleJson.findMatchingBracket("[\"open\"", 0));
+        assertEquals(6, SimpleJson.findMatchingBracket("[\"x]y\"]", 0));
+        assertTrue(SimpleJson.splitTopLevelObjects(null).isEmpty());
+        assertTrue(SimpleJson.splitTopLevelObjects(" , garbage {\"ok\":true}, {bad").size() == 1);
+        assertEquals(false, SimpleJson.isStringDelimiter("\\\"", 1));
+        assertEquals(true, SimpleJson.isStringDelimiter("\\\\\"", 2));
+        assertNull(SimpleJson.parseValue("?", new int[]{0}));
+        int[] position = {0};
+        assertEquals(12L, SimpleJson.parseValue("12x", position));
+        assertEquals(2, position[0]);
+    }
 }

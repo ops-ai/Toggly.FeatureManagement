@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.time.Instant;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
@@ -85,6 +87,47 @@ class ContextPropertyEvaluatorTest {
                 .build();
         TogglyEntityContext entity = new TogglyEntityContext("Order", "1", Map.of("Color", "red"));
         assertThat(ContextPropertyEvaluator.evaluateEntityFilters(def, entity)).isTrue();
+    }
+
+    @Test
+    void orderedComparisonSupportsNumbersAndDateRepresentations() {
+        assertThat(matches("age", "gt", "10", "number", 11)).isTrue();
+        assertThat(matches("age", "lt", "10", "number", 9.5)).isTrue();
+        assertThat(matches("age", "lte", "10", "number", 10)).isTrue();
+        assertThat(matches("age", "gte", "10", "number", "10")).isTrue();
+        assertThat(matches("age", "gt", "bad", "number", 11)).isFalse();
+        assertThat(matches("age", "gt", "10", "number", "bad")).isFalse();
+        assertThat(matches("age", "gt", "10", "string", "11")).isFalse();
+
+        assertThat(matches("created", "gte", "2026-01-01", "datetime",
+                Instant.parse("2026-01-01T00:00:00Z"))).isTrue();
+        assertThat(matches("created", "lt", "2026-01-02", "datetime",
+                Date.from(Instant.parse("2026-01-01T00:00:00Z")))).isTrue();
+        assertThat(matches("created", "gt", "2025-12-31T00:00:00", "datetime",
+                "2026-01-01T00:00:00")).isTrue();
+        assertThat(matches("created", "gt", "invalid-date", "datetime", "2026-01-01")).isFalse();
+        assertThat(matches("created", "gt", "2026-01-01", "datetime", "invalid-date")).isFalse();
+    }
+
+    @Test
+    void containsHandlesCollectionsArraysAndMissingValues() {
+        assertThat(matches("groups", "contains", "TEAM", "string[]", List.of("team", "other"))).isTrue();
+        assertThat(matches("groups", "contains", "TEAM", "string[]", new String[]{"other", "team"})).isTrue();
+        assertThat(matches("groups", "contains", "missing", "string[]", List.of("team"))).isFalse();
+        assertThat(matches("groups", "contains", "missing", "string[]", new String[]{"team"})).isFalse();
+        assertThat(matches("name", "contains", "BUY", "string", "buying")).isTrue();
+        assertThat(matches("name", "in", "  , first, SECOND", "string", "second")).isTrue();
+        assertThat(matches("name", "in", "first, second", "string", "third")).isFalse();
+        assertThat(matches("name", "neq", "first", "string", "second")).isTrue();
+        assertThat(ContextPropertyEvaluator.getEntityFilters(null)).isEmpty();
+        assertThat(ContextPropertyEvaluator.getUserFilters(null)).isEmpty();
+        assertThat(ContextPropertyEvaluator.isContextPropertyFilter(null)).isFalse();
+    }
+
+    private static boolean matches(String property, String op, String expected, String type, Object actual) {
+        return ContextPropertyEvaluator.evaluateEntityFilters(
+                definition(property, op, expected, type),
+                new TogglyEntityContext("Order", "1", Map.of(property, actual)));
     }
 
     private static FeatureDefinition definition(String property, String op, String value, String type) {
