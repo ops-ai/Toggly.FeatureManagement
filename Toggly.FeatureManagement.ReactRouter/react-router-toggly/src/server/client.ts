@@ -552,6 +552,14 @@ export class TogglyServerClient {
     }
   }
 
+  private applyNoAppKeyDefaults(): FeatureFlags {
+    this.logger.debug('No appKey, using featureDefaults.');
+    this.definitions = new Map();
+    this.variants = this.config.enableVariants ? {} : null;
+    this.flags = this.config.featureDefaults ?? {};
+    return this.flags;
+  }
+
   private applyParsedDefinitionsBody(parsed: unknown, useVariants: boolean): void {
     if (useVariants) {
       this.variants = parseVariantDefsPayload(parsed);
@@ -580,13 +588,63 @@ export class TogglyServerClient {
     return Boolean(useVariants && this.variants && Object.keys(this.variants).length > 0);
   }
 
+  private buildDefinitionsFetchUrl(useVariants: boolean, pin: string | null): string {
+    const identityContext =
+      useVariants && this.identity ? { identity: this.identity } : undefined;
+    return appendDefinitionsRevisionParam(
+      buildDefinitionsUrl(this.config, identityContext),
+      pin,
+    );
+  }
+
+  private noteNotModifiedResponse(responseRevision: string | null): FeatureFlags {
+    if (responseRevision) {
+      this.cacheDefinitionsRevision(responseRevision);
+    }
+    this.noteDefinitionCacheHit();
+    this.logger.debug('Definitions unchanged (304)');
+    return this.flags;
+  }
+
+  private noteAppliedDefinitionsRevision(
+    previousRevision: string | null,
+    responseRevision: string | null,
+  ): void {
+    if (responseRevision) {
+      this.cacheDefinitionsRevision(responseRevision);
+    }
+    if (this.definitionsRevisionsMatch(previousRevision, responseRevision)) {
+      this.noteDefinitionCacheHit();
+    } else {
+      this.noteDefinitionCacheMiss();
+    }
+  }
+
+  private recoverDefinitionsFetchError(
+    error: unknown,
+    outcomeRecorded: boolean,
+    useVariants: boolean,
+  ): FeatureFlags {
+    this.logger.warn(
+      'Failed to fetch flags, preserving last-known-good flags when available.',
+      error,
+    );
+    this.config.onError?.('Error fetching feature flags', error);
+
+    // Network error keeping last-good definitions only — not featureDefaults alone.
+    if (!outcomeRecorded && this.hasLastKnownGoodDefinitions(useVariants)) {
+      this.noteDefinitionCacheHit();
+    }
+
+    if (Object.keys(this.flags).length === 0) {
+      this.flags = this.config.featureDefaults ?? {};
+    }
+    return this.flags;
+  }
+
   private async performDefinitionsFetch(): Promise<FeatureFlags> {
     if (!this.config.appKey) {
-      this.logger.debug('No appKey, using featureDefaults.');
-      this.definitions = new Map();
-      this.variants = this.config.enableVariants ? {} : null;
-      this.flags = this.config.featureDefaults ?? {};
-      return this.flags;
+      return this.applyNoAppKeyDefaults();
     }
 
     let outcomeRecorded = false;
@@ -597,12 +655,7 @@ export class TogglyServerClient {
       this.pendingDefinitionsPin = null;
       // Local mode: do not pass identity into URL builder (no evaluation query params).
       // Variants mode is remote — include identity for userId targeting.
-      const identityContext =
-        useVariants && this.identity ? { identity: this.identity } : undefined;
-      const url = appendDefinitionsRevisionParam(
-        buildDefinitionsUrl(this.config, identityContext),
-        pin,
-      );
+      const url = this.buildDefinitionsFetchUrl(useVariants, pin);
       this.logger.debug(`Fetching definitions from: ${url}`);
 
       // Pin forces a cache-proof GET; do not treat prior etag as still current.
@@ -611,26 +664,19 @@ export class TogglyServerClient {
         ? { 'If-None-Match': previousRevision }
         : undefined;
       const headers = buildDefinitionFetchHeaders(conditionalHeaders);
-
       const response = await fetchWithTimeout(url, { headers }, this.config.timeout);
-
       const responseRevision = this.normalizeDefinitionsRevision(
         extractDefinitionsRevision(response),
       );
 
       if (response.status === 304) {
-        if (responseRevision) {
-          this.cacheDefinitionsRevision(responseRevision);
-        }
-        this.noteDefinitionCacheHit();
         outcomeRecorded = true;
-        this.logger.debug('Definitions unchanged (304)');
-        return this.flags;
+        return this.noteNotModifiedResponse(responseRevision);
       }
 
       if (!response.ok) {
         throw new TogglyNetworkError(
-          `HTTP ${response.status}: ${response.statusText}`
+          `HTTP ${response.status}: ${response.statusText}`,
         );
       }
 
@@ -646,34 +692,12 @@ export class TogglyServerClient {
       });
 
       this.applyParsedDefinitionsBody(parsed, useVariants);
-      if (responseRevision) {
-        this.cacheDefinitionsRevision(responseRevision);
-      }
-
-      if (this.definitionsRevisionsMatch(previousRevision, responseRevision)) {
-        this.noteDefinitionCacheHit();
-      } else {
-        this.noteDefinitionCacheMiss();
-      }
+      this.noteAppliedDefinitionsRevision(previousRevision, responseRevision);
       outcomeRecorded = true;
-
-      // Execute afterRefresh hooks
       await this.executeAfterRefresh(this.flags);
-
       return this.flags;
     } catch (error) {
-      this.logger.warn('Failed to fetch flags, preserving last-known-good flags when available.', error);
-      this.config.onError?.('Error fetching feature flags', error);
-
-      // Network error keeping last-good definitions only — not featureDefaults alone.
-      if (!outcomeRecorded && this.hasLastKnownGoodDefinitions(useVariants)) {
-        this.noteDefinitionCacheHit();
-      }
-
-      if (Object.keys(this.flags).length === 0) {
-        this.flags = this.config.featureDefaults ?? {};
-      }
-      return this.flags;
+      return this.recoverDefinitionsFetchError(error, outcomeRecorded, useVariants);
     }
   }
 
