@@ -109,7 +109,7 @@ export function createVariantStore(featureKey: string) {
 export function createVariantValueStore(featureKey: string) {
   return derived(
     [togglyVariantsStore, togglyLocalGatesRevision, togglyServiceStore],
-    ([$defs, _revision, service]): unknown | null => {
+    ([$defs, _revision, service]): unknown => {
       if (service) return service.getVariantValue(featureKey)
       const entry = $defs[featureKey]
       if (!entry?.variant) {

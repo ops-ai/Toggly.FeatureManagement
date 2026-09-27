@@ -25,7 +25,8 @@ export function buildWebSocketUrl(baseUri: string, appKey: string, cachedEtag: s
   }
   appendSdkQueryParams(params);
   const query = params.toString();
-  return `${wsBase}/${appKey}/ws${query ? `?${query}` : ''}`;
+  const path = `${wsBase}/${appKey}/ws`;
+  return query ? `${path}?${query}` : path;
 }
 
 export function getNextReconnectDelayMs(attempt: number): number {

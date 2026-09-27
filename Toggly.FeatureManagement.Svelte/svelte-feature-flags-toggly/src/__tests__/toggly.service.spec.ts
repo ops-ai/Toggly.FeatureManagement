@@ -210,6 +210,45 @@ describe('Toggly Service', () => {
       expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
 
+    it('should recover from a malformed baseURI without leaving later refreshes loading', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const toggly = new Toggly({
+        appKey: 'test-key',
+        environment: 'Production',
+        baseURI: 'not a valid URL',
+        enableTelemetry: false,
+      });
+
+      await expect(toggly._loadFeatures(true)).resolves.toEqual({});
+      expect((toggly as any)._loadingFeatures).toBe(false);
+
+      (toggly as any)._config.baseURI = 'https://custom.api.io';
+      await expect(toggly._loadFeatures(true)).resolves.toEqual({ F1: true, F2: false });
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should serialize concurrent forced refreshes and carry the cached ETag into the follow-up request', async () => {
+      vi.useFakeTimers();
+      try {
+        let resolveFirst!: (response: Response) => void;
+        fetchSpy
+          .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveFirst = resolve; }))
+          .mockResolvedValueOnce(new Response(null, { status: 304, headers: { ETag: 'revision-1' } }));
+        const toggly = new Toggly({ appKey: 'test-key', environment: 'Production', enableTelemetry: false });
+
+        const first = toggly._loadFeatures(true);
+        const second = toggly._loadFeatures(true);
+        resolveFirst(new Response(JSON.stringify({ F1: true }), { headers: { ETag: 'revision-1' } }));
+        await vi.advanceTimersByTimeAsync(100);
+
+        await expect(Promise.all([first, second])).resolves.toEqual([{ F1: true }, { F1: true }]);
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+        expect(new Headers(fetchSpy.mock.calls[1][1]?.headers).get('If-None-Match')).toBe('revision-1');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('should use _featuresLoaded to return cached or load', async () => {
       const toggly = new Toggly({ appKey: 'test-key', environment: 'Production', enableTelemetry: false });
       const features = await toggly._featuresLoaded();
@@ -977,29 +1016,15 @@ describe('Toggly Service', () => {
       expect(s._wsConnected).toBe(true);
     });
 
-    it('should refresh features on JSON flags-updated message', () => {
+    it.each([
+      ['flags-updated', {}],
+      ['update', {}],
+      ['sync', { etag: 'new-rev' }],
+    ])('should refresh features on JSON %s message', (type, message) => {
       const s = new Toggly({ appKey: 'k', environment: 'Prod', enableTelemetry: false });
       s.startWebSocket();
       fetchSpy.mockClear();
-      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'flags-updated' }) });
-      vi.advanceTimersByTime(350);
-      expect(fetchSpy).toHaveBeenCalled();
-    });
-
-    it('should refresh features on JSON update message', () => {
-      const s = new Toggly({ appKey: 'k', environment: 'Prod', enableTelemetry: false });
-      s.startWebSocket();
-      fetchSpy.mockClear();
-      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'update' }) });
-      vi.advanceTimersByTime(350);
-      expect(fetchSpy).toHaveBeenCalled();
-    });
-
-    it('should refresh features on JSON sync message', () => {
-      const s = new Toggly({ appKey: 'k', environment: 'Prod', enableTelemetry: false });
-      s.startWebSocket();
-      fetchSpy.mockClear();
-      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type: 'sync', etag: 'new-rev' }) });
+      mockWsInstances[0].onmessage!({ data: JSON.stringify({ type, ...message }) });
       vi.advanceTimersByTime(350);
       expect(fetchSpy).toHaveBeenCalled();
     });

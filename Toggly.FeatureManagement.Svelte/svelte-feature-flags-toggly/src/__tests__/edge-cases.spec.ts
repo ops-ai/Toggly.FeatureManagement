@@ -269,19 +269,13 @@ describe('Edge Cases & Error Handling', () => {
       });
     });
 
-    it('should handle empty string key', async () => {
-      const result = await isFeatureOn('');
-      expect(result).toBe(true);
-    });
-
-    it('should handle keys with dots', async () => {
-      const result = await isFeatureOn('feature.with.dots');
-      expect(result).toBe(true);
-    });
-
-    it('should handle keys with slashes', async () => {
-      const result = await isFeatureOn('feature/slashes');
-      expect(result).toBe(true);
+    it.each([
+      ['an empty string', ''],
+      ['dots', 'feature.with.dots'],
+      ['slashes', 'feature/slashes'],
+      ['emoji', '🚀emoji'],
+    ])('should support feature keys with %s', async (_description, featureKey) => {
+      expect(await isFeatureOn(featureKey)).toBe(true);
     });
 
     it('should be case-sensitive', async () => {
@@ -289,11 +283,6 @@ describe('Edge Cases & Error Handling', () => {
       const lower = await isFeatureOn('uppercase');
       expect(upper).toBe(true);
       expect(lower).toBeFalsy();
-    });
-
-    it('should handle emoji keys', async () => {
-      const result = await isFeatureOn('🚀emoji');
-      expect(result).toBe(true);
     });
 
     it('should return false for non-existent keys', async () => {
