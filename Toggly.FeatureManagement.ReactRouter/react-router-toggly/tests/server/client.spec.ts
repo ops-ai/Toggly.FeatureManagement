@@ -1186,6 +1186,77 @@ describe('TogglyServerClient', () => {
   });
 });
 
+describe('enableVariants', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockFetch.mockReset();
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('overrides evaluationMode to remote and fetches evaluated-variants-signed', async () => {
+    const body = JSON.stringify({
+      defs: {
+        Checkout: {
+          enabled: true,
+          variant: 'treatment',
+          configurationValue: { color: 'blue' },
+        },
+        Off: { enabled: false, variant: 'control' },
+      },
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve(body),
+      json: () => Promise.resolve(JSON.parse(body)),
+      headers: { get: () => null },
+    });
+
+    const client = new TogglyServerClient({
+      appKey: 'test-key',
+      environment: 'Production',
+      enableVariants: true,
+      enableUsageTracking: false,
+      enableMetrics: false,
+    });
+    await client.init();
+
+    const url = String(mockFetch.mock.calls[0]?.[0]);
+    expect(url).toContain('/evaluated-variants-signed/test-key/');
+    expect(url).not.toContain('/definitions-signed/');
+
+    expect(client.getFlags()).toEqual({ Checkout: true, Off: false });
+    expect(client.getVariant('Checkout')).toEqual({
+      name: 'treatment',
+      configurationValue: { color: 'blue' },
+    });
+    expect(client.getVariant('Off')).toBeNull();
+    expect(client.getVariantValue('Checkout')).toEqual({ color: 'blue' });
+    expect(client.getVariant('Missing')).toBeNull();
+  });
+
+  it('keeps local definitions-signed evaluation when enableVariants is unset', async () => {
+    mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ Plain: true }));
+
+    const client = new TogglyServerClient({
+      appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false,
+    });
+    await client.init();
+
+    const url = String(mockFetch.mock.calls[0]?.[0]);
+    expect(url).toContain('/definitions-signed/test-key/');
+    expect(client.getVariant('Plain')).toBeNull();
+    expect(client.getVariantValue('Plain')).toBeNull();
+  });
+});
+
 describe('createServerClient', () => {
   it('should create a TogglyServerClient instance', () => {
     const client = createServerClient({

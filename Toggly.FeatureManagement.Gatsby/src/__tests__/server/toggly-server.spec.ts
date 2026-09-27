@@ -484,6 +484,91 @@ describe('TogglyServer', () => {
     });
   });
 
+  // ─── enableVariants ──────────────────────
+  describe('enableVariants', () => {
+    it('should fetch evaluated-variants-signed when enableVariants is true', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockOkResponse({
+          defs: {
+            V: { enabled: true, variant: 'A', configurationValue: { x: 1 } },
+          },
+        }),
+      );
+
+      const server = new TogglyServer({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+      });
+
+      await server.getFlags();
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        'https://definitions.toggly.io/evaluated-variants-signed/test-key/Production',
+        expect.anything(),
+      );
+
+      expect(await server.getVariant('V')).toEqual({
+        name: 'A',
+        configurationValue: { x: 1 },
+      });
+      expect(await server.getVariantValue('V')).toEqual({ x: 1 });
+      expect(await server.getFlag('V')).toBe(true);
+    });
+
+    it('should pass userId query when enableVariants and identity are set', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockOkResponse({
+          defs: { F: { enabled: false, variant: 'control' } },
+        }),
+      );
+
+      const server = new TogglyServer({
+        appKey: 'k',
+        environment: 'Staging',
+        identity: 'user@x.com',
+        enableVariants: true,
+      });
+
+      await server.getFlags();
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        'https://definitions.toggly.io/evaluated-variants-signed/k/Staging?userId=user%40x.com',
+        expect.anything(),
+      );
+    });
+
+    it('getVariant returns null when enableVariants is false', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F: true }));
+
+      const server = new TogglyServer({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: false,
+      });
+
+      await server.getFlags();
+      expect(await server.getVariant('F')).toBeNull();
+      expect(await server.getVariantValue('F')).toBeNull();
+    });
+
+    it('getVariant returns null when enabled but no variant name on def', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockOkResponse({
+          defs: { V: { enabled: true, configurationValue: 'x' } },
+        }),
+      );
+
+      const server = new TogglyServer({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+      });
+
+      await server.getFlags();
+      expect(await server.getVariant('V')).toBeNull();
+      expect(await server.getVariantValue('V')).toBeNull();
+    });
+  });
+
   // ─── createTogglyServerClient ──────────────────────
   describe('createTogglyServerClient', () => {
     it('should create a TogglyServer instance', () => {

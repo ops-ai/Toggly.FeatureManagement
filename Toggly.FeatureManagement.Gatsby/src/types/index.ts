@@ -76,6 +76,15 @@ export interface TogglyPluginOptions {
    * When connected, HTTP polling becomes a rare fallback (~20 minutes).
    */
   enableLiveUpdates?: boolean;
+
+  /**
+   * Opt-in variant-aware evaluation. Fetches `/evaluated-variants-signed`
+   * instead of `/evaluated-signed` (browser) or `/definitions-signed`
+   * (server), and enables {@link UseTogglyResult.getVariant} /
+   * {@link UseTogglyResult.getVariantValue} / {@link TogglyServerClient.getVariant}.
+   * Default false.
+   */
+  enableVariants?: boolean;
   
   /** Enable all features during build (for hybrid approach with edge filtering) */
   allFeaturesEnabledDuringBuild?: boolean;
@@ -134,6 +143,21 @@ export type Flags = EvaluatedDefinitions;
 export type GateRequirement = 'all' | 'any';
 
 /**
+ * Assigned variant for a feature (aligned with `@ops-ai/feature-flags-toggly`).
+ */
+export interface VariantResult {
+  name: string;
+  configurationValue?: unknown;
+}
+
+/** Raw evaluated entry from `/evaluated-variants-signed` `defs`. */
+export interface EvaluatedVariantDef {
+  enabled: boolean;
+  variant?: string;
+  configurationValue?: unknown;
+}
+
+/**
  * Server-side Toggly client interface
  */
 export interface TogglyServerClient {
@@ -152,6 +176,18 @@ export interface TogglyServerClient {
   
   /** Refresh flags from API */
   refreshFlags(): Promise<void>;
+
+  /**
+   * Current variant assignment for a feature (requires {@link TogglyPluginOptions.enableVariants}).
+   * Null when disabled, the feature is off, or no variant is assigned.
+   */
+  getVariant(featureKey: string): Promise<VariantResult | null>;
+
+  /**
+   * Configuration payload for the assigned variant, if any.
+   * Optional `isT` type guard soft-fails to null on mismatch.
+   */
+  getVariantValue<T = unknown>(featureKey: string, isT?: (v: unknown) => v is T): Promise<T | null>;
 }
 
 /**
@@ -212,6 +248,18 @@ export interface UseTogglyResult {
   
   /** Function to manually refresh flags */
   refreshFlags: () => Promise<void>;
+
+  /**
+   * Current variant assignment for a feature (requires `enableVariants`).
+   * Null when disabled, the feature is off, or no variant is assigned.
+   */
+  getVariant: (featureKey: string) => VariantResult | null;
+
+  /**
+   * Configuration payload for the assigned variant, if any.
+   * Optional `isT` type guard soft-fails to null on mismatch.
+   */
+  getVariantValue: <T = unknown>(featureKey: string, isT?: (v: unknown) => v is T) => T | null;
 
   /** Explicit compact browser telemetry helpers */
   telemetry: TogglyTelemetry;

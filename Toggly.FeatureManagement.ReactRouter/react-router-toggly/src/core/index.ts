@@ -27,6 +27,8 @@ export type {
   EntityGate,
   EntityGateRule,
   TogglyEntityContext,
+  VariantResult,
+  EvaluatedVariantDef,
 } from './types';
 
 // Local evaluation types (definitions-signed rail)
@@ -69,6 +71,9 @@ export {
   normalizeEntityContext,
   registerContext,
   clearRegisteredContexts,
+  parseVariantDefsPayload,
+  variantDefsToFlags,
+  decodeVariantValue,
   normalizeFeatureKeys,
   createLogger,
   parseIdentity,
