@@ -1009,6 +1009,76 @@ void main() {
     HttpService.getInstance.http.interceptors.remove(interceptor);
   });
 
+  test('signed variant cache missing signature metadata is discarded',
+      () async {
+    final provider = _MemoryRevisionCacheProvider();
+    final errors = <String>[];
+    provider.variants['u:user-1'] = TogglyVariantsCache(
+      identity: 'u:user-1',
+      variants: '{"FeatureA":{"enabled":true,"variant":"stale"}}',
+      timestamp: null,
+      signature: null,
+      keyId: null,
+    );
+    HttpService.getInstance.http.interceptors.add(_notModifiedInterceptor());
+
+    await Toggly.init(
+      appKey: 'app',
+      identity: 'user-1',
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        enableTelemetry: false,
+        enableLiveUpdates: false,
+        enableVariants: true,
+        baseURI: 'https://example.test',
+        cacheProvider: provider,
+        onError: (message, error, stackTrace) => errors.add(message),
+      ),
+    );
+
+    expect(await Toggly.cachedVariantDefinitions(), isEmpty);
+    expect(provider.variants.containsKey('u:user-1'), isFalse);
+    expect(errors, contains('Error loading cached variant definitions'));
+  });
+
+  for (final valid in [true, false]) {
+    test('signed variant cache ${valid ? 'accepts' : 'rejects'} its signature',
+        () async {
+      const variantsJson = '{"FeatureA":{"enabled":true,"variant":"blue"}}';
+      final fixture = _buildSignedFlagsFixture(defsJson: variantsJson);
+      final provider = _MemoryRevisionCacheProvider()
+        ..jwks = jsonEncode(fixture.jwks);
+      provider.variants['u:user-1'] = TogglyVariantsCache(
+        identity: 'u:user-1',
+        variants: variantsJson,
+        timestamp: fixture.timestamp,
+        signature:
+            valid ? fixture.signature : base64Encode(List<int>.filled(64, 0)),
+        keyId: fixture.kid,
+      );
+      HttpService.getInstance.http.interceptors.add(_notModifiedInterceptor());
+
+      await Toggly.init(
+        appKey: 'app',
+        identity: 'user-1',
+        useSignedDefinitions: true,
+        flagDefaults: {'FeatureA': false},
+        config: TogglyConfig(
+          enableTelemetry: false,
+          enableLiveUpdates: false,
+          enableVariants: true,
+          baseURI: 'https://example.test',
+          cacheProvider: provider,
+        ),
+      );
+
+      final defs = await Toggly.cachedVariantDefinitions();
+      expect((defs['FeatureA'] as Map?)?['variant'], valid ? 'blue' : null);
+      expect(provider.variants.containsKey('u:user-1'), valid);
+    });
+  }
+
   test('variants rollback keeps newer cached assignments', () async {
     final provider = _MemoryRevisionCacheProvider();
     const signedMeta = {

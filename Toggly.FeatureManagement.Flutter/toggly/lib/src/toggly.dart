@@ -201,6 +201,16 @@ class Toggly with WidgetsBindingObserver {
     return Map<String, bool>.from(Toggly._flagDefaults);
   }
 
+  static bool _canReuseTelemetry(String? appKey, TogglyConfig config) =>
+      _telemetry != null &&
+      _telemetry!.isEnabled &&
+      appKey != null &&
+      appKey.isNotEmpty &&
+      config.enableTelemetry &&
+      _config.metricsBaseUrl == config.metricsBaseUrl &&
+      _config.telemetryFlushIntervalMs == config.telemetryFlushIntervalMs &&
+      _config.onTelemetryDiagnostic == config.onTelemetryDiagnostic;
+
   /// Initialize Toggly either by providing [flagDefaults] (to allow usage
   /// without Toggly.io) or by providing your [appKey] and [environment] from
   /// your Toggly.io application.
@@ -229,14 +239,7 @@ class Toggly with WidgetsBindingObserver {
     } catch (_) {
       // A binding may not exist in a pure Dart host.
     }
-    final reuseTelemetry = _telemetry != null &&
-        _telemetry!.isEnabled &&
-        appKey != null &&
-        appKey.isNotEmpty &&
-        config.enableTelemetry &&
-        _config.metricsBaseUrl == config.metricsBaseUrl &&
-        _config.telemetryFlushIntervalMs == config.telemetryFlushIntervalMs &&
-        _config.onTelemetryDiagnostic == config.onTelemetryDiagnostic;
+    final reuseTelemetry = _canReuseTelemetry(appKey, config);
     if (!reuseTelemetry) {
       _telemetry?.dispose(flush: false);
       _telemetry = null;
@@ -1128,6 +1131,28 @@ class Toggly with WidgetsBindingObserver {
     await Toggly._cache?.deleteVariants(Toggly._contextCacheKey);
   }
 
+  static Future<bool> _validateCachedVariantSignature(
+      TogglyVariantsCache cache, int generation) async {
+    if (cache.timestamp == null ||
+        cache.signature == null ||
+        cache.keyId == null) {
+      throw Exception('Variants cache missing signature metadata');
+    }
+    final isValid = await _verifySignature(
+      cache.variants,
+      cache.signature!,
+      cache.timestamp!,
+      true,
+      cache.keyId!,
+    );
+    if (generation != _generation) return false;
+    if (!isValid) {
+      _lastError = _invalidVariantsSignature;
+      throw Exception(_invalidVariantsSignature);
+    }
+    return true;
+  }
+
   static Future<Map<String, dynamic>>
       _readVerifiedVariantDefsFromCache() async {
     final generation = _generation;
@@ -1141,22 +1166,9 @@ class Toggly with WidgetsBindingObserver {
         return {};
       }
 
-      if (Toggly._useSignedDefinitions) {
-        if (vc.timestamp == null || vc.signature == null || vc.keyId == null) {
-          throw Exception('Variants cache missing signature metadata');
-        }
-        final isValid = await _verifySignature(
-          vc.variants,
-          vc.signature!,
-          vc.timestamp!,
-          true,
-          vc.keyId!,
-        );
-        if (generation != _generation) return {};
-        if (!isValid) {
-          _lastError = _invalidVariantsSignature;
-          throw Exception(_invalidVariantsSignature);
-        }
+      if (_useSignedDefinitions &&
+          !await _validateCachedVariantSignature(vc, generation)) {
+        return {};
       }
 
       final defs = Map<String, dynamic>.from(jsonDecode(vc.variants));
