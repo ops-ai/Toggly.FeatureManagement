@@ -57,6 +57,14 @@ const canUseStorage = (() => {
   }
 })();
 
+function trimRevisionQuotes(revision: string): string {
+  let start = 0;
+  let end = revision.length;
+  while (start < end && revision[start] === '"') start++;
+  while (end > start && revision[end - 1] === '"') end--;
+  return revision.slice(start, end);
+}
+
 type EvaluationSnapshot = {
   flags: EvaluatedDefinitions;
   variants: { [key: string]: EvaluatedVariantDef } | null;
@@ -219,7 +227,7 @@ export class Toggly {
   private static applyFetchRevision(response: Response): void {
     const revision = extractDefinitionsRevision(response);
     if (revision) {
-      Toggly.cacheDefinitionsRevision(revision.replace(/^"+/, '').replace(/"+$/, ''));
+      Toggly.cacheDefinitionsRevision(trimRevisionQuotes(revision));
     }
   }
 
