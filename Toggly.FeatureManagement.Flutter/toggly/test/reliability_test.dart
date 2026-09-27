@@ -58,6 +58,14 @@ class _MemoryCacheProvider implements TogglyCacheProvider {
   Future<void> writeCacheLruIndex(String json) async {}
 }
 
+class _ThrowingDeleteFlagsProvider extends _MemoryCacheProvider {
+  @override
+  Future<void> deleteFlags(String identity) async {
+    deletedFlags++;
+    throw StateError('persisted flags cannot be deleted');
+  }
+}
+
 class _MemoryRevisionCacheProvider extends _MemoryCacheProvider
     implements TogglyRevisionCacheProvider {
   final Map<String, String> revisions = {};
@@ -535,6 +543,36 @@ void main() {
     expect(errors, contains('Signature verification failed'));
 
     HttpService.getInstance.http.interceptors.remove(interceptor);
+  });
+
+  test('invalid signed cache stays closed when eviction fails', () async {
+    final provider = _ThrowingDeleteFlagsProvider();
+    final errors = <String>[];
+    final fixture = _buildSignedFlagsFixture(timestamp: 100);
+    provider.jwks = jsonEncode({...fixture.jwks, '_expiresAt': 0});
+    provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-1',
+      flags: fixture.defsJson,
+      timestamp: fixture.timestamp,
+      signature: base64Encode(List<int>.filled(64, 0)),
+      keyId: fixture.kid,
+    );
+
+    await Toggly.init(
+      identity: 'user-1',
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        enableTelemetry: false,
+        enableLiveUpdates: false,
+        cacheProvider: provider,
+        onError: (message, error, stackTrace) => errors.add(message),
+      ),
+    );
+
+    expect(await Toggly.cachedFeatureFlags, {'FeatureA': false});
+    expect(provider.deletedFlags, 1);
+    expect(errors, contains('Signature verification failed'));
   });
 
   test('clears cache and reports error when fresh signature verification fails',

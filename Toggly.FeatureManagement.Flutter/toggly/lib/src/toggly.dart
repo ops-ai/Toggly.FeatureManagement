@@ -637,34 +637,42 @@ class Toggly with WidgetsBindingObserver {
       return _CachedFlagsVerification.rejected;
     }
 
+    final bool isValid;
     try {
-      final isValid = await _verifySignature(
+      isValid = await _verifySignature(
         cache.flags,
         cache.signature!,
         cache.timestamp!,
         true,
         cache.keyId!,
       );
-      if (generation != _generation) return _CachedFlagsVerification.stale;
-      if (isValid) return _CachedFlagsVerification.verified;
-
-      _reportError(
-        _signatureVerificationFailed,
-        Exception('Invalid signature'),
-        StackTrace.current,
-      );
-      await _clearCachedFeatureFlagsIfCurrent(generation);
-      return _CachedFlagsVerification.rejected;
     } catch (_) {
       // Cached definitions were previously accepted when written. If offline
       // validation cannot run due to transient JWK issues, keep the
       // last-known-good cache but do not use its revision conditionally.
       return _CachedFlagsVerification.unavailable;
     }
+
+    if (generation != _generation) return _CachedFlagsVerification.stale;
+    if (isValid) return _CachedFlagsVerification.verified;
+
+    _reportError(
+      _signatureVerificationFailed,
+      Exception('Invalid signature'),
+      StackTrace.current,
+    );
+    await _clearCachedFeatureFlagsIfCurrent(generation);
+    return _CachedFlagsVerification.rejected;
   }
 
   static Future<void> _clearCachedFeatureFlagsIfCurrent(int generation) async {
-    if (generation == _generation) await clearFeatureFlagsCache();
+    if (generation != _generation) return;
+
+    try {
+      await clearFeatureFlagsCache();
+    } catch (error, stackTrace) {
+      _reportError('Error clearing cached feature flags', error, stackTrace);
+    }
   }
 
   static Map<String, bool> _publishCachedFeatureFlags(
