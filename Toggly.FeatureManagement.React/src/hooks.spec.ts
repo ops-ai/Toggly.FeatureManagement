@@ -42,8 +42,8 @@ describe('TogglyService Hooks', () => {
     test('should register hook via config', async () => {
       await service.isFeatureOn('Feature1');
       
-      expect(beforeEvalCalls.length).toBe(1);
-      expect(afterEvalCalls.length).toBe(1);
+      expect(beforeEvalCalls).toHaveLength(1);
+      expect(afterEvalCalls).toHaveLength(1);
     });
 
     test('should register hook via addHook', async () => {
@@ -54,18 +54,18 @@ describe('TogglyService Hooks', () => {
       newService.addHook(testHook);
       await newService.isFeatureOn('Feature1');
       
-      expect(beforeEvalCalls.length).toBe(1);
-      expect(afterEvalCalls.length).toBe(1);
+      expect(beforeEvalCalls).toHaveLength(1);
+      expect(afterEvalCalls).toHaveLength(1);
     });
 
     test('should remove hook via removeHook', async () => {
       await service.isFeatureOn('Feature1');
-      expect(beforeEvalCalls.length).toBe(1);
+      expect(beforeEvalCalls).toHaveLength(1);
 
       service.removeHook('TestHook');
       await service.isFeatureOn('Feature1');
       
-      expect(beforeEvalCalls.length).toBe(1);
+      expect(beforeEvalCalls).toHaveLength(1);
     });
   });
 
@@ -73,21 +73,21 @@ describe('TogglyService Hooks', () => {
     test('should call beforeEvaluation on isFeatureOn', async () => {
       await service.isFeatureOn('Feature1');
       
-      expect(beforeEvalCalls.length).toBe(1);
+      expect(beforeEvalCalls).toHaveLength(1);
       expect(beforeEvalCalls[0].flagKey).toBe('Feature1');
     });
 
     test('should call beforeEvaluation on isFeatureOff', async () => {
       await service.isFeatureOff('Feature2');
       
-      expect(beforeEvalCalls.length).toBe(1);
+      expect(beforeEvalCalls).toHaveLength(1);
       expect(beforeEvalCalls[0].flagKey).toBe('Feature2');
     });
 
     test('should call beforeEvaluation on evaluateFeatureGate', async () => {
       await service.evaluateFeatureGate(['Feature1', 'Feature2'], 'all');
       
-      expect(beforeEvalCalls.length).toBe(1);
+      expect(beforeEvalCalls).toHaveLength(1);
       expect(beforeEvalCalls[0].flagKey).toBe('Feature1');
     });
   });
@@ -96,7 +96,7 @@ describe('TogglyService Hooks', () => {
     test('should call afterEvaluation with result', async () => {
       await service.isFeatureOn('Feature1');
       
-      expect(afterEvalCalls.length).toBe(1);
+      expect(afterEvalCalls).toHaveLength(1);
       expect(afterEvalCalls[0].flagKey).toBe('Feature1');
       expect(afterEvalCalls[0].result).toBe(true);
     });
@@ -104,14 +104,14 @@ describe('TogglyService Hooks', () => {
     test('should call afterEvaluation for false result', async () => {
       await service.isFeatureOn('Feature2');
       
-      expect(afterEvalCalls.length).toBe(1);
+      expect(afterEvalCalls).toHaveLength(1);
       expect(afterEvalCalls[0].result).toBe(false);
     });
 
     test('should call afterEvaluation for gate evaluation', async () => {
       await service.evaluateFeatureGate(['Feature1', 'Feature2'], 'any');
       
-      expect(afterEvalCalls.length).toBe(1);
+      expect(afterEvalCalls).toHaveLength(1);
       expect(afterEvalCalls[0].result).toBe(true);
     });
   });
@@ -167,7 +167,7 @@ describe('TogglyService Hooks', () => {
       const result = await testService.isFeatureOn('Feature1');
       
       expect(result).toBe(true);
-      expect(afterEvalCalls.length).toBe(1);
+      expect(afterEvalCalls).toHaveLength(1);
     });
   });
 
