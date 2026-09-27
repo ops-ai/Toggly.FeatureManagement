@@ -42,7 +42,8 @@ class EvaluationContextTest {
         assertThat(context.getClaims()).containsEntry("role", "admin");
         assertThat(context.getRequest()).isSameAs(request);
         assertThat(context.getEntity()).isSameAs(entity);
-        assertThatThrownBy(() -> context.getGroups().add("other"))
+        Set<String> immutableGroups = context.getGroups();
+        assertThatThrownBy(() -> immutableGroups.add("other"))
                 .isInstanceOf(UnsupportedOperationException.class);
         assertThat(context.withIdentity("other").getIdentity()).isEqualTo("other");
         assertThat(context.withGroup("other").getGroups()).contains("beta", "other");
@@ -51,7 +52,7 @@ class EvaluationContextTest {
         assertThat(context.withRequest(null).getRequest()).isNull();
         assertThat(context.withEntity(null).getEntity()).isNull();
         assertThat(context.getGroups()).containsExactly("beta");
-        assertThat(context).isEqualTo(context).isNotEqualTo(null).isNotEqualTo("user");
+        assertThat(context).isNotNull().isNotEqualTo(context.withIdentity("other"));
     }
 
     @Test

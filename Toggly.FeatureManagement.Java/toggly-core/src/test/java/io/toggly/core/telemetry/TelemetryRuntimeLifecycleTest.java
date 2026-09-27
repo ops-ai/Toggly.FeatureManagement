@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -16,6 +17,7 @@ class TelemetryRuntimeLifecycleTest {
     void scheduledFlushSendsMetricsAndCloseIsIdempotent() throws Exception {
         List<MetricStatPayload> sent = new ArrayList<>();
         CountDownLatch delivered = new CountDownLatch(1);
+        AtomicInteger closes = new AtomicInteger();
         MetricsGrpcClient client = new MetricsGrpcClient() {
             @Override
             public void sendMetrics(MetricStatPayload payload) {
@@ -27,6 +29,7 @@ class TelemetryRuntimeLifecycleTest {
 
             @Override
             public void close() {
+                closes.incrementAndGet();
             }
         };
         TelemetryRuntime runtime = TelemetryRuntime.builder().appKey("app")
@@ -49,6 +52,7 @@ class TelemetryRuntimeLifecycleTest {
         }
         runtime.close();
         runtime.close();
+        assertThat(closes).hasValue(1);
         assertThat(runtime.isMetricsEnabled()).isFalse();
         runtime.start();
         assertThat(runtime.isMetricsEnabled()).isFalse();
@@ -57,6 +61,7 @@ class TelemetryRuntimeLifecycleTest {
     @Test
     void emptyBatchAndDisabledRuntimeDoNotSendOrSchedule() {
         List<FeatureStatPayload> sent = new ArrayList<>();
+        AtomicInteger closes = new AtomicInteger();
         UsageGrpcClient client = new UsageGrpcClient() {
             @Override
             public void sendStats(FeatureStatPayload payload) {
@@ -65,6 +70,7 @@ class TelemetryRuntimeLifecycleTest {
 
             @Override
             public void close() {
+                closes.incrementAndGet();
             }
         };
         TelemetryRuntime runtime = TelemetryRuntime.builder().appKey("app")
@@ -79,5 +85,6 @@ class TelemetryRuntimeLifecycleTest {
         runtime.flushAll();
         assertThat(sent).hasSize(1);
         runtime.close();
+        assertThat(closes).hasValue(1);
     }
 }

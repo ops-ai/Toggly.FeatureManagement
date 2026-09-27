@@ -22,7 +22,8 @@ class FeatureFilterTest {
         assertThat(filter.getStringParameter("count")).isEqualTo("7");
         assertThat(filter.getIntParameter("missing", 9)).isEqualTo(9);
         assertThat(filter.getDoubleParameter("missing", 9)).isEqualTo(9);
-        assertThatThrownBy(() -> filter.getParameters().put("new", true))
+        Map<String, Object> immutableParameters = filter.getParameters();
+        assertThatThrownBy(() -> immutableParameters.put("new", true))
                 .isInstanceOf(UnsupportedOperationException.class);
         assertThat(filter).isEqualTo(FeatureFilter.of("Custom", Map.of("rate", "12.5", "count", 7)))
                 .hasSameHashCodeAs(FeatureFilter.of("Custom", Map.of("rate", "12.5", "count", 7)));

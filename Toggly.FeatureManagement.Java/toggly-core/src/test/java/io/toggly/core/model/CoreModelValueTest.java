@@ -26,14 +26,17 @@ class CoreModelValueTest {
         assertThat(feature.getRequirementType()).isEqualTo(FeatureRequirement.ANY);
         assertThat(feature.getVariants()).isEmpty();
         assertThat(feature.getAllocation()).isNull();
-        assertThatThrownBy(() -> feature.getFilters().clear())
+        List<FeatureFilter> immutableFilters = feature.getFilters();
+        assertThatThrownBy(immutableFilters::clear)
                 .isInstanceOf(UnsupportedOperationException.class);
-        assertThatThrownBy(() -> feature.getMetrics().clear())
+        List<MetricDefinition> immutableMetrics = feature.getMetrics();
+        assertThatThrownBy(immutableMetrics::clear)
                 .isInstanceOf(UnsupportedOperationException.class);
         assertThat(FeatureDefinition.builder().featureKey("empty")
                 .filters(null).metrics(null).variants(null).requirementType(null).build()
                 .getFilters()).isEmpty();
-        assertThatThrownBy(() -> FeatureDefinition.builder().build())
+        FeatureDefinition.Builder incompleteFeature = FeatureDefinition.builder();
+        assertThatThrownBy(incompleteFeature::build)
                 .isInstanceOf(NullPointerException.class);
         assertThat(feature.toString()).contains("checkout");
     }
@@ -46,8 +49,8 @@ class CoreModelValueTest {
                 .userAgent("browser").acceptLanguage("en-US").country("US").build();
         RequestContext equalRequest = RequestContext.of("browser", "en-US", "US");
 
-        assertThat(metric).isEqualTo(equal).hasSameHashCodeAs(equal);
-        assertThat(metric).isNotEqualTo(null).isNotEqualTo("visits");
+        assertThat(metric).isEqualTo(equal).hasSameHashCodeAs(equal)
+                .isNotNull().isNotEqualTo(MetricDefinition.of("other", "counter", "count"));
         assertThat(metric.getMetricKey()).isEqualTo("visits");
         assertThat(metric.getType()).isEqualTo("counter");
         assertThat(metric.getUnit()).isEqualTo("count");
@@ -55,8 +58,8 @@ class CoreModelValueTest {
         assertThatThrownBy(() -> MetricDefinition.of(null, "counter", "count"))
                 .isInstanceOf(NullPointerException.class);
 
-        assertThat(request).isEqualTo(equalRequest).hasSameHashCodeAs(equalRequest);
-        assertThat(request).isNotEqualTo(null).isNotEqualTo("browser");
+        assertThat(request).isEqualTo(equalRequest).hasSameHashCodeAs(equalRequest)
+                .isNotNull().isNotEqualTo(RequestContext.of("other", "en-US", "US"));
         assertThat(request.getUserAgent()).isEqualTo("browser");
         assertThat(request.getAcceptLanguage()).isEqualTo("en-US");
         assertThat(request.getCountry()).isEqualTo("US");

@@ -28,7 +28,8 @@ class TogglyEntityContextTest {
         assertThat(entity.hasAttribute("nullable")).isTrue();
         assertThat(entity.hasAttribute("unknown")).isFalse();
         assertThat(entity.getAttributes()).doesNotContainKey(null);
-        assertThatThrownBy(() -> entity.getAttributes().clear())
+        Map<String, Object> immutableAttributes = entity.getAttributes();
+        assertThatThrownBy(immutableAttributes::clear)
                 .isInstanceOf(UnsupportedOperationException.class);
         assertThat(entity.getKind()).isEqualTo("Order");
         assertThat(entity.getKey()).isEqualTo("o-1");
@@ -43,7 +44,7 @@ class TogglyEntityContextTest {
         assertThat(empty.getKind()).isEmpty();
         assertThat(empty.getKey()).isEmpty();
         assertThat(empty.getAttributes()).isEmpty();
-        assertThat(empty).isEqualTo(same).hasSameHashCodeAs(same);
-        assertThat(empty).isEqualTo(empty).isNotEqualTo(null).isNotEqualTo("empty");
+        assertThat(empty).isEqualTo(same).hasSameHashCodeAs(same)
+                .isNotNull().isNotEqualTo(new TogglyEntityContext("Other", "", Map.of()));
     }
 }

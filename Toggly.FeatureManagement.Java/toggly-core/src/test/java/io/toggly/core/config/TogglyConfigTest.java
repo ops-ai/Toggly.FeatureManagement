@@ -48,7 +48,8 @@ class TogglyConfigTest {
         assertThat(config.getFeatureDefaults()).containsEntry("fallback", true)
                 .containsEntry("another", false);
         assertThat(config.getAllowedKeyIds()).containsExactly("kid");
-        assertThatThrownBy(() -> config.getFeatureDefaults().clear())
+        Map<String, Boolean> immutableDefaults = config.getFeatureDefaults();
+        assertThatThrownBy(immutableDefaults::clear)
                 .isInstanceOf(UnsupportedOperationException.class);
         assertThat(config.getRefreshIntervalSeconds()).isEqualTo(45);
         assertThat(config.getConnectTimeout()).isEqualTo(Duration.ofSeconds(2));

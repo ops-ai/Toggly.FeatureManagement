@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class SimpleJsonTest {
 
@@ -57,7 +58,7 @@ class SimpleJsonTest {
 
         assertEquals(1, VariantJson.parseVariants(featureJson).size());
         assertEquals("treatment", VariantJson.parseVariants(featureJson).get(0).getName());
-        assertTrue(VariantJson.parseAllocation(featureJson) != null);
+        assertNotNull(VariantJson.parseAllocation(featureJson));
         assertEquals("treatment", VariantJson.parseAllocation(featureJson).getDefaultWhenEnabled());
     }
 
@@ -117,7 +118,7 @@ class SimpleJsonTest {
         assertEquals(-1, SimpleJson.findMatchingBracket("[\"open\"", 0));
         assertEquals(6, SimpleJson.findMatchingBracket("[\"x]y\"]", 0));
         assertTrue(SimpleJson.splitTopLevelObjects(null).isEmpty());
-        assertTrue(SimpleJson.splitTopLevelObjects(" , garbage {\"ok\":true}, {bad").size() == 1);
+        assertEquals(1, SimpleJson.splitTopLevelObjects(" , garbage {\"ok\":true}, {bad").size());
         assertEquals(false, SimpleJson.isStringDelimiter("\\\"", 1));
         assertEquals(true, SimpleJson.isStringDelimiter("\\\\\"", 2));
         assertNull(SimpleJson.parseValue("?", new int[]{0}));

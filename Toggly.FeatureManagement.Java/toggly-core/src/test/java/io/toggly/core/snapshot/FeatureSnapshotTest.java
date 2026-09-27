@@ -46,8 +46,10 @@ class FeatureSnapshotTest {
         assertThat(signed.getKeyId()).isEqualTo("kid");
         assertThat(signed.getSignedTimestamp()).isEqualTo(42L);
         assertThat(signed.getSignedDefsJson()).isEqualTo("[{\"raw\":true}]");
-        assertThatThrownBy(() -> signed.getFeatures().clear()).isInstanceOf(UnsupportedOperationException.class);
-        assertThatThrownBy(() -> signed.getMetrics().clear()).isInstanceOf(UnsupportedOperationException.class);
+        Map<String, FeatureDefinition> immutableFeatures = signed.getFeatures();
+        Map<String, MetricDefinition> immutableMetrics = signed.getMetrics();
+        assertThatThrownBy(immutableFeatures::clear).isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(immutableMetrics::clear).isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test
@@ -55,9 +57,9 @@ class FeatureSnapshotTest {
         FeatureSnapshot first = new FeatureSnapshot(Map.of(), Map.of(), Instant.EPOCH, "etag");
         FeatureSnapshot second = new FeatureSnapshot(Map.of(), Map.of(), Instant.now(), "etag");
 
-        assertThat(first).isEqualTo(second).hasSameHashCodeAs(second);
-        assertThat(first).isNotEqualTo(second.withSignature("sig", "kid", 1L, "[]"));
-        assertThat(first).isNotEqualTo(null).isNotEqualTo("etag");
-        assertThat(first).isEqualTo(first);
+        assertThat(first).isEqualTo(second).hasSameHashCodeAs(second)
+                .isNotNull()
+                .isNotEqualTo(second.withSignature("sig", "kid", 1L, "[]"))
+                .isNotEqualTo(new FeatureSnapshot(Map.of(), Map.of(), Instant.EPOCH, "other"));
     }
 }

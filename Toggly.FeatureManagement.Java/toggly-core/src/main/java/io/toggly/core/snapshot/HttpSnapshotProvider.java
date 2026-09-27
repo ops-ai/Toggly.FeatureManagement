@@ -77,7 +77,7 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     private volatile long lastFallbackRefresh = 0;
     private final AtomicBoolean refreshInFlight = new AtomicBoolean(false);
     private final AtomicBoolean pendingWebSocketRefresh = new AtomicBoolean(false);
-    private volatile DefinitionCacheRecorder definitionCacheRecorder;
+    private final AtomicReference<DefinitionCacheRecorder> definitionCacheRecorder = new AtomicReference<>();
 
     /**
      * Creates an HTTP snapshot provider.
@@ -146,7 +146,7 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
 
     @Override
     public void setDefinitionCacheRecorder(DefinitionCacheRecorder recorder) {
-        this.definitionCacheRecorder = recorder;
+        this.definitionCacheRecorder.set(recorder);
     }
 
     @Override
@@ -161,27 +161,14 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     private FeatureSnapshot refreshInternal(boolean fromWebSocket) {
         // Concurrent refresh skipped (in flight) — do not count.
         if (!refreshInFlight.compareAndSet(false, true)) {
-            if (fromWebSocket) {
-                pendingWebSocketRefresh.set(true);
-                LOGGER.log(Level.FINE, "Refresh in progress; queued WebSocket-forced refresh");
-            } else {
-                LOGGER.log(Level.FINE, "Refresh already in progress, skipping");
-            }
+            handleConcurrentRefresh(fromWebSocket);
             return currentSnapshot.get();
         }
         // Exactly one hit/miss per attempt: record after apply, skip catch if already counted.
         boolean outcomeRecorded = false;
         try {
             FetchResult result = fetchDefinitions();
-            if (result.outcome == CacheOutcome.MISS) {
-                applySnapshot(result.snapshot);
-                recordDefinitionCacheMiss();
-            } else {
-                if (result.snapshot != null && result.applySnapshot) {
-                    applySnapshot(result.snapshot);
-                }
-                recordDefinitionCacheHit();
-            }
+            applyFetchResult(result);
             outcomeRecorded = true;
 
             if (config.isEnableLiveUpdates() && !wsConnected && webSocket == null) {
@@ -192,15 +179,11 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         } catch (TogglySignatureException e) {
             reportError("Invalid signature", e);
             LOGGER.log(Level.WARNING, "Signature verification failed", e);
-            if (!outcomeRecorded) {
-                recordDefinitionCacheHit();
-            }
+            recordCacheHitIfNeeded(outcomeRecorded);
         } catch (Exception e) {
             reportError("Failed to refresh definitions", e);
             LOGGER.log(Level.WARNING, "Failed to refresh definitions", e);
-            if (!outcomeRecorded) {
-                recordDefinitionCacheHit();
-            }
+            recordCacheHitIfNeeded(outcomeRecorded);
         } finally {
             refreshInFlight.set(false);
             if (pendingWebSocketRefresh.getAndSet(false)) {
@@ -210,6 +193,33 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         }
         // Last-known-good: keep serving the previous snapshot on transient failures
         return currentSnapshot.get();
+    }
+
+    private void handleConcurrentRefresh(boolean fromWebSocket) {
+        if (fromWebSocket) {
+            pendingWebSocketRefresh.set(true);
+            LOGGER.log(Level.FINE, "Refresh in progress; queued WebSocket-forced refresh");
+        } else {
+            LOGGER.log(Level.FINE, "Refresh already in progress, skipping");
+        }
+    }
+
+    private void applyFetchResult(FetchResult result) {
+        if (result.outcome == CacheOutcome.MISS) {
+            applySnapshot(result.snapshot);
+            recordDefinitionCacheMiss();
+        } else {
+            if (result.snapshot != null && result.applySnapshot) {
+                applySnapshot(result.snapshot);
+            }
+            recordDefinitionCacheHit();
+        }
+    }
+
+    private void recordCacheHitIfNeeded(boolean outcomeRecorded) {
+        if (!outcomeRecorded) {
+            recordDefinitionCacheHit();
+        }
     }
 
     @Override
@@ -382,9 +392,7 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         String newEtag = connection.getHeaderField("ETag");
         // HTTP 200 whose revision/etag matches existing (CDN replay) — cache hit.
         if (etagsMatch(previousEtag, newEtag)) {
-            if (newEtag != null) {
-                lastEtag.set(newEtag);
-            }
+            lastEtag.set(newEtag);
             return FetchResult.hit(currentSnapshot.get(), false);
         }
         if (newEtag != null) {
@@ -417,14 +425,14 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     }
 
     private void recordDefinitionCacheHit() {
-        DefinitionCacheRecorder recorder = definitionCacheRecorder;
+        DefinitionCacheRecorder recorder = definitionCacheRecorder.get();
         if (recorder != null) {
             recorder.recordDefinitionCacheHit();
         }
     }
 
     private void recordDefinitionCacheMiss() {
-        DefinitionCacheRecorder recorder = definitionCacheRecorder;
+        DefinitionCacheRecorder recorder = definitionCacheRecorder.get();
         if (recorder != null) {
             recorder.recordDefinitionCacheMiss();
         }
