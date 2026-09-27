@@ -155,7 +155,7 @@ public class ReactiveTogglyClient {
      */
     public <T> Mono<T> ifEnabled(String featureKey, Mono<T> action) {
         return isEnabled(featureKey)
-                .flatMap(enabled -> enabled ? action : Mono.empty());
+                .flatMap(enabled -> enabled.booleanValue() ? action : Mono.empty());
     }
 
     /**
@@ -169,7 +169,7 @@ public class ReactiveTogglyClient {
      */
     public <T> Mono<T> switchOn(String featureKey, Mono<T> enabledMono, Mono<T> disabledMono) {
         return isEnabled(featureKey)
-                .flatMap(enabled -> enabled ? enabledMono : disabledMono);
+                .flatMap(enabled -> enabled.booleanValue() ? enabledMono : disabledMono);
     }
 
     // ========== Feature Definitions ==========

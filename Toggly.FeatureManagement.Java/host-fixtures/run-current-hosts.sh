@@ -27,7 +27,7 @@ trap cleanup EXIT
 
 mvn -B -Dmaven.repo.local="${MAVEN_REPO_LOCAL}" -DskipTests install -f "${SDK_ROOT}/pom.xml"
 
-for fixture in caffeine servlet redis-jedis5 redis-jedis8; do
+for fixture in caffeine servlet webflux redis-jedis5 redis-jedis8; do
   fixture_root="${SCRIPT_DIR}/${fixture}"
   mvn -B -Dmaven.repo.local="${MAVEN_REPO_LOCAL}" \
     -Dtoggly.version="${TOGGLY_VERSION}" \

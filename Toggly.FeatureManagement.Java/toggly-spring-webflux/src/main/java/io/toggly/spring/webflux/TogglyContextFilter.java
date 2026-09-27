@@ -56,7 +56,7 @@ public class TogglyContextFilter implements WebFilter {
     public static Mono<EvaluationContext> getContext() {
         return Mono.deferContextual(ctx ->
                 Mono.justOrEmpty(ctx.getOrEmpty(CONTEXT_KEY))
-                        .map(obj -> (EvaluationContext) obj)
+                        .map(EvaluationContext.class::cast)
                         .defaultIfEmpty(EvaluationContext.empty()));
     }
 }
