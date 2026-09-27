@@ -11,6 +11,8 @@ import type {
 } from '@ops-ai/react-native-toggly-core';
 import { useTogglyContext } from '../contexts/TogglyContext';
 
+type EntityInput = TogglyEntityContext | Record<string, unknown> | null;
+
 /**
  * Result of the useToggly hook
  */
@@ -40,7 +42,7 @@ export interface UseTogglyResult extends Pick<TogglyService, 'recordUsage' | 're
    */
   isFeatureOn: (
     featureKey: string,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: EntityInput,
     kind?: string,
   ) => Promise<boolean>;
 
@@ -49,7 +51,7 @@ export interface UseTogglyResult extends Pick<TogglyService, 'recordUsage' | 're
    */
   isFeatureOff: (
     featureKey: string,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: EntityInput,
     kind?: string,
   ) => Promise<boolean>;
 
@@ -167,7 +169,7 @@ export function useToggly(): UseTogglyResult {
   const isFeatureOn = useCallback(
     async (
       featureKey: string,
-      context?: TogglyEntityContext | Record<string, unknown> | null,
+      context?: EntityInput,
       kind?: string,
     ): Promise<boolean> => {
       return toggly.isFeatureOn(featureKey, context, kind);
@@ -178,7 +180,7 @@ export function useToggly(): UseTogglyResult {
   const isFeatureOff = useCallback(
     async (
       featureKey: string,
-      context?: TogglyEntityContext | Record<string, unknown> | null,
+      context?: EntityInput,
       kind?: string,
     ): Promise<boolean> => {
       return toggly.isFeatureOff(featureKey, context, kind);

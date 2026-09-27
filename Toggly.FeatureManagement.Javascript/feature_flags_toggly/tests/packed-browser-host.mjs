@@ -51,7 +51,8 @@ try {
   assert.doesNotMatch(bundle.toString(),/node:http|node:zlib|api\/usage|grpc-js/);
   writeFileSync(join(host,'consumer.ts'), `import type {TogglyConfig} from '@ops-ai/feature-flags-toggly';
 const config:TogglyConfig={appKey:'public',instanceId:'host-minted',enableTelemetry:true,metricsBaseUrl:'https://metrics.example.test/base',telemetryFlushIntervalMs:45000};
-void window.Toggly.init(config);window.Toggly.instanceId='rotated';window.Toggly.recordUsage('Action','blue');window.Toggly.recordView('Panel');window.Toggly.incrementCounter('orders',2);window.Toggly.setGauge('cart',3);void window.Toggly.flushTelemetry();`);
+void window.Toggly.init(config);window.Toggly.instanceId='rotated';window.Toggly.recordUsage('Action','blue');window.Toggly.recordView('Panel');window.Toggly.incrementCounter('orders',2);window.Toggly.setGauge('cart',3);void window.Toggly.flushTelemetry();
+const variantValue: number | null = window.Toggly.getVariantValue<number>('Sale');void variantValue;`);
   run(join(host,'node_modules/.bin/tsc'),['--noEmit','--strict','--skipLibCheck','false','--target','ES2020','--module','commonjs','--moduleResolution','node','--lib','ES2020,DOM','consumer.ts'],host);
   writeFileSync(join(host,'ssr.mjs'),`import assert from 'node:assert/strict';import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);let work=0;globalThis.fetch=()=>{work++;throw Error('SSR request')};globalThis.setTimeout=globalThis.setInterval=()=>{work++;throw Error('SSR timer')};

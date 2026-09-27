@@ -316,7 +316,12 @@ void main() {
         httpClient: dio,
         clock: () => now,
         delay: (duration) async => now = now.add(duration),
-        requestTimeout: const Duration(milliseconds: 1),
+        // Retry scenarios resolve in the interceptor. A 1 ms wall-clock
+        // deadline can expire before Dio enters it on a loaded CI runner.
+        // Only the intentionally hanging scenario needs a short deadline.
+        requestTimeout: scenario['failure'] == 'timeout'
+            ? const Duration(seconds: 1)
+            : const Duration(minutes: 1),
       );
       reporter.incrementCounter('orders');
       await reporter.flushTelemetry();

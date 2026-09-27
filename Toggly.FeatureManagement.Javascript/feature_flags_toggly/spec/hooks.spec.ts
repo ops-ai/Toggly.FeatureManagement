@@ -55,8 +55,8 @@ describe('Toggly Hooks', () => {
         
         setTimeout(() => {
           try {
-            expect(beforeEvalCalls.length).toBe(1);
-            expect(afterEvalCalls.length).toBe(1);
+            expect(beforeEvalCalls).toHaveLength(1);
+            expect(afterEvalCalls).toHaveLength(1);
             done();
           } catch (error) {
             done(error);
@@ -73,8 +73,8 @@ describe('Toggly Hooks', () => {
         
         setTimeout(() => {
           try {
-            expect(beforeEvalCalls.length).toBe(1);
-            expect(afterEvalCalls.length).toBe(1);
+            expect(beforeEvalCalls).toHaveLength(1);
+            expect(afterEvalCalls).toHaveLength(1);
             done();
           } catch (error) {
             done(error);
@@ -90,12 +90,12 @@ describe('Toggly Hooks', () => {
       });
 
       Toggly.isFeatureOn('TestFeature');
-      expect(beforeEvalCalls.length).toBe(1);
+      expect(beforeEvalCalls).toHaveLength(1);
 
       Toggly.removeHook('TestHook');
       Toggly.isFeatureOn('TestFeature');
       
-      expect(beforeEvalCalls.length).toBe(1); // No new calls
+      expect(beforeEvalCalls).toHaveLength(1); // No new calls
     });
   });
 
@@ -115,7 +115,7 @@ describe('Toggly Hooks', () => {
       
       setTimeout(() => {
         try {
-          expect(beforeEvalCalls.length).toBe(1);
+          expect(beforeEvalCalls).toHaveLength(1);
           expect(beforeEvalCalls[0].flagKey).toBe('Feature1');
           expect(beforeEvalCalls[0].context).toBeUndefined();
           done();
@@ -130,7 +130,7 @@ describe('Toggly Hooks', () => {
       
       setTimeout(() => {
         try {
-          expect(beforeEvalCalls.length).toBe(1);
+          expect(beforeEvalCalls).toHaveLength(1);
           expect(beforeEvalCalls[0].flagKey).toBe('Feature2');
           done();
         } catch (error) {
@@ -144,7 +144,7 @@ describe('Toggly Hooks', () => {
       
       setTimeout(() => {
         try {
-          expect(beforeEvalCalls.length).toBe(1);
+          expect(beforeEvalCalls).toHaveLength(1);
           expect(beforeEvalCalls[0].flagKey).toBe('Feature1');
           done();
         } catch (error) {
@@ -170,7 +170,7 @@ describe('Toggly Hooks', () => {
       
       setTimeout(() => {
         try {
-          expect(afterEvalCalls.length).toBe(1);
+          expect(afterEvalCalls).toHaveLength(1);
           expect(afterEvalCalls[0].flagKey).toBe('Feature1');
           expect(afterEvalCalls[0].result).toBe(true);
           done();
@@ -185,7 +185,7 @@ describe('Toggly Hooks', () => {
       
       setTimeout(() => {
         try {
-          expect(afterEvalCalls.length).toBe(1);
+          expect(afterEvalCalls).toHaveLength(1);
           expect(afterEvalCalls[0].flagKey).toBe('Feature2');
           expect(afterEvalCalls[0].result).toBe(false);
           done();
@@ -200,7 +200,7 @@ describe('Toggly Hooks', () => {
       
       setTimeout(() => {
         try {
-          expect(afterEvalCalls.length).toBe(1);
+          expect(afterEvalCalls).toHaveLength(1);
           expect(afterEvalCalls[0].flagKey).toBe('Feature1');
           expect(afterEvalCalls[0].result).toBe(true);
           done();
@@ -228,10 +228,10 @@ describe('Toggly Hooks', () => {
       // Give hooks time to execute (fire-and-forget pattern)
       setTimeout(() => {
         try {
-          expect(beforeIdentifyCalls.length).toBe(1);
+          expect(beforeIdentifyCalls).toHaveLength(1);
           expect(beforeIdentifyCalls[0].identity).toBe('user123');
           
-          expect(afterIdentifyCalls.length).toBe(1);
+          expect(afterIdentifyCalls).toHaveLength(1);
           expect(afterIdentifyCalls[0].identity).toBe('user123');
           done();
         } catch (error) {
@@ -253,10 +253,10 @@ describe('Toggly Hooks', () => {
         // Give hooks time to execute (fire-and-forget pattern)
         setTimeout(() => {
           try {
-            expect(beforeIdentifyCalls.length).toBe(1);
+            expect(beforeIdentifyCalls).toHaveLength(1);
             expect(beforeIdentifyCalls[0].identity).toBe('');
             
-            expect(afterIdentifyCalls.length).toBe(1);
+            expect(afterIdentifyCalls).toHaveLength(1);
             expect(afterIdentifyCalls[0].identity).toBe('');
             done();
           } catch (error) {
@@ -369,7 +369,7 @@ describe('Toggly Hooks', () => {
         setTimeout(() => {
           try {
             // Second hook should still execute
-            expect(afterEvalCalls.length).toBe(1);
+            expect(afterEvalCalls).toHaveLength(1);
             done();
           } catch (error) {
             done(error);

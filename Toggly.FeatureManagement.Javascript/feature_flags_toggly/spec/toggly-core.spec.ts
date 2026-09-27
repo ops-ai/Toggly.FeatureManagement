@@ -1189,6 +1189,32 @@ describe('Toggly Core', () => {
       const init = mockFetch.mock.calls[0][1] as RequestInit;
       expect((init.headers as Record<string, string>)['If-None-Match']).toBe('rev-123');
     });
+
+    it('caches revisions with long internal quote runs without excessive work', async () => {
+      const revision = `x${'"'.repeat(100_000)}x`;
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: { get: (key: string) => (key === 'ETag' ? revision : null) },
+        json: async () => ({ F1: true }),
+      });
+
+      const start = performance.now();
+      await Toggly.init({ appKey, environment: env, featureFlagsRefreshInterval: 0 });
+      expect(performance.now() - start).toBeLessThan(1000);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: { get: () => null },
+        json: async () => ({ F1: true }),
+      });
+      await Toggly.refresh();
+      const request = mockFetch.mock.calls[1][1] as RequestInit;
+      expect((request.headers as Record<string, string>)['If-None-Match']).toBe(revision);
+    });
   });
 
   // ───────────────────────────────────────────────

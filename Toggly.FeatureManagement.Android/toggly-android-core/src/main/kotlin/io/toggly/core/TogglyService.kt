@@ -723,7 +723,7 @@ class TogglyService(
 
                 val loaded: EvaluatedDefinitions
                 var variants: Map<String, EvaluatedVariantDef>? = null
-                var defsRaw: String? = null
+                val defsRaw: String?
                 var signature: String? = null
                 var timestamp: Long? = null
                 var keyId: String? = null

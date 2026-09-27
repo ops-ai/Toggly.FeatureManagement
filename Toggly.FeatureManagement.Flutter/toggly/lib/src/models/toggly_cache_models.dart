@@ -1,5 +1,5 @@
-/// Serializable cache models used by [TogglyCacheProvider] implementations to
-/// persist feature flags and variant definitions across app restarts.
+// Serializable cache models used by cache-provider implementations to persist
+// feature flags and variant definitions across app restarts.
 
 /// Data representation to be stored in/retrieved from cache.
 class TogglyFeatureFlagsCache {

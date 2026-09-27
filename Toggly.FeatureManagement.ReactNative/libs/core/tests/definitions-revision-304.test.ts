@@ -13,7 +13,7 @@ describe('304 definitions revision persistence', () => {
     return service;
   }
 
-  it.each(['revision-2', undefined])('restores the matching validator after 304 with ETag %s', async updated => {
+  it.each(['revision-2', '""revision-2""', undefined])('restores the matching validator after 304 with ETag %s', async updated => {
     const storage = new MemoryStorage();
     (fetch as jest.Mock).mockResolvedValueOnce({ ok: true, status: 200,
       headers: new Map([['ETag', '"revision-1"']]), json: async () => ({ enabled: true }) });
@@ -24,14 +24,14 @@ describe('304 definitions revision persistence', () => {
       headers: new Map(updated ? [['ETag', `"${updated}"`]] : []) });
     expect((await first.refresh()).flags).toEqual({ enabled: true });
     expect(JSON.parse((await storage.get('@toggly:etag'))!)).toEqual({
-      context: originalRecord.context, revision: updated ?? 'revision-1', writeId: originalRecord.writeId,
+      context: originalRecord.context, revision: updated ? 'revision-2' : 'revision-1', writeId: originalRecord.writeId,
     });
     first.dispose();
 
     (fetch as jest.Mock).mockResolvedValueOnce({ ok: false, status: 304, headers: new Map() });
     const restored = create(storage);
     expect((await restored.init()).flags).toEqual({ enabled: true });
-    expect((fetch as jest.Mock).mock.calls[2][1].headers['If-None-Match']).toBe(updated ?? 'revision-1');
+    expect((fetch as jest.Mock).mock.calls[2][1].headers['If-None-Match']).toBe(updated ? 'revision-2' : 'revision-1');
     restored.dispose();
 
     (fetch as jest.Mock).mockRejectedValueOnce(new Error('offline'));

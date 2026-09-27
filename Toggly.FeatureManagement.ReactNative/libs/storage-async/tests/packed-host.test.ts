@@ -10,7 +10,7 @@ const hosts=[
  {asyncStorage:'3.1.1',react:'19.2.3',reactNative:'0.87.1',typesReact:'19.2.18'},
 ];
 for(const host of hosts)it(`installs, typechecks, and uses the default AsyncStorage API on ${host.asyncStorage}`,async()=>{
- await verifyStorage(join(__dirname,'..'),corePackage.archive,host.asyncStorage,{
+ await expect(verifyStorage(join(__dirname,'..'),corePackage.archive,host.asyncStorage,{
   '@react-native-async-storage/async-storage':host.asyncStorage,'@types/react':host.typesReact,react:host.react,'react-native':host.reactNative,...(host.expo?{expo:host.expo}:{})
- });
+ })).resolves.toBeUndefined();
 },240000);

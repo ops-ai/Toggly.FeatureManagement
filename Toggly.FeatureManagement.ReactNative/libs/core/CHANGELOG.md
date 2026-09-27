@@ -1,3 +1,8 @@
+## 1.10.1 — 2026-09-27
+
+### Fixed
+- Normalize quoted definitions revisions without a backtracking pattern, keeping refresh responsive even when a server returns an unusually long validator.
+
 ## 1.10.0 — 2026-09-24
 
 ### Added

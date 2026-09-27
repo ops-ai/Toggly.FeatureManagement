@@ -855,9 +855,9 @@
       }
     },
     "node_modules/@ops-ai/react-native-toggly-core": {
-      "version": "1.10.0",
+      "version": "1.10.1",
       "resolved": "file:core.tgz",
-      "integrity": "sha512-pi/qYyfcEFx1Z+4HVTdNhpmKyd7YXDlok1tqxlkqGL7V1aYGcbjhoYkP/J9k/Z3KC2eGPWp87af4fkoYN1rzfg==",
+      "integrity": "sha512-qhUNjVWlIyKdeaXJ8mXwOKCTU88bFtHELiIp//va+WLwPRFL8wU+fwYRxsCJZXLAV58Vbxc2EXdshqRV8+qRHQ==",
       "license": "MIT",
       "dependencies": {
         "@ops-ai/toggly-client-telemetry": "^1.1.1",

@@ -6,7 +6,7 @@ import type { TogglyStorage } from '../models';
  * Data is lost when the app is closed.
  */
 export class MemoryStorage implements TogglyStorage {
-  private storage: Map<string, string> = new Map();
+  private readonly storage: Map<string, string> = new Map();
 
   async get(key: string): Promise<string | null> {
     return this.storage.get(key) ?? null;

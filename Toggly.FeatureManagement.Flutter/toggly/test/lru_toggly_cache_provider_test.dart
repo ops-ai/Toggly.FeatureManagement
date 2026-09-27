@@ -169,6 +169,27 @@ void main() {
       );
     }
 
+    test('init tracks persisted flags when a positive cache limit is set',
+        () async {
+      addTearDown(Toggly.dispose);
+      inner.flags['u:alice'] = _flags('u:alice');
+
+      await Toggly.init(
+        identity: 'alice',
+        useSignedDefinitions: false,
+        flagDefaults: {'A': true},
+        config: TogglyConfig(
+          cacheProvider: inner,
+          maxCacheKeys: 1,
+          enableTelemetry: false,
+          enableLiveUpdates: false,
+        ),
+      );
+
+      expect(parseCacheLruIndex(inner.lruIndex).entries.keys,
+          contains('flags:u:alice'));
+    });
+
     test('unlimited maxCacheKeys retains all entries', () async {
       final provider = wrap(maxCacheKeys: 0);
       await provider.writeFlags(_flags('u1'));
@@ -210,6 +231,27 @@ void main() {
       expect(inner.flags.containsKey('u1'), isTrue);
       expect(inner.flags.containsKey('u2'), isFalse);
       expect(inner.flags.containsKey('u3'), isTrue);
+    });
+
+    test('evicts stale variants and revision entries as logical keys',
+        () async {
+      final provider = wrap(maxCacheKeys: 1);
+      inner.variants['old'] = _variants('old');
+      inner.revisions['app:Production:old'] = 'rev-old';
+      inner.lruIndex = jsonEncode({
+        'entries': {
+          'variants:old': {'lastAccessed': 1},
+          'revision:app:Production:old': {'lastAccessed': 2},
+        },
+      });
+
+      clock = 3;
+      await provider.writeFlags(_flags('new'));
+
+      expect(inner.variants, isEmpty);
+      expect(inner.revisions, isEmpty);
+      expect(inner.flags.keys, ['new']);
+      expect(parseCacheLruIndex(inner.lruIndex).entries.keys, ['flags:new']);
     });
 
     test('protects the key just written from eviction', () async {

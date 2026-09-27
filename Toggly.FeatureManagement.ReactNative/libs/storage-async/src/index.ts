@@ -31,7 +31,7 @@ export interface AsyncStorageAdapterOptions {
  * ```
  */
 export class AsyncStorageAdapter implements TogglyStorage {
-  private keyPrefix: string;
+  private readonly keyPrefix: string;
 
   constructor(options: AsyncStorageAdapterOptions = {}) {
     this.keyPrefix = options.keyPrefix ?? '@toggly:';

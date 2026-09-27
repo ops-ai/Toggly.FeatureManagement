@@ -347,6 +347,34 @@ void main() {
     });
   });
 
+  test('same telemetry configuration sends pending and new metrics on reinit',
+      () async {
+    final base = 'http://${server.address.host}:${server.port}';
+    final config = TogglyConfig(
+        baseURI: base, metricsBaseUrl: base, enableLiveUpdates: false);
+    await Toggly.init(
+        appKey: 'test-key',
+        identity: 'alice',
+        useSignedDefinitions: false,
+        config: config);
+    Toggly.incrementCounter('orders');
+
+    await Toggly.init(
+        appKey: 'test-key',
+        identity: 'alice',
+        useSignedDefinitions: false,
+        config: config);
+    Toggly.incrementCounter('orders');
+    await Toggly.flushTelemetry();
+
+    await twoTelemetryArrived.future.timeout(const Duration(seconds: 2));
+    expect(sent, hasLength(2));
+    expect(sent.map((batch) => batch['m']), [
+      {'orders': 1},
+      {'orders': 1},
+    ]);
+  });
+
   testWidgets('widget recomputation records one check per gate evaluation',
       (tester) async {
     final base = 'http://${server.address.host}:${server.port}';

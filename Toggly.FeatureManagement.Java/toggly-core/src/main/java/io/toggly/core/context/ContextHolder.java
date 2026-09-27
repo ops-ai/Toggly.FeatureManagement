@@ -26,7 +26,7 @@ package io.toggly.core.context;
  */
 public final class ContextHolder {
 
-    private static final ThreadLocal<EvaluationContext> contextHolder = new ThreadLocal<>();
+    private static final ThreadLocal<EvaluationContext> CURRENT_CONTEXT = new ThreadLocal<>();
 
     private ContextHolder() {
         // Utility class
@@ -38,7 +38,7 @@ public final class ContextHolder {
      * @param context the evaluation context
      */
     public static void setContext(EvaluationContext context) {
-        contextHolder.set(context);
+        CURRENT_CONTEXT.set(context);
     }
 
     /**
@@ -47,7 +47,7 @@ public final class ContextHolder {
      * @return the context or null if not set
      */
     public static EvaluationContext getContext() {
-        return contextHolder.get();
+        return CURRENT_CONTEXT.get();
     }
 
     /**
@@ -57,7 +57,7 @@ public final class ContextHolder {
      * @return the context or the default
      */
     public static EvaluationContext getContextOrDefault(EvaluationContext defaultContext) {
-        EvaluationContext context = contextHolder.get();
+        EvaluationContext context = CURRENT_CONTEXT.get();
         return context != null ? context : defaultContext;
     }
 
@@ -76,7 +76,7 @@ public final class ContextHolder {
      * <p>Should be called at the end of request processing to prevent memory leaks.</p>
      */
     public static void clear() {
-        contextHolder.remove();
+        CURRENT_CONTEXT.remove();
     }
 
     /**
@@ -85,7 +85,7 @@ public final class ContextHolder {
      * @return true if a context is set
      */
     public static boolean hasContext() {
-        return contextHolder.get() != null;
+        return CURRENT_CONTEXT.get() != null;
     }
 
     /**

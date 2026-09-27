@@ -11,13 +11,13 @@ Object.defineProperty(globalThis, 'crypto', {
   configurable: true,
 });
 
-if (typeof globalThis.TextEncoder === 'undefined') {
+if (globalThis.TextEncoder === undefined) {
   Object.defineProperty(globalThis, 'TextEncoder', {
     value: TextEncoder,
     configurable: true,
   });
 }
-if (typeof globalThis.TextDecoder === 'undefined') {
+if (globalThis.TextDecoder === undefined) {
   Object.defineProperty(globalThis, 'TextDecoder', {
     value: TextDecoder,
     configurable: true,
