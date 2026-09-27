@@ -27,13 +27,19 @@ void main() {
     final connected = Completer<void>();
     final message = Completer<List<Object?>>();
     final refreshed = Completer<List<Object?>>();
+    final signingKeyRefresh = Completer<bool>();
     final confirmed = Completer<String>();
     sync.onConnected = connected.complete;
     sync.onSyncMessage = ({required bool unchanged, String? etag}) =>
         message.complete([unchanged, etag]);
-    sync.onRefreshRequested = (
-            {required bool forceJwksRefresh, String? pinnedRevision}) async =>
+    sync.onRefreshRequested =
+        ({required bool forceJwksRefresh, String? pinnedRevision}) async {
+      if (forceJwksRefresh) {
+        signingKeyRefresh.complete(pinnedRevision == null);
+      } else {
         refreshed.complete([forceJwksRefresh, pinnedRevision]);
+      }
+    };
     sync.onDefinitionsRevisionUpdated = confirmed.complete;
 
     sync.startWebSocket(
@@ -52,5 +58,8 @@ void main() {
 
     socket.add('{"type":"flags-updated","etag":"old"}');
     expect(await confirmed.future, 'old');
+
+    socket.add('{"type":"signing-key-updated"}');
+    expect(await signingKeyRefresh.future, isTrue);
   });
 }

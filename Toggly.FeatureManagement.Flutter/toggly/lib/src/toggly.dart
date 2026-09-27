@@ -1883,13 +1883,11 @@ class Toggly with WidgetsBindingObserver {
         final enabled = applyLocalGate(remote, key, localGates, localIndex);
         if (telemetry != null && attribution != null && telemetry.isEnabled) {
           try {
-            final assignment = variants[key];
-            final variant = enabled
-                ? (assignment?.enabled == true
-                    ? assignment?.name ?? 'enabled'
-                    : 'enabled')
-                : 'disabled';
-            telemetry.recordCapturedCheck(attribution, key, variant);
+            telemetry.recordCapturedCheck(
+              attribution,
+              key,
+              _capturedVariantName(enabled, variants[key]),
+            );
           } catch (_) {
             // Optional reporting must never change the evaluated boolean.
           }
@@ -1897,6 +1895,16 @@ class Toggly with WidgetsBindingObserver {
         return enabled;
       },
     );
+  }
+
+  static String _capturedVariantName(bool enabled, VariantResult? assignment) {
+    if (!enabled) {
+      return 'disabled';
+    }
+    if (assignment?.enabled != true) {
+      return 'enabled';
+    }
+    return assignment?.name ?? 'enabled';
   }
 
   /// Cancels registered timers and closes the feature flags stream.

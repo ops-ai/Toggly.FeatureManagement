@@ -236,20 +236,22 @@ class SyncService {
     }
 
     if (message.type == _flagsUpdatedMessage || message.type == 'update') {
-      if (kDebugMode) {
-        print(
-            'Toggly: Received WebSocket flags update (type: ${message.type})');
-      }
-      if (_shouldFetchOnFlagsUpdated(message)) {
-        // Never set revision from WS before HTTP confirms — that poisons
-        // If-None-Match and yields a stale 304. Pass etag via refresh pin.
-        requestRefresh(pinnedRevision: message.etag);
-        return;
-      }
-      if (message.etag != null && message.etag!.isNotEmpty) {
-        onDefinitionsRevisionUpdated?.call(message.etag!);
-      }
+      _handleFlagsUpdatedMessage(message);
+    }
+  }
+
+  void _handleFlagsUpdatedMessage(WsSyncMessage message) {
+    if (kDebugMode) {
+      print('Toggly: Received WebSocket flags update (type: ${message.type})');
+    }
+    if (_shouldFetchOnFlagsUpdated(message)) {
+      // Never set revision from WS before HTTP confirms — that poisons
+      // If-None-Match and yields a stale 304. Pass etag via refresh pin.
+      requestRefresh(pinnedRevision: message.etag);
       return;
+    }
+    if (message.etag != null && message.etag!.isNotEmpty) {
+      onDefinitionsRevisionUpdated?.call(message.etag!);
     }
   }
 

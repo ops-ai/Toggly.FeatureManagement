@@ -399,12 +399,11 @@ jobs:
           args: >
             -Dsonar.projectKey=${{ matrix.sonarKey }}
             -Dsonar.organization=ops-ai
-            -Dsonar.projectName=${{ matrix.sonarName }}
+            -Dsonar.projectName="${{ matrix.sonarName }}"
             -Dsonar.sources=lib
             -Dsonar.tests=test
             -Dsonar.exclusions=**/.*/**,**/example/**,**/*.g.dart,**/*.freezed.dart
             -Dsonar.dart.lcov.reportPaths=coverage/lcov.info
-        continue-on-error: true
 
       - name: SonarQube Server Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.1
@@ -415,12 +414,11 @@ jobs:
           projectBaseDir: Toggly.FeatureManagement.Flutter/${{ matrix.dir }}
           args: >
             -Dsonar.projectKey=${{ matrix.sonarKey }}
-            -Dsonar.projectName=${{ matrix.sonarName }}
+            -Dsonar.projectName="${{ matrix.sonarName }}"
             -Dsonar.sources=lib
             -Dsonar.tests=test
             -Dsonar.exclusions=**/.*/**,**/example/**,**/*.g.dart,**/*.freezed.dart
             -Dsonar.dart.lcov.reportPaths=coverage/lcov.info
-        continue-on-error: true
 
   secure-storage-version-matrix:
     name: Secure Storage Plugin ${{ matrix.version }}

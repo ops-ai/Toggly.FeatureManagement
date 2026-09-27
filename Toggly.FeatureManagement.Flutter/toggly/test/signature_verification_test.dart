@@ -253,6 +253,35 @@ void main() {
     },
   );
 
+  test('signed definitions reject keys outside the trusted whitelist',
+      () async {
+    final fixture = _buildWebCryptoSignedFixture();
+    _installInterceptors(
+      definitionsBody: fixture.rawBody,
+      jwks: fixture.jwks,
+    );
+    final errors = <String>[];
+
+    await Toggly.init(
+      appKey: 'app-key',
+      environment: 'TestFlight',
+      identity: 'ApplicationUsers/1-C',
+      useSignedDefinitions: true,
+      flagDefaults: const {'PresalePhotos': false},
+      config: TogglyConfig(
+        enableTelemetry: false,
+        baseURI: 'https://example.test',
+        enableLiveUpdates: false,
+        trustedKeyIds: const ['different-key'],
+        onError: (message, error, stack) => errors.add(message),
+      ),
+    );
+
+    expect(errors, contains('Key ID not in trusted whitelist'));
+    expect(Toggly.debug()['lastSynced'], isNull);
+    expect(Toggly.featureFlagsSnapshot['PresalePhotos'], isFalse);
+  });
+
   test(
     'rejects envelopes that nest signed defs under data (top-level only)',
     () async {

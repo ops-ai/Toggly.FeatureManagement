@@ -212,6 +212,27 @@ void main() {
       expect(inner.flags.containsKey('u3'), isTrue);
     });
 
+    test('evicts stale variants and revision entries as logical keys',
+        () async {
+      final provider = wrap(maxCacheKeys: 1);
+      inner.variants['old'] = _variants('old');
+      inner.revisions['app:Production:old'] = 'rev-old';
+      inner.lruIndex = jsonEncode({
+        'entries': {
+          'variants:old': {'lastAccessed': 1},
+          'revision:app:Production:old': {'lastAccessed': 2},
+        },
+      });
+
+      clock = 3;
+      await provider.writeFlags(_flags('new'));
+
+      expect(inner.variants, isEmpty);
+      expect(inner.revisions, isEmpty);
+      expect(inner.flags.keys, ['new']);
+      expect(parseCacheLruIndex(inner.lruIndex).entries.keys, ['flags:new']);
+    });
+
     test('protects the key just written from eviction', () async {
       final provider = wrap(maxCacheKeys: 1);
       clock = 1;
