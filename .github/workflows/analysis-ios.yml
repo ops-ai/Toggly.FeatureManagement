@@ -31,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        xcode: ['16.1', '16.2']
+        xcode: ['16.1', '16.2', '16.4']
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -61,32 +61,22 @@ jobs:
 
       - name: Run tests
         working-directory: ${{ env.SDK_ROOT }}
-        run: |
-          if [ "${{ matrix.xcode }}" = "16.1" ]; then
-            swift test -v --enable-code-coverage
-          else
-            swift test -v
-          fi
-
-      - name: Install iOS 18.1 simulator runtime
-        if: matrix.xcode == '16.1'
-        timeout-minutes: 30
-        run: xcodebuild -downloadPlatform iOS -buildVersion 18.1
+        run: swift test -v
 
       - name: Run iOS simulator tests with coverage
-        if: matrix.xcode == '16.1'
+        if: matrix.xcode == '16.4'
         working-directory: ${{ env.SDK_ROOT }}
         run: |
           xcodebuild test \
             -scheme Toggly-Package \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.1' \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' \
             -enableCodeCoverage YES \
             -derivedDataPath "$RUNNER_TEMP/ios-derived" \
             -resultBundlePath "$RUNNER_TEMP/ios-coverage.xcresult" \
             -quiet
 
       - name: Export simulator coverage for all four products
-        if: matrix.xcode == '16.1'
+        if: matrix.xcode == '16.4'
         working-directory: ${{ env.SDK_ROOT }}
         run: |
           python3 scripts/xccov-to-sonar.py \
@@ -95,7 +85,7 @@ jobs:
             coverage-generic.xml
 
       - name: Upload coverage to Codecov
-        if: matrix.xcode == '16.1'
+        if: matrix.xcode == '16.4'
         uses: codecov/codecov-action@v7
         with:
           file: ${{ env.SDK_ROOT }}/coverage.lcov
@@ -105,7 +95,7 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload coverage artifact
-        if: matrix.xcode == '16.1'
+        if: matrix.xcode == '16.4'
         uses: actions/upload-artifact@v7
         with:
           name: ios-coverage
@@ -285,25 +275,26 @@ jobs:
     strategy:
       matrix:
         destination:
-          - 'platform=iOS Simulator,name=iPhone 16,OS=18.1'
+          - 'platform=iOS Simulator,name=iPhone 16,OS=18.5'
           - 'platform=macOS'
-          - 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation),OS=18.1'
-          - 'platform=watchOS Simulator,name=Apple Watch Series 10 (46mm),OS=11.1'
+          - 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation),OS=18.5'
+          - 'platform=watchOS Simulator,name=Apple Watch Series 10 (46mm),OS=11.5'
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.1.app
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app
 
       - name: Build for platform
         working-directory: ${{ env.SDK_ROOT }}
         run: |
+          set -o pipefail
           xcodebuild build \
             -scheme Toggly-Package \
             -destination '${{ matrix.destination }}' \
             -skipPackagePluginValidation \
-            | xcpretty || true
+            | xcpretty
 
   summary:
     name: Analysis Summary
