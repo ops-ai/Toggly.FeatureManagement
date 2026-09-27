@@ -141,6 +141,11 @@ declare class Toggly implements TogglyService {
     shouldShowFeatureDuringEvaluation: boolean;
     get lastError(): string | undefined;
     private _reportError;
+    private _applyInitialDefaults;
+    private _applyFeatureDefaults;
+    private _applyDefaultEnvironment;
+    private _initializeConfiguredState;
+    private _seedCachedFeatures;
     constructor(config: TogglyOptions);
     private _ensureTelemetry;
     private get _definitionsRevision();
@@ -166,10 +171,10 @@ declare class Toggly implements TogglyService {
     } | null>;
     private _captureEvaluation;
     private _getEffectiveFlagValue;
-    _evaluateFeatureGate: (gate: string[], requirement?: string, negate?: boolean, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string, snapshot?: EvaluationSnapshot) => Promise<boolean>;
-    evaluateFeatureGate: (featureKeys: string[], requirement?: string, negate?: boolean, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string) => Promise<boolean>;
-    isFeatureOn: (featureKey: string, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string) => Promise<boolean>;
-    isFeatureOff: (featureKey: string, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string) => Promise<boolean>;
+    _evaluateFeatureGate: (gate: string[], requirement?: string, negate?: boolean, context?: TogglyEntityContextInput, kind?: string, snapshot?: EvaluationSnapshot) => Promise<boolean>;
+    evaluateFeatureGate: (featureKeys: string[], requirement?: string, negate?: boolean, context?: TogglyEntityContextInput, kind?: string) => Promise<boolean>;
+    isFeatureOn: (featureKey: string, context?: TogglyEntityContextInput, kind?: string) => Promise<boolean>;
+    isFeatureOff: (featureKey: string, context?: TogglyEntityContextInput, kind?: string) => Promise<boolean>;
     registerContext: <T>(kind: string, mapper: (entity: T) => TogglyEntityContext) => void;
     /**
      * Current variant assignment for a feature (requires {@link TogglyOptions.enableVariants} and loaded data).

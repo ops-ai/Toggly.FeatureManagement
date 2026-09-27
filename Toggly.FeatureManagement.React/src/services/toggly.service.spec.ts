@@ -96,6 +96,29 @@ describe('Toggly Service', () => {
       expect(calls).toContain('F1');
     });
 
+    it('keeps initial feature, group, claim and local-gate state independent from configuration inputs', async () => {
+      const groups = ['beta'];
+      const claims = { plan: 'trial' };
+      const service = new Toggly({
+        enableTelemetry: false,
+        featureDefaults: { Enabled: true },
+        groups,
+        claims,
+        localGates: [{
+          id: 'disable-enabled',
+          flagKeys: ['Enabled'],
+          isEnabled: () => false,
+        }],
+      });
+
+      groups.push('mutated-after-construction');
+      claims.plan = 'changed-after-construction';
+
+      expect((service as any)._groups).toEqual(['beta']);
+      expect((service as any)._claims).toEqual({ plan: 'trial' });
+      expect(await service.isFeatureOn('Enabled')).toBe(false);
+    });
+
     it('should merge config with defaults', () => {
       const service = new Toggly({
         enableTelemetry: false, appKey: 'key',
@@ -169,6 +192,38 @@ describe('Toggly Service', () => {
           headers: expect.objectContaining({ 'If-None-Match': 'rev123' }),
         }),
       );
+    });
+
+    it('normalizes quoted ETags without regex backtracking', async () => {
+      const longRevision = 'r'.repeat(100_000);
+      const cases = [
+        { revision: '"quoted"', expected: 'quoted' },
+        { revision: 'W/"weak"', expected: 'W/"weak' },
+        { revision: '"malformed', expected: 'malformed' },
+        { revision: `"${longRevision}"`, expected: longRevision },
+      ];
+
+      for (const { revision, expected } of cases) {
+        localStorage.clear();
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: { get: (key: string) => (key === 'ETag' ? revision : null) },
+          json: () => Promise.resolve({ ApiFlag: true }),
+          text: () => Promise.resolve(JSON.stringify({ ApiFlag: true })),
+        });
+        const service = new Toggly({
+          enableTelemetry: false,
+          appKey: 'test-key',
+          environment: 'Production',
+          enableLiveUpdates: false,
+        });
+
+        await service._loadFeatures(true);
+
+        expect((service as any)._cachedDefinitionsRevision).toBe(expected);
+      }
     });
 
     it('should preserve cached flags when API returns non-2xx', async () => {

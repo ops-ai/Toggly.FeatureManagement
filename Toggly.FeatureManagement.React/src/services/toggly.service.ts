@@ -55,7 +55,7 @@ export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-h
 export { isEntityGate, mapEntityContext, normalizeEntityContext, registerContext } from '@ops-ai/toggly-hooks-types';
 
 const canUseStorage = (() => {
-  try { return globalThis.window !== undefined && globalThis.window.localStorage !== undefined }
+  try { return globalThis.window?.localStorage !== undefined }
   catch { return false }
 })()
 const CACHE_PREFIX = 'toggly:flags:'
@@ -64,7 +64,13 @@ const REVISION_CACHE_PREFIX = 'toggly:revision:'
 const CACHE_LRU_KEY = 'toggly:cache-lru'
 
 function stripEtagQuotes(revision: string | null | undefined): string | undefined {
-  return revision?.replace(/^"+/, '').replace(/"+$/, '')
+  if (revision == null) return undefined
+
+  let start = 0
+  let end = revision.length
+  while (start < end && revision[start] === '"') start++
+  while (end > start && revision[end - 1] === '"') end--
+  return revision.slice(start, end)
 }
 
 function getCacheKey(appKey: string, environment: string, contextKey = ''): string {
@@ -414,63 +420,67 @@ export class Toggly implements TogglyService {
     this._config.onError?.(message, error)
   }
 
-  constructor(config: TogglyOptions) {
+  private _applyInitialDefaults(config: TogglyOptions): void {
     if (!config.appKey) {
-      if (config.featureDefaults) {
-        this._features = config.featureDefaults
+      this._applyFeatureDefaults(config)
+      return
+    }
+    this._applyDefaultEnvironment(config)
+  }
 
-        console.warn(
-          'Toggly --- Using feature defaults as no application key provided when initializing the Toggly',
-        )
-      } else {
-        console.warn(
-          'Toggly --- A valid application key is required to connect to your Toggly.io application for evaluating your features.',
-        )
-      }
-    } else if (!config.environment) {
-      config.environment = 'Production'
-
+  private _applyFeatureDefaults(config: TogglyOptions): void {
+    if (config.featureDefaults) {
+      this._features = config.featureDefaults
       console.warn(
-        'Toggly --- Using Production environment as no environment provided when initializing the Toggly',
+        'Toggly --- Using feature defaults as no application key provided when initializing the Toggly',
       )
+      return
     }
+    console.warn(
+      'Toggly --- A valid application key is required to connect to your Toggly.io application for evaluating your features.',
+    )
+  }
 
+  private _applyDefaultEnvironment(config: TogglyOptions): void {
+    if (config.environment) return
+    config.environment = 'Production'
+    console.warn(
+      'Toggly --- Using Production environment as no environment provided when initializing the Toggly',
+    )
+  }
+
+  private _initializeConfiguredState(config: TogglyOptions): void {
     this._config = { ...this._config, ...config, instanceId: config.instanceId?.trim() || undefined }
-
-
     this.shouldShowFeatureDuringEvaluation = this._config.showFeatureDuringEvaluation!
-    
-    // Register initial hooks
-    if (this._config.hooks) {
-      this._config.hooks.forEach(hook => this._hookExecutor.addHook(hook))
-    }
-
-    if (this._config.localGates) {
-      this.setLocalGates(this._config.localGates)
-    }
-
+    this._config.hooks?.forEach(hook => this._hookExecutor.addHook(hook))
+    if (this._config.localGates) this.setLocalGates(this._config.localGates)
     this._groups = this._config.groups ? [...this._config.groups] : []
     this._claims = this._config.claims ? { ...this._config.claims } : {}
+  }
 
-    // Seed in-memory features (and variants) from localStorage for instant availability
-    if (this._features === null && this._canPersist && this._config.appKey) {
-      const appKey = this._config.appKey
-      const env = this._config.environment ?? 'Production'
-      const contextKey = this._bodyCacheKey()
-      if (this._config.enableVariants) {
-        const vCached = readCachedVariants(appKey, env, contextKey, this._config.maxCacheKeys)
-        if (vCached) {
-          this._variants = vCached
-          this._features = variantDefsToFlags(vCached)
-        }
-      }
-      if (this._features === null) {
-        const cached = readCachedFlags(appKey, env, contextKey, this._config.maxCacheKeys)
-        if (cached) {
-          this._features = cached
-        }
+  private _seedCachedFeatures(): void {
+    if (this._features !== null || !this._canPersist || !this._config.appKey) return
+
+    const appKey = this._config.appKey
+    const env = this._config.environment ?? 'Production'
+    const contextKey = this._bodyCacheKey()
+    if (this._config.enableVariants) {
+      const variants = readCachedVariants(appKey, env, contextKey, this._config.maxCacheKeys)
+      if (variants) {
+        this._variants = variants
+        this._features = variantDefsToFlags(variants)
       }
     }
+    if (this._features !== null) return
+
+    const flags = readCachedFlags(appKey, env, contextKey, this._config.maxCacheKeys)
+    if (flags) this._features = flags
+  }
+
+  constructor(config: TogglyOptions) {
+    this._applyInitialDefaults(config)
+    this._initializeConfiguredState(config)
+    this._seedCachedFeatures()
   }
 
   private _ensureTelemetry(): TelemetryReporter | undefined {
@@ -820,7 +830,7 @@ export class Toggly implements TogglyService {
 
   _evaluateFeatureGate = async (
     gate: string[], requirement = 'all', negate = false,
-    context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string,
+    context?: TogglyEntityContextInput, kind?: string,
     snapshot?: EvaluationSnapshot,
   ) => {
     if (!snapshot) { await this._featuresLoaded(); snapshot = this._captureEvaluation() }
@@ -833,7 +843,7 @@ export class Toggly implements TogglyService {
 
   evaluateFeatureGate = async (
     featureKeys: string[], requirement = 'all', negate = false,
-    context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string,
+    context?: TogglyEntityContextInput, kind?: string,
   ) => {
     await this._featuresLoaded()
     const snapshot = this._captureEvaluation()
@@ -847,11 +857,11 @@ export class Toggly implements TogglyService {
   }
 
   isFeatureOn = async (
-    featureKey: string, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string,
+    featureKey: string, context?: TogglyEntityContextInput, kind?: string,
   ) => this.evaluateFeatureGate([featureKey], 'all', false, context, kind)
 
   isFeatureOff = async (
-    featureKey: string, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string,
+    featureKey: string, context?: TogglyEntityContextInput, kind?: string,
   ) => this.evaluateFeatureGate([featureKey], 'all', true, context, kind)
 
   registerContext = <T>(kind: string, mapper: (entity: T) => TogglyEntityContext): void => {

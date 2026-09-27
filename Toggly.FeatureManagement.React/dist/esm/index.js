@@ -1100,10 +1100,11 @@ function appendDefinitionsRevisionParam(url, rev) {
 }
 
 var canUseStorage = (function () {
+    var _a;
     try {
-        return globalThis.window !== undefined && globalThis.window.localStorage !== undefined;
+        return ((_a = globalThis.window) === null || _a === void 0 ? void 0 : _a.localStorage) !== undefined;
     }
-    catch (_a) {
+    catch (_b) {
         return false;
     }
 })();
@@ -1112,7 +1113,15 @@ var VARIANTS_CACHE_PREFIX = 'toggly:variants:';
 var REVISION_CACHE_PREFIX = 'toggly:revision:';
 var CACHE_LRU_KEY = 'toggly:cache-lru';
 function stripEtagQuotes(revision) {
-    return revision === null || revision === void 0 ? void 0 : revision.replace(/^"+/, '').replace(/"+$/, '');
+    if (revision == null)
+        return undefined;
+    var start = 0;
+    var end = revision.length;
+    while (start < end && revision[start] === '"')
+        start++;
+    while (end > start && revision[end - 1] === '"')
+        end--;
+    return revision.slice(start, end);
 }
 function getCacheKey(appKey, environment, contextKey) {
     if (contextKey === void 0) { contextKey = ''; }
@@ -1298,7 +1307,6 @@ function writeCachedVariants(appKey, environment, variants, contextKey, maxCache
 var Toggly = /** @class */ (function () {
     function Toggly(config) {
         var _this = this;
-        var _a, _b;
         this._config = {
             baseURI: 'https://definitions.toggly.io',
             verifySignatures: false,
@@ -1734,49 +1742,9 @@ var Toggly = /** @class */ (function () {
                 }
             });
         }); };
-        if (!config.appKey) {
-            if (config.featureDefaults) {
-                this._features = config.featureDefaults;
-                console.warn('Toggly --- Using feature defaults as no application key provided when initializing the Toggly');
-            }
-            else {
-                console.warn('Toggly --- A valid application key is required to connect to your Toggly.io application for evaluating your features.');
-            }
-        }
-        else if (!config.environment) {
-            config.environment = 'Production';
-            console.warn('Toggly --- Using Production environment as no environment provided when initializing the Toggly');
-        }
-        this._config = __assign(__assign(__assign({}, this._config), config), { instanceId: ((_a = config.instanceId) === null || _a === void 0 ? void 0 : _a.trim()) || undefined });
-        this.shouldShowFeatureDuringEvaluation = this._config.showFeatureDuringEvaluation;
-        // Register initial hooks
-        if (this._config.hooks) {
-            this._config.hooks.forEach(function (hook) { return _this._hookExecutor.addHook(hook); });
-        }
-        if (this._config.localGates) {
-            this.setLocalGates(this._config.localGates);
-        }
-        this._groups = this._config.groups ? __spreadArray([], this._config.groups, true) : [];
-        this._claims = this._config.claims ? __assign({}, this._config.claims) : {};
-        // Seed in-memory features (and variants) from localStorage for instant availability
-        if (this._features === null && this._canPersist && this._config.appKey) {
-            var appKey = this._config.appKey;
-            var env = (_b = this._config.environment) !== null && _b !== void 0 ? _b : 'Production';
-            var contextKey = this._bodyCacheKey();
-            if (this._config.enableVariants) {
-                var vCached = readCachedVariants(appKey, env, contextKey, this._config.maxCacheKeys);
-                if (vCached) {
-                    this._variants = vCached;
-                    this._features = variantDefsToFlags(vCached);
-                }
-            }
-            if (this._features === null) {
-                var cached = readCachedFlags(appKey, env, contextKey, this._config.maxCacheKeys);
-                if (cached) {
-                    this._features = cached;
-                }
-            }
-        }
+        this._applyInitialDefaults(config);
+        this._initializeConfiguredState(config);
+        this._seedCachedFeatures();
     }
     Object.defineProperty(Toggly.prototype, "lastError", {
         get: function () {
@@ -1789,6 +1757,58 @@ var Toggly = /** @class */ (function () {
         var _a, _b;
         this._lastError = message;
         (_b = (_a = this._config).onError) === null || _b === void 0 ? void 0 : _b.call(_a, message, error);
+    };
+    Toggly.prototype._applyInitialDefaults = function (config) {
+        if (!config.appKey) {
+            this._applyFeatureDefaults(config);
+            return;
+        }
+        this._applyDefaultEnvironment(config);
+    };
+    Toggly.prototype._applyFeatureDefaults = function (config) {
+        if (config.featureDefaults) {
+            this._features = config.featureDefaults;
+            console.warn('Toggly --- Using feature defaults as no application key provided when initializing the Toggly');
+            return;
+        }
+        console.warn('Toggly --- A valid application key is required to connect to your Toggly.io application for evaluating your features.');
+    };
+    Toggly.prototype._applyDefaultEnvironment = function (config) {
+        if (config.environment)
+            return;
+        config.environment = 'Production';
+        console.warn('Toggly --- Using Production environment as no environment provided when initializing the Toggly');
+    };
+    Toggly.prototype._initializeConfiguredState = function (config) {
+        var _this = this;
+        var _a, _b;
+        this._config = __assign(__assign(__assign({}, this._config), config), { instanceId: ((_a = config.instanceId) === null || _a === void 0 ? void 0 : _a.trim()) || undefined });
+        this.shouldShowFeatureDuringEvaluation = this._config.showFeatureDuringEvaluation;
+        (_b = this._config.hooks) === null || _b === void 0 ? void 0 : _b.forEach(function (hook) { return _this._hookExecutor.addHook(hook); });
+        if (this._config.localGates)
+            this.setLocalGates(this._config.localGates);
+        this._groups = this._config.groups ? __spreadArray([], this._config.groups, true) : [];
+        this._claims = this._config.claims ? __assign({}, this._config.claims) : {};
+    };
+    Toggly.prototype._seedCachedFeatures = function () {
+        var _a;
+        if (this._features !== null || !this._canPersist || !this._config.appKey)
+            return;
+        var appKey = this._config.appKey;
+        var env = (_a = this._config.environment) !== null && _a !== void 0 ? _a : 'Production';
+        var contextKey = this._bodyCacheKey();
+        if (this._config.enableVariants) {
+            var variants = readCachedVariants(appKey, env, contextKey, this._config.maxCacheKeys);
+            if (variants) {
+                this._variants = variants;
+                this._features = variantDefsToFlags(variants);
+            }
+        }
+        if (this._features !== null)
+            return;
+        var flags = readCachedFlags(appKey, env, contextKey, this._config.maxCacheKeys);
+        if (flags)
+            this._features = flags;
     };
     Toggly.prototype._ensureTelemetry = function () {
         var _this = this;
