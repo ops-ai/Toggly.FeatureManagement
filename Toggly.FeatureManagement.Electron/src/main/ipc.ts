@@ -73,11 +73,14 @@ export function registerTogglyIpc(
     handler: (args: unknown[]) => unknown,
     validate: (args: unknown[]) => boolean,
     secured = false,
+    failureValue: unknown = false,
   ) => {
     syncChannels.push(channel)
     ipcMain.on(channel, (event, ...args) => {
       event.returnValue =
-        (!secured || trusted(event)) && validate(args) ? handler(args) : false
+        (!secured || trusted(event)) && validate(args)
+          ? handler(args)
+          : failureValue
     })
   }
   const async = (
@@ -142,6 +145,8 @@ export function registerTogglyIpc(
     IPC_CHANNELS.getVariant,
     ([key]) => client.getVariant(key as string),
     (args) => args.length <= 1 && validKey(args[0]),
+    false,
+    null,
   )
   async(
     IPC_CHANNELS.getFlags,

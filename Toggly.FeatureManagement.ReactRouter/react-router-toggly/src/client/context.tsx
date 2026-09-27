@@ -25,8 +25,15 @@ import {
   parseVariantDefsPayload,
   variantDefsToFlags,
   decodeVariantValue,
+  type TogglyEntityContext,
+  type VariantResult,
+  type EvaluatedVariantDef,
+  type FeatureFlags,
+  type ServerFeatureContext,
+  type IdentityContext,
+  type TogglyConfig,
+  type TogglyHook,
 } from '../core';
-import type { TogglyEntityContext, VariantResult, EvaluatedVariantDef } from '../core';
 import { createBrowserTelemetry, type FrontendTelemetry } from './telemetry';
 import { appendSdkQueryParams } from './sdk-identity';
 import {
@@ -35,13 +42,6 @@ import {
   type FlagGateIndex,
   type LocalGate,
 } from '@ops-ai/toggly-local-gates';
-import type {
-  FeatureFlags,
-  ServerFeatureContext,
-  IdentityContext,
-  TogglyConfig,
-  TogglyHook,
-} from '../core';
 
 /**
  * Toggly context value

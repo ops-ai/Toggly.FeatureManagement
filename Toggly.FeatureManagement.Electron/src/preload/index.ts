@@ -11,7 +11,8 @@ import type {
 } from '../types.js'
 
 function requestVariant(key: string): VariantResult | null {
-  return ipcRenderer.sendSync(IPC_CHANNELS.getVariant, key) as VariantResult | null
+  const result = ipcRenderer.sendSync(IPC_CHANNELS.getVariant, key)
+  return result && typeof result === 'object' ? (result as VariantResult) : null
 }
 
 /**

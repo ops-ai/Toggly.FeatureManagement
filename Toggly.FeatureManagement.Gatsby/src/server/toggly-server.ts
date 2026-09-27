@@ -214,6 +214,15 @@ export class TogglyServer implements TogglyServerClient {
           acc[key] = true;
           return acc;
         }, {} as Flags);
+
+        // Keep getVariant consistent with forced-on flags during SSG.
+        if (variantDefs) {
+          const enabledVariantDefs: Record<string, EvaluatedVariantDef> = {};
+          for (const [key, entry] of Object.entries(variantDefs)) {
+            enabledVariantDefs[key] = { ...entry, enabled: true };
+          }
+          variantDefs = enabledVariantDefs;
+        }
       }
 
       if (this.config.isDebug) {

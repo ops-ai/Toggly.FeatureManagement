@@ -552,6 +552,34 @@ export class TogglyServerClient {
     }
   }
 
+  private applyParsedDefinitionsBody(parsed: unknown, useVariants: boolean): void {
+    if (useVariants) {
+      this.variants = parseVariantDefsPayload(parsed);
+      this.definitions = new Map();
+      this.flags = {
+        ...this.config.featureDefaults,
+        ...variantDefsToFlags(this.variants),
+      };
+      this.logger.debug(`Fetched ${Object.keys(this.variants).length} variant defs.`);
+      return;
+    }
+
+    this.variants = null;
+    this.definitions = parseDefinitionsPayload(parsed);
+    this.flags = {
+      ...this.config.featureDefaults,
+      ...snapshotEvaluatedBooleans(this.definitions, this.buildEvalContext()),
+    };
+    this.logger.debug(`Fetched ${this.definitions.size} definitions.`);
+  }
+
+  private hasLastKnownGoodDefinitions(useVariants: boolean): boolean {
+    if (this.definitions.size > 0) {
+      return true;
+    }
+    return Boolean(useVariants && this.variants && Object.keys(this.variants).length > 0);
+  }
+
   private async performDefinitionsFetch(): Promise<FeatureFlags> {
     if (!this.config.appKey) {
       this.logger.debug('No appKey, using featureDefaults.');
@@ -569,20 +597,20 @@ export class TogglyServerClient {
       this.pendingDefinitionsPin = null;
       // Local mode: do not pass identity into URL builder (no evaluation query params).
       // Variants mode is remote — include identity for userId targeting.
+      const identityContext =
+        useVariants && this.identity ? { identity: this.identity } : undefined;
       const url = appendDefinitionsRevisionParam(
-        buildDefinitionsUrl(
-          this.config,
-          useVariants && this.identity ? { identity: this.identity } : undefined,
-        ),
+        buildDefinitionsUrl(this.config, identityContext),
         pin,
       );
       this.logger.debug(`Fetching definitions from: ${url}`);
 
       // Pin forces a cache-proof GET; do not treat prior etag as still current.
       const previousRevision = pin ? null : this.getDefinitionsRevision();
-      const headers = buildDefinitionFetchHeaders(
-        previousRevision ? { 'If-None-Match': previousRevision } : {},
-      );
+      const conditionalHeaders = previousRevision
+        ? { 'If-None-Match': previousRevision }
+        : undefined;
+      const headers = buildDefinitionFetchHeaders(conditionalHeaders);
 
       const response = await fetchWithTimeout(url, { headers }, this.config.timeout);
 
@@ -614,26 +642,10 @@ export class TogglyServerClient {
         baseUrl: this.config.baseUrl ?? 'https://definitions.toggly.io',
         allowedKeyIds: this.config.allowedKeyIds,
         maxSignatureAgeSeconds: this.config.maxSignatureAgeSeconds,
-        headers: buildDefinitionFetchHeaders({}),
+        headers: buildDefinitionFetchHeaders(),
       });
 
-      if (useVariants) {
-        this.variants = parseVariantDefsPayload(parsed);
-        this.definitions = new Map();
-        this.flags = {
-          ...(this.config.featureDefaults ?? {}),
-          ...variantDefsToFlags(this.variants),
-        };
-        this.logger.debug(`Fetched ${Object.keys(this.variants).length} variant defs.`);
-      } else {
-        this.variants = null;
-        this.definitions = parseDefinitionsPayload(parsed);
-        this.flags = {
-          ...(this.config.featureDefaults ?? {}),
-          ...snapshotEvaluatedBooleans(this.definitions, this.buildEvalContext()),
-        };
-        this.logger.debug(`Fetched ${this.definitions.size} definitions.`);
-      }
+      this.applyParsedDefinitionsBody(parsed, useVariants);
       if (responseRevision) {
         this.cacheDefinitionsRevision(responseRevision);
       }
@@ -654,7 +666,7 @@ export class TogglyServerClient {
       this.config.onError?.('Error fetching feature flags', error);
 
       // Network error keeping last-good definitions only — not featureDefaults alone.
-      if (!outcomeRecorded && (this.definitions.size > 0 || (useVariants && this.variants && Object.keys(this.variants).length > 0))) {
+      if (!outcomeRecorded && this.hasLastKnownGoodDefinitions(useVariants)) {
         this.noteDefinitionCacheHit();
       }
 

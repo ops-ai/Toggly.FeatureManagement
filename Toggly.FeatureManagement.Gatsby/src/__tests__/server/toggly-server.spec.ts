@@ -464,6 +464,31 @@ describe('TogglyServer', () => {
       expect(flags.F2).toBe(false);
     });
 
+    it('should enable variant defs during build when enableVariants is on', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockOkResponse({
+          defs: {
+            F2: { enabled: false, variant: 'control', configurationValue: 1 },
+          },
+        }),
+      );
+
+      const server = new TogglyServer(
+        {
+          appKey: 'test-key',
+          allFeaturesEnabledDuringBuild: true,
+          enableVariants: true,
+        },
+        true,
+      );
+
+      expect(await server.getFlag('F2')).toBe(true);
+      expect(await server.getVariant('F2')).toEqual({
+        name: 'control',
+        configurationValue: 1,
+      });
+    });
+
     it('should log in debug mode during build override', async () => {
       const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       vi.spyOn(globalThis, 'fetch').mockResolvedValue(defsResponse({ F1: true }));

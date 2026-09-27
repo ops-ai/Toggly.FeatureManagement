@@ -71,12 +71,12 @@ export function buildDefinitionsUrl(
 
   const mode = evaluationMode ?? 'remote';
   const useVariants = mode !== 'local' && enableVariants === true;
-  const pathSegment =
-    mode === 'local'
-      ? 'definitions-signed'
-      : useVariants
-        ? 'evaluated-variants-signed'
-        : 'evaluated-signed';
+  let pathSegment = 'evaluated-signed';
+  if (mode === 'local') {
+    pathSegment = 'definitions-signed';
+  } else if (useVariants) {
+    pathSegment = 'evaluated-variants-signed';
+  }
   const url = new URL(`${baseUrl}/${pathSegment}/${appKey}/${environment}`);
 
   if (mode === 'local') {
