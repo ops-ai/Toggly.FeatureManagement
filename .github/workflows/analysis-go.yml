@@ -96,17 +96,30 @@ jobs:
           args: --timeout=5m
           working-directory: toggly-go
       
-      - name: Run tests with coverage
-        run: go test -v -race -timeout 5m -coverprofile=coverage.out -covermode=atomic ./...
-      
+      - name: Run all tests with raw coverage
+        run: go test -v -race -timeout 5m -coverprofile=coverage-raw.out -covermode=atomic ./...
+
+      - name: Measure authored module coverage
+        run: |
+          packages="$(go list ./... | grep -vE '/examples/|/metricspb$|/usagepb$')"
+          mapfile -t package_array <<< "$packages"
+          go test -race -timeout 5m -coverprofile=coverage.out -covermode=atomic "${package_array[@]}"
+
       - name: Display coverage
-        run: go tool cover -func=coverage.out
+        run: |
+          echo 'All packages, including generated protobuf and examples:'
+          go tool cover -func=coverage-raw.out | tail -1
+          echo 'Authored publishable module:'
+          go tool cover -func=coverage.out | tail -1
+          go tool cover -func=coverage.out | awk '/^total:/ {gsub(/%/, "", $3); if ($3 <= 80) exit 1; found=1} END {if (!found) exit 1}'
       
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
         with:
           name: go-coverage
-          path: toggly-go/coverage.out
+          path: |
+            toggly-go/coverage.out
+            toggly-go/coverage-raw.out
           retention-days: 7
 
   smoke-test:
@@ -219,18 +232,28 @@ jobs:
           args: --timeout=5m
           working-directory: toggly-go-mongodb-v2
 
-      - name: Run tests with the race detector and coverage
-        run: go test -v -race -timeout 5m -coverprofile=coverage.out -covermode=atomic ./...
+      - name: Run all tests with the race detector and raw coverage
+        run: go test -v -race -timeout 5m -coverprofile=coverage-raw.out -covermode=atomic ./...
+
+      - name: Measure MongoDB v2 module coverage
+        run: go test -race -timeout 5m -coverprofile=coverage.out -covermode=atomic .
 
       - name: Display module coverage
-        run: go tool cover -func=coverage.out
+        run: |
+          echo 'All packages, including example:'
+          go tool cover -func=coverage-raw.out | tail -1
+          echo 'Publishable MongoDB v2 adapter:'
+          go tool cover -func=coverage.out | tail -1
+          go tool cover -func=coverage.out | awk '/^total:/ {gsub(/%/, "", $3); if ($3 <= 80) exit 1; found=1} END {if (!found) exit 1}'
 
       - name: Upload MongoDB v2 coverage artifact
         if: matrix.go-version == '1.25.x'
         uses: actions/upload-artifact@v7
         with:
           name: go-mongodb-v2-coverage
-          path: toggly-go-mongodb-v2/coverage.out
+          path: |
+            toggly-go-mongodb-v2/coverage.out
+            toggly-go-mongodb-v2/coverage-raw.out
           retention-days: 7
 
   mongodb-v2-consumer:
@@ -368,6 +391,7 @@ jobs:
           path: toggly-go/
         continue-on-error: true
 
+      # Generated protobuf/grpc bindings are never hand-edited; analyze authored Go.
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.1
         env:
@@ -381,7 +405,7 @@ jobs:
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Go"
             -Dsonar.sources=.
-            -Dsonar.exclusions=**/*_test.go,**/vendor/**,**/examples/**
+            -Dsonar.exclusions=**/*_test.go,**/vendor/**,**/examples/**,**/*.pb.go
             -Dsonar.tests=.
             -Dsonar.test.inclusions=**/*_test.go
             -Dsonar.go.coverage.reportPaths=coverage.out
@@ -405,11 +429,65 @@ jobs:
             -Dsonar.projectKey=toggly-sdks-go
             -Dsonar.projectName="Toggly SDKs - Go"
             -Dsonar.sources=.
-            -Dsonar.exclusions=**/*_test.go,**/vendor/**,**/examples/**
+            -Dsonar.exclusions=**/*_test.go,**/vendor/**,**/examples/**,**/*.pb.go
             -Dsonar.tests=.
             -Dsonar.test.inclusions=**/*_test.go
             -Dsonar.go.coverage.reportPaths=coverage.out
             -Dsonar.dependencyCheck.reportPath=../dependency-check-reports/dependency-check-report.xml
+        continue-on-error: true
+
+  sonar-mongodb-v2:
+    name: SonarQube Analysis - MongoDB Driver v2
+    runs-on: ubuntu-latest
+    needs: [mongodb-v2]
+    if: ${{ always() && (github.event_name != 'workflow_call' || inputs.run_reporting) }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Download MongoDB v2 coverage report
+        uses: actions/download-artifact@v8
+        with:
+          name: go-mongodb-v2-coverage
+          path: toggly-go-mongodb-v2/
+
+      - name: SonarCloud Scan - MongoDB Driver v2
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          projectBaseDir: toggly-go-mongodb-v2
+          args: >
+            -Dsonar.projectKey=toggly-sdks-go-mongodb-v2
+            -Dsonar.organization=ops-ai
+            -Dsonar.projectName="Toggly SDKs - Go MongoDB Driver v2"
+            -Dsonar.sources=.
+            -Dsonar.exclusions=**/*_test.go,**/examples/**
+            -Dsonar.tests=.
+            -Dsonar.test.inclusions=**/*_test.go
+            -Dsonar.go.coverage.reportPaths=coverage.out
+        continue-on-error: true
+
+      - name: SonarQube Server Scan - MongoDB Driver v2
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          projectBaseDir: toggly-go-mongodb-v2
+          args: >
+            -Dsonar.projectKey=toggly-sdks-go-mongodb-v2
+            -Dsonar.projectName="Toggly SDKs - Go MongoDB Driver v2"
+            -Dsonar.sources=.
+            -Dsonar.exclusions=**/*_test.go,**/examples/**
+            -Dsonar.tests=.
+            -Dsonar.test.inclusions=**/*_test.go
+            -Dsonar.go.coverage.reportPaths=coverage.out
         continue-on-error: true
 
   build:

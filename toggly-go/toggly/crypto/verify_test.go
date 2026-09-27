@@ -15,10 +15,15 @@ import (
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 )
 
+const (
+	verifyGenerateKeyError = "generate key: %v"
+	verifySignError        = "sign: %v"
+)
+
 func TestVerifySignedDefinitions_OK(t *testing.T) {
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		t.Fatalf("generate key: %v", err)
+		t.Fatalf(verifyGenerateKeyError, err)
 	}
 
 	xBytes := pad32(priv.X.Bytes())
@@ -42,7 +47,7 @@ func TestVerifySignedDefinitions_OK(t *testing.T) {
 
 	sig, err := signP1363(priv, doubleHash(payload))
 	if err != nil {
-		t.Fatalf("sign: %v", err)
+		t.Fatalf(verifySignError, err)
 	}
 
 	env := &definitions.SignedDefinitionsResponse{
@@ -60,7 +65,7 @@ func TestVerifySignedDefinitions_OK(t *testing.T) {
 func TestVerifySignedDefinitions_AllowedKid(t *testing.T) {
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		t.Fatalf("generate key: %v", err)
+		t.Fatalf(verifyGenerateKeyError, err)
 	}
 
 	xBytes := pad32(priv.X.Bytes())
@@ -83,7 +88,7 @@ func TestVerifySignedDefinitions_AllowedKid(t *testing.T) {
 	payload := string(defs) + "|" + strconv.FormatInt(ts, 10)
 	sig, err := signP1363(priv, doubleHash(payload))
 	if err != nil {
-		t.Fatalf("sign: %v", err)
+		t.Fatalf(verifySignError, err)
 	}
 
 	env := &definitions.SignedDefinitionsResponse{
@@ -104,7 +109,7 @@ func TestVerifySignedDefinitions_AllowedKid(t *testing.T) {
 func TestVerifySignedDefinitions_BadSignature(t *testing.T) {
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		t.Fatalf("generate key: %v", err)
+		t.Fatalf(verifyGenerateKeyError, err)
 	}
 
 	xBytes := pad32(priv.X.Bytes())
@@ -127,7 +132,7 @@ func TestVerifySignedDefinitions_BadSignature(t *testing.T) {
 	payload := string(defs) + "|" + strconv.FormatInt(ts, 10)
 	sig, err := signP1363(priv, doubleHash(payload))
 	if err != nil {
-		t.Fatalf("sign: %v", err)
+		t.Fatalf(verifySignError, err)
 	}
 	// Corrupt the signature
 	sig[0] ^= 0xff
@@ -147,7 +152,7 @@ func TestVerifySignedDefinitions_BadSignature(t *testing.T) {
 func TestVerifySignedDefinitions_RejectsSingleHash(t *testing.T) {
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		t.Fatalf("generate key: %v", err)
+		t.Fatalf(verifyGenerateKeyError, err)
 	}
 
 	xBytes := pad32(priv.X.Bytes())
@@ -171,7 +176,7 @@ func TestVerifySignedDefinitions_RejectsSingleHash(t *testing.T) {
 	first := sha256.Sum256([]byte(payload))
 	sig, err := signP1363(priv, first[:])
 	if err != nil {
-		t.Fatalf("sign: %v", err)
+		t.Fatalf(verifySignError, err)
 	}
 
 	env := &definitions.SignedDefinitionsResponse{

@@ -6,6 +6,15 @@ import (
 	"github.com/mileusna/useragent"
 )
 
+const (
+	segmentBrowserFamily   = "BrowserFamily:0"
+	segmentErrorFormat     = "err: %v"
+	segmentBrowserLanguage = "BrowserLanguage:0"
+	segmentCountry         = "Country:0"
+	segmentOperatingSystem = "OperatingSystem:0"
+	segmentDeviceType      = "DeviceType:0"
+)
+
 const chromeUA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 const iphoneUA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
@@ -16,8 +25,8 @@ func TestBrowserFamily_StickyPercentage(t *testing.T) {
 	bucket := ComputePercentile(identity, featureKey)
 
 	params := map[string]any{
-		"Percentage":      bucket + 1,
-		"BrowserFamily:0": "Chrome",
+		"Percentage":         bucket + 1,
+		segmentBrowserFamily: "Chrome",
 	}
 	ctx := Context{
 		Identity: identity,
@@ -34,7 +43,7 @@ func TestBrowserFamily_StickyPercentage(t *testing.T) {
 	}
 	off, err := e.Evaluate(featureKey, params, ctx)
 	if err != nil {
-		t.Fatalf("err: %v", err)
+		t.Fatalf(segmentErrorFormat, err)
 	}
 	if off {
 		t.Fatalf("expected sticky gate to fail below bucket")
@@ -53,8 +62,8 @@ func TestSegmentFilters_Basic(t *testing.T) {
 			name: "language",
 			ev:   BrowserLanguageEvaluator{},
 			params: map[string]any{
-				"Percentage":        float64(100),
-				"BrowserLanguage:0": "en-US",
+				"Percentage":           float64(100),
+				segmentBrowserLanguage: "en-US",
 			},
 			ctx:  Context{Identity: "u", Request: &RequestContext{AcceptLanguage: "en-US,en;q=0.9"}},
 			want: true,
@@ -63,8 +72,8 @@ func TestSegmentFilters_Basic(t *testing.T) {
 			name: "country",
 			ev:   CountryEvaluator{},
 			params: map[string]any{
-				"Percentage": float64(100),
-				"Country:0":  "US",
+				"Percentage":   float64(100),
+				segmentCountry: "US",
 			},
 			ctx:  Context{Identity: "u", Request: &RequestContext{Country: "us"}},
 			want: true,
@@ -73,8 +82,8 @@ func TestSegmentFilters_Basic(t *testing.T) {
 			name: "os",
 			ev:   OperatingSystemEvaluator{},
 			params: map[string]any{
-				"Percentage":        float64(100),
-				"OperatingSystem:0": "macOS",
+				"Percentage":           float64(100),
+				segmentOperatingSystem: "macOS",
 			},
 			ctx:  Context{Identity: "u", Request: &RequestContext{UserAgent: chromeUA}},
 			want: true,
@@ -83,8 +92,8 @@ func TestSegmentFilters_Basic(t *testing.T) {
 			name: "device",
 			ev:   DeviceTypeEvaluator{},
 			params: map[string]any{
-				"Percentage":   float64(100),
-				"DeviceType:0": "iPhone",
+				"Percentage":      float64(100),
+				segmentDeviceType: "iPhone",
 			},
 			ctx:  Context{Identity: "u", Request: &RequestContext{UserAgent: iphoneUA}},
 			want: true,
@@ -117,7 +126,7 @@ func TestSegmentFilters_Basic(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := tc.ev.Evaluate("f", tc.params, tc.ctx)
 			if err != nil {
-				t.Fatalf("err: %v", err)
+				t.Fatalf(segmentErrorFormat, err)
 			}
 			if got != tc.want {
 				t.Fatalf("got %v want %v", got, tc.want)
@@ -183,7 +192,7 @@ func TestSegmentFilters_EdgeBranches(t *testing.T) {
 		{
 			name:   "browser missing percentage",
 			ev:     BrowserFamilyEvaluator{},
-			params: map[string]any{"BrowserFamily:0": "Chrome"},
+			params: map[string]any{segmentBrowserFamily: "Chrome"},
 			ctx:    chromeCtx,
 			want:   false,
 		},
@@ -197,35 +206,35 @@ func TestSegmentFilters_EdgeBranches(t *testing.T) {
 		{
 			name:   "browser nil request",
 			ev:     BrowserFamilyEvaluator{},
-			params: map[string]any{"Percentage": float64(100), "BrowserFamily:0": "Chrome"},
+			params: map[string]any{"Percentage": float64(100), segmentBrowserFamily: "Chrome"},
 			ctx:    nilReqCtx,
 			want:   false,
 		},
 		{
 			name:   "browser empty ua",
 			ev:     BrowserFamilyEvaluator{},
-			params: map[string]any{"Percentage": float64(100), "BrowserFamily:0": "Chrome"},
+			params: map[string]any{"Percentage": float64(100), segmentBrowserFamily: "Chrome"},
 			ctx:    emptyUACtx,
 			want:   false,
 		},
 		{
 			name:   "browser family other",
 			ev:     BrowserFamilyEvaluator{},
-			params: map[string]any{"Percentage": float64(100), "BrowserFamily:0": "Chrome"},
+			params: map[string]any{"Percentage": float64(100), segmentBrowserFamily: "Chrome"},
 			ctx:    otherUACtx,
 			want:   false,
 		},
 		{
 			name:   "browser no match",
 			ev:     BrowserFamilyEvaluator{},
-			params: map[string]any{"Percentage": float64(100), "BrowserFamily:0": "Firefox"},
+			params: map[string]any{"Percentage": float64(100), segmentBrowserFamily: "Firefox"},
 			ctx:    chromeCtx,
 			want:   false,
 		},
 		{
 			name:   "language missing percentage",
 			ev:     BrowserLanguageEvaluator{},
-			params: map[string]any{"BrowserLanguage:0": "en"},
+			params: map[string]any{segmentBrowserLanguage: "en"},
 			ctx:    Context{Identity: "u", Request: &RequestContext{AcceptLanguage: "en-US"}},
 			want:   false,
 		},
@@ -239,21 +248,21 @@ func TestSegmentFilters_EdgeBranches(t *testing.T) {
 		{
 			name:   "language empty accept",
 			ev:     BrowserLanguageEvaluator{},
-			params: map[string]any{"Percentage": float64(100), "BrowserLanguage:0": "en"},
+			params: map[string]any{"Percentage": float64(100), segmentBrowserLanguage: "en"},
 			ctx:    Context{Identity: "u", Request: &RequestContext{}},
 			want:   false,
 		},
 		{
 			name:   "language no match",
 			ev:     BrowserLanguageEvaluator{},
-			params: map[string]any{"Percentage": float64(100), "BrowserLanguage:0": "fr"},
+			params: map[string]any{"Percentage": float64(100), segmentBrowserLanguage: "fr"},
 			ctx:    Context{Identity: "u", Request: &RequestContext{AcceptLanguage: "en-US"}},
 			want:   false,
 		},
 		{
 			name:   "country missing percentage",
 			ev:     CountryEvaluator{},
-			params: map[string]any{"Country:0": "US"},
+			params: map[string]any{segmentCountry: "US"},
 			ctx:    Context{Identity: "u", Request: &RequestContext{Country: "US"}},
 			want:   false,
 		},
@@ -267,21 +276,21 @@ func TestSegmentFilters_EdgeBranches(t *testing.T) {
 		{
 			name:   "country empty",
 			ev:     CountryEvaluator{},
-			params: map[string]any{"Percentage": float64(100), "Country:0": "US"},
+			params: map[string]any{"Percentage": float64(100), segmentCountry: "US"},
 			ctx:    Context{Identity: "u", Request: &RequestContext{}},
 			want:   false,
 		},
 		{
 			name:   "country no match",
 			ev:     CountryEvaluator{},
-			params: map[string]any{"Percentage": float64(100), "Country:0": "CA"},
+			params: map[string]any{"Percentage": float64(100), segmentCountry: "CA"},
 			ctx:    Context{Identity: "u", Request: &RequestContext{Country: "US"}},
 			want:   false,
 		},
 		{
 			name:   "device missing percentage",
 			ev:     DeviceTypeEvaluator{},
-			params: map[string]any{"DeviceType:0": "iPhone"},
+			params: map[string]any{segmentDeviceType: "iPhone"},
 			ctx:    Context{Identity: "u", Request: &RequestContext{UserAgent: iphoneUA}},
 			want:   false,
 		},
@@ -295,28 +304,28 @@ func TestSegmentFilters_EdgeBranches(t *testing.T) {
 		{
 			name:   "device empty ua",
 			ev:     DeviceTypeEvaluator{},
-			params: map[string]any{"Percentage": float64(100), "DeviceType:0": "iPhone"},
+			params: map[string]any{"Percentage": float64(100), segmentDeviceType: "iPhone"},
 			ctx:    emptyUACtx,
 			want:   false,
 		},
 		{
 			name:   "device family other",
 			ev:     DeviceTypeEvaluator{},
-			params: map[string]any{"Percentage": float64(100), "DeviceType:0": "iPhone"},
+			params: map[string]any{"Percentage": float64(100), segmentDeviceType: "iPhone"},
 			ctx:    otherUACtx,
 			want:   false,
 		},
 		{
 			name:   "device no match",
 			ev:     DeviceTypeEvaluator{},
-			params: map[string]any{"Percentage": float64(100), "DeviceType:0": "iPad"},
+			params: map[string]any{"Percentage": float64(100), segmentDeviceType: "iPad"},
 			ctx:    Context{Identity: "u", Request: &RequestContext{UserAgent: iphoneUA}},
 			want:   false,
 		},
 		{
 			name:   "os missing percentage",
 			ev:     OperatingSystemEvaluator{},
-			params: map[string]any{"OperatingSystem:0": "macOS"},
+			params: map[string]any{segmentOperatingSystem: "macOS"},
 			ctx:    chromeCtx,
 			want:   false,
 		},
@@ -330,21 +339,21 @@ func TestSegmentFilters_EdgeBranches(t *testing.T) {
 		{
 			name:   "os empty ua",
 			ev:     OperatingSystemEvaluator{},
-			params: map[string]any{"Percentage": float64(100), "OperatingSystem:0": "macOS"},
+			params: map[string]any{"Percentage": float64(100), segmentOperatingSystem: "macOS"},
 			ctx:    emptyUACtx,
 			want:   false,
 		},
 		{
 			name:   "os family other",
 			ev:     OperatingSystemEvaluator{},
-			params: map[string]any{"Percentage": float64(100), "OperatingSystem:0": "macOS"},
+			params: map[string]any{"Percentage": float64(100), segmentOperatingSystem: "macOS"},
 			ctx:    otherUACtx,
 			want:   false,
 		},
 		{
 			name:   "os no match",
 			ev:     OperatingSystemEvaluator{},
-			params: map[string]any{"Percentage": float64(100), "OperatingSystem:0": "Windows"},
+			params: map[string]any{"Percentage": float64(100), segmentOperatingSystem: "Windows"},
 			ctx:    chromeCtx,
 			want:   false,
 		},
@@ -382,7 +391,7 @@ func TestSegmentFilters_EdgeBranches(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := tc.ev.Evaluate("f", tc.params, tc.ctx)
 			if err != nil {
-				t.Fatalf("err: %v", err)
+				t.Fatalf(segmentErrorFormat, err)
 			}
 			if got != tc.want {
 				t.Fatalf("got %v want %v", got, tc.want)

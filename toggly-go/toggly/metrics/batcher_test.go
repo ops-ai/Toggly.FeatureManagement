@@ -3,6 +3,8 @@ package metrics
 import (
 	"testing"
 	"time"
+
+	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/metrics/metricspb"
 )
 
 func TestBatcher_MeasureIncrementObserve_VariantValues(t *testing.T) {
@@ -24,35 +26,17 @@ func TestBatcher_MeasureIncrementObserve_VariantValues(t *testing.T) {
 		t.Fatalf("envelope: %+v", msg)
 	}
 
-	findStat := func(metric, feature string) map[string]float64 {
-		for _, s := range msg.Stats {
-			f := ""
-			if s.Feature != nil {
-				f = *s.Feature
-			}
-			if s.Metric == metric && f == feature {
-				return s.VariantValues
-			}
-		}
-		return nil
-	}
-
-	rev := findStat("revenue", "FeatA")
+	rev := findStat(msg, "revenue", "FeatA")
 	if rev == nil || rev["enabled"] != 13 || rev["disabled"] != 5 {
 		t.Fatalf("revenue variantValues = %v", rev)
 	}
 
-	stand := findStat("standalone", "")
+	stand := findStat(msg, "standalone", "")
 	if stand == nil || stand["enabled"] != 7 {
 		t.Fatalf("standalone = %v", stand)
 	}
 
-	var clicks map[string]float64
-	for _, c := range msg.Counters {
-		if c.Metric == "clicks" && c.Feature != nil && *c.Feature == "FeatA" {
-			clicks = c.VariantValues
-		}
-	}
+	clicks := findCounter(msg, "clicks", "FeatA")
 	if clicks == nil || clicks["enabled"] != 3 {
 		t.Fatalf("clicks = %v", clicks)
 	}
@@ -69,6 +53,28 @@ func TestBatcher_MeasureIncrementObserve_VariantValues(t *testing.T) {
 	if len(empty.Stats) != 0 || len(empty.Counters) != 0 || len(empty.Observations) != 0 {
 		t.Fatalf("expected empty after reset: %+v", empty)
 	}
+}
+
+func findStat(msg *metricspb.MetricStat, metric, feature string) map[string]float64 {
+	for _, stat := range msg.Stats {
+		actualFeature := ""
+		if stat.Feature != nil {
+			actualFeature = *stat.Feature
+		}
+		if stat.Metric == metric && actualFeature == feature {
+			return stat.VariantValues
+		}
+	}
+	return nil
+}
+
+func findCounter(msg *metricspb.MetricStat, metric, feature string) map[string]float64 {
+	for _, counter := range msg.Counters {
+		if counter.Metric == metric && counter.Feature != nil && *counter.Feature == feature {
+			return counter.VariantValues
+		}
+	}
+	return nil
 }
 
 func TestBatcher_DefaultVariantEnabled(t *testing.T) {

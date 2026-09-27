@@ -7,6 +7,12 @@ import (
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 )
 
+const (
+	sessionTestUser    = "user-1"
+	sessionClaimsFlag  = "claims-flag"
+	sessionBrowserFlag = "browser-flag"
+)
+
 func TestClient_PercentageStickyByFeatureKeyAndIdentity(t *testing.T) {
 	c, err := NewClient(Config{
 		AppKey:                   "app",
@@ -37,7 +43,7 @@ func TestClient_PercentageStickyByFeatureKeyAndIdentity(t *testing.T) {
 		},
 	})
 
-	ctx := Context{Identity: "user-1"}
+	ctx := Context{Identity: sessionTestUser}
 	a1, err := c.IsEnabled(context.Background(), "flagA", ctx)
 	if err != nil {
 		t.Fatalf("IsEnabled 1: %v", err)
@@ -77,7 +83,7 @@ func TestClient_IsEnabled_ForwardsClaimsAndRequest(t *testing.T) {
 
 	c.provider.applyDefinitions([]definitions.FeatureDefinitionModel{
 		{
-			FeatureKey: "claims-flag",
+			FeatureKey: sessionClaimsFlag,
 			Filters: []definitions.FeatureFilter{
 				{
 					Name: "UserClaims",
@@ -91,7 +97,7 @@ func TestClient_IsEnabled_ForwardsClaimsAndRequest(t *testing.T) {
 			RequirementType: definitions.RequirementAny,
 		},
 		{
-			FeatureKey: "browser-flag",
+			FeatureKey: sessionBrowserFlag,
 			Filters: []definitions.FeatureFilter{
 				{
 					Name: "BrowserFamily",
@@ -105,8 +111,8 @@ func TestClient_IsEnabled_ForwardsClaimsAndRequest(t *testing.T) {
 		},
 	})
 
-	claimsOn, err := c.IsEnabled(context.Background(), "claims-flag", Context{
-		Identity: "user-1",
+	claimsOn, err := c.IsEnabled(context.Background(), sessionClaimsFlag, Context{
+		Identity: sessionTestUser,
 		Claims:   map[string]string{"role": "admin"},
 	})
 	if err != nil {
@@ -116,8 +122,8 @@ func TestClient_IsEnabled_ForwardsClaimsAndRequest(t *testing.T) {
 		t.Fatal("expected UserClaims match via forwarded Claims")
 	}
 
-	claimsOff, err := c.IsEnabled(context.Background(), "claims-flag", Context{
-		Identity: "user-1",
+	claimsOff, err := c.IsEnabled(context.Background(), sessionClaimsFlag, Context{
+		Identity: sessionTestUser,
 		Claims:   map[string]string{"role": "user"},
 	})
 	if err != nil {
@@ -127,8 +133,8 @@ func TestClient_IsEnabled_ForwardsClaimsAndRequest(t *testing.T) {
 		t.Fatal("expected UserClaims mismatch to fail")
 	}
 
-	browserOn, err := c.IsEnabled(context.Background(), "browser-flag", Context{
-		Identity: "user-1",
+	browserOn, err := c.IsEnabled(context.Background(), sessionBrowserFlag, Context{
+		Identity: sessionTestUser,
 		Request: &RequestContext{
 			UserAgent:      chromeUA,
 			AcceptLanguage: "en-US",
@@ -142,8 +148,8 @@ func TestClient_IsEnabled_ForwardsClaimsAndRequest(t *testing.T) {
 		t.Fatal("expected BrowserFamily match via forwarded Request")
 	}
 
-	browserOff, err := c.IsEnabled(context.Background(), "browser-flag", Context{
-		Identity: "user-1",
+	browserOff, err := c.IsEnabled(context.Background(), sessionBrowserFlag, Context{
+		Identity: sessionTestUser,
 		Request:  &RequestContext{UserAgent: "curl/8.0"},
 	})
 	if err != nil {
