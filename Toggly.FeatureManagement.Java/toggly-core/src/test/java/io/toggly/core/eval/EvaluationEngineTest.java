@@ -1,6 +1,7 @@
 package io.toggly.core.eval;
 
 import io.toggly.core.context.EvaluationContext;
+import io.toggly.core.context.TogglyEntityContext;
 import io.toggly.core.model.FeatureDefinition;
 import io.toggly.core.model.FeatureFilter;
 import io.toggly.core.model.FeatureRequirement;
@@ -47,6 +48,33 @@ class EvaluationEngineTest {
                 .build();
 
         assertTrue(engine.evaluate(definition, EvaluationContext.empty()));
+    }
+
+    @Test
+    void entityFilterMustPassBeforeUserFiltersAndCanStandAlone() {
+        FeatureFilter entityFilter = FeatureFilter.of("ContextProperty", Map.of(
+                "Property", "Region", "Operator", "eq", "Value", "US"));
+        FeatureDefinition entityOnly = FeatureDefinition.builder()
+                .featureKey("regional")
+                .filters(List.of(entityFilter))
+                .build();
+        FeatureDefinition entityAndUser = FeatureDefinition.builder()
+                .featureKey("regional-targeted")
+                .filters(List.of(entityFilter, FeatureFilter.targetingUsers("alice")))
+                .build();
+        EvaluationContext alice = EvaluationContext.builder().identity("alice")
+                .entity(new TogglyEntityContext("Account", "a-1", Map.of("Region", "US")))
+                .build();
+        EvaluationContext bob = alice.withIdentity("bob");
+        EvaluationContext wrongRegion = EvaluationContext.builder().identity("alice")
+                .entity(new TogglyEntityContext("Account", "a-2", Map.of("Region", "EU")))
+                .build();
+
+        assertTrue(engine.evaluate(entityOnly, alice));
+        assertFalse(engine.evaluate(entityOnly, EvaluationContext.empty()));
+        assertFalse(engine.evaluate(entityOnly, wrongRegion));
+        assertTrue(engine.evaluate(entityAndUser, alice));
+        assertFalse(engine.evaluate(entityAndUser, bob));
     }
 
     @Test

@@ -241,6 +241,33 @@ describe('TogglyProvider', () => {
     });
   });
 
+  it('preserves service error messages and uses a safe fallback', async () => {
+    let contextValue: ReturnType<typeof useTogglyContext> | undefined;
+    function ContextConsumer() { contextValue = useTogglyContext(); return null; }
+    render(<TogglyProvider appKey="test-key"><ContextConsumer /></TogglyProvider>);
+    await waitFor(() => expect(contextValue?.isReady).toBe(true));
+    const errorListener = mockOn.mock.calls.find(([event]) => event === 'error')?.[1];
+    expect(errorListener).toBeDefined();
+    act(() => errorListener({ data: { error: { message: 'network unavailable' } } }));
+    expect(contextValue?.error?.message).toBe('network unavailable');
+    act(() => errorListener({ data: { error: new Error('request failed') } }));
+    expect(contextValue?.error?.message).toBe('request failed');
+    act(() => errorListener({ data: { error: 'offline' } }));
+    expect(contextValue?.error?.message).toBe('offline');
+    act(() => errorListener({ data: { error: { code: 503 } } }));
+    expect(contextValue?.error?.message).toBe('Toggly error');
+  });
+
+  it('keeps the context value stable when the owner state has not changed', async () => {
+    let value: ReturnType<typeof useTogglyContext> | undefined;
+    function ContextConsumer() { value = useTogglyContext(); return null; }
+    const host = render(<TogglyProvider appKey="test-key"><ContextConsumer /></TogglyProvider>);
+    await waitFor(() => expect(value?.isReady).toBe(true));
+    const initial = value;
+    host.rerender(<TogglyProvider appKey="test-key"><ContextConsumer /></TogglyProvider>);
+    expect(value).toBe(initial);
+  });
+
   it('disposes service on unmount', async () => {
     const { unmount } = render(
       <TogglyProvider appKey="test-key" environment="Production">

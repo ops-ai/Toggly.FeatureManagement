@@ -580,7 +580,7 @@ describe('Edge Cases & Error Handling', () => {
       jest.advanceTimersByTime(10000);
 
       // After canceling, no more fetches should happen
-      expect(mockFetch.mock.calls.length).toBe(callsBefore);
+      expect(mockFetch.mock.calls).toHaveLength(callsBefore);
       jest.useRealTimers();
     });
 

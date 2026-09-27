@@ -4,7 +4,6 @@ import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser'
 import { FeatureRequirement, StorageKeys, TogglyConfig, VariantResult, EvaluatedVariantDef } from './models';
 import { decodeVariantValue } from './decode-variant-value';
 import { HookExecutor } from './hooks';
-import type { Hook, TogglyEvaluationContext, EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 import {
   appendEvaluationContext,
   evaluationContextCacheKey,
@@ -20,6 +19,10 @@ import {
   registerContext as registerEntityContext,
   resolveEvaluatedDefinition,
   toBooleanDefinitions,
+  type Hook,
+  type TogglyEvaluationContext,
+  type EvaluatedDefinitions,
+  type TogglyEntityContext,
 } from '@ops-ai/toggly-hooks-types';
 import {
   applyLocalGate,
@@ -54,6 +57,14 @@ const canUseStorage = (() => {
   }
 })();
 
+function trimRevisionQuotes(revision: string): string {
+  let start = 0;
+  let end = revision.length;
+  while (start < end && revision[start] === '"') start++;
+  while (end > start && revision[end - 1] === '"') end--;
+  return revision.slice(start, end);
+}
+
 type EvaluationSnapshot = {
   flags: EvaluatedDefinitions;
   variants: { [key: string]: EvaluatedVariantDef } | null;
@@ -67,15 +78,15 @@ export class Toggly {
   private static _generation = 0;
   private static _active = false;
   private static _instanceId = '';
-  private static _requests = new Set<AbortController>();
-  private static _contextMemory = new Map<string, string | null>();
-  private static _contextMemoryOnly = new Set<string>();
+  private static readonly _requests = new Set<AbortController>();
+  private static readonly _contextMemory = new Map<string, string | null>();
+  private static readonly _contextMemoryOnly = new Set<string>();
   private static _refreshInterval: number | undefined;
-  private static _hookExecutor = new HookExecutor();
+  private static readonly _hookExecutor = new HookExecutor();
   private static _localGates: LocalGate[] = [];
   private static _inMemoryJwks: JwkSet | null = null;
   private static _localGateIndex: FlagGateIndex = new Map();
-  private static _localGatesChangedListeners = new Set<() => void>();
+  private static readonly _localGatesChangedListeners = new Set<() => void>();
   private static _inMemoryFlags: EvaluatedDefinitions | null = null;
   private static _inMemoryVariants: { [key: string]: EvaluatedVariantDef } | null = null;
   private static _hasLoadedFlags = false;
@@ -216,7 +227,7 @@ export class Toggly {
   private static applyFetchRevision(response: Response): void {
     const revision = extractDefinitionsRevision(response);
     if (revision) {
-      Toggly.cacheDefinitionsRevision(revision.replace(/^"+|"+$/g, ''));
+      Toggly.cacheDefinitionsRevision(trimRevisionQuotes(revision));
     }
   }
 
@@ -813,7 +824,7 @@ export class Toggly {
     const evaluation = Toggly.captureEvaluation();
     const entry = evaluation.variants?.[featureKey];
     const enabled = Toggly._getEffectiveFlagValue(evaluation.flags, featureKey, undefined, evaluation);
-    if (!entry || !entry.variant) return null;
+    if (!entry?.variant) return null;
     if (!enabled || entry.enabled !== true) {
       return null;
     }
@@ -891,7 +902,7 @@ export class Toggly {
         .catch((error) => {
           if (generation !== Toggly._generation) { resolve(fallback); return; }
           Toggly._reportError('Error fetching feature flags', error);
-          var flags = Toggly._getFallbackFlags();
+          const flags = Toggly._getFallbackFlags();
           resolve(toBooleanDefinitions(flags));
 
           if (Toggly._config.isDebug) { console.log(`Toggly.loadedFromCache - ${JSON.stringify(flags)}`); }
@@ -974,9 +985,7 @@ export class Toggly {
       Promise.resolve(Toggly._hookExecutor.executeAfterRefresh(flags))
         .catch(err => console.error('[Toggly] Hook execution error:', err));
       
-      return new Promise((resolve, reject) => {
-        resolve(flags);
-      });
+      return Promise.resolve(flags);
     }
 
     return Toggly.fetchFeatureFlags().then(flags => {
@@ -1003,7 +1012,7 @@ export class Toggly {
   }
 
   private static _evaluateFeatureGate(
-    flags: EvaluatedDefinitions = {},
+    flags: EvaluatedDefinitions,
     featureGate: string[],
     requirement: FeatureRequirement = FeatureRequirement.all,
     negate: boolean = false,
@@ -1014,7 +1023,7 @@ export class Toggly {
       return negate;
     }
 
-    var isEnabled: boolean;
+    let isEnabled: boolean;
 
     if (requirement === FeatureRequirement.any) {
       isEnabled = featureGate.reduce((isEnabled, featureKey) => {
@@ -1136,6 +1145,32 @@ export class Toggly {
     };
   }
 
+  private static handleWebSocketMessage(data: unknown): void {
+    if (typeof data !== 'string') return;
+    if (data === 'update' || data === 'flags-updated') {
+      if (Toggly._config.isDebug) { console.log(`[Toggly] WebSocket received text: ${data}`); }
+      Toggly.scheduleDebouncedRefresh();
+      return;
+    }
+
+    try {
+      const message = JSON.parse(data) as WsSyncMessage;
+      if (message.type === 'ping') return;
+      if (message.type === 'sync') {
+        if (Toggly._config.isDebug) { console.log('[Toggly] WebSocket received sync'); }
+        Toggly.handleWsSyncMessage(message);
+        return;
+      }
+      if (message.type === 'flags-updated' || message.type === 'update' || message.type === 'signing-key-updated') {
+        if (Toggly._config.isDebug) { console.log(`[Toggly] WebSocket received: ${message.type}`); }
+        Toggly.handleWsUpdateMessage(message);
+      }
+    } catch {
+      // Invalid or unsupported messages must not interrupt live updates.
+      if (Toggly._config.isDebug) { console.log(`[Toggly] WebSocket received unrecognized message: ${data}`); }
+    }
+  }
+
   static startWebSocket() {
     if (typeof window === 'undefined' || typeof WebSocket === 'undefined') return;
     if (!Toggly._config.appKey) {
@@ -1169,33 +1204,7 @@ export class Toggly {
 
     ws.onmessage = (event) => {
       if (generation !== Toggly._generation || Toggly._ws !== ws) return;
-      const data = event.data;
-
-      if (typeof data === 'string') {
-        if (data === 'update' || data === 'flags-updated') {
-          if (Toggly._config.isDebug) { console.log(`[Toggly] WebSocket received text: ${data}`); }
-          Toggly.scheduleDebouncedRefresh();
-          return;
-        }
-
-        try {
-          const message = JSON.parse(data) as WsSyncMessage;
-          if (message.type === 'ping') {
-            return;
-          }
-          if (message.type === 'sync') {
-            if (Toggly._config.isDebug) { console.log('[Toggly] WebSocket received sync'); }
-            Toggly.handleWsSyncMessage(message);
-            return;
-          }
-          if (message.type === 'flags-updated' || message.type === 'update' || message.type === 'signing-key-updated') {
-            if (Toggly._config.isDebug) { console.log(`[Toggly] WebSocket received: ${message.type}`); }
-            Toggly.handleWsUpdateMessage(message);
-          }
-        } catch (e) {
-          if (Toggly._config.isDebug) { console.log(`[Toggly] WebSocket received unrecognized message: ${data}`); }
-        }
-      }
+      Toggly.handleWebSocketMessage(event.data);
     };
 
     ws.onclose = () => {

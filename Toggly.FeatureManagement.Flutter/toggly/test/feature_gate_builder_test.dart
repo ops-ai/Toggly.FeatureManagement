@@ -44,6 +44,42 @@ void main() {
         true,
       );
     });
+
+    test('reinit clears local gates and retains the ephemeral identity',
+        () async {
+      await Toggly.init(
+        useSignedDefinitions: false,
+        flagDefaults: {'PremiumCheckout': true},
+        config: TogglyConfig(
+          localGates: [
+            LocalGate(
+              id: 'sales',
+              flagKeys: ['PremiumCheckout'],
+              isEnabled: () => false,
+            ),
+          ],
+        ),
+      );
+      final firstIdentity = Toggly.debug()['user'];
+      expect(firstIdentity, isNotEmpty);
+      expect(
+        Toggly.evaluateFeatureGateSync(['PremiumCheckout'],
+            flags: Toggly.featureFlagsSnapshot),
+        isFalse,
+      );
+
+      await Toggly.init(
+        useSignedDefinitions: false,
+        flagDefaults: {'PremiumCheckout': true},
+      );
+
+      expect(Toggly.debug()['user'], firstIdentity);
+      expect(
+        Toggly.evaluateFeatureGateSync(['PremiumCheckout'],
+            flags: Toggly.featureFlagsSnapshot),
+        isTrue,
+      );
+    });
   });
 
   group('FeatureGateBuilder', () {

@@ -3,7 +3,7 @@ import type { Hook, EvaluationSeriesData, IdentitySeriesData } from '@ops-ai/tog
  * Internal class that manages hook registration and execution
  */
 export declare class HookExecutor {
-    private hooks;
+    private readonly hooks;
     /**
      * Register a new hook
      */
