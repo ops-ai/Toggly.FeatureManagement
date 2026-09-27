@@ -312,11 +312,11 @@ jobs:
             resultset=$(find coverage-artifacts/$pkg -name ".resultset.json" 2>/dev/null | head -1)
             test -n "$json"
             test -n "$resultset"
-            python3 - "$json" "$pkg" "coverage/$pkg-coverage.json" <<'PY'
+            python3 - "$json" "$resultset" "$pkg" "coverage/$pkg-coverage.json" "coverage/$pkg-resultset.json" <<'PY'
           import json
           import sys
 
-          source, package, output = sys.argv[1:]
+          source, resultset_source, package, output, resultset_output = sys.argv[1:]
           directory = {"core": "toggly", "rails": "toggly-rails", "cache": "toggly-cache"}[package]
           with open(source, encoding="utf-8") as handle:
               report = json.load(handle)
@@ -326,8 +326,17 @@ jobs:
           }
           with open(output, "w", encoding="utf-8") as handle:
               json.dump(report, handle)
+          with open(resultset_source, encoding="utf-8") as handle:
+              resultset = json.load(handle)
+          # The Server analyzer expects the older SimpleCov path-to-lines format.
+          for framework in resultset.values():
+              framework["coverage"] = {
+                  path: file_coverage["lines"]
+                  for path, file_coverage in framework["coverage"].items()
+              }
+          with open(resultset_output, "w", encoding="utf-8") as handle:
+              json.dump(resultset, handle)
           PY
-            cp "$resultset" "coverage/$pkg-resultset.json"
             echo "Mapped coverage for $pkg: $json"
           done
           echo "Coverage files:"
