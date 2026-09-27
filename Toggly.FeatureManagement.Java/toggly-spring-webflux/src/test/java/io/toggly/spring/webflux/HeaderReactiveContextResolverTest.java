@@ -1,6 +1,5 @@
 package io.toggly.spring.webflux;
 
-import io.toggly.core.context.EvaluationContext;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;

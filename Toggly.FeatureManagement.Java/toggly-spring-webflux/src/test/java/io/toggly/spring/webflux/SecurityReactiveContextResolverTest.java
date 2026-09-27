@@ -95,6 +95,8 @@ class SecurityReactiveContextResolverTest {
 
     private static Authentication authentication(Object... authorities) {
         return new Authentication() {
+            private boolean authenticated = true;
+
             @Override
             @SuppressWarnings({"unchecked", "rawtypes"})
             public Collection<? extends GrantedAuthority> getAuthorities() {
@@ -118,11 +120,12 @@ class SecurityReactiveContextResolverTest {
 
             @Override
             public boolean isAuthenticated() {
-                return true;
+                return authenticated;
             }
 
             @Override
             public void setAuthenticated(boolean authenticated) {
+                this.authenticated = authenticated;
             }
 
             @Override
