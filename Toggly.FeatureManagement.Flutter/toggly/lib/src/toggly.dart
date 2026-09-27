@@ -1193,7 +1193,7 @@ class Toggly with WidgetsBindingObserver {
     return true;
   }
 
-  static Future<Map<String, dynamic>>
+  static Future<Map<String, dynamic>?>
       _readVerifiedVariantDefsFromCache() async {
     final generation = _generation;
     try {
@@ -1218,7 +1218,8 @@ class Toggly with WidgetsBindingObserver {
     } on _JwksUnavailableException {
       // Match signed flag-cache policy: keep unverifiable variants so a later
       // usable JWK can validate them instead of wiping offline assignments.
-      return {};
+      // Null distinguishes this retryable state from a verified empty cache.
+      return null;
     } catch (e, stackTrace) {
       if (generation != _generation) return {};
       _reportError('Error loading cached variant definitions', e, stackTrace);
@@ -1245,7 +1246,7 @@ class Toggly with WidgetsBindingObserver {
         return {};
       }
       final defs = await _readVerifiedVariantDefsFromCache();
-      if (generation != _generation) return {};
+      if (generation != _generation || defs == null) return {};
       _inMemoryVariantDefs = defs;
       return defs;
     } catch (e, stackTrace) {

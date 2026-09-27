@@ -12,6 +12,8 @@
 - Keep flag-loading recovery when a consumer `onError` callback throws.
 - Preserve signed variant caches when JWKs are temporarily unavailable,
   matching signed feature-flag offline behavior.
+- Retry retained signed variant caches in the same session after JWKs become
+  available, instead of retaining an empty fallback in memory.
 
 ## 1.13.0
 

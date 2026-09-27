@@ -1592,6 +1592,49 @@ void main() {
         .removeWhere((interceptor) => interceptor is InterceptorsWrapper);
   });
 
+  test('retries signed variant cache after JWKs become available in-session',
+      () async {
+    const variantsJson = '{"FeatureA":{"enabled":true,"variant":"blue"}}';
+    final fixture = _buildSignedFlagsFixture(defsJson: variantsJson);
+    final provider = _MemoryRevisionCacheProvider();
+    provider.variants['u:user-1'] = TogglyVariantsCache(
+      identity: 'u:user-1',
+      variants: variantsJson,
+      timestamp: fixture.timestamp,
+      signature: fixture.signature,
+      keyId: fixture.kid,
+    );
+    final offlineInterceptor = InterceptorsWrapper(
+      onRequest: (options, handler) => handler.reject(
+        DioException(requestOptions: options, error: 'offline'),
+      ),
+    );
+    HttpService.getInstance.http.interceptors.add(offlineInterceptor);
+
+    await Toggly.init(
+      identity: 'user-1',
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        enableTelemetry: false,
+        enableLiveUpdates: false,
+        enableVariants: true,
+        baseURI: 'https://example.test',
+        cacheProvider: provider,
+      ),
+    );
+
+    expect(await Toggly.cachedVariantDefinitions(), isEmpty);
+    expect(provider.variants.containsKey('u:user-1'), isTrue);
+
+    HttpService.getInstance.http.interceptors.remove(offlineInterceptor);
+    provider.jwks = jsonEncode(fixture.jwks);
+
+    final defs = await Toggly.cachedVariantDefinitions();
+    expect((defs['FeatureA'] as Map?)?['variant'], 'blue');
+    expect(provider.variants.containsKey('u:user-1'), isTrue);
+  });
+
   test('variants rollback keeps newer cached assignments', () async {
     final provider = _MemoryRevisionCacheProvider();
     const signedMeta = {
