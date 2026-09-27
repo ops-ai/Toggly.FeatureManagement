@@ -328,10 +328,10 @@ impl Evaluator for TimeWindowEvaluator {
 pub struct ContextualTargetingEvaluator;
 
 impl ContextualTargetingEvaluator {
-    fn compare_strings(
-        actual: &serde_json::Value,
-        expected: &serde_json::Value,
-        compare: impl FnOnce(&str, &str) -> bool,
+    fn compare_strings<'a, 'b>(
+        actual: &'a serde_json::Value,
+        expected: &'b serde_json::Value,
+        compare: impl FnOnce(&'a str, &'b str) -> bool,
     ) -> bool {
         actual
             .as_str()
@@ -377,13 +377,13 @@ impl ContextualTargetingEvaluator {
             "Equals" | "equals" | "eq" => actual_value == expected_value,
             "NotEquals" | "notEquals" | "ne" => actual_value != expected_value,
             "Contains" | "contains" => {
-                Self::compare_strings(actual_value, expected_value, |a, b| a.contains(b))
+                Self::compare_strings(actual_value, expected_value, str::contains)
             }
             "StartsWith" | "startsWith" => {
-                Self::compare_strings(actual_value, expected_value, |a, b| a.starts_with(b))
+                Self::compare_strings(actual_value, expected_value, str::starts_with)
             }
             "EndsWith" | "endsWith" => {
-                Self::compare_strings(actual_value, expected_value, |a, b| a.ends_with(b))
+                Self::compare_strings(actual_value, expected_value, str::ends_with)
             }
             "GreaterThan" | "greaterThan" | "gt" => {
                 Self::compare_numbers(actual_value, expected_value, |a, b| a > b)
