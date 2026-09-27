@@ -12,6 +12,13 @@ export interface FrontendTelemetry {
 type Attribution = {identity?: string; instanceId?: string};
 type Entry = {partition: number; context: Attribution; key: string; variant?: string; kind: 'feature' | 'counter' | 'gauge'; values: number[]};
 
+function checkVariantLabel(result: boolean | string): string {
+  if (typeof result === 'string') {
+    return result;
+  }
+  return result ? 'enabled' : 'disabled';
+}
+
 /** Render may be abandoned: keep its bounded aggregate inert until commit. */
 export function createBrowserTelemetry(config: TogglyConfig) {
   const enabled = globalThis.window !== undefined && typeof document !== 'undefined' &&
@@ -108,22 +115,17 @@ export function createBrowserTelemetry(config: TogglyConfig) {
     },
     captureCheck(): (key: string, result: boolean | string) => void {
       if (disposed || !usage) return () => {};
-      const toVariant = (result: boolean | string) =>
-        typeof result === 'string' ? result : result ? 'enabled' : 'disabled';
       if (active) {
         const record = getReporter().captureCheck();
-        return (key, result) => record(key, toVariant(result));
+        return (key, result) => record(key, checkVariantLabel(result));
       }
       const attribution = context;
       const capturedPartition = partition;
-      return (key, result) => feature(key, toVariant(result), 0, attribution, capturedPartition);
+      return (key, result) =>
+        feature(key, checkVariantLabel(result), 0, attribution, capturedPartition);
     },
     recordCheck: (key: string, result: boolean | string) =>
-      feature(
-        key,
-        typeof result === 'string' ? result : result ? 'enabled' : 'disabled',
-        0,
-      ),
+      feature(key, checkVariantLabel(result), 0),
     activate() {
       if (disposed || active) return;
       active = true;

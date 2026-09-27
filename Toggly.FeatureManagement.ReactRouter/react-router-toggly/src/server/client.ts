@@ -134,6 +134,11 @@ export class TogglyServerClient {
   private definitionsLoadPromise: Promise<void> | null = null;
   /** Single-flight for definition GET so concurrent joiners are not double-counted. */
   private definitionsFetchInFlight: Promise<FeatureFlags> | null = null;
+  /**
+   * Serializes variants-mode init so concurrent identities cannot interleave
+   * shared `this.variants` / `this.flags` mutations.
+   */
+  private variantsInitChain: Promise<unknown> = Promise.resolve();
 
   // WebSocket live updates
   private ws: WebSocket | null = null;
@@ -495,16 +500,11 @@ export class TogglyServerClient {
   }
 
   /**
-   * Initialize the client by fetching feature definitions.
-   * When already initialized, rebinds identity (including clearing it) and
-   * re-snapshots flags without re-fetching (definitions are identity-agnostic).
-   * Concurrent cold starts share one fetch; each caller still receives a
-   * request-local snapshot for its identity.
-   */
-  /**
    * Initialize the client and optionally bind identity.
-   * Concurrent cold starts share one fetch; each caller still receives a
-   * request-local snapshot for its identity.
+   * Local mode: concurrent cold starts share one definitions fetch; each caller
+   * still receives a request-local snapshot for its identity.
+   * Variants mode: inits are serialized so concurrent identities cannot
+   * interleave remote variant assignments on the shared client.
    */
   async init(identity?: string): Promise<FeatureFlags> {
     if (this.config.enableVariants) {
@@ -518,32 +518,42 @@ export class TogglyServerClient {
    * `/evaluated-variants-signed` receives the correct `userId`.
    */
   private async initWithVariants(identity?: string): Promise<FeatureFlags> {
-    const previousIdentity = this.identity;
-    const wasWarm = this.initialized && this.variants !== null;
-    const identityChanged = previousIdentity !== identity;
+    const run = async (): Promise<FeatureFlags> => {
+      const previousIdentity = this.identity;
+      const wasWarm = this.initialized && this.variants !== null;
+      const identityChanged = previousIdentity !== identity;
 
-    this.identity = identity;
-    if (!wasWarm || identityChanged) {
-      // Do not join an in-flight fetch started under a different identity.
-      if (identityChanged && this.definitionsFetchInFlight) {
-        await this.definitionsFetchInFlight.catch(() => undefined);
-      }
-      await this.fetchFlags();
-      this.initialized = true;
-      if (!wasWarm) {
-        this.startWebSocket();
-        if (identity) {
-          await this.executeBeforeIdentify(identity);
-          await this.executeAfterIdentify(identity);
+      this.identity = identity;
+      if (!wasWarm || identityChanged) {
+        // Do not join an in-flight fetch started under a different identity.
+        if (identityChanged && this.definitionsFetchInFlight) {
+          await this.definitionsFetchInFlight.catch(() => undefined);
+        }
+        await this.fetchFlags();
+        this.initialized = true;
+        if (!wasWarm) {
+          this.startWebSocket();
+          if (identity) {
+            await this.executeBeforeIdentify(identity);
+            await this.executeAfterIdentify(identity);
+          }
         }
       }
-    }
 
-    this.flags = this.snapshotFlags({ identity });
-    if (wasWarm && !identityChanged) {
-      this.logger.debug('Client already initialized; re-snapshotted for identity.');
-    }
-    return this.flags;
+      this.flags = this.snapshotFlags({ identity });
+      if (wasWarm && !identityChanged) {
+        this.logger.debug('Client already initialized; re-snapshotted for identity.');
+      }
+      // Return a copy so a later serialized init cannot mutate the caller's snapshot.
+      return { ...this.flags };
+    };
+
+    const result = this.variantsInitChain.then(run, run);
+    this.variantsInitChain = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   private async initWithLocalDefinitions(identity?: string): Promise<FeatureFlags> {

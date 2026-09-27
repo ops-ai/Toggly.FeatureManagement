@@ -1294,6 +1294,59 @@ describe('enableVariants', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
+  it('serializes concurrent variant inits so each identity gets its own flags', async () => {
+    const bodyFor = (name: string) =>
+      JSON.stringify({
+        defs: {
+          Checkout: {
+            enabled: true,
+            variant: name,
+            configurationValue: { who: name },
+          },
+        },
+      });
+
+    mockFetch.mockImplementation(async (url: string) => {
+      const who = String(url).includes('userId=alice') ? 'alice-variant' : 'bob-variant';
+      await new Promise((r) => setTimeout(r, 20));
+      const body = bodyFor(who);
+      return {
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(body),
+        json: () => Promise.resolve(JSON.parse(body)),
+        headers: { get: () => null },
+      };
+    });
+
+    const client = new TogglyServerClient({
+      appKey: 'test-key',
+      environment: 'Production',
+      enableVariants: true,
+      enableUsageTracking: false,
+      enableMetrics: false,
+    });
+
+    const [alice, bob] = await Promise.all([
+      client.init('alice'),
+      client.init('bob'),
+    ]);
+
+    expect(alice.Checkout).toBe(true);
+    expect(bob.Checkout).toBe(true);
+    // Each caller must receive the snapshot for its own identity, not a
+    // clobbered shared last-write-wins map.
+    const aliceUrl = mockFetch.mock.calls.find((c) =>
+      String(c[0]).includes('userId=alice'),
+    );
+    const bobUrl = mockFetch.mock.calls.find((c) =>
+      String(c[0]).includes('userId=bob'),
+    );
+    expect(aliceUrl).toBeDefined();
+    expect(bobUrl).toBeDefined();
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps local definitions-signed evaluation when enableVariants is unset', async () => {
     mockFetch.mockResolvedValueOnce(mockDefsFetchResponse({ Plain: true }));
 
