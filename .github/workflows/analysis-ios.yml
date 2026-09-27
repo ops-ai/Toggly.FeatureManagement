@@ -278,7 +278,7 @@ jobs:
           - 'platform=iOS Simulator,name=iPhone 16,OS=18.5'
           - 'platform=macOS'
           - 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation),OS=18.5'
-          - 'platform=watchOS Simulator,name=Apple Watch Series 10 (46mm),OS=11.5'
+          - 'generic/platform=watchOS Simulator'
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
