@@ -1,3 +1,11 @@
+## 2.10.1
+
+2026-09-27
+
+### Fixed
+- Marked immutable `TogglyService` internals as `readonly` in the published
+  TypeScript declarations.
+
 ## 2.10.0
 
 2026-09-24
