@@ -270,3 +270,60 @@ class TestFeatureFlagBlueprint:
                 response = client.get("/new-page")
                 assert response.status_code == 200
                 assert response.data == b"new page"
+
+
+@pytest.mark.parametrize(
+    ("enabled", "variant", "expected"),
+    [
+        (True, "experiment", b"variant"),
+        (True, "unknown", b"original"),
+        (True, None, b"original"),
+        (False, "experiment", b"default"),
+    ],
+)
+def test_feature_variant_routes_to_matching_handler(enabled, variant, expected):
+    from flask import Flask
+
+    from toggly_flask.decorators import feature_variant
+
+    app = Flask(__name__)
+    client = MagicMock()
+    client.is_enabled.return_value = enabled
+    client.get_feature_state.return_value.metadata = {"variant": variant}
+
+    @app.route("/checkout")
+    @feature_variant(
+        "checkout",
+        default_view=lambda: "default",
+        variants={"experiment": lambda: "variant"},
+    )
+    def original():
+        return "original"
+
+    with patch("toggly_flask.decorators.get_client", return_value=client):
+        with app.test_client() as test_client:
+            response = test_client.get("/checkout")
+    assert response.status_code == 200
+    assert response.data == expected
+    if enabled:
+        client.get_feature_state.assert_called_once()
+    else:
+        client.get_feature_state.assert_not_called()
+
+
+def test_feature_variant_uses_default_without_client():
+    from flask import Flask
+
+    from toggly_flask.decorators import feature_variant
+
+    app = Flask(__name__)
+
+    @app.route("/checkout")
+    @feature_variant("checkout", default_view=lambda: "default")
+    def original():
+        return "original"
+
+    with patch("toggly_flask.decorators.get_client", return_value=None):
+        with app.test_client() as test_client:
+            response = test_client.get("/checkout")
+    assert response.data == b"default"

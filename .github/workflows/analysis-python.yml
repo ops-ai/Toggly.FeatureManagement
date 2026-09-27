@@ -121,7 +121,7 @@ jobs:
       - name: Run tests
         run: |
           cd toggly
-          pytest tests/ -v --cov=src/toggly --cov-report=xml --cov-report=term-missing
+          pytest tests/ -v --cov=src/toggly --cov-report=xml --cov-report=term-missing --cov-fail-under=80.01
 
       - name: Upload coverage (Python 3.11 only)
         if: matrix.python-version == '3.11'
@@ -186,10 +186,10 @@ jobs:
       - name: Run tests
         run: |
           cd toggly-django
-          pytest tests/ -v --cov=src/toggly_django --cov-report=xml --cov-report=term-missing
+          pytest tests/ -v --cov=src/toggly_django --cov-report=xml --cov-report=term-missing --cov-fail-under=80.01
 
       - name: Upload coverage
-        if: matrix.python-version == '3.11' && matrix.django-version == '5.0'
+        if: matrix.python-version == '3.11' && matrix.django-version == '5.0.*'
         uses: actions/upload-artifact@v7
         with:
           name: python-coverage-django
@@ -226,7 +226,7 @@ jobs:
       - name: Run tests
         run: |
           cd toggly-flask
-          pytest tests/ -v --cov=src/toggly_flask --cov-report=xml --cov-report=term-missing
+          pytest tests/ -v --cov=src/toggly_flask --cov-report=xml --cov-report=term-missing --cov-fail-under=80.01
 
       - name: Upload coverage
         if: matrix.python-version == '3.11'
@@ -266,7 +266,7 @@ jobs:
       - name: Run tests
         run: |
           cd toggly-fastapi
-          pytest tests/ -v --cov=src/toggly_fastapi --cov-report=xml --cov-report=term-missing
+          pytest tests/ -v --cov=src/toggly_fastapi --cov-report=xml --cov-report=term-missing --cov-fail-under=80.01
 
       - name: Upload coverage
         if: matrix.python-version == '3.11'
@@ -306,7 +306,7 @@ jobs:
       - name: Run tests
         run: |
           cd toggly-cache
-          pytest tests/ -v --cov=src/toggly_cache --cov-report=xml --cov-report=term-missing
+          pytest tests/ -v --cov=src/toggly_cache --cov-report=xml --cov-report=term-missing --cov-fail-under=80.01
 
       - name: Upload coverage
         if: matrix.python-version == '3.11'
