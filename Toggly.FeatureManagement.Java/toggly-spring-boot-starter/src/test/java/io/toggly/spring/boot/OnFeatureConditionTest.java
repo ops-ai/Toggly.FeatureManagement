@@ -66,6 +66,39 @@ class OnFeatureConditionTest {
         }
     }
 
+    @Test
+    void clientAllAndAnyConditionsRespectBothUniformFeatureStates() {
+        FeatureDefinition firstEnabled = FeatureDefinition.builder()
+                .featureKey("first").addFilter(FeatureFilter.alwaysOn()).build();
+        FeatureDefinition secondEnabled = FeatureDefinition.builder()
+                .featureKey("second").addFilter(FeatureFilter.alwaysOn()).build();
+        FeatureDefinition firstDisabled = FeatureDefinition.builder().featureKey("first").build();
+        FeatureDefinition secondDisabled = FeatureDefinition.builder().featureKey("second").build();
+        TogglyConfig config = TogglyConfig.builder().appKey("test-key")
+                .enableUsageTracking(false).enableMetrics(false)
+                .registerContextsOnStartup(false).build();
+
+        try (TogglyClient enabled = new TogglyClient(config,
+                new InMemorySnapshotProvider(Map.of(
+                        "first", firstEnabled, "second", secondEnabled)));
+             TogglyClient disabled = new TogglyClient(config,
+                     new InMemorySnapshotProvider(Map.of(
+                             "first", firstDisabled, "second", secondDisabled)))) {
+            runner.withBean(TogglyClient.class, () -> enabled).run(context -> {
+                assertThat(context).hasBean("allEnabled");
+                assertThat(context).hasBean("anyEnabled");
+                assertThat(context).doesNotHaveBean("negatedAll");
+                assertThat(context).doesNotHaveBean("negatedAny");
+            });
+            runner.withBean(TogglyClient.class, () -> disabled).run(context -> {
+                assertThat(context).doesNotHaveBean("allEnabled");
+                assertThat(context).doesNotHaveBean("anyEnabled");
+                assertThat(context).hasBean("negatedAll");
+                assertThat(context).hasBean("negatedAny");
+            });
+        }
+    }
+
     @Configuration(proxyBeanMethods = false)
     static class FeatureBeans {
         @Bean

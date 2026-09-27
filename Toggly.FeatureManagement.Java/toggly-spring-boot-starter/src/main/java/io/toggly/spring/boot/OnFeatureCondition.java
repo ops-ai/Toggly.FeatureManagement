@@ -42,26 +42,26 @@ public class OnFeatureCondition implements Condition {
             return evaluateFromProperties(context, featureKeys, matchAll, matchIfDisabled);
         }
 
-        boolean result;
+        boolean result = evaluateFromClient(client, featureKeys, matchAll);
+        return matchIfDisabled ? !result : result;
+    }
+
+    private boolean evaluateFromClient(TogglyClient client, String[] featureKeys, boolean matchAll) {
         if (matchAll) {
-            result = true;
             for (String key : featureKeys) {
                 if (!client.isEnabled(key)) {
-                    result = false;
-                    break;
+                    return false;
                 }
             }
-        } else {
-            result = false;
-            for (String key : featureKeys) {
-                if (client.isEnabled(key)) {
-                    result = true;
-                    break;
-                }
-            }
+            return true;
         }
 
-        return matchIfDisabled ? !result : result;
+        for (String key : featureKeys) {
+            if (client.isEnabled(key)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean evaluateFromProperties(ConditionContext context, String[] featureKeys,
