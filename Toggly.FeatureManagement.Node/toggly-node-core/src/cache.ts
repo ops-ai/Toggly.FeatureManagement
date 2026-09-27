@@ -9,7 +9,7 @@ import { CACHE_KEYS } from './constants.js'
  * In-memory cache provider
  */
 export class MemoryCacheProvider implements CacheProvider {
-  private cache = new Map<string, { value: string; expires: number | null }>()
+  private readonly cache = new Map<string, { value: string; expires: number | null }>()
 
   async get(key: string): Promise<string | null> {
     const entry = this.cache.get(key)
@@ -51,8 +51,8 @@ export class MemoryCacheProvider implements CacheProvider {
  * File-based cache provider for offline/startup resilience
  */
 export class FileCacheProvider implements CacheProvider {
-  private basePath: string
-  private logger: ReturnType<typeof createLogger>
+  private readonly basePath: string
+  private readonly logger: ReturnType<typeof createLogger>
 
   constructor(basePath: string, debug = false) {
     this.basePath = basePath
@@ -125,12 +125,22 @@ export class FileCacheProvider implements CacheProvider {
  * Definitions cache wrapper with serialization
  */
 export class DefinitionsCache {
-  private provider: CacheProvider
-  private logger: ReturnType<typeof createLogger>
+  private readonly provider: CacheProvider
+  private readonly logger: ReturnType<typeof createLogger>
 
   constructor(provider: CacheProvider, debug = false) {
     this.provider = provider
     this.logger = createLogger(debug)
+  }
+
+  private async getParsedValue(key: string): Promise<unknown | null> {
+    try {
+      const value = await this.provider.get(key)
+      return value ? JSON.parse(value) : null
+    } catch (error) {
+      this.logger.error('Failed to parse cached definitions:', error)
+      return null
+    }
   }
 
   /**
@@ -140,22 +150,8 @@ export class DefinitionsCache {
   async getDefinitionModels(
     key: string
   ): Promise<FeatureDefinitionModel[] | null> {
-    try {
-      const value = await this.provider.get(key)
-
-      if (!value) {
-        return null
-      }
-
-      const parsed: unknown = JSON.parse(value)
-      if (!Array.isArray(parsed)) {
-        return null
-      }
-      return parsed as FeatureDefinitionModel[]
-    } catch (error) {
-      this.logger.error('Failed to parse cached definitions:', error)
-      return null
-    }
+    const parsed = await this.getParsedValue(key)
+    return Array.isArray(parsed) ? parsed as FeatureDefinitionModel[] : null
   }
 
   /**
@@ -177,22 +173,11 @@ export class DefinitionsCache {
    * @deprecated Prefer getDefinitionModels — kept for boolean snapshot caches.
    */
   async getDefinitions(key: string): Promise<FeatureDefinitions | null> {
-    try {
-      const value = await this.provider.get(key)
-
-      if (!value) {
-        return null
-      }
-
-      const parsed: unknown = JSON.parse(value)
-      if (Array.isArray(parsed) || parsed === null || typeof parsed !== 'object') {
-        return null
-      }
-      return parsed as FeatureDefinitions
-    } catch (error) {
-      this.logger.error('Failed to parse cached definitions:', error)
+    const parsed = await this.getParsedValue(key)
+    if (Array.isArray(parsed) || parsed === null || typeof parsed !== 'object') {
       return null
     }
+    return parsed as FeatureDefinitions
   }
 
   /**

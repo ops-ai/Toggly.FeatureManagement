@@ -265,8 +265,9 @@ describe('HookExecutor', () => {
 
       executor.addHook(hook)
 
-      // Should not throw
-      await executor.executeOnError(new Error('Original error'), 'context')
+      await expect(
+        executor.executeOnError(new Error('Original error'), 'context')
+      ).resolves.toBeUndefined()
     })
   })
 

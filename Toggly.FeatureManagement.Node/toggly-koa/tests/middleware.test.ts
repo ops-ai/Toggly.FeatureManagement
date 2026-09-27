@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import Koa from 'koa'
-import type { Context, Next } from 'koa'
+import type { Context } from 'koa'
 import {
   togglyMiddleware,
   featureGate,

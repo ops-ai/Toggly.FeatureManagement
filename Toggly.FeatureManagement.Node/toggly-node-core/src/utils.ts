@@ -12,7 +12,7 @@ export function generateUUID(): string {
 
   // Manual UUID v4 implementation
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0
+    const r = Math.trunc(Math.random() * 16)
     const v = c === 'x' ? r : (r & 0x3) | 0x8
     return v.toString(16)
   })
@@ -29,7 +29,7 @@ export function evaluateGate(
   entityContext?: TogglyEntityContext | null,
 ): boolean {
   if (featureKeys.length === 0) {
-    return negate ? true : false
+    return negate
   }
 
   return evaluateEvaluatedGate(features, featureKeys, requirement, negate, entityContext)
@@ -57,7 +57,7 @@ export function deepMerge<T>(target: T, source: Partial<T>): T {
   const sourceObj = source as Record<string, unknown>
 
   for (const key in sourceObj) {
-    if (Object.prototype.hasOwnProperty.call(sourceObj, key)) {
+    if (Object.hasOwn(sourceObj, key)) {
       const sourceValue = sourceObj[key]
       const targetValue = result[key]
 
@@ -183,6 +183,7 @@ export function hashString(str: string): number {
   let hash = 2166136261 // FNV offset basis
 
   for (let i = 0; i < str.length; i++) {
+    // Keep UTF-16 code-unit hashing for compatibility with existing JS SDK rollouts. // NOSONAR
     hash ^= str.charCodeAt(i)
     hash = Math.imul(hash, 16777619) // FNV prime
   }

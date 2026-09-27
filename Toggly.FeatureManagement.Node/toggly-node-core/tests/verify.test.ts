@@ -289,9 +289,10 @@ describe('assertEnvelopeFreshness', () => {
   })
 
   it('rejects non-finite timestamps when freshness is enabled', () => {
-    expect(() =>
+    const assertInvalidTimestamp = () =>
       assertEnvelopeFreshness(Number.NaN, { maxSignatureAgeSeconds: 300, nowSeconds: 1000 })
-    ).toThrow(/invalid signature timestamp/)
+    expect(assertInvalidTimestamp).toThrow(TypeError)
+    expect(assertInvalidTimestamp).toThrow(/invalid signature timestamp/)
   })
 
   it('rejects timestamps too far in the future', () => {

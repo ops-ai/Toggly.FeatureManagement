@@ -121,7 +121,7 @@ export interface FeatureRouteOptions extends FeatureGateOptions {
 declare global {
   namespace Express {
     interface Request {
-      toggly?: TogglyRequest['toggly']
+      toggly?: NonNullable<TogglyRequest['toggly']>
     }
   }
 }

@@ -107,9 +107,7 @@ export function togglyMiddleware(config: TogglyKoaConfig): Middleware {
 
   return async (ctx: Context, next: Next) => {
     // Ensure client is initialized
-    if (!initPromise) {
-      initPromise = initialize()
-    }
+    initPromise ??= initialize()
     await initPromise
 
     if (!koaClient) {

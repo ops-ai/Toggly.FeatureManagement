@@ -13,8 +13,6 @@ export interface MetricsBatcherOptions {
   instanceName?: string
 }
 
-type MetricKey = string // `${metric}\0${feature ?? ''}`
-
 export interface MetricStatPayload {
   appKey: string
   environment: string
@@ -45,8 +43,8 @@ export class MetricsBatcher {
   private readonly appKey: string
   private readonly environment: string
   private readonly instanceName?: string
-  private measures = new Map<MetricKey, Map<string, number>>()
-  private counters = new Map<MetricKey, Map<string, number>>()
+  private readonly measures = new Map<string, Map<string, number>>()
+  private readonly counters = new Map<string, Map<string, number>>()
   private observations: Array<{
     time: Date
     metric: string
@@ -61,17 +59,17 @@ export class MetricsBatcher {
     this.instanceName = options.instanceName
   }
 
-  private key(metric: string, feature?: string): MetricKey {
+  private key(metric: string, feature?: string): string {
     return `${metric}\0${feature ?? ''}`
   }
 
-  private parseKey(key: MetricKey): { metric: string; feature?: string } {
+  private parseKey(key: string): { metric: string; feature?: string } {
     const [metric, feature = ''] = key.split('\0')
     return feature ? { metric, feature } : { metric }
   }
 
   private addToMap(
-    store: Map<MetricKey, Map<string, number>>,
+    store: Map<string, Map<string, number>>,
     metric: string,
     value: number,
     options?: MetricsFeatureOptions,
@@ -109,7 +107,7 @@ export class MetricsBatcher {
   }
 
   private drainMap(
-    store: Map<MetricKey, Map<string, number>>,
+    store: Map<string, Map<string, number>>,
   ): Array<{ metric: string; feature?: string; variantValues: Record<string, number> }> {
     const out: Array<{ metric: string; feature?: string; variantValues: Record<string, number> }> =
       []

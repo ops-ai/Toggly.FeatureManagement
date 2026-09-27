@@ -42,32 +42,16 @@ describe('getVariant / getVariantValue (catalog-local, MF-parity)', () => {
     closeToggly()
   })
 
-  it('resolves the user-allocated variant for a matching identity', async () => {
+  it.each([
+    ['resolves the user-allocated variant for a matching identity', 'checkout-flow', 'alice', { name: 'A', configurationValue: { color: 'blue' } }],
+    ['falls back to defaultWhenEnabled for a non-matching identity', 'checkout-flow', 'carol', { name: 'B', configurationValue: { color: 'green' } }],
+    ['returns null for an unknown feature key', 'does-not-exist', undefined, null],
+  ])('%s', async (_description, featureKey, identity, expected) => {
     mockFetch.mockResolvedValueOnce(defsResponse([variantDef()]))
     const client = createTogglyClient({ appKey: 'test-app' })
     await client.init()
 
-    const variant = await client.getVariant('checkout-flow', { identity: 'alice' })
-
-    expect(variant).toEqual({ name: 'A', configurationValue: { color: 'blue' } })
-  })
-
-  it('falls back to defaultWhenEnabled for a non-matching identity', async () => {
-    mockFetch.mockResolvedValueOnce(defsResponse([variantDef()]))
-    const client = createTogglyClient({ appKey: 'test-app' })
-    await client.init()
-
-    const variant = await client.getVariant('checkout-flow', { identity: 'carol' })
-
-    expect(variant).toEqual({ name: 'B', configurationValue: { color: 'green' } })
-  })
-
-  it('returns null for an unknown feature key', async () => {
-    mockFetch.mockResolvedValueOnce(defsResponse([variantDef()]))
-    const client = createTogglyClient({ appKey: 'test-app' })
-    await client.init()
-
-    expect(await client.getVariant('does-not-exist')).toBeNull()
+    await expect(client.getVariant(featureKey, { identity })).resolves.toEqual(expected)
   })
 
   it('returns null when the feature is disabled for this context', async () => {

@@ -17,7 +17,7 @@ export default defineConfig({
       // Exclude package barrel only — telemetry/index.ts is runtime logic Sonar scores.
       exclude: ['src/**/*.d.ts', 'src/index.ts', 'src/**/types.ts'],
       thresholds: {
-        lines: 75,
+        lines: 85,
         functions: 75,
         branches: 70,
         statements: 75,

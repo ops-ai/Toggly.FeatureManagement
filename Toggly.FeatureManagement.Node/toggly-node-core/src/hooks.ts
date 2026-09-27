@@ -12,8 +12,8 @@ import { createLogger } from './utils.js'
  * Hook executor manages hook registration and execution
  */
 export class HookExecutor {
-  private hooks: Hook[] = []
-  private logger: ReturnType<typeof createLogger>
+  private readonly hooks: Hook[] = []
+  private readonly logger: ReturnType<typeof createLogger>
 
   constructor(debug = false) {
     this.logger = createLogger(debug)
@@ -215,7 +215,7 @@ export class HookExecutor {
    * Clear all hooks
    */
   clear(): void {
-    this.hooks = []
+    this.hooks.length = 0
   }
 }
 

@@ -129,9 +129,7 @@ export function togglyMiddleware(config: TogglyExpressConfig): RequestHandler {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       // Ensure client is initialized
-      if (!initPromise) {
-        initPromise = initialize()
-      }
+      initPromise ??= initialize()
       await initPromise
 
       if (!expressClient) {

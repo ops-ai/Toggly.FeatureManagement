@@ -40,7 +40,7 @@ export function assertEnvelopeFreshness(
     return
   }
   if (!Number.isFinite(timestamp)) {
-    throw new Error('invalid signature timestamp')
+    throw new TypeError('invalid signature timestamp')
   }
   const now = options?.nowSeconds ?? Math.floor(Date.now() / 1000)
   const skew = options?.maxClockSkewSeconds ?? 60
@@ -99,27 +99,19 @@ export function extractRawJsonProperty(text: string, key: string): string | null
       continue
     }
 
-    if (character === '"') {
-      if (depth === 1) {
-        const keyEnd = findStringEnd(text, index)
-        if (keyEnd == null) {
-          return null
-        }
-        const propertyName = text.slice(index + 1, keyEnd)
-        let valueStart = keyEnd + 1
-        while (valueStart < text.length && /\s/.test(text[valueStart]!)) {
-          valueStart += 1
-        }
-        if (propertyName === key && valueStart < text.length && text[valueStart] === ':') {
-          valueStart += 1
-          while (valueStart < text.length && /\s/.test(text[valueStart]!)) {
-            valueStart += 1
-          }
-          return extractJsonValue(text, valueStart)
-        }
-        index = keyEnd + 1
-        continue
+    if (character === '"' && depth === 1) {
+      const property = readTopLevelProperty(text, index)
+      if (!property) {
+        return null
       }
+      if (property.name === key) {
+        return extractJsonValue(text, property.valueStart)
+      }
+      index = property.nextIndex
+      continue
+    }
+
+    if (character === '"') {
       inString = true
       index += 1
       continue
@@ -134,6 +126,33 @@ export function extractRawJsonProperty(text: string, key: string): string | null
   }
 
   return null
+}
+
+function skipWhitespace(text: string, start: number): number {
+  let index = start
+  while (index < text.length && /\s/.test(text[index]!)) {
+    index += 1
+  }
+  return index
+}
+
+function readTopLevelProperty(
+  text: string,
+  keyStart: number,
+): { name: string; valueStart: number; nextIndex: number } | null {
+  const keyEnd = findStringEnd(text, keyStart)
+  if (keyEnd == null) {
+    return null
+  }
+  const colon = skipWhitespace(text, keyEnd + 1)
+  if (text[colon] !== ':') {
+    return { name: '', valueStart: colon, nextIndex: keyEnd + 1 }
+  }
+  return {
+    name: text.slice(keyStart + 1, keyEnd),
+    valueStart: skipWhitespace(text, colon + 1),
+    nextIndex: keyEnd + 1,
+  }
 }
 
 function findStringEnd(text: string, startQuote: number): number | null {
@@ -162,33 +181,7 @@ function extractJsonValue(text: string, start: number): string | null {
 
   const first = text[start]!
   if (first === '{' || first === '[') {
-    let depth = 0
-    let inString = false
-    let escape = false
-    for (let j = start; j < text.length; j++) {
-      const c = text[j]!
-      if (inString) {
-        if (escape) {
-          escape = false
-        } else if (c === '\\') {
-          escape = true
-        } else if (c === '"') {
-          inString = false
-        }
-        continue
-      }
-      if (c === '"') {
-        inString = true
-      } else if (c === '{' || c === '[') {
-        depth += 1
-      } else if (c === '}' || c === ']') {
-        depth -= 1
-        if (depth === 0) {
-          return text.slice(start, j + 1)
-        }
-      }
-    }
-    return null
+    return extractContainerValue(text, start)
   }
 
   if (first === '"') {
@@ -201,6 +194,36 @@ function extractJsonValue(text: string, start: number): string | null {
     j += 1
   }
   return text.slice(start, j)
+}
+
+function extractContainerValue(text: string, start: number): string | null {
+  let depth = 0
+  let inString = false
+  let escape = false
+  for (let index = start; index < text.length; index++) {
+    const character = text[index]!
+    if (inString) {
+      if (escape) {
+        escape = false
+      } else if (character === '\\') {
+        escape = true
+      } else if (character === '"') {
+        inString = false
+      }
+      continue
+    }
+    if (character === '"') {
+      inString = true
+    } else if (character === '{' || character === '[') {
+      depth += 1
+    } else if (character === '}' || character === ']') {
+      depth -= 1
+      if (depth === 0) {
+        return text.slice(start, index + 1)
+      }
+    }
+  }
+  return null
 }
 
 export function parseSignedEnvelope(bodyText: string): {
@@ -246,6 +269,8 @@ function padBase64Url(value: string): string {
 function computeKid(x: string, y: string): string {
   const xBytes = Buffer.from(padBase64Url(x), 'base64url')
   const yBytes = Buffer.from(padBase64Url(y), 'base64url')
+  // This is the legacy, protocol-defined key identifier—not a security primitive.
+  // It must remain SHA-1-compatible with the Definitions issuer. NOSONAR
   const digest = createHash('sha1').update(xBytes).update(yBytes).digest('hex').toUpperCase()
   return `${digest}ES256`
 }
