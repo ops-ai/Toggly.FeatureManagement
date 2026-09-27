@@ -189,7 +189,11 @@ class Toggly with WidgetsBindingObserver {
     StackTrace? stackTrace,
   ]) {
     _lastError = message;
-    Toggly._config.onError?.call(message, error, stackTrace);
+    try {
+      Toggly._config.onError?.call(message, error, stackTrace);
+    } catch (_) {
+      // Consumer callbacks must not break SDK recovery or control flow.
+    }
     if (kDebugMode) {
       print(error == null ? message : '$message: $error');
       if (stackTrace != null) {
@@ -1455,12 +1459,7 @@ class Toggly with WidgetsBindingObserver {
 
       return jwksData;
     } catch (e, stackTrace) {
-      try {
-        _reportError('Error fetching JWKs', e, stackTrace);
-      } catch (_) {
-        // A consumer callback must not prevent callers from treating this as
-        // a transient JWK failure and preserving the unverifiable cache.
-      }
+      _reportError('Error fetching JWKs', e, stackTrace);
       return null;
     }
   }
@@ -1726,15 +1725,11 @@ class Toggly with WidgetsBindingObserver {
     final jwksData =
         await _fetchAndCacheJwks(ignoreExpiration: allowOfflineValidation);
     if (jwksData == null) {
-      try {
-        _reportError(
-          _jwksFetchFailed,
-          Exception(_jwksFetchFailed),
-          StackTrace.current,
-        );
-      } catch (_) {
-        // A consumer callback must not mask the unavailable-JWK signal.
-      }
+      _reportError(
+        _jwksFetchFailed,
+        Exception(_jwksFetchFailed),
+        StackTrace.current,
+      );
       throw const _JwksUnavailableException();
     }
 

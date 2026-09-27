@@ -9,6 +9,7 @@
 - Preserve signed caches that cannot currently be verified when an error
   callback fails during JWK retrieval, so they can be verified later.
 - Remove identity-mismatched flag caches before notifying an error callback.
+- Keep flag-loading recovery when a consumer `onError` callback throws.
 
 ## 1.13.0
 

@@ -434,6 +434,7 @@ void main() {
   test('evicts an identity-mismatched cache before reporting the error',
       () async {
     final provider = _MemoryCacheProvider();
+    var errorReports = 0;
 
     await Toggly.init(
       identity: 'user-1',
@@ -444,6 +445,7 @@ void main() {
         enableLiveUpdates: false,
         cacheProvider: provider,
         onError: (message, error, stackTrace) {
+          errorReports++;
           throw StateError('consumer error handler failed');
         },
       ),
@@ -456,19 +458,10 @@ void main() {
       keyId: null,
     );
 
-    await expectLater(
-      Toggly.cachedFeatureFlags,
-      throwsA(
-        isA<StateError>().having(
-          (error) => error.message,
-          'message',
-          'consumer error handler failed',
-        ),
-      ),
-    );
-
+    expect(await Toggly.cachedFeatureFlags, {'FeatureA': false});
     expect(provider.deletedFlags, 1);
     expect(provider.flags['u:user-1'], isNull);
+    expect(errorReports, greaterThan(0));
   });
 
   test('fresh signed fetch refreshes expired persisted JWKs', () async {
@@ -740,10 +733,11 @@ void main() {
     HttpService.getInstance.http.interceptors.remove(offlineInterceptor);
   });
 
-  test('propagates an error callback failure for malformed signed cache',
+  test('recovers with defaults when error callback fails for malformed cache',
       () async {
     final provider = _MemoryCacheProvider();
     final fixture = _buildSignedFlagsFixture(timestamp: 100);
+    var errorReports = 0;
     provider.jwks = jsonEncode({...fixture.jwks, '_expiresAt': 0});
     provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
       identity: 'u:user-1',
@@ -762,21 +756,15 @@ void main() {
         enableLiveUpdates: false,
         cacheProvider: provider,
         onError: (message, error, stackTrace) {
+          errorReports++;
           throw StateError('consumer error handler failed');
         },
       ),
     );
 
-    await expectLater(
-      Toggly.cachedFeatureFlags,
-      throwsA(
-        isA<StateError>().having(
-          (error) => error.message,
-          'message',
-          'consumer error handler failed',
-        ),
-      ),
-    );
+    expect(await Toggly.cachedFeatureFlags, {'FeatureA': false});
+    expect(provider.deletedFlags, greaterThan(0));
+    expect(errorReports, greaterThan(0));
 
     Toggly.dispose();
     provider.jwks = null;
