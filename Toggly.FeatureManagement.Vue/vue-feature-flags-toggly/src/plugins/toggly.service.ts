@@ -589,8 +589,12 @@ export class Toggly implements TogglyService {
     // Only the current context may supply an instance token.
     parsed.searchParams.delete('i')
     if (this._config.instanceId) {
-      for (const key of [...parsed.searchParams.keys()]) {
-        if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) parsed.searchParams.delete(key)
+      const targetingKeys: string[] = []
+      parsed.searchParams.forEach((_value, key) => {
+        if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) targetingKeys.push(key)
+      })
+      for (const key of targetingKeys) {
+        parsed.searchParams.delete(key)
       }
       parsed.searchParams.set('i', this._config.instanceId)
     }
@@ -628,6 +632,18 @@ export class Toggly implements TogglyService {
       await this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
     }
     if (this._isCurrentGeneration(generation)) this.notifyFeaturesRefresh()
+  }
+
+  private _handleNotModified(revision: string | null, isInitialLoad: boolean): { [key: string]: boolean } | null {
+    if (revision) this._cacheDefinitionsRevision(revision)
+    if (isInitialLoad) this.startWebSocket()
+    return this._booleanFeatures()
+  }
+
+  private _finishLoad(generation: number, isInitialLoad: boolean): { [key: string]: boolean } | null {
+    if (isInitialLoad && this._isCurrentGeneration(generation)) this.startWebSocket()
+    if (!this._isCurrentGeneration(generation)) return null
+    return this._booleanFeatures()
   }
 
   private async _handleLoadFailure(
@@ -876,9 +892,7 @@ export class Toggly implements TogglyService {
       )
       if (!this._isCurrentGeneration(generation)) return null
       if (loaded.notModified) {
-        if (loaded.revision) this._cacheDefinitionsRevision(loaded.revision)
-        if (isInitialLoad) this.startWebSocket()
-        return this._booleanFeatures()
+        return this._handleNotModified(loaded.revision, isInitialLoad)
       }
       this._storeDefinitions(loaded.defs, request)
       // Persist a validator only after its mode-specific body has been written.
@@ -890,13 +904,7 @@ export class Toggly implements TogglyService {
       if (generation === this._generation) this._loadingFeatures = false
     }
 
-    // Start WebSocket after initial feature load
-    if (isInitialLoad && this._isCurrentGeneration(generation)) {
-      this.startWebSocket()
-    }
-
-    if (!this._isCurrentGeneration(generation)) return null
-    return this._features ? toBooleanDefinitions(this._features) : null
+    return this._finishLoad(generation, isInitialLoad)
   }
 
   private _booleanFeatures(): { [key: string]: boolean } | null {
