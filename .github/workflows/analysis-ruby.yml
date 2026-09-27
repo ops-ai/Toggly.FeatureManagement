@@ -309,7 +309,9 @@ jobs:
           mkdir -p coverage
           for pkg in core rails cache; do
             json=$(find coverage-artifacts/$pkg -name "coverage.json" 2>/dev/null | head -1)
+            resultset=$(find coverage-artifacts/$pkg -name ".resultset.json" 2>/dev/null | head -1)
             test -n "$json"
+            test -n "$resultset"
             python3 - "$json" "$pkg" "coverage/$pkg-coverage.json" <<'PY'
           import json
           import sys
@@ -325,6 +327,7 @@ jobs:
           with open(output, "w", encoding="utf-8") as handle:
               json.dump(report, handle)
           PY
+            cp "$resultset" "coverage/$pkg-resultset.json"
             echo "Mapped coverage for $pkg: $json"
           done
           echo "Coverage files:"
@@ -368,7 +371,7 @@ jobs:
             -Dsonar.exclusions=**/vendor/**,**/spec/**,**/test/**,**/coverage/**,**/*.gemspec
             -Dsonar.tests=${{ env.SDK_ROOT }}
             -Dsonar.test.inclusions=**/spec/**,**/test/**,**/host-fixtures/**
-            -Dsonar.ruby.coverage.reportPaths=coverage/core-coverage.json,coverage/rails-coverage.json,coverage/cache-coverage.json
+            -Dsonar.ruby.coverage.reportPaths=coverage/core-resultset.json,coverage/rails-resultset.json,coverage/cache-resultset.json
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
             -Dsonar.qualitygate.wait=true
 
