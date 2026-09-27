@@ -24,6 +24,8 @@ module Toggly
   #   )
   #   client = Toggly::Client.new(config)
   class Client
+    UNHANDLED_VARIANT_VALUE = Object.new.freeze
+
     include CacheTelemetry
     include SnapshotSupport
 
@@ -359,27 +361,40 @@ module Toggly
       return block.call(value) if block
       return nil if as.nil?
 
-      # Scalars / :boolean before Class#new — String.new({}) would soft-fail to "".
-      if as == String
-        return value.is_a?(String) ? value : nil
-      end
-      if as == Integer
-        return value.is_a?(Integer) && !value.is_a?(TrueClass) && !value.is_a?(FalseClass) ? value : nil
-      end
-      if as == Float
-        return value.is_a?(Numeric) && !value.is_a?(TrueClass) && !value.is_a?(FalseClass) ? value.to_f : nil
-      end
-      if [TrueClass, FalseClass, :boolean].include?(as)
-        return [true, false].include?(value) ? value : nil
-      end
+      scalar_value = decode_scalar_variant_value(value, as)
+      return scalar_value unless scalar_value.equal?(UNHANDLED_VARIANT_VALUE)
 
       # is_a? requires a Module; symbols like :boolean are handled above.
       return value if as.is_a?(Module) && value.is_a?(as)
-      return as.new(**value.transform_keys(&:to_sym)) if as.respond_to?(:new) && value.is_a?(Hash)
-      return as.json_create(value) if as.respond_to?(:json_create) && value.is_a?(Hash)
+
+      decode_variant_object(value, as)
+    rescue StandardError
+      nil
+    end
+
+    # Scalars / :boolean before Class#new — String.new({}) would soft-fail to "".
+    def decode_scalar_variant_value(value, as)
+      return value.is_a?(String) ? value : nil if as == String
+      return numeric_variant_value(value, Integer) if as == Integer
+      return numeric_variant_value(value, Float) if as == Float
+      return [true, false].include?(value) ? value : nil if [TrueClass, FalseClass, :boolean].include?(as)
+
+      UNHANDLED_VARIANT_VALUE
+    end
+
+    def numeric_variant_value(value, type)
+      return nil if value.is_a?(TrueClass) || value.is_a?(FalseClass)
+      return value if type == Integer && value.is_a?(Integer)
+      return value.to_f if type == Float && value.is_a?(Numeric)
 
       nil
-    rescue StandardError
+    end
+
+    def decode_variant_object(value, as)
+      return nil unless value.is_a?(Hash)
+      return as.new(**value.transform_keys(&:to_sym)) if as.respond_to?(:new)
+      return as.json_create(value) if as.respond_to?(:json_create)
+
       nil
     end
 

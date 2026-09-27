@@ -281,6 +281,38 @@ RSpec.describe Toggly::Client do
             "allocation" => { "defaultWhenEnabled" => "A" }
           },
           {
+            "featureKey" => "integer-variant",
+            "enabled" => true,
+            "variants" => [
+              { "name" => "A", "configurationValue" => 42, "statusOverride" => "None" }
+            ],
+            "allocation" => { "defaultWhenEnabled" => "A" }
+          },
+          {
+            "featureKey" => "float-variant",
+            "enabled" => true,
+            "variants" => [
+              { "name" => "A", "configurationValue" => 3.5, "statusOverride" => "None" }
+            ],
+            "allocation" => { "defaultWhenEnabled" => "A" }
+          },
+          {
+            "featureKey" => "boolean-variant",
+            "enabled" => true,
+            "variants" => [
+              { "name" => "A", "configurationValue" => false, "statusOverride" => "None" }
+            ],
+            "allocation" => { "defaultWhenEnabled" => "A" }
+          },
+          {
+            "featureKey" => "true-variant",
+            "enabled" => true,
+            "variants" => [
+              { "name" => "A", "configurationValue" => true, "statusOverride" => "None" }
+            ],
+            "allocation" => { "defaultWhenEnabled" => "A" }
+          },
+          {
             "featureKey" => "killswitch-feature",
             "enabled" => false,
             "variants" => [
@@ -374,6 +406,48 @@ RSpec.describe Toggly::Client do
 
       it "soft-binds a scalar when as: matches" do
         expect(client.get_variant_value("string-variant", as: String)).to eq("hello")
+      end
+
+      it "preserves native numeric values and rejects incompatible numeric coercions" do
+        aggregate_failures do
+          expect(client.get_variant_value("integer-variant", as: Integer)).to eq(42)
+          expect(client.get_variant_value("float-variant", as: Float)).to eq(3.5)
+          expect(client.get_variant_value("string-variant", as: Integer)).to be_nil
+          expect(client.get_variant_value("string-variant", as: Float)).to be_nil
+          expect(client.get_variant_value("boolean-variant", as: Integer)).to be_nil
+          expect(client.get_variant_value("true-variant", as: Float)).to be_nil
+        end
+      end
+
+      it "uses json_create to soft-bind hash configuration values" do
+        json_type = Object.new
+        json_type.define_singleton_method(:json_create) { |value| value.fetch("cta").upcase }
+
+        bound = client.get_variant_value(
+          "checkout-flow",
+          context: Toggly::Context.new(identity: "alice"),
+          as: json_type
+        )
+
+        expect(bound).to eq("BUY NOW")
+        expect(client.get_variant_value("string-variant", as: json_type)).to be_nil
+        expect(client.get_variant_value("checkout-flow", as: Object.new)).to be_nil
+      end
+
+      it "softly returns nil when an object binding constructor rejects the value" do
+        rejecting_type = Class.new do
+          def initialize(**)
+            raise ArgumentError, "unsupported configuration"
+          end
+        end
+
+        value = client.get_variant_value(
+          "checkout-flow",
+          context: Toggly::Context.new(identity: "alice"),
+          as: rejecting_type
+        )
+
+        expect(value).to be_nil
       end
 
       it "returns nil on typed mismatch" do
