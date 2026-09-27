@@ -121,12 +121,12 @@ export class TogglyService implements ITogglyService, OnDestroy {
   private _features: EvaluatedDefinitions | null = null
   private _variants: { [key: string]: EvaluatedVariantDef } | null = null
   private _loadingFeatures: boolean = false
-  private _hookExecutor = new HookExecutor()
-  private _isBrowser: boolean
+  private readonly _hookExecutor = new HookExecutor()
+  private readonly _isBrowser: boolean
   private _localGates: LocalGate[] = []
   private _localGateIndex: FlagGateIndex = new Map()
-  private _localGatesChangedListeners = new Set<() => void>()
-  private _featuresRefreshListeners = new Set<() => void>()
+  private readonly _localGatesChangedListeners = new Set<() => void>()
+  private readonly _featuresRefreshListeners = new Set<() => void>()
   private _lastError: string | undefined
   private _groups: string[] = []
   private _claims: Record<string, string> = {}
@@ -144,7 +144,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
   _pendingDefinitionsPin: string | null = null
   private _lastFallbackRefresh = 0
   private _webSocketBootstrapped = false
-  private _jwks = new InMemoryJwksCache()
+  private readonly _jwks = new InMemoryJwksCache()
   private readonly FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000
 
   shouldShowFeatureDuringEvaluation: boolean = false
@@ -582,7 +582,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
     )
   }
 
-  private _refreshFeatures = async (): Promise<void> => {
+  private readonly _refreshFeatures = async (): Promise<void> => {
     const generation = this._generation
     const flags = await this._loadFeatures(true)
     if (generation !== this._generation || this._destroyed) return
@@ -594,7 +594,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
     }
   }
 
-  private _loadFeatures = async (
+  private readonly _loadFeatures = async (
     forceRefresh = false,
     options?: { strict?: boolean },
   ) => {
@@ -733,7 +733,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
     return this._features
   }
 
-  private _featuresLoaded = async () => {
+  private readonly _featuresLoaded = async () => {
     if (this._features === null) {
       await this._loadFeatures()
     }
@@ -774,7 +774,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
     return enabled
   }
 
-  private _evaluateFeatureGate = async (
+  private readonly _evaluateFeatureGate = async (
     gate: string[], requirement = 'all', negate = false,
     entityContext?: TogglyEntityContext | null,
     snapshot?: EvaluationSnapshot,
