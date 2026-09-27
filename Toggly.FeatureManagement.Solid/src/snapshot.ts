@@ -96,7 +96,7 @@ export function frontendDefinitionsUrl(
   for (const [key, value] of query)
     if (!contextKeys.has(key)) target.searchParams.append(key, value);
   if (token) {
-    for (const key of [...target.searchParams.keys()]) {
+    for (const key of Array.from(target.searchParams.keys())) {
       if (['u', 'userId', 'g', 'i'].includes(key) || key.startsWith('claim.'))
         target.searchParams.delete(key);
     }
