@@ -175,6 +175,7 @@ jobs:
             -Dsonar.tests=test
             -Dsonar.exclusions=**/.*/**,**/example/**,**/benchmark/**,**/*.g.dart,**/*.freezed.dart
             -Dsonar.dart.lcov.reportPaths=coverage/lcov.info
+            -Dsonar.dart.analyzer.options.override=false
             -Dsonar.dependencyCheck.reportPath=../../dependency-check-reports/dependency-check-report.xml
         continue-on-error: true
 
