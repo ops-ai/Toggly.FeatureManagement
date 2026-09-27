@@ -4,6 +4,8 @@ import {
   isFeatureOff,
   evaluateFeatureGate,
   getFlags,
+  getVariant,
+  getVariantValue,
   setContext,
   clearContext,
   onFlagsUpdated,
@@ -21,6 +23,8 @@ describe('renderer wrappers', () => {
     isFeatureOn: vi.fn(() => true),
     isFeatureOff: vi.fn(() => false),
     evaluateFeatureGate: vi.fn(() => true),
+    getVariant: vi.fn(() => ({ name: 'treatment', configurationValue: 42 })),
+    getVariantValue: vi.fn(() => 42),
     getFlags: vi.fn(async () => ({ A: true })),
     setContext: vi.fn(async () => ({ A: true })),
     clearContext: vi.fn(async () => ({})),
@@ -40,6 +44,8 @@ describe('renderer wrappers', () => {
     expect(isFeatureOn('A')).toBe(true)
     expect(isFeatureOff('A')).toBe(false)
     expect(evaluateFeatureGate(['A'], 'all')).toBe(true)
+    expect(getVariant('A')).toEqual({ name: 'treatment', configurationValue: 42 })
+    expect(getVariantValue('A')).toBe(42)
     expect(await getFlags()).toEqual({ A: true })
     expect(await setContext({ identity: 'x' })).toEqual({ A: true })
     expect(await clearContext()).toEqual({})
@@ -55,6 +61,8 @@ describe('renderer wrappers', () => {
     expect(isFeatureOff('A')).toBe(true)
     expect(evaluateFeatureGate(['A'])).toBe(false)
     expect(evaluateFeatureGate(['A'], 'all', true)).toBe(true)
+    expect(getVariant('A')).toBeNull()
+    expect(getVariantValue('A')).toBeNull()
     expect(onFlagsUpdated(() => undefined)).toBeTypeOf('function')
     await expect(getFlags()).rejects.toThrow(/window.toggly/)
   })

@@ -10,6 +10,8 @@ export {
   isFeatureOn,
   isFeatureOff,
   evaluateFeatureGate,
+  getVariant,
+  getVariantValue,
   setContext,
   clearContext,
   addHook,
@@ -27,7 +29,10 @@ export type {
   FeatureRequirement,
   EntityContextInput,
   Hook,
+  VariantResult,
+  EvaluatedVariantDef,
 } from '../types.js'
+export { decodeVariantValue } from '../decode-variant-value.js'
 export { IPC_CHANNELS, IPC_PREFIX } from '../ipc-channels.js'
 export { SDK_ID, SDK_VERSION } from '../sdk-identity.js'
 

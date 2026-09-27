@@ -29,6 +29,13 @@ import { createHash, randomUUID } from 'node:crypto'
 import { DiskFeatureCache, isValidDefinitions } from './cache.js'
 import { buildDefinitionFetchHeaders } from '../sdk-identity.js'
 import {
+  parseVariantDefinitions,
+  variantDefsToFlags,
+  type EvaluatedVariantDef,
+  type VariantResult,
+} from '../variant.js'
+import { decodeVariantValue } from '../decode-variant-value.js'
+import {
   appendDefinitionsRevisionParam,
   applyFlagsUpdatedPlan,
   buildWebSocketUrl,
@@ -152,6 +159,8 @@ export class ElectronTogglyClient {
   private readonly listeners = new Set<FlagsUpdatedListener>()
 
   private features: EvaluatedDefinitions = {}
+  /** Raw evaluated-variants defs, kept apart from `features`; only set when `enableVariants`. */
+  private variants: Record<string, EvaluatedVariantDef> | null = null
   private hasLoadedFlags = false
   private identity: string
   private instanceId: string | undefined
@@ -294,15 +303,19 @@ export class ElectronTogglyClient {
   }
 
   private get contextCacheKey(): string {
-    if (this.instanceId) return `i:${createHash('sha256').update(this.instanceId).digest('hex')}`
+    // Variants mode fetches a distinct shape (/evaluated-variants-signed); tag the
+    // key so switching enableVariants never reads/writes a boolean-mode cache entry.
+    // Untagged when off, so existing boolean-mode disk scopes stay byte-identical.
+    const variantsTag = this.config.enableVariants ? ':variants' : ''
+    if (this.instanceId) return `i:${createHash('sha256').update(this.instanceId).digest('hex')}${variantsTag}`
     const claims = this.claims
-    return `v2:${encodeURIComponent(
-      JSON.stringify([
-        this.identity ?? '',
-        [...this.groups].sort((a, b) => a.localeCompare(b)),
-        Object.entries(claims).sort(([a], [b]) => a.localeCompare(b)),
-      ]),
-    )}`
+    const parts: unknown[] = [
+      this.identity ?? '',
+      [...this.groups].sort((a, b) => a.localeCompare(b)),
+      Object.entries(claims).sort(([a], [b]) => a.localeCompare(b)),
+    ]
+    if (this.config.enableVariants) parts.push(true)
+    return `v2:${encodeURIComponent(JSON.stringify(parts))}`
   }
 
   private getBooleanFlags(): FeatureFlagsSnapshot {
@@ -319,7 +332,8 @@ export class ElectronTogglyClient {
 
   private buildEvaluatedUrl(): string {
     const url = new URL(this.config.baseURI)
-    url.pathname = `${url.pathname.replace(/\/$/, '')}/evaluated-signed/${this.config.appKey}/${this.config.environment}`
+    const path = this.config.enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed'
+    url.pathname = `${url.pathname.replace(/\/$/, '')}/${path}/${this.config.appKey}/${this.config.environment}`
     url.hash = ''
     url.searchParams.delete('i')
     if (this.instanceId) {
@@ -362,7 +376,12 @@ export class ElectronTogglyClient {
     }
     const generation = this.generation
     const context = this.contextCacheKey
-    const entry = { flags: structuredClone(this.features), revision: this.cachedDefinitionsRevision, updatedAt: Date.now() }
+    const entry = {
+      flags: structuredClone(this.features),
+      variants: this.config.enableVariants ? structuredClone(this.variants) : null,
+      revision: this.cachedDefinitionsRevision,
+      updatedAt: Date.now(),
+    }
     try {
       if (existingBodyOnly) {
         const stored = await this.cache.read(this.config.appKey, this.config.environment, context)
@@ -394,6 +413,7 @@ export class ElectronTogglyClient {
         return false
       }
       this.features = entry.flags
+      this.variants = this.config.enableVariants ? (entry.variants ?? null) : null
       this.cachedDefinitionsRevision = entry.revision
       this.hasLoadedFlags = true
       return true
@@ -406,6 +426,7 @@ export class ElectronTogglyClient {
   private captureEvaluation() {
     const record = this.telemetry.captureCheck()
     const features = structuredClone(this.features)
+    const variants = this.config.enableVariants ? structuredClone(this.variants ?? {}) : {}
     const defaults = { ...this.config.flagDefaults }
     const gates = (this.disposed ? [] : this.localGates).map(gate => ({ ...gate, flagKeys: [...gate.flagKeys] }))
     const index = buildFlagGateIndex(gates)
@@ -421,7 +442,7 @@ export class ElectronTogglyClient {
         const resolved = resolveEvaluatedDefinition(features[key], context,
           gate && gates.length === 0 ? false : (defaults[key] ?? false))
         const effective = applyLocalGate(resolved, key, gates, index)
-        record(key, effective ? 'enabled' : 'disabled')
+        record(key, effective ? (variants[key]?.variant || 'enabled') : 'disabled')
         return effective
       },
     }
@@ -489,6 +510,32 @@ export class ElectronTogglyClient {
     }
   }
 
+  /**
+   * Current variant assignment for a feature (requires {@link TogglyElectronConfig.enableVariants}
+   * and loaded data). Records a telemetry check the same way `isFeatureOn` does.
+   * Null when variants are disabled, the feature is off/local-gated, or no variant is assigned.
+   */
+  getVariant(featureKey: string): VariantResult | null {
+    if (!this.config.enableVariants || !this.variants) return null
+    const entry = this.variants[featureKey]
+    const evaluation = this.captureEvaluation()
+    const enabled = evaluation.resolve(featureKey)
+    return enabled && entry?.variant
+      ? { name: entry.variant, configurationValue: entry.configurationValue }
+      : null
+  }
+
+  /**
+   * Configuration payload for the assigned variant, if any.
+   * Optional `isT` type guard soft-fails to null on mismatch.
+   */
+  getVariantValue<T = unknown>(
+    featureKey: string,
+    isT?: (value: unknown) => value is T,
+  ): T | null {
+    return decodeVariantValue(this.getVariant(featureKey)?.configurationValue, isT)
+  }
+
   recordUsage(key: string, variant = 'enabled'): void {
     this.telemetry.recordUsage(key, variant)
   }
@@ -540,10 +587,12 @@ export class ElectronTogglyClient {
     }
   }
 
+  private unwrapParsedDefs(parsed: unknown): unknown {
+    return this.config.verifySignatures ? parsed : unwrapDefsPayload(parsed)
+  }
+
   private evaluatedDefinitions(parsed: unknown): EvaluatedDefinitions {
-    return (this.config.verifySignatures
-      ? parsed as EvaluatedDefinitions
-      : unwrapDefsPayload(parsed) as EvaluatedDefinitions) ?? {}
+    return (this.unwrapParsedDefs(parsed) as EvaluatedDefinitions) ?? {}
   }
 
   private acceptNotModified(response: Response): void {
@@ -554,6 +603,16 @@ export class ElectronTogglyClient {
   private acceptDefinitions(defs: EvaluatedDefinitions, response: Response): void {
     if (!isValidDefinitions(defs)) throw new Error('Invalid evaluated definitions body')
     this.features = defs
+    this.variants = null
+    this.hasLoadedFlags = true
+    this.cachedDefinitionsRevision = null
+    this.applyRevision(response)
+  }
+
+  private acceptVariantDefinitions(parsed: unknown, response: Response): void {
+    const defs = parseVariantDefinitions(this.unwrapParsedDefs(parsed))
+    this.variants = defs
+    this.features = variantDefsToFlags(defs)
     this.hasLoadedFlags = true
     this.cachedDefinitionsRevision = null
     this.applyRevision(response)
@@ -578,6 +637,7 @@ export class ElectronTogglyClient {
 
     if (!this.config.appKey) {
       this.features = { ...(this.config.flagDefaults ?? {}) }
+      this.variants = null
       this.hasLoadedFlags = true
       this.notifyFlagsUpdated()
       return this.getBooleanFlags()
@@ -618,10 +678,12 @@ export class ElectronTogglyClient {
         bodyText, this.definitionsParseOptions(headers, controller),
       )
 
-      const defs = this.evaluatedDefinitions(parsed)
-
       if (!current()) return this.getBooleanFlags()
-      this.acceptDefinitions(defs, response)
+      if (this.config.enableVariants) {
+        this.acceptVariantDefinitions(parsed, response)
+      } else {
+        this.acceptDefinitions(this.evaluatedDefinitions(parsed), response)
+      }
       await this.persistCache()
       if (!current()) return this.getBooleanFlags()
       await this.hookExecutor.executeAfterRefresh(this.getBooleanFlags(), current)
@@ -680,6 +742,7 @@ export class ElectronTogglyClient {
     if (input.claims !== undefined) this.claims = { ...input.claims }
     this.telemetry.setContext({ identity: this.identity, instanceId: this.instanceId ?? '' })
     this.features = { ...this.config.flagDefaults }
+    this.variants = null
     this.hasLoadedFlags = false
     this.cachedDefinitionsRevision = null
     this.pendingDefinitionsPin = null
@@ -943,6 +1006,17 @@ export function isFeatureOff(
   kind?: string,
 ): boolean {
   return singleton?.isFeatureOff(key, entityContext, kind) ?? true
+}
+
+export function getVariant(key: string): VariantResult | null {
+  return singleton?.getVariant(key) ?? null
+}
+
+export function getVariantValue<T = unknown>(
+  key: string,
+  isT?: (value: unknown) => value is T,
+): T | null {
+  return singleton?.getVariantValue(key, isT) ?? null
 }
 
 export function evaluateFeatureGate(

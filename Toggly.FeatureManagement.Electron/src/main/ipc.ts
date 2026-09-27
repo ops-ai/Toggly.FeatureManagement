@@ -138,6 +138,11 @@ export function registerTogglyIpc(
       validContext(args[3]) &&
       (args[4] === undefined || validKey(args[4])),
   )
+  sync(
+    IPC_CHANNELS.getVariant,
+    ([key]) => client.getVariant(key as string),
+    (args) => args.length <= 1 && validKey(args[0]),
+  )
   async(
     IPC_CHANNELS.getFlags,
     () => client.getFlags(),

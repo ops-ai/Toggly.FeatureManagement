@@ -30,6 +30,8 @@ describe('exposeToggly', () => {
       isFeatureOn: (k: string) => boolean
       isFeatureOff: (k: string) => boolean
       evaluateFeatureGate: (keys: string[]) => boolean
+      getVariant: (k: string) => { name: string; configurationValue?: unknown } | null
+      getVariantValue: (k: string) => unknown
       getFlags: () => Promise<Record<string, boolean>>
       setContext: (c: object) => Promise<Record<string, boolean>>
       clearContext: () => Promise<Record<string, boolean>>
@@ -40,6 +42,10 @@ describe('exposeToggly', () => {
     expect(sendSync).toHaveBeenCalled()
     expect(api.isFeatureOff('A')).toBe(true)
     expect(api.evaluateFeatureGate(['A'])).toBe(true)
+    sendSync.mockReturnValueOnce({ name: 'treatment', configurationValue: 7 })
+    expect(api.getVariant('A')).toEqual({ name: 'treatment', configurationValue: 7 })
+    sendSync.mockReturnValueOnce({ name: 'treatment', configurationValue: 7 })
+    expect(api.getVariantValue('A')).toBe(7)
     await api.getFlags()
     await api.setContext({ identity: 'x' })
     await api.clearContext()

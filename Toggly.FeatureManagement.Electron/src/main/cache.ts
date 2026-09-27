@@ -2,9 +2,12 @@ import { mkdir, readFile, writeFile, unlink, rename } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import type { EvaluatedDefinitions } from '@ops-ai/toggly-hooks-types'
+import { isValidVariantDefinitions, type EvaluatedVariantDef } from '../variant.js'
 
 export interface DiskCacheEntry {
   flags: EvaluatedDefinitions
+  /** Raw evaluated-variants defs, paired with `flags` when `enableVariants` is set. */
+  variants?: Record<string, EvaluatedVariantDef> | null
   revision: string | null
   updatedAt: number
 }
@@ -55,11 +58,12 @@ export class DiskFeatureCache {
     try {
       const raw = await readFile(path, 'utf-8')
       const parsed = JSON.parse(raw) as DiskCacheEntry & { scope?: string[] }
-      if (!parsed || typeof parsed !== 'object' || !isValidDefinitions(parsed.flags) || (parsed.revision != null && typeof parsed.revision !== 'string') || (parsed.scope !== undefined && JSON.stringify(parsed.scope) !== JSON.stringify([appKey, environment, contextKey]))) {
+      if (!parsed || typeof parsed !== 'object' || !isValidDefinitions(parsed.flags) || (parsed.revision != null && typeof parsed.revision !== 'string') || (parsed.variants != null && !isValidVariantDefinitions(parsed.variants)) || (parsed.scope !== undefined && JSON.stringify(parsed.scope) !== JSON.stringify([appKey, environment, contextKey]))) {
         return null
       }
       return {
         flags: parsed.flags,
+        variants: parsed.variants ?? null,
         revision: parsed.revision ?? null,
         updatedAt: typeof parsed.updatedAt === 'number' ? parsed.updatedAt : Date.now(),
       }

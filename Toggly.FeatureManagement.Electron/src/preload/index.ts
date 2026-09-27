@@ -1,12 +1,18 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '../ipc-channels.js'
+import { decodeVariantValue } from '../decode-variant-value.js'
 import type {
   EntityContextInput,
   FeatureFlagsSnapshot,
   FeatureRequirement,
   SetContextInput,
   TogglyBridge,
+  VariantResult,
 } from '../types.js'
+
+function requestVariant(key: string): VariantResult | null {
+  return ipcRenderer.sendSync(IPC_CHANNELS.getVariant, key) as VariantResult | null
+}
 
 /**
  * Expose the Flutter-like `window.toggly` API to the renderer via contextBridge.
@@ -70,6 +76,17 @@ export function exposeToggly(): void {
         entityContext ?? null,
         kind,
       ) as boolean
+    },
+
+    getVariant(key: string): VariantResult | null {
+      return requestVariant(key)
+    },
+
+    getVariantValue<T = unknown>(
+      key: string,
+      isT?: (value: unknown) => value is T,
+    ): T | null {
+      return decodeVariantValue(requestVariant(key)?.configurationValue, isT)
     },
 
     getFlags(): Promise<FeatureFlagsSnapshot> {

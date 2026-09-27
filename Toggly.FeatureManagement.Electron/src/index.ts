@@ -12,10 +12,13 @@ export {
   isFeatureOn,
   isFeatureOff,
   evaluateFeatureGate,
+  getVariant,
+  getVariantValue,
   getFlags,
   setContext,
   clearContext,
   onFlagsUpdated,
+  decodeVariantValue,
 } from './renderer/index.js'
 
 export type {
@@ -27,4 +30,6 @@ export type {
   TogglyTelemetry,
   TogglyElectronConfig,
   Hook,
+  VariantResult,
+  EvaluatedVariantDef,
 } from './types.js'

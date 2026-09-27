@@ -4,6 +4,7 @@ import type {
   EvaluatedDefinitions,
   TogglyEntityContext,
 } from '@ops-ai/toggly-hooks-types'
+import type { VariantResult } from './variant.js'
 
 export type FeatureRequirement = 'all' | 'any'
 
@@ -26,6 +27,12 @@ export interface TogglyElectronConfig {
   allowedKeyIds?: string[]
   maxSignatureAgeSeconds?: number | null
   enableLiveUpdates?: boolean
+  /**
+   * Opt-in variant-aware evaluation. Uses `/evaluated-variants-signed` instead
+   * of `/evaluated-signed` and enables `getVariant` / `getVariantValue`.
+   * Default false.
+   */
+  enableVariants?: boolean
   /** Required — typically `app.getPath('userData')`. */
   userDataPath: string
   connectTimeout?: number
@@ -83,6 +90,17 @@ export interface TogglyBridge extends TogglyTelemetry {
   getFlags(): Promise<FeatureFlagsSnapshot>
   setContext(context: SetContextInput): Promise<FeatureFlagsSnapshot>
   clearContext(): Promise<FeatureFlagsSnapshot>
+  /**
+   * Current variant assignment for a feature (requires `enableVariants`).
+   * Null when variants are disabled, the feature is off/local-gated, or no
+   * variant is assigned.
+   */
+  getVariant(key: string): VariantResult | null
+  /** Configuration payload for the assigned variant, if any (untyped). */
+  getVariantValue<T = unknown>(
+    key: string,
+    isT?: (value: unknown) => value is T,
+  ): T | null
   /** @internal Reactive invalidation, without evaluation or hydration checks. */
   onEvaluationsChanged(callback: () => void): () => void
   onFlagsUpdated(callback: (flags: FeatureFlagsSnapshot) => void): () => void
@@ -95,3 +113,4 @@ declare global {
 }
 
 export type { Hook, EvaluatedDefinitions, TogglyEntityContext }
+export type { EvaluatedVariantDef, VariantResult } from './variant.js'
