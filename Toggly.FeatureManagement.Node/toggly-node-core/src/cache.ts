@@ -133,7 +133,7 @@ export class DefinitionsCache {
     this.logger = createLogger(debug)
   }
 
-  private async getParsedValue(key: string): Promise<unknown | null> {
+  private async getParsedValue(key: string): Promise<unknown> {
     try {
       const value = await this.provider.get(key)
       return value ? JSON.parse(value) : null

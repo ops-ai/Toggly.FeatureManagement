@@ -77,6 +77,18 @@ function normalizeRevision(revision: string | null | undefined): string | null {
   return revision.slice(start, end)
 }
 
+function revisionsMatch(
+  previous: string | null | undefined,
+  incoming: string | null | undefined,
+): boolean {
+  const a = normalizeRevision(previous)
+  const b = normalizeRevision(incoming)
+  if (!a || !b) {
+    return false
+  }
+  return a === b
+}
+
 function registerContext<T>(
   kind: string,
   mapper: (entity: T) => TogglyEntityContext,
@@ -174,18 +186,6 @@ export function createTogglyClient(
     } catch (error) {
       logger.debug('Failed to record definition cache miss:', error)
     }
-  }
-
-  function revisionsMatch(
-    previous: string | null | undefined,
-    incoming: string | null | undefined,
-  ): boolean {
-    const a = normalizeRevision(previous)
-    const b = normalizeRevision(incoming)
-    if (!a || !b) {
-      return false
-    }
-    return a === b
   }
 
   function getDefinitionsRevision(): string | null {
