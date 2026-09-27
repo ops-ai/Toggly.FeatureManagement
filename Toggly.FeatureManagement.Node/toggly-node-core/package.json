@@ -43,6 +43,7 @@
     "dist",
     "proto",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
