@@ -277,7 +277,7 @@ jobs:
         destination:
           - 'platform=iOS Simulator,name=iPhone 16,OS=18.5'
           - 'platform=macOS'
-          - 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation),OS=18.5'
+          - 'generic/platform=tvOS Simulator'
           - 'generic/platform=watchOS Simulator'
     steps:
       - name: Checkout code
