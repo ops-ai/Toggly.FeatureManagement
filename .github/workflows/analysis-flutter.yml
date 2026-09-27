@@ -406,6 +406,22 @@ jobs:
             -Dsonar.dart.lcov.reportPaths=coverage/lcov.info
         continue-on-error: true
 
+      - name: SonarQube Server Scan
+        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          projectBaseDir: Toggly.FeatureManagement.Flutter/${{ matrix.dir }}
+          args: >
+            -Dsonar.projectKey=${{ matrix.sonarKey }}
+            -Dsonar.projectName=${{ matrix.sonarName }}
+            -Dsonar.sources=lib
+            -Dsonar.tests=test
+            -Dsonar.exclusions=**/.*/**,**/example/**,**/*.g.dart,**/*.freezed.dart
+            -Dsonar.dart.lcov.reportPaths=coverage/lcov.info
+        continue-on-error: true
+
   secure-storage-version-matrix:
     name: Secure Storage Plugin ${{ matrix.version }}
     runs-on: ubuntu-latest

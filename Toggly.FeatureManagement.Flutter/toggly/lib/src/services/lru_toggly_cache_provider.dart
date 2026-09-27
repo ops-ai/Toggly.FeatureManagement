@@ -15,6 +15,10 @@ import '../models/toggly_cache_models.dart';
 /// When [inner] implements [TogglyRevisionCacheProvider], the returned
 /// instance also implements that interface and delegates revision methods.
 class LruTogglyCacheProvider implements TogglyCacheProvider {
+  static const _flagsPrefix = 'flags:';
+  static const _variantsPrefix = 'variants:';
+  static const _revisionPrefix = 'revision:';
+
   final TogglyCacheProvider _inner;
   final int maxCacheKeys;
   final int Function() _nowMs;
@@ -78,16 +82,16 @@ class LruTogglyCacheProvider implements TogglyCacheProvider {
   }
 
   List<String> _protectKeysForLogicalKey(String logicalKey) {
-    if (logicalKey.startsWith('flags:')) {
-      final identity = logicalKey.substring('flags:'.length);
+    if (logicalKey.startsWith(_flagsPrefix)) {
+      final identity = logicalKey.substring(_flagsPrefix.length);
       return [flagsKey(identity), variantsKey(identity)];
     }
-    if (logicalKey.startsWith('variants:')) {
-      final identity = logicalKey.substring('variants:'.length);
+    if (logicalKey.startsWith(_variantsPrefix)) {
+      final identity = logicalKey.substring(_variantsPrefix.length);
       return [flagsKey(identity), variantsKey(identity)];
     }
-    if (logicalKey.startsWith('revision:')) {
-      final rest = logicalKey.substring('revision:'.length);
+    if (logicalKey.startsWith(_revisionPrefix)) {
+      final rest = logicalKey.substring(_revisionPrefix.length);
       final parts = rest.split(':');
       if (parts.length < 3) {
         return [logicalKey];
@@ -168,16 +172,16 @@ class LruTogglyCacheProvider implements TogglyCacheProvider {
   }
 
   Future<void> _evictLogicalKey(String logicalKey) async {
-    if (logicalKey.startsWith('flags:')) {
-      await _inner.deleteFlags(logicalKey.substring('flags:'.length));
+    if (logicalKey.startsWith(_flagsPrefix)) {
+      await _inner.deleteFlags(logicalKey.substring(_flagsPrefix.length));
       return;
     }
-    if (logicalKey.startsWith('variants:')) {
-      await _inner.deleteVariants(logicalKey.substring('variants:'.length));
+    if (logicalKey.startsWith(_variantsPrefix)) {
+      await _inner.deleteVariants(logicalKey.substring(_variantsPrefix.length));
       return;
     }
-    if (logicalKey.startsWith('revision:')) {
-      final rest = logicalKey.substring('revision:'.length);
+    if (logicalKey.startsWith(_revisionPrefix)) {
+      final rest = logicalKey.substring(_revisionPrefix.length);
       final parts = rest.split(':');
       if (parts.length < 3) {
         return;
@@ -196,14 +200,14 @@ class LruTogglyCacheProvider implements TogglyCacheProvider {
     }
   }
 
-  static String flagsKey(String identity) => 'flags:$identity';
-  static String variantsKey(String identity) => 'variants:$identity';
+  static String flagsKey(String identity) => '$_flagsPrefix$identity';
+  static String variantsKey(String identity) => '$_variantsPrefix$identity';
   static String revisionKey(
     String appKey,
     String environment,
     String identity,
   ) =>
-      'revision:$appKey:$environment:$identity';
+      '$_revisionPrefix$appKey:$environment:$identity';
 
   @override
   Future<TogglyFeatureFlagsCache?> readFlags(String identity) async {
@@ -267,10 +271,10 @@ class LruTogglyCacheProvider implements TogglyCacheProvider {
 class _LruRevisionTogglyCacheProvider extends LruTogglyCacheProvider
     implements TogglyRevisionCacheProvider {
   _LruRevisionTogglyCacheProvider(
-    TogglyRevisionCacheProvider inner, {
-    required int maxCacheKeys,
-    int Function()? nowMs,
-  }) : super._(inner, maxCacheKeys: maxCacheKeys, nowMs: nowMs);
+    TogglyRevisionCacheProvider super.inner, {
+    required super.maxCacheKeys,
+    super.nowMs,
+  }) : super._();
 
   TogglyRevisionCacheProvider get _revisionInner =>
       _inner as TogglyRevisionCacheProvider;

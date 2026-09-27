@@ -18,6 +18,14 @@ import 'services/telemetry_reporter.dart';
 ///
 /// Allows enabling and disabling of features easily. Can be used with or without Toggly.io.
 class Toggly with WidgetsBindingObserver {
+  static const _signatureVerificationFailed = 'Signature verification failed';
+  static const _invalidJwksReceived = 'Invalid JWKs received from server';
+  static const _keyNotTrusted = 'Key ID not in trusted whitelist';
+  static const _jwksFetchFailed = 'Failed to fetch JWKs';
+  static const _invalidVariantsSignature = 'Invalid variants signature';
+  static const _missingJwkCoordinates =
+      'Invalid JWK: missing x or y coordinates';
+
   static const Uuid _uuid = Uuid();
   static late String? _appKey;
   static String _environment = 'Production';
@@ -604,7 +612,7 @@ class Toggly with WidgetsBindingObserver {
 
           if (!isValid) {
             _reportError(
-              'Signature verification failed',
+              _signatureVerificationFailed,
               Exception('Invalid signature'),
               StackTrace.current,
             );
@@ -861,7 +869,7 @@ class Toggly with WidgetsBindingObserver {
           if (generation != _generation) {
             return TogglyLoadFeatureFlagsResponse.cached;
           }
-          _reportError('Signature verification failed', e, stack);
+          _reportError(_signatureVerificationFailed, e, stack);
           if (generation != _generation) {
             return TogglyLoadFeatureFlagsResponse.cached;
           }
@@ -869,7 +877,7 @@ class Toggly with WidgetsBindingObserver {
           if (generation != _generation) {
             return TogglyLoadFeatureFlagsResponse.cached;
           }
-          throw Exception('Signature verification failed');
+          throw Exception(_signatureVerificationFailed);
         }
 
         _applyDefinitionsRevision(response);
@@ -929,7 +937,7 @@ class Toggly with WidgetsBindingObserver {
         return TogglyLoadFeatureFlagsResponse.error;
       }
 
-      if (e.toString().contains('Signature verification failed')) {
+      if (e.toString().contains(_signatureVerificationFailed)) {
         return TogglyLoadFeatureFlagsResponse.error;
       }
 
@@ -1037,7 +1045,7 @@ class Toggly with WidgetsBindingObserver {
         );
         if (generation != _generation) return;
         if (!isValid) {
-          throw Exception('Invalid variants signature');
+          throw Exception(_invalidVariantsSignature);
         }
         if (kDebugMode) {
           print('Toggly variants signature verification successful');
@@ -1146,8 +1154,8 @@ class Toggly with WidgetsBindingObserver {
         );
         if (generation != _generation) return {};
         if (!isValid) {
-          _lastError = 'Invalid variants signature';
-          throw Exception('Invalid variants signature');
+          _lastError = _invalidVariantsSignature;
+          throw Exception(_invalidVariantsSignature);
         }
       }
 
@@ -1377,11 +1385,11 @@ class Toggly with WidgetsBindingObserver {
       // Validate fetched keys
       if (!_validateJwks(keys)) {
         _reportError(
-          'Invalid JWKs received from server',
-          Exception('Invalid JWKs received from server'),
+          _invalidJwksReceived,
+          Exception(_invalidJwksReceived),
           StackTrace.current,
         );
-        throw Exception('Invalid JWKs received from server');
+        throw Exception(_invalidJwksReceived);
       }
 
       jwksData['_expiresAt'] =
@@ -1410,9 +1418,9 @@ class Toggly with WidgetsBindingObserver {
       for (var key in keys) {
         if (key['x'] == null || key['y'] == null) {
           if (kDebugMode) {
-            print('Invalid JWK: missing x or y coordinates');
+            print(_missingJwkCoordinates);
           }
-          _lastError = 'Invalid JWK: missing x or y coordinates';
+          _lastError = _missingJwkCoordinates;
           return false;
         }
 
@@ -1586,33 +1594,7 @@ class Toggly with WidgetsBindingObserver {
 
     final first = text[start];
     if (first == '{' || first == '[') {
-      var depth = 0;
-      var inString = false;
-      var escape = false;
-      for (var j = start; j < text.length; j++) {
-        final c = text[j];
-        if (inString) {
-          if (escape) {
-            escape = false;
-          } else if (c == '\\') {
-            escape = true;
-          } else if (c == '"') {
-            inString = false;
-          }
-          continue;
-        }
-        if (c == '"') {
-          inString = true;
-        } else if (c == '{' || c == '[') {
-          depth++;
-        } else if (c == '}' || c == ']') {
-          depth--;
-          if (depth == 0) {
-            return text.substring(start, j + 1);
-          }
-        }
-      }
-      return null;
+      return _extractJsonContainer(text, start);
     }
 
     if (first == '"') {
@@ -1634,6 +1616,30 @@ class Toggly with WidgetsBindingObserver {
     return text.substring(start, j);
   }
 
+  static String? _extractJsonContainer(String text, int start) {
+    var depth = 0;
+    for (var j = start; j < text.length; j++) {
+      final c = text[j];
+      if (c == '"') {
+        final stringEnd = _findJsonStringEnd(text, j);
+        if (stringEnd == null) {
+          return null;
+        }
+        j = stringEnd;
+        continue;
+      }
+      if (c == '{' || c == '[') {
+        depth++;
+      } else if (c == '}' || c == ']') {
+        depth--;
+        if (depth == 0) {
+          return text.substring(start, j + 1);
+        }
+      }
+    }
+    return null;
+  }
+
   static bool _isJsonWhitespace(int codeUnit) =>
       codeUnit == 0x20 || // space
       codeUnit == 0x09 || // tab
@@ -1645,7 +1651,7 @@ class Toggly with WidgetsBindingObserver {
       int timestamp, bool allowOfflineValidation, String keyId) async {
     if (signature.isEmpty || keyId.isEmpty) {
       _reportError(
-        'Signature verification failed',
+        _signatureVerificationFailed,
         Exception('Empty signature or key ID'),
         StackTrace.current,
       );
@@ -1656,11 +1662,11 @@ class Toggly with WidgetsBindingObserver {
     if (Toggly._config.trustedKeyIds != null &&
         !Toggly._config.trustedKeyIds!.contains(keyId)) {
       _reportError(
-        'Key ID not in trusted whitelist',
-        Exception('Key ID not in trusted whitelist'),
+        _keyNotTrusted,
+        Exception(_keyNotTrusted),
         StackTrace.current,
       );
-      throw Exception('Key ID not in trusted whitelist');
+      throw Exception(_keyNotTrusted);
     }
 
     // Get JWKs
@@ -1668,11 +1674,11 @@ class Toggly with WidgetsBindingObserver {
         await _fetchAndCacheJwks(ignoreExpiration: allowOfflineValidation);
     if (jwksData == null) {
       _reportError(
-        'Failed to fetch JWKs',
-        Exception('Failed to fetch JWKs'),
+        _jwksFetchFailed,
+        Exception(_jwksFetchFailed),
         StackTrace.current,
       );
-      throw Exception('Failed to fetch JWKs');
+      throw Exception(_jwksFetchFailed);
     }
 
     final jwksList = List<Map<String, dynamic>>.from(jwksData['keys']);
@@ -1700,11 +1706,11 @@ class Toggly with WidgetsBindingObserver {
     try {
       if (jwk['x'] == null || jwk['y'] == null) {
         _reportError(
-          'Invalid JWK: missing x or y coordinates',
-          Exception('Invalid JWK: missing x or y coordinates'),
+          _missingJwkCoordinates,
+          Exception(_missingJwkCoordinates),
           StackTrace.current,
         );
-        throw Exception('Invalid JWK: missing x or y coordinates');
+        throw Exception(_missingJwkCoordinates);
       }
 
       if (kDebugMode) {
@@ -1789,8 +1795,8 @@ class Toggly with WidgetsBindingObserver {
 
       return isValid;
     } catch (e, stack) {
-      _reportError('Signature verification failed', e, stack);
-      throw Exception('Signature verification failed');
+      _reportError(_signatureVerificationFailed, e, stack);
+      throw Exception(_signatureVerificationFailed);
     }
   }
 
