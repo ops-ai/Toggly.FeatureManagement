@@ -68,6 +68,11 @@ jobs:
             swift test -v
           fi
 
+      - name: Install iOS 18.1 simulator runtime
+        if: matrix.xcode == '16.1'
+        timeout-minutes: 30
+        run: xcodebuild -downloadPlatform iOS -buildVersion 18.1
+
       - name: Run iOS simulator tests with coverage
         if: matrix.xcode == '16.1'
         working-directory: ${{ env.SDK_ROOT }}
