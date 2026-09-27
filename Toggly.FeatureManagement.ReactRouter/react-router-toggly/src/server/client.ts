@@ -679,7 +679,6 @@ export class TogglyServerClient {
   getVariant(featureKey: string): VariantResult | null {
     if (!this.config.enableVariants) return null;
     const entry = this.variants?.[featureKey];
-    const variant = entry?.variant || 'enabled';
     const enabled = applyLocalGate(
       entry?.enabled === true,
       featureKey,

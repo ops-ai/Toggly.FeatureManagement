@@ -135,6 +135,11 @@ export const pluginOptionsSchema: GatsbyNode['pluginOptionsSchema'] = ({ Joi }) 
     enableLiveUpdates: Joi.boolean()
       .default(true)
       .description('Enable WebSocket live updates in the browser client'),
+    enableVariants: Joi.boolean()
+      .default(false)
+      .description(
+        'Opt-in variant-aware evaluation (/evaluated-variants-signed) and getVariant/getVariantValue',
+      ),
     allFeaturesEnabledDuringBuild: Joi.boolean()
       .default(false)
       .description('Enable all features during build'),
