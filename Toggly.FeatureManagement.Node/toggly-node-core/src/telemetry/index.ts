@@ -100,57 +100,59 @@ export class TelemetryRuntime {
       return
     }
 
-    const needsTransport = this.config.enableUsageTracking || this.config.enableMetrics
-    if (needsTransport) {
-      if (this.config.usageClient !== undefined || this.config.metricsClient !== undefined) {
-        this.clients = {
-          usage: this.config.usageClient as UsageGrpcClient,
-          metrics: this.config.metricsClient as MetricsGrpcClient,
-        }
-      } else if (!isGrpcAvailable()) {
-        this.logger.warn(
-          'Usage/metrics enabled but @grpc/grpc-js and @grpc/proto-loader are not installed. ' +
-            'Install them to send telemetry: npm install @grpc/grpc-js @grpc/proto-loader',
-        )
-      } else {
-        this.clients = createGrpcClients(this.config.metricsBaseUrl)
-        if (!this.clients) {
-          this.logger.warn('Failed to create Toggly gRPC clients; telemetry disabled')
-        }
-      }
-    }
-
-    if (this.config.enableUsageTracking) {
-      this.usageBatcher = new UsageBatcher({
-        appKey: this.config.appKey,
-        environment: this.config.environment,
-        instanceName: this.config.instanceName,
-        appVersion: this.config.appVersion,
-        processStartTime: this.processStartTime,
-      })
-      if (this.config.usageFlushInterval > 0) {
-        this.usageTimer = setInterval(() => {
-          void this.flushUsage()
-        }, this.config.usageFlushInterval)
-        this.usageTimer.unref?.()
-      }
-    }
-
-    if (this.config.enableMetrics) {
-      this.metricsBatcher = new MetricsBatcher({
-        appKey: this.config.appKey,
-        environment: this.config.environment,
-        instanceName: this.config.instanceName,
-      })
-      if (this.config.metricsFlushInterval > 0) {
-        this.metricsTimer = setInterval(() => {
-          void this.flushMetrics()
-        }, this.config.metricsFlushInterval)
-        this.metricsTimer.unref?.()
-      }
-    }
-
+    this.initializeClients()
+    this.startUsageBatcher()
+    this.startMetricsBatcher()
     this.attachProcessHandlers()
+  }
+
+  private initializeClients(): void {
+    if (this.config.usageClient !== undefined || this.config.metricsClient !== undefined) {
+      this.clients = {
+        usage: this.config.usageClient as UsageGrpcClient,
+        metrics: this.config.metricsClient as MetricsGrpcClient,
+      }
+      return
+    }
+    if (!isGrpcAvailable()) {
+      this.logger.warn(
+        'Usage/metrics enabled but @grpc/grpc-js and @grpc/proto-loader are not installed. ' +
+          'Install them to send telemetry: npm install @grpc/grpc-js @grpc/proto-loader',
+      )
+      return
+    }
+    this.clients = createGrpcClients(this.config.metricsBaseUrl)
+    if (!this.clients) {
+      this.logger.warn('Failed to create Toggly gRPC clients; telemetry disabled')
+    }
+  }
+
+  private startUsageBatcher(): void {
+    if (!this.config.enableUsageTracking) return
+    this.usageBatcher = new UsageBatcher({
+      appKey: this.config.appKey,
+      environment: this.config.environment,
+      instanceName: this.config.instanceName,
+      appVersion: this.config.appVersion,
+      processStartTime: this.processStartTime,
+    })
+    if (this.config.usageFlushInterval > 0) {
+      this.usageTimer = setInterval(() => void this.flushUsage(), this.config.usageFlushInterval)
+      this.usageTimer.unref?.()
+    }
+  }
+
+  private startMetricsBatcher(): void {
+    if (!this.config.enableMetrics) return
+    this.metricsBatcher = new MetricsBatcher({
+      appKey: this.config.appKey,
+      environment: this.config.environment,
+      instanceName: this.config.instanceName,
+    })
+    if (this.config.metricsFlushInterval > 0) {
+      this.metricsTimer = setInterval(() => void this.flushMetrics(), this.config.metricsFlushInterval)
+      this.metricsTimer.unref?.()
+    }
   }
 
   /** Best-effort flush budget before re-emitting the signal so Node can exit. */
@@ -207,7 +209,7 @@ export class TelemetryRuntime {
       // Default handler after our listener is gone terminates the process.
       process.kill(process.pid, signal)
     } catch {
-      const code = signal === 'SIGINT' ? 130 : signal === 'SIGTERM' ? 143 : 0
+      const code = signal === 'SIGINT' ? 130 : 143
       process.exit(code)
     }
   }

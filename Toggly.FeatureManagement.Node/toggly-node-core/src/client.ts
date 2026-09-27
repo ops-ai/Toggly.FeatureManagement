@@ -4,6 +4,7 @@ import type {
   TogglyState,
   FeatureDefinitions,
   FeatureRequirement,
+  EvaluationEntityContext,
   EvaluationContext,
   Hook,
   VariantResult,
@@ -59,6 +60,46 @@ import {
 } from './entity-context-registration.js'
 import { TelemetryRuntime } from './telemetry/index.js'
 import { decodeVariantValue } from './decode-variant-value.js'
+
+function normalizeRevision(revision: string | null | undefined): string | null {
+  if (!revision) {
+    return null
+  }
+
+  let start = 0
+  let end = revision.length
+  while (revision[start] === '"') {
+    start += 1
+  }
+  while (end > start && revision[end - 1] === '"') {
+    end -= 1
+  }
+  return revision.slice(start, end)
+}
+
+function revisionsMatch(
+  previous: string | null | undefined,
+  incoming: string | null | undefined,
+): boolean {
+  const a = normalizeRevision(previous)
+  const b = normalizeRevision(incoming)
+  if (!a || !b) {
+    return false
+  }
+  return a === b
+}
+
+function registerContext<T>(
+  kind: string,
+  mapper: (entity: T) => TogglyEntityContext,
+  schema?: {
+    keyProperty: string
+    displayName?: string
+    properties: Array<{ name: string; type: string }>
+  },
+): void {
+  registerEntityContext(kind, mapper, schema)
+}
 
 /**
  * Create a new Toggly client
@@ -147,25 +188,6 @@ export function createTogglyClient(
     }
   }
 
-  function normalizeRevision(revision: string | null | undefined): string | null {
-    if (!revision) {
-      return null
-    }
-    return revision.replace(/^"+|"+$/g, '')
-  }
-
-  function revisionsMatch(
-    previous: string | null | undefined,
-    incoming: string | null | undefined,
-  ): boolean {
-    const a = normalizeRevision(previous)
-    const b = normalizeRevision(incoming)
-    if (!a || !b) {
-      return false
-    }
-    return a === b
-  }
-
   function getDefinitionsRevision(): string | null {
     return cachedDefinitionsRevision ?? state.etag
   }
@@ -203,7 +225,7 @@ export function createTogglyClient(
 
   function buildEvalContext(
     context?: EvaluationContext,
-    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    entity?: EvaluationEntityContext,
     kind?: string,
   ): EvalContext {
     return {
@@ -585,7 +607,7 @@ export function createTogglyClient(
    */
   async function clearCache(): Promise<void> {
     state.definitions = new Map()
-    state.features = { ...(config.featureDefaults ?? {}) }
+    state.features = { ...config.featureDefaults }
     state.etag = null
     cachedDefinitionsRevision = null
     clearJwksCache()
@@ -830,7 +852,7 @@ export function createTogglyClient(
   async function isFeatureOn(
     featureKey: string,
     context?: EvaluationContext,
-    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    entity?: EvaluationEntityContext,
     kind?: string,
   ): Promise<boolean> {
     const evalContext = buildEvalContext(context, entity, kind)
@@ -858,7 +880,7 @@ export function createTogglyClient(
   async function isFeatureOff(
     featureKey: string,
     context?: EvaluationContext,
-    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    entity?: EvaluationEntityContext,
     kind?: string,
   ): Promise<boolean> {
     const isOn = await isFeatureOn(featureKey, context, entity, kind)
@@ -870,7 +892,7 @@ export function createTogglyClient(
     requirement: FeatureRequirement = 'all',
     negate = false,
     context?: EvaluationContext,
-    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    entity?: EvaluationEntityContext,
     kind?: string,
   ): Promise<boolean> {
     const evalContext = buildEvalContext(context, entity, kind)
@@ -917,7 +939,7 @@ export function createTogglyClient(
   async function getVariant(
     featureKey: string,
     context?: EvaluationContext,
-    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    entity?: EvaluationEntityContext,
     kind?: string,
   ): Promise<VariantResult | null> {
     const def = state.definitions.get(featureKey)
@@ -940,24 +962,12 @@ export function createTogglyClient(
   async function getVariantValue<T = unknown>(
     featureKey: string,
     context?: EvaluationContext,
-    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    entity?: EvaluationEntityContext,
     kind?: string,
     isT?: (v: unknown) => v is T,
   ): Promise<T | null> {
     const variant = await getVariant(featureKey, context, entity, kind)
     return decodeVariantValue(variant?.configurationValue, isT)
-  }
-
-  function registerContext<T>(
-    kind: string,
-    mapper: (entity: T) => TogglyEntityContext,
-    schema?: {
-      keyProperty: string
-      displayName?: string
-      properties: Array<{ name: string; type: string }>
-    },
-  ): void {
-    registerEntityContext(kind, mapper, schema)
   }
 
   /**

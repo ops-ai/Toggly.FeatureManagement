@@ -124,9 +124,7 @@ export function togglyMiddleware(config: TogglyHonoConfig): MiddlewareHandler {
 
   return async (c: Context, next) => {
     // Ensure client is initialized
-    if (!initPromise) {
-      initPromise = initialize()
-    }
+    initPromise ??= initialize()
     await initPromise
 
     if (!honoClient) {

@@ -1,3 +1,20 @@
+## 0.11.2
+
+2026-09-27
+
+### Fixed
+- Generate anonymous SDK UUIDs with Node's cryptographic UUID source on all
+  supported Node versions.
+
+## 0.11.1
+
+2026-09-27
+
+### Fixed
+- Report non-finite signed-definition timestamps as `TypeError` when freshness
+  validation is enabled, so callers can distinguish invalid input from a
+  stale or future signature.
+
 ## 0.11.0
 
 2026-09-24

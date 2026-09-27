@@ -82,6 +82,20 @@ describe('extractRawJsonProperty', () => {
       '{"data":{"defs":{"innocent":true}},"defs":{"Evil":true},"signature":"x","timestamp":1,"kid":"k"}'
     expect(extractRawJsonProperty(body, 'defs')).toBe('{"Evil":true}')
   })
+
+  it('does not treat a nested defs property as signed definitions', () => {
+    const body =
+      '{"data":{"defs":{"unsigned":true}},"signature":"x","timestamp":1,"kid":"k"}'
+
+    expect(extractRawJsonProperty(body, 'defs')).toBeNull()
+  })
+
+  it('extracts top-level defs after nested strings contain escaped structural characters', () => {
+    const body =
+      '{"metadata":{"message":"brace } bracket ] and escaped quote \\" stay nested"},"defs":[{"featureKey":"safe"}],"signature":"x","timestamp":1,"kid":"k"}'
+
+    expect(extractRawJsonProperty(body, 'defs')).toBe('[{"featureKey":"safe"}]')
+  })
 })
 
 describe('verifySignedDefinitions', () => {
@@ -289,9 +303,10 @@ describe('assertEnvelopeFreshness', () => {
   })
 
   it('rejects non-finite timestamps when freshness is enabled', () => {
-    expect(() =>
+    const assertInvalidTimestamp = () =>
       assertEnvelopeFreshness(Number.NaN, { maxSignatureAgeSeconds: 300, nowSeconds: 1000 })
-    ).toThrow(/invalid signature timestamp/)
+    expect(assertInvalidTimestamp).toThrow(TypeError)
+    expect(assertInvalidTimestamp).toThrow(/invalid signature timestamp/)
   })
 
   it('rejects timestamps too far in the future', () => {

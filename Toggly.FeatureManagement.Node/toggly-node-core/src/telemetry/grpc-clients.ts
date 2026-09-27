@@ -44,8 +44,8 @@ export const DEFAULT_TELEMETRY_FLUSH_MS = 60_000
 export function hashIdentity(identity: string): number {
   let hash = 2166136261 // FNV offset basis
   const bytes = utf8Encoder.encode(identity)
-  for (let i = 0; i < bytes.length; i++) {
-    hash ^= bytes[i]!
+  for (const byte of bytes) {
+    hash ^= byte
     hash = Math.imul(hash, 16777619) // FNV prime
   }
   const unsigned = hash >>> 0
@@ -106,9 +106,7 @@ type GrpcJs = typeof import('@grpc/grpc-js')
 function tryLoadGrpcModules(): { grpc: GrpcJs; protoLoader: ProtoLoader } | null {
   try {
     // Optional peer/optionalDependencies — evaluate flags without gRPC installed.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const grpc = require('@grpc/grpc-js') as GrpcJs
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const protoLoader = require('@grpc/proto-loader') as ProtoLoader
     return { grpc, protoLoader }
   } catch {

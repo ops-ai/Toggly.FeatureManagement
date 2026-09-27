@@ -4,6 +4,8 @@ import type { FeatureDefinitionModel } from '@ops-ai/toggly-eval'
 export type { EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
 export type { FeatureDefinitionModel } from '@ops-ai/toggly-eval'
 
+export type EvaluationEntityContext = TogglyEntityContext | Record<string, unknown> | null
+
 /**
  * Catalog-local variant assignment result, resolved entirely from cached
  * definitions (no server round trip). `null` when the feature is unknown,
@@ -262,13 +264,13 @@ export interface TogglyClient {
   isFeatureOn(
     featureKey: string,
     context?: EvaluationContext,
-    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    entity?: EvaluationEntityContext,
     kind?: string,
   ): Promise<boolean>
   isFeatureOff(
     featureKey: string,
     context?: EvaluationContext,
-    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    entity?: EvaluationEntityContext,
     kind?: string,
   ): Promise<boolean>
   evaluateFeatureGate(
@@ -276,7 +278,7 @@ export interface TogglyClient {
     requirement?: FeatureRequirement,
     negate?: boolean,
     context?: EvaluationContext,
-    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    entity?: EvaluationEntityContext,
     kind?: string,
   ): Promise<boolean>
   /**
@@ -288,14 +290,14 @@ export interface TogglyClient {
   getVariant(
     featureKey: string,
     context?: EvaluationContext,
-    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    entity?: EvaluationEntityContext,
     kind?: string,
   ): Promise<VariantResult | null>
   /** Convenience wrapper: the assigned variant's `configurationValue`, or `null`. */
   getVariantValue<T = unknown>(
     featureKey: string,
     context?: EvaluationContext,
-    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    entity?: EvaluationEntityContext,
     kind?: string,
     isT?: (v: unknown) => v is T,
   ): Promise<T | null>

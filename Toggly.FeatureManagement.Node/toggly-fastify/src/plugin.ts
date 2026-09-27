@@ -231,8 +231,8 @@ export function featureRoutes(routes: FeatureRouteOptions[]): PreHandlerHook {
       return gate(request, reply)
     }
 
-    // No matching route, continue
-    return
+    // No matching route, continue.
+    return undefined
   }
 }
 

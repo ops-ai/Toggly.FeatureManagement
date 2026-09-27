@@ -18,7 +18,7 @@ describe('sdk-identity', () => {
 
   it('exposes sdk constants and user agent', () => {
     expect(SDK_ID).toBe('node')
-    expect(SDK_VERSION).toBeTruthy()
+    expect(SDK_VERSION).toBe('0.11.2')
     expect(sdkUserAgent()).toBe(`toggly-${SDK_ID}/${SDK_VERSION}`)
     expect(sdkCustomHeaders()).toEqual({
       [SDK_HEADER_ID]: SDK_ID,
