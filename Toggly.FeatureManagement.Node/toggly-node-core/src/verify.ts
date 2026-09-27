@@ -107,7 +107,7 @@ function scanRawJsonCharacter(
 ): RawJsonScan {
   if (text[index] !== '"') {
     return {
-      depth: updateContainerDepth(depth, text[index]!),
+      depth: updateContainerDepth(depth, text[index]),
       nextIndex: index + 1,
     }
   }
