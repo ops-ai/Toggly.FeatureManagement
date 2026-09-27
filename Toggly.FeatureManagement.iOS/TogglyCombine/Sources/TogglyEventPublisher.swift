@@ -1,4 +1,5 @@
 import Combine
+import Foundation
 import TogglyCore
 
 /// A publisher that emits Toggly events.
@@ -24,10 +25,12 @@ public struct TogglyEventPublisher: Publisher {
 }
 
 private final class TogglyEventSubscription<S: Subscriber>: Subscription where S.Input == TogglyEvent, S.Failure == Never {
+    private let lock = NSRecursiveLock()
     private var subscriber: S?
     private let service: TogglyService?
     private var unsubscribe: (@Sendable () -> Void)?
     private var demand: Subscribers.Demand = .none
+    private var setupStarted = false
 
     init(subscriber: S, service: TogglyService?) {
         self.subscriber = subscriber
@@ -35,34 +38,49 @@ private final class TogglyEventSubscription<S: Subscriber>: Subscription where S
     }
 
     func request(_ demand: Subscribers.Demand) {
-        self.demand += demand
-
-        guard demand > 0 else { return }
-
-        Task {
-            await setup()
+        let shouldStart = lock.withLock { () -> Bool in
+            guard subscriber != nil else { return false }
+            self.demand += demand
+            guard self.demand > 0, !setupStarted else { return false }
+            setupStarted = true
+            return true
         }
+        if shouldStart { Task { await setup() } }
     }
 
     private func setup() async {
         let toggly = service ?? (Toggly.isConfigured ? Toggly.shared : nil)
 
-        guard let toggly = toggly else { return }
+        guard let toggly, lock.withLock({ subscriber != nil }) else { return }
 
-        unsubscribe = await toggly.on { [weak self] event in
+        let remove = await toggly.on { [weak self] event in
             self?.emit(event)
         }
+        let alreadyCancelled = lock.withLock { () -> Bool in
+            guard subscriber != nil else { return true }
+            unsubscribe = remove
+            return false
+        }
+        if alreadyCancelled { remove() }
     }
 
     private func emit(_ event: TogglyEvent) {
-        guard demand > 0, let subscriber = subscriber else { return }
-        demand -= 1
-        demand += subscriber.receive(event)
+        lock.withLock {
+            guard demand > 0, let subscriber else { return }
+            demand -= 1
+            demand += subscriber.receive(event)
+        }
     }
 
     func cancel() {
-        unsubscribe?()
-        subscriber = nil
+        let remove = lock.withLock { () -> (@Sendable () -> Void)? in
+            subscriber = nil
+            demand = .none
+            let remove = unsubscribe
+            unsubscribe = nil
+            return remove
+        }
+        remove?()
     }
 }
 
@@ -94,11 +112,13 @@ public struct FeatureChangedPublisher: Publisher {
 }
 
 private final class FeatureChangedSubscription<S: Subscriber>: Subscription where S.Input == FeatureChangedEvent, S.Failure == Never {
+    private let lock = NSRecursiveLock()
     private var subscriber: S?
     private let featureKey: String?
     private let service: TogglyService?
     private var unsubscribe: (@Sendable () -> Void)?
     private var demand: Subscribers.Demand = .none
+    private var setupStarted = false
 
     init(subscriber: S, featureKey: String?, service: TogglyService?) {
         self.subscriber = subscriber
@@ -107,22 +127,23 @@ private final class FeatureChangedSubscription<S: Subscriber>: Subscription wher
     }
 
     func request(_ demand: Subscribers.Demand) {
-        self.demand += demand
-
-        guard demand > 0 else { return }
-
-        Task {
-            await setup()
+        let shouldStart = lock.withLock { () -> Bool in
+            guard subscriber != nil else { return false }
+            self.demand += demand
+            guard self.demand > 0, !setupStarted else { return false }
+            setupStarted = true
+            return true
         }
+        if shouldStart { Task { await setup() } }
     }
 
     private func setup() async {
         let toggly = service ?? (Toggly.isConfigured ? Toggly.shared : nil)
 
-        guard let toggly = toggly else { return }
+        guard let toggly, lock.withLock({ subscriber != nil }) else { return }
 
-        unsubscribe = await toggly.addStateChangeHandler { [weak self] key, previousValue, newValue in
-            guard let self = self else { return }
+        let remove = await toggly.addStateChangeHandler { [weak self] key, previousValue, newValue in
+            guard let self else { return }
 
             // Filter by key if specified
             if let filterKey = self.featureKey, key != filterKey {
@@ -136,16 +157,30 @@ private final class FeatureChangedSubscription<S: Subscriber>: Subscription wher
             )
             self.emit(event)
         }
+        let alreadyCancelled = lock.withLock { () -> Bool in
+            guard subscriber != nil else { return true }
+            unsubscribe = remove
+            return false
+        }
+        if alreadyCancelled { remove() }
     }
 
     private func emit(_ event: FeatureChangedEvent) {
-        guard demand > 0, let subscriber = subscriber else { return }
-        demand -= 1
-        demand += subscriber.receive(event)
+        lock.withLock {
+            guard demand > 0, let subscriber else { return }
+            demand -= 1
+            demand += subscriber.receive(event)
+        }
     }
 
     func cancel() {
-        unsubscribe?()
-        subscriber = nil
+        let remove = lock.withLock { () -> (@Sendable () -> Void)? in
+            subscriber = nil
+            demand = .none
+            let remove = unsubscribe
+            unsubscribe = nil
+            return remove
+        }
+        remove?()
     }
 }

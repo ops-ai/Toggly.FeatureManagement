@@ -91,7 +91,7 @@ open class FeatureFlagViewController: UIViewController {
     /// - Parameters:
     ///   - key: The feature flag key that changed.
     ///   - isEnabled: Whether the feature is now enabled.
-    open func featureFlagDidChange(_ key: String, isEnabled: Bool) {
+    open func featureFlagDidChange(_: String, isEnabled _: Bool) {
         // Override in subclass
     }
 

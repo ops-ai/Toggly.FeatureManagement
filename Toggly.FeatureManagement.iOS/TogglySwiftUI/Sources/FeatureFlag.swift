@@ -30,7 +30,9 @@ public struct FeatureFlag: DynamicProperty {
     public var projectedValue: Binding<Bool> {
         Binding(
             get: { observer.isEnabled },
-            set: { _ in } // Read-only
+            set: { _ in
+                // This projection is read-only; the service owns flag updates.
+            }
         )
     }
 
