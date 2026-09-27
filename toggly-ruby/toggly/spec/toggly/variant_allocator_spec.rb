@@ -65,4 +65,15 @@ RSpec.describe Toggly::VariantAllocator do
       expect(with_seed).not_to eq(without_seed)
     end
   end
+
+  describe ".match_percentile" do
+    it "keeps the first matching allocation range" do
+      entries = [
+        { from: 0, to: 100, variant: "first" },
+        { from: 0, to: 100, variant: "second" }
+      ]
+
+      expect(described_class.match_percentile(entries, nil, "alice", "feature-a", false)).to eq("first")
+    end
+  end
 end

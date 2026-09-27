@@ -112,13 +112,12 @@ module Toggly
       return nil if list.empty?
 
       pct = compute_percentile(identity, seed, feature_key, ignore_case)
-      list.each do |entry|
+      matching_entry = list.find do |entry|
         from = entry[:from].to_f
         to = entry[:to].to_f
-        matched = to >= 100.0 ? pct >= from : (pct >= from && pct < to)
-        return entry[:variant] if matched
+        to >= 100.0 ? pct >= from : (pct >= from && pct < to)
       end
-      nil
+      matching_entry&.fetch(:variant, nil)
     end
 
     # MF-parity percentile hash.
