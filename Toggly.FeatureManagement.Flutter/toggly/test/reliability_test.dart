@@ -363,6 +363,114 @@ void main() {
     expect(jwksRequests, 0);
   });
 
+  test('preserves unverifiable signed cache when JWK error reporting fails',
+      () async {
+    final provider = _MemoryCacheProvider();
+    final fixture = _buildSignedFlagsFixture();
+    final offlineInterceptor = InterceptorsWrapper(
+      onRequest: (options, handler) => handler.reject(
+        DioException(requestOptions: options, error: 'offline'),
+      ),
+    );
+    HttpService.getInstance.http.interceptors.add(offlineInterceptor);
+    provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-1',
+      flags: fixture.defsJson,
+      timestamp: fixture.timestamp,
+      signature: fixture.signature,
+      keyId: fixture.kid,
+    );
+
+    await Toggly.init(
+      identity: 'user-1',
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        enableTelemetry: false,
+        enableLiveUpdates: false,
+        baseURI: 'https://example.test',
+        cacheProvider: provider,
+        onError: (message, error, stackTrace) {
+          throw StateError('consumer error handler failed');
+        },
+      ),
+    );
+
+    expect(await Toggly.cachedFeatureFlags, {'FeatureA': false});
+    expect(provider.deletedFlags, 0);
+    expect(provider.flags['u:user-1'], isNotNull);
+
+    Toggly.dispose();
+    HttpService.getInstance.http.interceptors.remove(offlineInterceptor);
+    final jwksInterceptor = InterceptorsWrapper(
+      onRequest: (options, handler) => handler.resolve(
+        Response<dynamic>(
+          requestOptions: options,
+          data: fixture.jwks,
+          statusCode: 200,
+        ),
+      ),
+    );
+    HttpService.getInstance.http.interceptors.add(jwksInterceptor);
+
+    await Toggly.init(
+      identity: 'user-1',
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        enableTelemetry: false,
+        enableLiveUpdates: false,
+        baseURI: 'https://example.test',
+        cacheProvider: provider,
+      ),
+    );
+
+    expect(await Toggly.cachedFeatureFlags, {'FeatureA': true});
+    expect(provider.deletedFlags, 0);
+
+    HttpService.getInstance.http.interceptors.remove(jwksInterceptor);
+  });
+
+  test('evicts an identity-mismatched cache before reporting the error',
+      () async {
+    final provider = _MemoryCacheProvider();
+
+    await Toggly.init(
+      identity: 'user-1',
+      useSignedDefinitions: false,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        enableTelemetry: false,
+        enableLiveUpdates: false,
+        cacheProvider: provider,
+        onError: (message, error, stackTrace) {
+          throw StateError('consumer error handler failed');
+        },
+      ),
+    );
+    provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
+      identity: 'u:other-user',
+      flags: '{"FeatureA":true}',
+      timestamp: null,
+      signature: null,
+      keyId: null,
+    );
+
+    await expectLater(
+      Toggly.cachedFeatureFlags,
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'consumer error handler failed',
+        ),
+      ),
+    );
+
+    expect(provider.deletedFlags, 1);
+    expect(provider.flags['u:user-1'], isNull);
+  });
+
   test('fresh signed fetch refreshes expired persisted JWKs', () async {
     final provider = _MemoryCacheProvider();
     final fixture = _buildSignedFlagsFixture();

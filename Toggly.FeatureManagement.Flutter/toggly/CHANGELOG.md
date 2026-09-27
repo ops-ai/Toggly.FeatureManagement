@@ -6,6 +6,9 @@
 - Reject malformed or unverifiable signed flag caches before exposing their
   values. Offline signed cache use requires a usable persisted or fetched JWK;
   a matching persisted JWK still permits verified offline definitions.
+- Preserve signed caches that cannot currently be verified when an error
+  callback fails during JWK retrieval, so they can be verified later.
+- Remove identity-mismatched flag caches before notifying an error callback.
 
 ## 1.13.0
 

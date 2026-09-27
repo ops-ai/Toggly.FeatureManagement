@@ -599,12 +599,12 @@ class Toggly with WidgetsBindingObserver {
     if (generation != _generation || cache == null) return null;
 
     if (cache.identity != Toggly._contextCacheKey) {
+      await _clearCachedFeatureFlagsIfCurrent(generation);
       _reportError(
         'Cached feature flags identity mismatch',
         Exception('Cached identity does not match current identity'),
         StackTrace.current,
       );
-      await _clearCachedFeatureFlagsIfCurrent(generation);
       return null;
     }
 
@@ -1455,7 +1455,12 @@ class Toggly with WidgetsBindingObserver {
 
       return jwksData;
     } catch (e, stackTrace) {
-      _reportError('Error fetching JWKs', e, stackTrace);
+      try {
+        _reportError('Error fetching JWKs', e, stackTrace);
+      } catch (_) {
+        // A consumer callback must not prevent callers from treating this as
+        // a transient JWK failure and preserving the unverifiable cache.
+      }
       return null;
     }
   }
@@ -1721,11 +1726,15 @@ class Toggly with WidgetsBindingObserver {
     final jwksData =
         await _fetchAndCacheJwks(ignoreExpiration: allowOfflineValidation);
     if (jwksData == null) {
-      _reportError(
-        _jwksFetchFailed,
-        Exception(_jwksFetchFailed),
-        StackTrace.current,
-      );
+      try {
+        _reportError(
+          _jwksFetchFailed,
+          Exception(_jwksFetchFailed),
+          StackTrace.current,
+        );
+      } catch (_) {
+        // A consumer callback must not mask the unavailable-JWK signal.
+      }
       throw const _JwksUnavailableException();
     }
 
