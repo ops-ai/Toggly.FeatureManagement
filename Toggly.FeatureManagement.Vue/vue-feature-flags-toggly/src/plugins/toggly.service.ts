@@ -67,6 +67,14 @@ type FeatureLoadOptions = {
   strict?: boolean
 }
 
+type DefinitionsRequest = {
+  appKey: string
+  environment: string
+  contextKey: string
+  fetchUrl: string
+  pin: string | null
+}
+
 function getCacheKey(appKey: string, environment: string, contextKey = '', variants = false): string {
   const suffix = contextKey ? `:${contextKey}` : ''
   return `${variants ? VARIANT_FLAGS_CACHE_PREFIX : CACHE_PREFIX}${appKey}:${environment}${suffix}`
@@ -113,7 +121,9 @@ function isPairedRevisionKey(revisionKey: string, bodyKey: string, prefix: strin
       const route = revisionKey.slice(REVISION_CACHE_PREFIX.length, position)
       const context = revisionKey.slice(position + marker.length)
       // Match the entire key: app/environment and legacy identities can contain ':'.
-      if (`${prefix}${route}${context ? `:${context}` : ''}` === bodyKey) {
+      const cacheKey = `${prefix}${route}`
+      const contextualCacheKey = context ? `${cacheKey}:${context}` : cacheKey
+      if (contextualCacheKey === bodyKey) {
         return true
       }
       position = revisionKey.indexOf(marker, position + 1)
@@ -539,6 +549,121 @@ export class Toggly implements TogglyService {
     }
   }
 
+  private _isCurrentGeneration(generation: number): boolean {
+    return generation === this._generation && !this._disposed
+  }
+
+  private _waitForCurrentLoad(generation: number): Promise<void> | null {
+    if (!this._loadingFeatures) return null
+    return new Promise<void>((resolve) => {
+      const waitForLoad = () => {
+        if (!this._loadingFeatures || generation !== this._generation) {
+          resolve()
+          return
+        }
+        setTimeout(waitForLoad, 100)
+      }
+      waitForLoad()
+    })
+  }
+
+  private _canUseLoadedFeatures(forceRefresh: boolean): boolean {
+    if (this._features === null || forceRefresh) return false
+    if (this._wsConnected) {
+      const now = Date.now()
+      if (now - this._lastFallbackRefresh >= Toggly.FALLBACK_REFRESH_INTERVAL) {
+        this._lastFallbackRefresh = now
+      }
+    }
+    return true
+  }
+
+  private _buildDefinitionsRequest(): DefinitionsRequest {
+    const parsed = new URL(this._config.baseURI ?? 'https://definitions.toggly.io')
+    const appKey = this._config.appKey ?? ''
+    const environment = this._config.environment ?? 'Production'
+    const contextKey = this._contextCacheKey()
+    const endpoint = this._config.enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed'
+    parsed.pathname = `${parsed.pathname.replace(/\/$/, '')}/${endpoint}/${appKey}/${environment}`
+    appendEvaluationContext(parsed, this._getEvaluationContext(), this._config.enableVariants ? 'variants' : 'evaluated')
+    // Only the current context may supply an instance token.
+    parsed.searchParams.delete('i')
+    if (this._config.instanceId) {
+      for (const key of [...parsed.searchParams.keys()]) {
+        if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) parsed.searchParams.delete(key)
+      }
+      parsed.searchParams.set('i', this._config.instanceId)
+    }
+    const pin = this._pendingDefinitionsPin
+    this._pendingDefinitionsPin = null
+    return {
+      appKey,
+      environment,
+      contextKey,
+      fetchUrl: appendDefinitionsRevisionParam(parsed.toString(), pin),
+      pin,
+    }
+  }
+
+  private _storeDefinitions(parsedDefs: unknown, request: DefinitionsRequest): void {
+    if (this._config.enableVariants) {
+      const defs = asVariantDefsRecord<EvaluatedVariantDef>(parsedDefs)
+      this._variants = defs
+      this._features = variantDefsToFlags(defs)
+      if (this._features && this._canPersist) {
+        writeCachedVariants(request.appKey, request.environment, defs, request.contextKey, this._config.maxCacheKeys)
+        writeCachedFlags(request.appKey, request.environment, this._features, request.contextKey, this._config.maxCacheKeys, true)
+      }
+      return
+    }
+    this._variants = null
+    this._features = (parsedDefs ?? {}) as EvaluatedDefinitions
+    if (this._features && this._canPersist) {
+      writeCachedFlags(request.appKey, request.environment, this._features, request.contextKey, this._config.maxCacheKeys)
+    }
+  }
+
+  private async _notifyAfterRefresh(generation: number): Promise<void> {
+    if (this._features) {
+      await this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
+    }
+    if (this._isCurrentGeneration(generation)) this.notifyFeaturesRefresh()
+  }
+
+  private async _handleLoadFailure(
+    error: unknown,
+    options: FeatureLoadOptions | undefined,
+    generation: number,
+    request: DefinitionsRequest,
+  ): Promise<void> {
+    if (!this._isCurrentGeneration(generation)) return
+    this._reportError('Error fetching feature flags', error)
+    if (!this._isCurrentGeneration(generation)) return
+    const recovered = resolveEvaluatedFetchErrorState({
+      enableVariants: !!this._config.enableVariants,
+      featuresAlreadyLoaded: this._features !== null,
+      readVariants: () =>
+        this._canPersist
+          ? readCachedVariants(request.appKey, request.environment, request.contextKey, this._config.maxCacheKeys)
+          : null,
+      readFlags: () =>
+        this._canPersist
+          ? readCachedFlags(request.appKey, request.environment, request.contextKey, this._config.maxCacheKeys, this._config.enableVariants)
+          : null,
+      defaults: this._config.featureDefaults ?? {},
+      variantsToFlags: variantDefsToFlags,
+    })
+    if (recovered) {
+      this._variants = recovered.variants
+      this._features = recovered.features
+    }
+    if (options?.strict) throw error
+    console.warn(
+      'Toggly --- Using cached/default features as features could not be loaded from the Toggly API',
+    )
+    await this._notifyAfterRefresh(generation)
+  }
+
   init = (options: TogglyOptions) => {
     this._releaseResources(false)
     this._generation++
@@ -725,145 +850,52 @@ export class Toggly implements TogglyService {
   ) => {
     const generation = this._generation
     if (this._disposed) return this._booleanFeatures()
-    // Feature are currently being loaded
-    if (this._loadingFeatures) {
-      await new Promise<void>((resolve) => {
-        const checkIfApiCallFinished = () => {
-          if (!this._loadingFeatures || generation !== this._generation) {
-            resolve()
-          } else {
-            setTimeout(checkIfApiCallFinished, 100)
-          }
-        }
-        checkIfApiCallFinished()
-      })
-    }
-
-    if (generation !== this._generation || this._disposed) return null
-
-    // Features already loaded — throttle polling when WebSocket is connected
-    if (this._features !== null && !forceRefresh) {
-      if (this._wsConnected) {
-        const now = Date.now()
-        if (now - this._lastFallbackRefresh < Toggly.FALLBACK_REFRESH_INTERVAL) {
-          return this._booleanFeatures()
-        }
-        this._lastFallbackRefresh = now
-      }
-      return this._booleanFeatures()
-    }
+    const currentLoad = this._waitForCurrentLoad(generation)
+    // Preserve the synchronous no-load path so concurrent callers share one request.
+    if (currentLoad) await currentLoad
+    if (!this._isCurrentGeneration(generation)) return null
+    // Features already loaded — throttle polling when WebSocket is connected.
+    if (this._canUseLoadedFeatures(forceRefresh)) return this._booleanFeatures()
 
     this._loadingFeatures = true
-
     const isInitialLoad = this._ws === null && !this._wsConnected
-    const appKey = this._config.appKey ?? ''
-    const env = this._config.environment ?? 'Production'
-    const contextKey = this._contextCacheKey()
+    const request = this._buildDefinitionsRequest()
 
     try {
-      const parsed = new URL(this._config.baseURI ?? 'https://definitions.toggly.io')
-      const endpoint = this._config.enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed'
-      parsed.pathname = `${parsed.pathname.replace(/\/$/, '')}/${endpoint}/${appKey}/${env}`
-      appendEvaluationContext(parsed, this._getEvaluationContext(), this._config.enableVariants ? 'variants' : 'evaluated')
-      // Only the current context may supply an instance token.
-      parsed.searchParams.delete('i')
-      if (this._config.instanceId) {
-        for (const key of [...parsed.searchParams.keys()]) {
-          if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) parsed.searchParams.delete(key)
-        }
-        parsed.searchParams.set('i', this._config.instanceId)
-      }
-      const url = parsed.toString()
-      const pin = this._pendingDefinitionsPin
-      this._pendingDefinitionsPin = null
-      const fetchUrl = appendDefinitionsRevisionParam(url, pin)
-
       const loaded = await fetchEvaluatedSignedDefinitions(
-        fetchUrl,
+        request.fetchUrl,
         this._jwks,
         {
           ...this._config,
           baseURI: this._config.baseURI ?? 'https://definitions.toggly.io',
         },
         {
-          revision: pin ? null : this._definitionsRevision,
+          revision: request.pin ? null : this._definitionsRevision,
           headers: buildDefinitionFetchHeaders(),
         },
       )
-      if (generation !== this._generation || this._disposed) return null
+      if (!this._isCurrentGeneration(generation)) return null
       if (loaded.notModified) {
         if (loaded.revision) this._cacheDefinitionsRevision(loaded.revision)
         if (isInitialLoad) this.startWebSocket()
         return this._booleanFeatures()
       }
-      const parsedDefs = loaded.defs
-
-      if (this._config.enableVariants) {
-        const defs = asVariantDefsRecord<EvaluatedVariantDef>(parsedDefs)
-        this._variants = defs
-        this._features = variantDefsToFlags(defs)
-        if (this._features && this._canPersist) {
-          writeCachedVariants(appKey, env, defs, contextKey, this._config.maxCacheKeys)
-          writeCachedFlags(appKey, env, this._features, contextKey, this._config.maxCacheKeys, true)
-        }
-      } else {
-        this._variants = null
-        this._features = (parsedDefs ?? {}) as EvaluatedDefinitions
-        if (this._features && this._canPersist) {
-          writeCachedFlags(appKey, env, this._features, contextKey, this._config.maxCacheKeys)
-        }
-      }
-
+      this._storeDefinitions(loaded.defs, request)
       // Persist a validator only after its mode-specific body has been written.
       if (loaded.revision) this._cacheDefinitionsRevision(loaded.revision)
-
-      // Trigger afterRefresh hooks
-      if (this._features) {
-        await this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
-      }
-      if (generation === this._generation && !this._disposed) this.notifyFeaturesRefresh()
+      await this._notifyAfterRefresh(generation)
     } catch (error) {
-      if (generation !== this._generation || this._disposed) return null
-      this._reportError('Error fetching feature flags', error)
-      if (generation !== this._generation || this._disposed) return null
-      const recovered = resolveEvaluatedFetchErrorState({
-        enableVariants: !!this._config.enableVariants,
-        featuresAlreadyLoaded: this._features !== null,
-        readVariants: () =>
-          this._canPersist
-            ? readCachedVariants(appKey, env, contextKey, this._config.maxCacheKeys)
-            : null,
-        readFlags: () =>
-          this._canPersist
-            ? readCachedFlags(appKey, env, contextKey, this._config.maxCacheKeys, this._config.enableVariants)
-            : null,
-        defaults: this._config.featureDefaults ?? {},
-        variantsToFlags: variantDefsToFlags,
-      })
-      if (recovered) {
-        this._variants = recovered.variants
-        this._features = recovered.features
-      }
-      if (options?.strict) {
-        throw error
-      }
-      console.warn(
-        'Toggly --- Using cached/default features as features could not be loaded from the Toggly API',
-      )
-      if (this._features) {
-        await this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
-      }
-      if (generation === this._generation && !this._disposed) this.notifyFeaturesRefresh()
+      await this._handleLoadFailure(error, options, generation, request)
     } finally {
       if (generation === this._generation) this._loadingFeatures = false
     }
 
     // Start WebSocket after initial feature load
-    if (isInitialLoad && generation === this._generation && !this._disposed) {
+    if (isInitialLoad && this._isCurrentGeneration(generation)) {
       this.startWebSocket()
     }
 
-    if (generation !== this._generation || this._disposed) return null
+    if (!this._isCurrentGeneration(generation)) return null
     return this._features ? toBooleanDefinitions(this._features) : null
   }
 
