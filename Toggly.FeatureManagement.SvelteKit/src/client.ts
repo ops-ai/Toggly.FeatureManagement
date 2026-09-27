@@ -114,6 +114,59 @@ export function connectBrowser(
       throw new Error('Unexpected 304 without a matching verified snapshot');
   };
   const isCurrentRequest = (ownRequest: number) => !disposed && ownRequest === requestId;
+  const fetchAndPublish = async (
+    ownRequest: number,
+    unconditional: boolean,
+    pin: string | undefined,
+    controller: AbortController,
+  ): Promise<void> => {
+    const fetcher: typeof fetch = (input, init) =>
+      fetch(input, { ...init, cache: 'no-store', signal: controller.signal });
+    const capture = captureEvaluatedResponse(fetcher);
+    const requestKeys = jwks;
+    const target = new URL(url);
+    if (pin) target.searchParams.set('rev', pin);
+    const result = await fetchEvaluatedSignedDefinitions(
+      target.toString(),
+      requestKeys,
+      {
+        ...options,
+        baseURI,
+        verifySignatures: true,
+        // Own the verified cache: native HTTP caching must not add validators to forced invalidations.
+        fetchImpl: capture.fetch,
+      },
+      { revision: unconditional ? null : revision },
+    );
+    if (!isCurrentRequest(ownRequest)) return;
+    if (result.notModified) {
+      validateUnchangedResponse(unconditional);
+      return;
+    }
+    if (mode === 'variants') {
+      validateVariantDefs(asVariantDefsRecord(result.defs));
+    } else {
+      validateEvaluatedDefinitions(result.defs);
+    }
+    const body = capture.body();
+    if (!body) throw new Error('Missing signed envelope');
+    const keys = await requestKeys.get({ ...options, baseURI, fetchImpl: fetcher });
+    const verified = await verifyEnvelope(body, keys, options, timestamps.get(url) ?? 0, mode);
+    if (!isCurrentRequest(ownRequest)) return;
+    timestamps.set(url, verified.timestamp);
+    observedKeys.set(baseURI, structuredClone(keys));
+    persistence.write(url, body, verified.keys);
+    // HTTP confirms revisions only after verification. WS metadata never becomes a cache validator.
+    revision = result.revision;
+    publish(
+      verified.definitions,
+      {
+        signedTimestamp: verified.timestamp,
+        signingKey: verified.keys.keys[0],
+      },
+      verified.variants,
+    );
+  };
   const refresh = async (unconditional = false, pin?: string): Promise<void> => {
     if (!isCurrentRequest(requestId)) return;
     active?.abort();
@@ -127,52 +180,7 @@ export function connectBrowser(
       const restored = restoreCached(ownRequest);
       if (restored) await restored;
       if (!isCurrentRequest(ownRequest)) return;
-      const fetcher: typeof fetch = (input, init) =>
-        fetch(input, { ...init, cache: 'no-store', signal: controller.signal });
-      const capture = captureEvaluatedResponse(fetcher);
-      const requestKeys = jwks;
-      const target = new URL(url);
-      if (pin) target.searchParams.set('rev', pin);
-      const result = await fetchEvaluatedSignedDefinitions(
-        target.toString(),
-        requestKeys,
-        {
-          ...options,
-          baseURI,
-          verifySignatures: true,
-          // Own the verified cache: native HTTP caching must not add validators to forced invalidations.
-          fetchImpl: capture.fetch,
-        },
-        { revision: unconditional ? null : revision },
-      );
-      if (!isCurrentRequest(ownRequest)) return;
-      if (result.notModified) {
-        validateUnchangedResponse(unconditional);
-        return;
-      }
-      if (mode === 'variants') {
-        validateVariantDefs(asVariantDefsRecord(result.defs));
-      } else {
-        validateEvaluatedDefinitions(result.defs);
-      }
-      const body = capture.body();
-      if (!body) throw new Error('Missing signed envelope');
-      const keys = await requestKeys.get({ ...options, baseURI, fetchImpl: fetcher });
-      const verified = await verifyEnvelope(body, keys, options, timestamps.get(url) ?? 0, mode);
-      if (!isCurrentRequest(ownRequest)) return;
-      timestamps.set(url, verified.timestamp);
-      observedKeys.set(baseURI, structuredClone(keys));
-      persistence.write(url, body, verified.keys);
-      // HTTP confirms revisions only after verification. WS metadata never becomes a cache validator.
-      revision = result.revision;
-      publish(
-        verified.definitions,
-        {
-          signedTimestamp: verified.timestamp,
-          signingKey: verified.keys.keys[0],
-        },
-        verified.variants,
-      );
+      await fetchAndPublish(ownRequest, unconditional, pin, controller);
     } catch (cause) {
       if (isCurrentRequest(ownRequest)) report(cause);
     } finally {
