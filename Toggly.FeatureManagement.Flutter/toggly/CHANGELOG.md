@@ -4,8 +4,8 @@
 
 ### Fixed
 - Reject malformed or unverifiable signed flag caches before exposing their
-  values. Cached definitions remain available offline only when signature
-  verification cannot run because no usable JWK is available.
+  values. Offline signed cache use requires a usable persisted or fetched JWK;
+  a matching persisted JWK still permits verified offline definitions.
 
 ## 1.13.0
 

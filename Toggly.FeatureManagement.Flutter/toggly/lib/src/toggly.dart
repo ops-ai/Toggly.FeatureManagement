@@ -16,7 +16,6 @@ import 'services/telemetry_reporter.dart';
 
 enum _CachedFlagsVerification {
   verified,
-  unavailable,
   rejected,
   stale,
 }
@@ -631,13 +630,13 @@ class Toggly with WidgetsBindingObserver {
     if (cache.timestamp == null ||
         cache.signature == null ||
         cache.keyId == null) {
+      await _clearCachedFeatureFlagsIfCurrent(generation);
       _reportError(
         'Cached feature flags missing signature metadata',
         Exception(
             'Timestamp, signature and keyId are required for signed definitions'),
         StackTrace.current,
       );
-      await _clearCachedFeatureFlagsIfCurrent(generation);
       return _CachedFlagsVerification.rejected;
     }
 
@@ -651,25 +650,24 @@ class Toggly with WidgetsBindingObserver {
         cache.keyId!,
       );
     } on _JwksUnavailableException {
-      // Cached definitions were previously accepted when written. If offline
-      // validation cannot run due to transient JWK issues, keep the
-      // last-known-good cache but do not use its revision conditionally.
-      return _CachedFlagsVerification.unavailable;
+      // Signed data cannot be trusted without a verifier. Retain it so a
+      // usable persisted or fetched JWK can validate it on a later attempt.
+      return _CachedFlagsVerification.rejected;
     } catch (error, stackTrace) {
-      _reportError(_signatureVerificationFailed, error, stackTrace);
       await _clearCachedFeatureFlagsIfCurrent(generation);
+      _reportError(_signatureVerificationFailed, error, stackTrace);
       return _CachedFlagsVerification.rejected;
     }
 
     if (generation != _generation) return _CachedFlagsVerification.stale;
     if (isValid) return _CachedFlagsVerification.verified;
 
+    await _clearCachedFeatureFlagsIfCurrent(generation);
     _reportError(
       _signatureVerificationFailed,
       Exception('Invalid signature'),
       StackTrace.current,
     );
-    await _clearCachedFeatureFlagsIfCurrent(generation);
     return _CachedFlagsVerification.rejected;
   }
 

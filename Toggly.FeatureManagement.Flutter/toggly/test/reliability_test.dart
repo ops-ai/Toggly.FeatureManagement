@@ -266,7 +266,8 @@ void main() {
     HttpService.getInstance.http.interceptors.clear();
   });
 
-  test('reports JWK fetch failure while preserving cached flags', () async {
+  test('falls back to defaults when no JWK can validate signed cache',
+      () async {
     final provider = _MemoryCacheProvider();
     final errors = <String>[];
     final interceptor = InterceptorsWrapper(
@@ -305,7 +306,7 @@ void main() {
 
     final flags = await Toggly.cachedFeatureFlags;
 
-    expect(flags['FeatureA'], true);
+    expect(flags['FeatureA'], false);
     expect(provider.deletedFlags, 0);
     expect(errors, contains('Error fetching JWKs'));
 
@@ -604,6 +605,31 @@ void main() {
     expect(provider.deletedFlags, 1);
     expect(errors, contains('Signature verification failed'));
     expect(errors, contains('Error clearing cached feature flags'));
+
+    Toggly.dispose();
+    provider.jwks = null;
+    final offlineInterceptor = InterceptorsWrapper(
+      onRequest: (options, handler) => handler.reject(
+        DioException(requestOptions: options, error: 'offline'),
+      ),
+    );
+    HttpService.getInstance.http.interceptors.add(offlineInterceptor);
+
+    await Toggly.init(
+      identity: 'user-1',
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        enableTelemetry: false,
+        enableLiveUpdates: false,
+        baseURI: 'https://example.test',
+        cacheProvider: provider,
+      ),
+    );
+
+    expect(await Toggly.cachedFeatureFlags, {'FeatureA': false});
+
+    HttpService.getInstance.http.interceptors.remove(offlineInterceptor);
   });
 
   test('propagates an error callback failure for malformed signed cache',
@@ -643,6 +669,31 @@ void main() {
         ),
       ),
     );
+
+    Toggly.dispose();
+    provider.jwks = null;
+    final offlineInterceptor = InterceptorsWrapper(
+      onRequest: (options, handler) => handler.reject(
+        DioException(requestOptions: options, error: 'offline'),
+      ),
+    );
+    HttpService.getInstance.http.interceptors.add(offlineInterceptor);
+
+    await Toggly.init(
+      identity: 'user-1',
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        enableTelemetry: false,
+        enableLiveUpdates: false,
+        baseURI: 'https://example.test',
+        cacheProvider: provider,
+      ),
+    );
+
+    expect(await Toggly.cachedFeatureFlags, {'FeatureA': false});
+
+    HttpService.getInstance.http.interceptors.remove(offlineInterceptor);
   });
 
   test('clears cache and reports error when fresh signature verification fails',
@@ -773,6 +824,7 @@ void main() {
   test('rollback (older timestamp) keeps newer cached flags, no cache delete',
       () async {
     final provider = _MemoryCacheProvider();
+    final cachedFixture = _buildSignedFlagsFixture(timestamp: 300);
     final errors = <String>[];
     final interceptor = InterceptorsWrapper(
       onRequest: (options, handler) {
@@ -794,11 +846,12 @@ void main() {
 
     provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
       identity: 'u:user-1',
-      flags: '{"FeatureA":true}',
-      timestamp: 300,
-      signature: base64Encode(List<int>.filled(64, 0)),
-      keyId: 'kid-1',
+      flags: cachedFixture.defsJson,
+      timestamp: cachedFixture.timestamp,
+      signature: cachedFixture.signature,
+      keyId: cachedFixture.kid,
     );
+    provider.jwks = jsonEncode({...cachedFixture.jwks, '_expiresAt': 0});
 
     final result = await Toggly.init(
       appKey: 'app',
@@ -903,20 +956,30 @@ void main() {
   test('setIdentity switch preserves persisted flags for switch-back',
       () async {
     final provider = _MemoryRevisionCacheProvider();
+    final userAFixture = _buildSignedFlagsFixture();
+    final userBFixture =
+        _buildSignedFlagsFixture(defsJson: '{"FeatureA":false}');
     provider.flags['u:user-a'] = TogglyFeatureFlagsCache(
       identity: 'u:user-a',
-      flags: '{"FeatureA":true}',
-      timestamp: 200,
-      signature: base64Encode(List<int>.filled(64, 0)),
-      keyId: 'kid-1',
+      flags: userAFixture.defsJson,
+      timestamp: userAFixture.timestamp,
+      signature: userAFixture.signature,
+      keyId: userAFixture.kid,
     );
     provider.flags['u:user-b'] = TogglyFeatureFlagsCache(
       identity: 'u:user-b',
-      flags: '{"FeatureA":false}',
-      timestamp: 200,
-      signature: base64Encode(List<int>.filled(64, 0)),
-      keyId: 'kid-1',
+      flags: userBFixture.defsJson,
+      timestamp: userBFixture.timestamp,
+      signature: userBFixture.signature,
+      keyId: userBFixture.kid,
     );
+    provider.jwks = jsonEncode({
+      'keys': [
+        ...(userAFixture.jwks['keys'] as List),
+        ...(userBFixture.jwks['keys'] as List),
+      ],
+      '_expiresAt': 0,
+    });
 
     final interceptor = _notModifiedInterceptor();
     HttpService.getInstance.http.interceptors.add(interceptor);
