@@ -62,28 +62,40 @@ public class SecurityReactiveContextResolver implements ReactiveContextResolver 
      * @return the resolver
      */
     public static SecurityReactiveContextResolver forSpringSecurityRoles() {
-        return new SecurityReactiveContextResolver(principal -> {
-            Set<String> roles = new HashSet<>();
-            try {
-                Class<?> authClass = Class.forName(
-                        "org.springframework.security.core.Authentication");
-                if (authClass.isInstance(principal)) {
-                    Object authorities = authClass.getMethod("getAuthorities")
-                            .invoke(principal);
-                    if (authorities instanceof Collection) {
-                        for (Object authority : (Collection<?>) authorities) {
-                            Object roleStr = authority.getClass()
-                                    .getMethod("getAuthority").invoke(authority);
-                            if (roleStr != null) {
-                                roles.add(roleStr.toString());
-                            }
-                        }
-                    }
-                }
-            } catch (ReflectiveOperationException | LinkageError e) {
-                // Spring Security not available
+        return new SecurityReactiveContextResolver(SecurityReactiveContextResolver::extractRoles);
+    }
+
+    private static Set<String> extractRoles(Principal principal) {
+        Set<String> roles = new HashSet<>();
+        try {
+            Class<?> authClass = Class.forName(
+                    "org.springframework.security.core.Authentication");
+            if (!authClass.isInstance(principal)) {
+                return roles;
             }
-            return roles;
-        });
+
+            Object authorities = authClass.getMethod("getAuthorities").invoke(principal);
+            if (!(authorities instanceof Collection<?> authorityValues)) {
+                return roles;
+            }
+
+            for (Object authority : authorityValues) {
+                String role = extractRole(authority);
+                if (role != null) {
+                    roles.add(role);
+                }
+            }
+        } catch (ReflectiveOperationException | LinkageError e) {
+            // Spring Security is optional for this adapter.
+        }
+        return roles;
+    }
+
+    private static String extractRole(Object authority) throws ReflectiveOperationException {
+        if (authority == null) {
+            return null;
+        }
+        Object role = authority.getClass().getMethod("getAuthority").invoke(authority);
+        return role != null ? role.toString() : null;
     }
 }

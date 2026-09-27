@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.1.1
+
+2026-09-27
+
+### Fixed
+
+- Spring WebFlux role resolution now ignores null entries in a Spring Security
+  authentication's authorities collection while preserving valid roles.
+
 ## 2.1.0
 
 2026-09-24
