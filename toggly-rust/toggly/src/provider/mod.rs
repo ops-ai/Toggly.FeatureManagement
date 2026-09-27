@@ -297,6 +297,46 @@ impl DefinitionsProvider {
         });
     }
 
+    fn ws_refresh_action(text: &str, cached_etag: Option<&str>) -> Option<(&'static str, bool)> {
+        if let Ok(message) = serde_json::from_str::<serde_json::Value>(text) {
+            if let Some(kind) = message.get("type").and_then(|value| value.as_str()) {
+                let incoming = message.get("etag").and_then(|value| value.as_str());
+                return match kind {
+                    "signing-key-updated" => Some(("signing-key-updated", true)),
+                    "sync" => {
+                        let unchanged = message.get("unchanged").and_then(|value| value.as_bool())
+                            == Some(true);
+                        (!unchanged && Self::ws_revision_changed(incoming, cached_etag, false))
+                            .then_some(("sync", false))
+                    }
+                    "flags-updated" => Self::ws_revision_changed(incoming, cached_etag, true)
+                        .then_some(("flags-updated", false)),
+                    "update" => Self::ws_revision_changed(incoming, cached_etag, true)
+                        .then_some(("update", false)),
+                    _ => None,
+                };
+            }
+        }
+
+        match text.trim() {
+            "update" => Some(("update", false)),
+            "flags-updated" => Some(("flags-updated", false)),
+            _ => None,
+        }
+    }
+
+    fn ws_revision_changed(
+        incoming: Option<&str>,
+        cached: Option<&str>,
+        refresh_without_incoming: bool,
+    ) -> bool {
+        match (incoming, cached) {
+            (_, None) => true,
+            (None, Some(_)) => refresh_without_incoming,
+            (Some(incoming), Some(cached)) => incoming != cached,
+        }
+    }
+
     /// Handle an incoming WebSocket text message.
     #[allow(clippy::too_many_arguments)]
     async fn handle_ws_message(
@@ -316,73 +356,14 @@ impl DefinitionsProvider {
         definitions_loaded: &AtomicBool,
         cache_recorder: &RwLock<Option<Arc<dyn DefinitionCacheRecorder>>>,
     ) {
-        if let Ok(msg) = serde_json::from_str::<serde_json::Value>(text) {
-            if let Some(msg_type) = msg.get("type").and_then(|t| t.as_str()) {
-                if msg_type == "ping" {
-                    return;
-                }
-
-                let force_jwks = msg_type == "signing-key-updated";
-                let should_refresh = match msg_type {
-                    "signing-key-updated" => true,
-                    "sync" => {
-                        if msg.get("unchanged").and_then(|v| v.as_bool()) == Some(true) {
-                            false
-                        } else {
-                            let cached = etag.read().clone();
-                            match (msg.get("etag").and_then(|v| v.as_str()), cached.as_deref()) {
-                                (_, None) => true,
-                                (Some(incoming), Some(cached)) => incoming != cached,
-                                _ => false,
-                            }
-                        }
-                    }
-                    "flags-updated" | "update" => {
-                        let cached = etag.read().clone();
-                        match (msg.get("etag").and_then(|v| v.as_str()), cached.as_deref()) {
-                            (_, None) | (None, _) => true,
-                            (Some(incoming), Some(cached)) => incoming != cached,
-                        }
-                    }
-                    _ => false,
-                };
-
-                // Keep the loaded ETag until refresh successfully applies a new
-                // revision. Preloading the WS-announced ETag into If-None-Match
-                // can yield 304 / SameRevision and count a hit without applying.
-                if should_refresh {
-                    debug!(msg_type, force_jwks, "WebSocket: refreshing definitions");
-                    // WS-forced refresh must not be suppressed by scheduled poll skip.
-                    if let Err(e) = Self::refresh_impl(
-                        http_client,
-                        config,
-                        definitions,
-                        last_fetch,
-                        etag,
-                        last_modified,
-                        last_timestamp,
-                        last_error,
-                        last_error_time,
-                        jwks,
-                        refresh_in_flight,
-                        pending_ws_refresh,
-                        definitions_loaded,
-                        cache_recorder,
-                        true,
-                        force_jwks,
-                    )
-                    .await
-                    {
-                        error!(error = %e, "WebSocket-triggered refresh failed");
-                    }
-                }
-                return;
-            }
-        }
-
-        let trimmed = text.trim();
-        if trimmed == "update" || trimmed == "flags-updated" {
-            debug!("WebSocket: plain text update signal, refreshing");
+        let cached_etag = etag.read().clone();
+        if let Some((msg_type, force_jwks)) = Self::ws_refresh_action(text, cached_etag.as_deref())
+        {
+            // Keep the loaded ETag until refresh successfully applies a new
+            // revision. Preloading the WS-announced ETag into If-None-Match
+            // can yield 304 / SameRevision and count a hit without applying.
+            debug!(msg_type, force_jwks, "WebSocket: refreshing definitions");
+            // WS-forced refresh must not be suppressed by scheduled poll skip.
             if let Err(e) = Self::refresh_impl(
                 http_client,
                 config,
@@ -399,7 +380,7 @@ impl DefinitionsProvider {
                 definitions_loaded,
                 cache_recorder,
                 true,
-                false,
+                force_jwks,
             )
             .await
             {
@@ -766,63 +747,24 @@ impl DefinitionsProvider {
             }
         };
 
-        let parsed_definitions = if config.use_signed_definitions {
-            let current_ts = *last_timestamp.read();
-            match Self::parse_and_verify_signed(http_client, config, &body_bytes, jwks).await {
-                Ok((defs, ts)) => {
-                    if cached_signed_timestamp(current_ts, ts) {
-                        debug!(
-                            ?current_ts,
-                            ts, "Ignoring signed definitions with equal or older timestamp"
-                        );
-                        Self::store_revision_headers(
-                            etag,
-                            last_modified,
-                            response_etag,
-                            response_lm,
-                        );
-                        *last_fetch.write() = Some(Instant::now());
-                        return Ok(RefreshCacheOutcome::Hit);
-                    }
-                    *last_timestamp.write() = Some(ts);
-                    defs
-                }
-                Err(e) => {
-                    // Preserve last-known-good definitions on verify/fetch failure.
-                    Self::record_error(config, last_error, last_error_time, &e);
-                    return Err(e);
-                }
-            }
-        } else {
-            // Unsigned path: still treat equal signed timestamp in JSON as hit when present.
-            let body: serde_json::Value = match serde_json::from_slice(&body_bytes) {
-                Ok(v) => v,
-                Err(e) => {
-                    let err = crate::Error::from(e);
-                    Self::record_error(config, last_error, last_error_time, &err);
-                    return Err(err);
-                }
-            };
-            if let Some(ts) = body.get("timestamp").and_then(|v| v.as_i64()) {
-                let current_ts = *last_timestamp.read();
-                if cached_signed_timestamp(current_ts, ts) {
-                    debug!(
-                        ?current_ts,
-                        ts, "Ignoring definitions with equal or older signed timestamp"
-                    );
-                    Self::store_revision_headers(etag, last_modified, response_etag, response_lm);
-                    *last_fetch.write() = Some(Instant::now());
-                    return Ok(RefreshCacheOutcome::Hit);
-                }
-            }
-            match Self::parse_definitions_payload(body) {
-                Ok(defs) => defs,
-                Err(e) => {
-                    Self::record_error(config, last_error, last_error_time, &e);
-                    return Err(e);
-                }
+        let parsed =
+            Self::parse_response_body(http_client, config, &body_bytes, jwks, last_timestamp).await;
+        let parsed = match parsed {
+            Ok(parsed) => parsed,
+            Err(err) => {
+                // Preserve last-known-good definitions on verification or parse failure.
+                Self::record_error(config, last_error, last_error_time, &err);
+                return Err(err);
             }
         };
+        let Some((parsed_definitions, signed_timestamp)) = parsed else {
+            Self::store_revision_headers(etag, last_modified, response_etag, response_lm);
+            *last_fetch.write() = Some(Instant::now());
+            return Ok(RefreshCacheOutcome::Hit);
+        };
+        if let Some(timestamp) = signed_timestamp {
+            *last_timestamp.write() = Some(timestamp);
+        }
 
         Self::store_revision_headers(etag, last_modified, response_etag, response_lm);
         Self::apply_definitions(definitions, parsed_definitions, definitions_loaded);
@@ -831,6 +773,41 @@ impl DefinitionsProvider {
         *last_error.write() = None;
         *last_error_time.write() = None;
         Ok(RefreshCacheOutcome::Miss)
+    }
+
+    async fn parse_response_body(
+        http_client: &reqwest::Client,
+        config: &TogglyConfig,
+        body_bytes: &[u8],
+        jwks: &RwLock<Option<JwksCache>>,
+        last_timestamp: &RwLock<Option<i64>>,
+    ) -> crate::Result<Option<(Vec<FeatureDefinition>, Option<i64>)>> {
+        let current_ts = *last_timestamp.read();
+        if config.use_signed_definitions {
+            let (definitions, timestamp) =
+                Self::parse_and_verify_signed(http_client, config, body_bytes, jwks).await?;
+            if cached_signed_timestamp(current_ts, timestamp) {
+                debug!(
+                    ?current_ts,
+                    timestamp, "Ignoring signed definitions with equal or older timestamp"
+                );
+                return Ok(None);
+            }
+            return Ok(Some((definitions, Some(timestamp))));
+        }
+
+        // Unsigned payloads can still carry a signed timestamp. Replay is a cache hit.
+        let body: serde_json::Value = serde_json::from_slice(body_bytes)?;
+        if let Some(timestamp) = body.get("timestamp").and_then(|value| value.as_i64()) {
+            if cached_signed_timestamp(current_ts, timestamp) {
+                debug!(
+                    ?current_ts,
+                    timestamp, "Ignoring definitions with equal or older signed timestamp"
+                );
+                return Ok(None);
+            }
+        }
+        Ok(Some((Self::parse_definitions_payload(body)?, None)))
     }
 
     async fn parse_and_verify_signed(
@@ -1079,6 +1056,48 @@ mod tests {
     }
 
     #[test]
+    fn websocket_messages_refresh_only_for_changed_revisions() {
+        let cases = [
+            (r#"{"type":"ping"}"#, Some("rev1"), None),
+            (
+                r#"{"type":"sync","unchanged":true,"etag":"rev2"}"#,
+                Some("rev1"),
+                None,
+            ),
+            (r#"{"type":"sync","etag":"rev1"}"#, Some("rev1"), None),
+            (
+                r#"{"type":"sync","etag":"rev2"}"#,
+                Some("rev1"),
+                Some(("sync", false)),
+            ),
+            (
+                r#"{"type":"sync","etag":"rev2"}"#,
+                None,
+                Some(("sync", false)),
+            ),
+            (
+                r#"{"type":"flags-updated"}"#,
+                Some("rev1"),
+                Some(("flags-updated", false)),
+            ),
+            (
+                r#"{"type":"signing-key-updated"}"#,
+                Some("rev1"),
+                Some(("signing-key-updated", true)),
+            ),
+            ("update", Some("rev1"), Some(("update", false))),
+            ("unrecognized", Some("rev1"), None),
+        ];
+        for (message, cached_etag, expected) in cases {
+            assert_eq!(
+                DefinitionsProvider::ws_refresh_action(message, cached_etag),
+                expected,
+                "{message}"
+            );
+        }
+    }
+
+    #[test]
     fn test_provider_new() {
         let config = TogglyConfig::builder()
             .app_key("test")
@@ -1314,6 +1333,37 @@ mod tests {
         provider.set_last_timestamp_for_test(1_700_000_000);
         provider.refresh(true, false).await.unwrap();
         assert_eq!(rec.snapshot(), (1, 0));
+    }
+
+    #[tokio::test]
+    async fn malformed_refresh_keeps_loaded_definitions_and_revision() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "\"good\"")
+                    .set_body_json(feature_json("feat-a")),
+            )
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "\"bad\"")
+                    .set_body_raw("{broken", "application/json"),
+            )
+            .mount(&server)
+            .await;
+
+        let provider = provider_against(&server).await;
+        provider.refresh(false, false).await.unwrap();
+        assert!(provider.refresh(true, false).await.is_err());
+        assert!(provider.contains("feat-a"));
+        assert_eq!(provider.etag().as_deref(), Some("\"good\""));
+        assert!(provider.last_error().is_some());
     }
 
     #[tokio::test]

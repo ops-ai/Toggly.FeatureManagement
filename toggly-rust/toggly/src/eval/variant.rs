@@ -145,48 +145,74 @@ fn resolve_enabled_allocation(
     context: &EvalContext,
     ignore_case: bool,
 ) -> (Option<String>, AssignmentReason) {
-    if let Some(user_id) = context.identity.as_deref().filter(|s| !s.is_empty()) {
-        if let Some(rules) = &allocation.user {
-            for rule in rules {
-                if string_list_contains(&rule.users, user_id, ignore_case) {
-                    return (Some(rule.variant.clone()), AssignmentReason::User);
-                }
-            }
-        }
+    if let Some(variant) = matching_user_variant(allocation, context, ignore_case) {
+        return (Some(variant), AssignmentReason::User);
     }
-
-    if let Some(rules) = &allocation.group {
-        for rule in rules {
-            if context
-                .groups
-                .iter()
-                .any(|g| string_list_contains(&rule.groups, g, ignore_case))
-            {
-                return (Some(rule.variant.clone()), AssignmentReason::Group);
-            }
-        }
+    if let Some(variant) = matching_group_variant(allocation, context, ignore_case) {
+        return (Some(variant), AssignmentReason::Group);
     }
-
-    if let Some(rules) = &allocation.percentile {
-        let user_id = context.identity.as_deref().unwrap_or("");
-        let context_id = percentile_context_id(
-            user_id,
-            feature_key,
-            allocation.seed.as_deref(),
-            ignore_case,
-        );
-        let percentage = percentile_marker(&context_id);
-        for rule in rules {
-            if bucket_matches(percentage, rule.from, rule.to) {
-                return (Some(rule.variant.clone()), AssignmentReason::Percentile);
-            }
-        }
+    if let Some(variant) =
+        matching_percentile_variant(allocation, feature_key, context, ignore_case)
+    {
+        return (Some(variant), AssignmentReason::Percentile);
     }
 
     (
         allocation.default_when_enabled.clone(),
         AssignmentReason::DefaultWhenEnabled,
     )
+}
+
+fn matching_user_variant(
+    allocation: &Allocation,
+    context: &EvalContext,
+    ignore_case: bool,
+) -> Option<String> {
+    let user_id = context.identity.as_deref().filter(|s| !s.is_empty())?;
+    allocation
+        .user
+        .as_ref()?
+        .iter()
+        .find(|rule| string_list_contains(&rule.users, user_id, ignore_case))
+        .map(|rule| rule.variant.clone())
+}
+
+fn matching_group_variant(
+    allocation: &Allocation,
+    context: &EvalContext,
+    ignore_case: bool,
+) -> Option<String> {
+    allocation
+        .group
+        .as_ref()?
+        .iter()
+        .find(|rule| {
+            context
+                .groups
+                .iter()
+                .any(|group| string_list_contains(&rule.groups, group, ignore_case))
+        })
+        .map(|rule| rule.variant.clone())
+}
+
+fn matching_percentile_variant(
+    allocation: &Allocation,
+    feature_key: &str,
+    context: &EvalContext,
+    ignore_case: bool,
+) -> Option<String> {
+    let rules = allocation.percentile.as_ref()?;
+    let context_id = percentile_context_id(
+        context.identity.as_deref().unwrap_or(""),
+        feature_key,
+        allocation.seed.as_deref(),
+        ignore_case,
+    );
+    let percentage = percentile_marker(&context_id);
+    rules
+        .iter()
+        .find(|rule| bucket_matches(percentage, rule.from, rule.to))
+        .map(|rule| rule.variant.clone())
 }
 
 fn string_list_contains(candidates: &[String], value: &str, ignore_case: bool) -> bool {
