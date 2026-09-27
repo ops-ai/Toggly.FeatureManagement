@@ -3,7 +3,9 @@ package live
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -17,8 +19,9 @@ const (
 	// WSReconnectMax caps exponential reconnect backoff.
 	WSReconnectMaxMs = 60000
 
-	sdkID      = "go"
-	sdkVersion = "0.5.0"
+	sdkID               = "go"
+	sdkVersion          = "0.11.1"
+	flagsUpdatedMessage = "flags-updated"
 )
 
 type wsSyncMessage struct {
@@ -46,7 +49,10 @@ func Start(
 		httpClient = http.DefaultClient
 	}
 
-	wsURL := buildWebSocketURL(baseURL, appKey, cachedRevision)
+	wsURL, err := buildWebSocketURL(baseURL, appKey, cachedRevision)
+	if err != nil {
+		return nil, err
+	}
 
 	c, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
 		HTTPClient: httpClient,
@@ -80,7 +86,7 @@ func Start(
 // must be refreshed.
 func shouldTriggerUpdate(msg []byte, cachedRevision string) (forceJWKSRefresh bool, shouldUpdate bool) {
 	text := strings.TrimSpace(string(msg))
-	if text == "update" || text == "flags-updated" {
+	if text == "update" || text == flagsUpdatedMessage {
 		return false, true
 	}
 
@@ -96,7 +102,7 @@ func shouldTriggerUpdate(msg []byte, cachedRevision string) (forceJWKSRefresh bo
 		return false, shouldFetchOnSync(payload, cachedRevision)
 	case "signing-key-updated":
 		return true, true
-	case "flags-updated", "update":
+	case flagsUpdatedMessage, "update":
 		return false, shouldFetchOnFlagsUpdated(payload, cachedRevision)
 	default:
 		return false, false
@@ -120,7 +126,7 @@ func shouldFetchOnSync(msg wsSyncMessage, cachedRevision string) bool {
 }
 
 func shouldFetchOnFlagsUpdated(msg wsSyncMessage, cachedRevision string) bool {
-	if msg.Type != "flags-updated" {
+	if msg.Type != flagsUpdatedMessage {
 		return true
 	}
 	if msg.ETag == "" || cachedRevision == "" {
@@ -129,18 +135,32 @@ func shouldFetchOnFlagsUpdated(msg wsSyncMessage, cachedRevision string) bool {
 	return msg.ETag != cachedRevision
 }
 
-func buildWebSocketURL(baseURL, appKey, cachedRevision string) string {
-	base := strings.TrimRight(baseURL, "/")
-	base = strings.Replace(base, "https://", "wss://", 1)
-	base = strings.Replace(base, "http://", "ws://", 1)
-	wsURL := base + "/" + appKey + "/ws"
-	q := url.Values{}
+func buildWebSocketURL(baseURL, appKey, cachedRevision string) (string, error) {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return "", err
+	}
+	switch u.Scheme {
+	case "https", "wss":
+		u.Scheme = "wss"
+	case "http", "ws":
+		ip := net.ParseIP(u.Hostname())
+		if !strings.EqualFold(u.Hostname(), "localhost") && (ip == nil || !ip.IsLoopback()) {
+			return "", fmt.Errorf("secure WebSocket required for remote host %q", u.Hostname())
+		}
+		u.Scheme = "ws"
+	default:
+		return "", fmt.Errorf("unsupported WebSocket base URL scheme %q", u.Scheme)
+	}
+	u.Path = strings.TrimRight(u.Path, "/") + "/" + appKey + "/ws"
+	q := u.Query()
 	if cachedRevision != "" {
 		q.Set("rev", cachedRevision)
 	}
 	q.Set("sdk", sdkID)
 	q.Set("sdkVersion", sdkVersion)
-	return wsURL + "?" + q.Encode()
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }
 
 type closerFunc func() error

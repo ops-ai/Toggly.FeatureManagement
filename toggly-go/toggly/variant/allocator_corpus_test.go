@@ -73,45 +73,44 @@ func TestAssign_GoldCorpus(t *testing.T) {
 	for _, c := range cases {
 		c := c
 		t.Run(c.ID, func(t *testing.T) {
-			def := definitions.FeatureDefinitionModel{
-				FeatureKey: c.Feature.Name,
-				Variants:   c.Feature.Variants,
-				Allocation: c.Feature.Allocation,
-			}
-			baseEnabled := len(c.Feature.EnabledFor) > 0
-
-			var userID string
-			if c.Targeting.UserID != nil {
-				userID = *c.Targeting.UserID
-			}
-			targeting := TargetingContext{UserID: userID, Groups: c.Targeting.Groups}
-
-			got := Assign(def, baseEnabled, targeting, c.IgnoreCase)
-
-			var gotName string
-			var gotConfig interface{}
-			if got.Variant != nil {
-				gotName = got.Variant.Name
-				gotConfig = got.Variant.ConfigurationValue
-			}
-			var wantName string
-			if c.Expected.VariantName != nil {
-				wantName = *c.Expected.VariantName
-			}
-
-			if gotName != wantName {
-				t.Errorf("variant name: got %q want %q", gotName, wantName)
-			}
-			if !reflect.DeepEqual(gotConfig, c.Expected.ConfigurationValue) {
-				t.Errorf("configurationValue: got %#v want %#v", gotConfig, c.Expected.ConfigurationValue)
-			}
-			if got.Enabled != c.Expected.Enabled {
-				t.Errorf("enabled: got %v want %v", got.Enabled, c.Expected.Enabled)
-			}
-			if string(got.Reason) != c.Expected.AssignmentReason {
-				t.Errorf("assignmentReason: got %q want %q", got.Reason, c.Expected.AssignmentReason)
-			}
+			assertCorpusAssignment(t, c)
 		})
+	}
+}
+
+func assertCorpusAssignment(t *testing.T, c corpusCase) {
+	t.Helper()
+	def := definitions.FeatureDefinitionModel{
+		FeatureKey: c.Feature.Name,
+		Variants:   c.Feature.Variants,
+		Allocation: c.Feature.Allocation,
+	}
+	var userID string
+	if c.Targeting.UserID != nil {
+		userID = *c.Targeting.UserID
+	}
+	got := Assign(def, len(c.Feature.EnabledFor) > 0, TargetingContext{UserID: userID, Groups: c.Targeting.Groups}, c.IgnoreCase)
+	var gotName string
+	var gotConfig interface{}
+	if got.Variant != nil {
+		gotName = got.Variant.Name
+		gotConfig = got.Variant.ConfigurationValue
+	}
+	var wantName string
+	if c.Expected.VariantName != nil {
+		wantName = *c.Expected.VariantName
+	}
+	if gotName != wantName {
+		t.Errorf("variant name: got %q want %q", gotName, wantName)
+	}
+	if !reflect.DeepEqual(gotConfig, c.Expected.ConfigurationValue) {
+		t.Errorf("configurationValue: got %#v want %#v", gotConfig, c.Expected.ConfigurationValue)
+	}
+	if got.Enabled != c.Expected.Enabled {
+		t.Errorf("enabled: got %v want %v", got.Enabled, c.Expected.Enabled)
+	}
+	if string(got.Reason) != c.Expected.AssignmentReason {
+		t.Errorf("assignmentReason: got %q want %q", got.Reason, c.Expected.AssignmentReason)
 	}
 }
 

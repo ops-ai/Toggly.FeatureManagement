@@ -6,6 +6,7 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/eval"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/metrics"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/usage"
@@ -60,32 +61,11 @@ func NewClient(cfg Config) (*Client, error) {
 	eng := eval.NewEngine(reg)
 	c := &Client{cfg: cfg, provider: p, engine: eng, registry: reg, identity: cfg.Identity}
 
-	ua := SDKUserAgent()
-	if cfg.EnableUsage {
-		if cfg.UsageClient != nil {
-			c.usage = cfg.UsageClient
-		} else {
-			u, err := usage.Dial(cfg.MetricsURL, cfg.AppKey, cfg.Environment, cfg.InstanceName, cfg.AppVersion, ua)
-			if err != nil {
-				return nil, err
-			}
-			c.usage = u
-		}
-		c.usage.StartAutoFlush(cfg.UsageFlushInterval)
-		p.setDefinitionCacheRecorder(c.usage)
+	if err := c.configureUsage(); err != nil {
+		return nil, err
 	}
-
-	if cfg.EnableMetrics {
-		if cfg.MetricsClient != nil {
-			c.metrics = cfg.MetricsClient
-		} else {
-			m, err := metrics.Dial(cfg.MetricsURL, cfg.AppKey, cfg.Environment, cfg.InstanceName, ua)
-			if err != nil {
-				return nil, err
-			}
-			c.metrics = m
-		}
-		c.metrics.StartAutoFlush(cfg.MetricsFlushInterval)
+	if err := c.configureMetrics(); err != nil {
+		return nil, err
 	}
 
 	if !cfg.DisableBackgroundRefresh {
@@ -93,6 +73,43 @@ func NewClient(cfg Config) (*Client, error) {
 	}
 	go registerEntityContextsAtStartup(cfg)
 	return c, nil
+}
+
+func (c *Client) configureUsage() error {
+	cfg := c.cfg
+	if !cfg.EnableUsage {
+		return nil
+	}
+	if cfg.UsageClient != nil {
+		c.usage = cfg.UsageClient
+	} else {
+		u, err := usage.Dial(cfg.MetricsURL, cfg.AppKey, cfg.Environment, cfg.InstanceName, cfg.AppVersion, SDKUserAgent())
+		if err != nil {
+			return err
+		}
+		c.usage = u
+	}
+	c.usage.StartAutoFlush(cfg.UsageFlushInterval)
+	c.provider.setDefinitionCacheRecorder(c.usage)
+	return nil
+}
+
+func (c *Client) configureMetrics() error {
+	cfg := c.cfg
+	if !cfg.EnableMetrics {
+		return nil
+	}
+	if cfg.MetricsClient != nil {
+		c.metrics = cfg.MetricsClient
+	} else {
+		m, err := metrics.Dial(cfg.MetricsURL, cfg.AppKey, cfg.Environment, cfg.InstanceName, SDKUserAgent())
+		if err != nil {
+			return err
+		}
+		c.metrics = m
+	}
+	c.metrics.StartAutoFlush(cfg.MetricsFlushInterval)
+	return nil
 }
 
 // GetVariant assigns a feature variant locally from the cached definitions
@@ -125,19 +142,9 @@ func (c *Client) GetVariant(ctx context.Context, featureKey string, evalCtx Cont
 		return nil, nil
 	}
 
-	baseEnabled, err := c.engine.Evaluate(def, toEvalContext(evalCtx))
+	baseEnabled, err := c.variantBaseEnabled(ctx, featureKey, def, evalCtx)
 	if err != nil {
 		return nil, err
-	}
-
-	// Match IsEnabled: secure features require AuthorizationService approval
-	// before variant assignment treats the flag as enabled.
-	if baseEnabled && c.cfg.AuthorizationService != nil && c.provider.isSecure(featureKey) {
-		allowed, err := c.cfg.AuthorizationService.IsAllowed(ctx, featureKey, evalCtx)
-		if err != nil {
-			return nil, err
-		}
-		baseEnabled = allowed
 	}
 
 	assignment := variant.Assign(def, baseEnabled, variant.TargetingContext{
@@ -153,6 +160,23 @@ func (c *Client) GetVariant(ctx context.Context, featureKey string, evalCtx Cont
 		ConfigurationValue: assignment.Variant.ConfigurationValue,
 		Enabled:            assignment.Enabled,
 	}, nil
+}
+
+func (c *Client) variantBaseEnabled(ctx context.Context, featureKey string, def definitions.FeatureDefinitionModel, evalCtx Context) (bool, error) {
+	baseEnabled, err := c.engine.Evaluate(def, toEvalContext(evalCtx))
+	if err != nil || !baseEnabled {
+		return baseEnabled, err
+	}
+	// Match IsEnabled: secure features require authorization before an enabled
+	// variant is assigned.
+	return c.authorizeFeature(ctx, featureKey, evalCtx)
+}
+
+func (c *Client) authorizeFeature(ctx context.Context, featureKey string, evalCtx Context) (bool, error) {
+	if c.cfg.AuthorizationService == nil || !c.provider.isSecure(featureKey) {
+		return true, nil
+	}
+	return c.cfg.AuthorizationService.IsAllowed(ctx, featureKey, evalCtx)
 }
 
 // GetVariantValue returns the configuration payload for the assigned variant,
@@ -262,10 +286,8 @@ func (c *Client) IsEnabled(ctx context.Context, featureKey string, evalCtx Conte
 	}
 
 	// Session stickiness for non-deterministic rollouts.
-	if c.cfg.SessionStore != nil && evalCtx.Identity != "" && shouldUseSession(def) {
-		if v, err := c.cfg.SessionStore.Get(ctx, evalCtx.Identity, featureKey); err == nil && v != nil {
-			return *v, nil
-		}
+	if value, found := c.cachedSessionValue(ctx, featureKey, evalCtx, def); found {
+		return value, nil
 	}
 
 	res, err := c.engine.Evaluate(def, toEvalContext(evalCtx))
@@ -274,8 +296,8 @@ func (c *Client) IsEnabled(ctx context.Context, featureKey string, evalCtx Conte
 	}
 
 	// Secure features require an additional authorization check when enabled.
-	if res && c.cfg.AuthorizationService != nil && c.provider.isSecure(featureKey) {
-		allowed, err := c.cfg.AuthorizationService.IsAllowed(ctx, featureKey, evalCtx)
+	if res {
+		allowed, err := c.authorizeFeature(ctx, featureKey, evalCtx)
 		if err != nil {
 			return false, err
 		}
@@ -293,6 +315,17 @@ func (c *Client) IsEnabled(ctx context.Context, featureKey string, evalCtx Conte
 	}
 
 	return res, nil
+}
+
+func (c *Client) cachedSessionValue(ctx context.Context, featureKey string, evalCtx Context, def definitions.FeatureDefinitionModel) (bool, bool) {
+	if c.cfg.SessionStore == nil || evalCtx.Identity == "" || !shouldUseSession(def) {
+		return false, false
+	}
+	value, err := c.cfg.SessionStore.Get(ctx, evalCtx.Identity, featureKey)
+	if err != nil || value == nil {
+		return false, false
+	}
+	return *value, true
 }
 
 // toEvalContext maps the public Context to the internal eval.Context used by

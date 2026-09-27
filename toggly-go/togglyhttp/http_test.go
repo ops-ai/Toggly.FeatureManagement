@@ -12,6 +12,15 @@ import (
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/togglyctx"
 )
 
+const (
+	httpTestUserAgentValue  = "Mozilla/5.0"
+	httpTestAcceptLanguage  = "Accept-Language"
+	httpTestUserAgentHeader = "User-Agent"
+	httpTestCountryHeader   = "CF-IPCountry"
+	httpTestExpectedOK      = "expected 200, got %d"
+	httpTestUserHeader      = "X-User"
+)
+
 type fakeEval struct {
 	on  map[string]bool
 	err error
@@ -35,9 +44,9 @@ func (f *fakeEval) IsEnabled(ctx context.Context, featureKey string, evalCtx tog
 
 func TestFromHttpRequest_MapsHeaders(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("User-Agent", "Mozilla/5.0")
-	req.Header.Set("Accept-Language", "en-US")
-	req.Header.Set("CF-IPCountry", "US")
+	req.Header.Set(httpTestUserAgentHeader, httpTestUserAgentValue)
+	req.Header.Set(httpTestAcceptLanguage, "en-US")
+	req.Header.Set(httpTestCountryHeader, "US")
 
 	ctx := FromHttpRequest(req, toggly.Context{Identity: "u1"})
 	if ctx.Identity != "u1" {
@@ -46,7 +55,7 @@ func TestFromHttpRequest_MapsHeaders(t *testing.T) {
 	if ctx.Request == nil {
 		t.Fatal("expected request")
 	}
-	if ctx.Request.UserAgent != "Mozilla/5.0" {
+	if ctx.Request.UserAgent != httpTestUserAgentValue {
 		t.Fatalf("ua: %q", ctx.Request.UserAgent)
 	}
 	if ctx.Request.AcceptLanguage != "en-US" {
@@ -59,9 +68,9 @@ func TestFromHttpRequest_MapsHeaders(t *testing.T) {
 
 func TestFromHttpRequest_PreservesExtrasRequestFields(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("User-Agent", "Mozilla/5.0")
-	req.Header.Set("Accept-Language", "en-US")
-	req.Header.Set("CF-IPCountry", "US")
+	req.Header.Set(httpTestUserAgentHeader, httpTestUserAgentValue)
+	req.Header.Set(httpTestAcceptLanguage, "en-US")
+	req.Header.Set(httpTestCountryHeader, "US")
 
 	ctx := FromHttpRequest(req, toggly.Context{
 		Identity: "u1",
@@ -75,7 +84,7 @@ func TestFromHttpRequest_PreservesExtrasRequestFields(t *testing.T) {
 	if ctx.Request.Country != "CA" {
 		t.Fatalf("extras country should win, got %q", ctx.Request.Country)
 	}
-	if ctx.Request.UserAgent != "Mozilla/5.0" {
+	if ctx.Request.UserAgent != httpTestUserAgentValue {
 		t.Fatalf("empty extras UA should take header, got %q", ctx.Request.UserAgent)
 	}
 	if ctx.Request.AcceptLanguage != "en-US" {
@@ -119,7 +128,7 @@ func TestMiddleware_StoresContext(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
+		t.Fatalf(httpTestExpectedOK, rr.Code)
 	}
 }
 
@@ -139,11 +148,11 @@ func TestMiddleware_MergesRequestHeaders(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("User-Agent", "UA")
-	req.Header.Set("CF-IPCountry", "CA")
+	req.Header.Set(httpTestUserAgentHeader, "UA")
+	req.Header.Set(httpTestCountryHeader, "CA")
 	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
+		t.Fatalf(httpTestExpectedOK, rr.Code)
 	}
 }
 
@@ -173,11 +182,11 @@ func TestMiddlewareWith_ProvidersAndHeaderMerge(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("Accept-Language", "fr-FR")
-	req.Header.Set("CF-IPCountry", "FR")
+	req.Header.Set(httpTestAcceptLanguage, "fr-FR")
+	req.Header.Set(httpTestCountryHeader, "FR")
 	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
+		t.Fatalf(httpTestExpectedOK, rr.Code)
 	}
 }
 
@@ -207,18 +216,18 @@ func TestMiddlewareWith_GetContextKeepsSetRequestFields(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("User-Agent", "HeaderUA")
-	req.Header.Set("CF-IPCountry", "GB")
+	req.Header.Set(httpTestUserAgentHeader, "HeaderUA")
+	req.Header.Set(httpTestCountryHeader, "GB")
 	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
+		t.Fatalf(httpTestExpectedOK, rr.Code)
 	}
 }
 
 func TestMiddleware_ConcurrentRequestIsolation(t *testing.T) {
 	mw := MiddlewareWith(Options{
 		GetIdentity: func(r *http.Request) string {
-			return r.Header.Get("X-User")
+			return r.Header.Get(httpTestUserHeader)
 		},
 	})
 
@@ -231,7 +240,7 @@ func TestMiddleware_ConcurrentRequestIsolation(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		key := r.Header.Get("X-User")
+		key := r.Header.Get(httpTestUserHeader)
 		mu.Lock()
 		seen[key] = ctx.Identity
 		mu.Unlock()
@@ -247,8 +256,8 @@ func TestMiddleware_ConcurrentRequestIsolation(t *testing.T) {
 			id := fmt.Sprintf("user-%d", i)
 			rr := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
-			req.Header.Set("X-User", id)
-			req.Header.Set("CF-IPCountry", "US")
+			req.Header.Set(httpTestUserHeader, id)
+			req.Header.Set(httpTestCountryHeader, "US")
 			h.ServeHTTP(rr, req)
 			if rr.Code != http.StatusOK {
 				t.Errorf("status %d for %s", rr.Code, id)
@@ -295,7 +304,7 @@ func TestFeatureGate_AllowsWhenOn(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
+		t.Fatalf(httpTestExpectedOK, rr.Code)
 	}
 }
 
@@ -310,15 +319,49 @@ func TestFeatureGate_UsesAmbientContext(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("User-Agent", "GateUA")
+	req.Header.Set(httpTestUserAgentHeader, "GateUA")
 	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rr.Code)
+		t.Fatalf(httpTestExpectedOK, rr.Code)
 	}
 	if e.lastCtx.Identity != "gate-user" {
 		t.Fatalf("expected ambient identity, got %#v", e.lastCtx)
 	}
 	if e.lastCtx.Request == nil || e.lastCtx.Request.UserAgent != "GateUA" {
 		t.Fatalf("expected header request on gate eval: %#v", e.lastCtx.Request)
+	}
+}
+
+func TestFeatureGateBuilderMergesHeadersAndCustomHandlers(t *testing.T) {
+	e := &fakeEval{on: map[string]bool{"On": true}}
+	gate := FeatureGate(e, "On", WithContextBuilder(func(*http.Request) toggly.Context {
+		return toggly.Context{Identity: "builder-user"}
+	}))
+	h := gate(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set(httpTestUserAgentHeader, "GateUA")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNoContent || e.lastCtx.Identity != "builder-user" || e.lastCtx.Request == nil || e.lastCtx.Request.UserAgent != "GateUA" {
+		t.Fatalf("status = %d, context = %#v", rr.Code, e.lastCtx)
+	}
+
+	e.err = fmt.Errorf("evaluation unavailable")
+	errorGate := FeatureGate(e, "On", WithErrorHandler(func(w http.ResponseWriter, _ *http.Request, _ error) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	rr = httptest.NewRecorder()
+	errorGate(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("custom error status = %d", rr.Code)
+	}
+
+	denyGate := FeatureGate(nil, "On", WithDenyHandler(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	rr = httptest.NewRecorder()
+	denyGate(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("custom deny status = %d", rr.Code)
 	}
 }

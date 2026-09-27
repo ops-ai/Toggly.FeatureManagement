@@ -8,11 +8,16 @@ import (
 	"time"
 )
 
+const (
+	identityCheckoutFlow    = "checkout-flow"
+	identityGetVariantError = "GetVariant: %v"
+)
+
 func TestGetVariant_UsesConfigIdentity(t *testing.T) {
 	c := newCatalogVariantsClientWithConfigIdentity(t, "alice")
-	v, err := c.GetVariant(context.Background(), "checkout-flow", Context{})
+	v, err := c.GetVariant(context.Background(), identityCheckoutFlow, Context{})
 	if err != nil {
-		t.Fatalf("GetVariant: %v", err)
+		t.Fatalf(identityGetVariantError, err)
 	}
 	if v == nil || v.Name != "A" {
 		t.Fatalf("got %+v, want variant A from config identity", v)
@@ -22,9 +27,9 @@ func TestGetVariant_UsesConfigIdentity(t *testing.T) {
 func TestGetVariant_SetIdentityOverridesConfig(t *testing.T) {
 	c := newCatalogVariantsClientWithConfigIdentity(t, "carol")
 	c.SetIdentity("alice")
-	v, err := c.GetVariant(context.Background(), "checkout-flow", Context{})
+	v, err := c.GetVariant(context.Background(), identityCheckoutFlow, Context{})
 	if err != nil {
-		t.Fatalf("GetVariant: %v", err)
+		t.Fatalf(identityGetVariantError, err)
 	}
 	if v == nil || v.Name != "A" {
 		t.Fatalf("got %+v, want A after SetIdentity", v)
@@ -34,9 +39,9 @@ func TestGetVariant_SetIdentityOverridesConfig(t *testing.T) {
 func TestGetVariant_AmbientOverridesClientIdentity(t *testing.T) {
 	c := newCatalogVariantsClientWithConfigIdentity(t, "carol")
 	ctx := WithEvalContext(context.Background(), Context{Identity: "alice"})
-	v, err := c.GetVariant(ctx, "checkout-flow", Context{})
+	v, err := c.GetVariant(ctx, identityCheckoutFlow, Context{})
 	if err != nil {
-		t.Fatalf("GetVariant: %v", err)
+		t.Fatalf(identityGetVariantError, err)
 	}
 	if v == nil || v.Name != "A" {
 		t.Fatalf("got %+v, want A from ambient", v)
@@ -46,9 +51,9 @@ func TestGetVariant_AmbientOverridesClientIdentity(t *testing.T) {
 func TestGetVariant_PerCallOverridesAmbientAndConfig(t *testing.T) {
 	c := newCatalogVariantsClientWithConfigIdentity(t, "carol")
 	ctx := WithEvalContext(context.Background(), Context{Identity: "bob"})
-	v, err := c.GetVariant(ctx, "checkout-flow", Context{Identity: "alice"})
+	v, err := c.GetVariant(ctx, identityCheckoutFlow, Context{Identity: "alice"})
 	if err != nil {
-		t.Fatalf("GetVariant: %v", err)
+		t.Fatalf(identityGetVariantError, err)
 	}
 	if v == nil || v.Name != "A" {
 		t.Fatalf("got %+v, want A from per-call", v)
@@ -57,9 +62,9 @@ func TestGetVariant_PerCallOverridesAmbientAndConfig(t *testing.T) {
 
 func TestGetVariant_EmptyIdentityFallsBackToDefaultWhenEnabled(t *testing.T) {
 	c := newCatalogVariantsClient(t)
-	v, err := c.GetVariant(context.Background(), "checkout-flow", Context{})
+	v, err := c.GetVariant(context.Background(), identityCheckoutFlow, Context{})
 	if err != nil {
-		t.Fatalf("GetVariant: %v", err)
+		t.Fatalf(identityGetVariantError, err)
 	}
 	if v == nil || v.Name != "B" {
 		t.Fatalf("got %+v, want defaultWhenEnabled B", v)
@@ -81,9 +86,9 @@ func TestGetVariant_HTTPAmbientPreferredOverConfig(t *testing.T) {
 	c := newCatalogVariantsClientWithConfigIdentity(t, "carol")
 	var gotName string
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		v, err := c.GetVariant(r.Context(), "checkout-flow", Context{})
+		v, err := c.GetVariant(r.Context(), identityCheckoutFlow, Context{})
 		if err != nil {
-			t.Errorf("GetVariant: %v", err)
+			t.Errorf(identityGetVariantError, err)
 			return
 		}
 		if v != nil {

@@ -122,7 +122,7 @@ func (b *Batcher) RecordUsed(feature string, enabled bool, identity string) {
 
 // RecordView records a feature "viewed" event (rendered/displayed).
 // Views are associated with the "enabled" variant on the wire (matching .NET).
-func (b *Batcher) RecordView(feature string, identity string) {
+func (b *Batcher) RecordView(feature, identity string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	agg := b.get(feature)

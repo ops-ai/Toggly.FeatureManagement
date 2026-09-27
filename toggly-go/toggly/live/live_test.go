@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -53,5 +55,37 @@ func TestStart_CallsOnUpdate(t *testing.T) {
 		// ok
 	case <-time.After(2 * time.Second):
 		t.Fatalf("expected onUpdate to be called")
+	}
+}
+
+func TestStartRejectsPlaintextWebSocketForRemoteHost(t *testing.T) {
+	_, err := Start(context.Background(), "http://features.example.com", "app", "env", nil, "", func(bool) {})
+	if err == nil || !strings.Contains(err.Error(), "secure WebSocket") {
+		t.Fatalf("remote HTTP endpoint error = %v, want secure WebSocket rejection", err)
+	}
+}
+
+func TestBuildWebSocketURLPreservesSecureTransportAndRevision(t *testing.T) {
+	for _, tc := range []struct {
+		base   string
+		scheme string
+	}{
+		{"https://features.example.com/", "wss"},
+		{"http://127.0.0.1:8080/", "ws"},
+		{"http://[::1]:8080/", "ws"},
+	} {
+		raw, err := buildWebSocketURL(tc.base, "app", "revision-1")
+		if err != nil {
+			t.Fatalf("base %q: %v", tc.base, err)
+		}
+		u, err := url.Parse(raw)
+		if err != nil || u.Scheme != tc.scheme || u.Path != "/app/ws" || u.Query().Get("rev") != "revision-1" || u.Query().Get("sdk") != sdkID || u.Query().Get("sdkVersion") != sdkVersion {
+			t.Fatalf("base %q: URL = %q, %v", tc.base, raw, err)
+		}
+	}
+	for _, base := range []string{"ws://features.example.com", "ftp://features.example.com"} {
+		if raw, err := buildWebSocketURL(base, "app", ""); err == nil {
+			t.Fatalf("unsupported remote base %q yielded %q", base, raw)
+		}
 	}
 }

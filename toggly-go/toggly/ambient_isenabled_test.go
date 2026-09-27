@@ -7,6 +7,10 @@ import (
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 )
 
+const (
+	ambientClaimsFlag = "claims-flag"
+)
+
 func TestClient_IsEnabled_MergesAmbientContext(t *testing.T) {
 	c, err := NewClient(Config{
 		AppKey:                   "app",
@@ -23,7 +27,7 @@ func TestClient_IsEnabled_MergesAmbientContext(t *testing.T) {
 
 	c.provider.applyDefinitions([]definitions.FeatureDefinitionModel{
 		{
-			FeatureKey: "claims-flag",
+			FeatureKey: ambientClaimsFlag,
 			Filters: []definitions.FeatureFilter{
 				{
 					Name: "UserClaims",
@@ -59,7 +63,7 @@ func TestClient_IsEnabled_MergesAmbientContext(t *testing.T) {
 	ctx := WithEvalContext(context.Background(), ambient)
 
 	// Empty per-call pulls ambient claims + request
-	claimsOn, err := c.IsEnabled(ctx, "claims-flag", Context{})
+	claimsOn, err := c.IsEnabled(ctx, ambientClaimsFlag, Context{})
 	if err != nil {
 		t.Fatalf("ambient claims: %v", err)
 	}
@@ -76,7 +80,7 @@ func TestClient_IsEnabled_MergesAmbientContext(t *testing.T) {
 	}
 
 	// Per-call claims override wins (wrong role → off)
-	claimsOff, err := c.IsEnabled(ctx, "claims-flag", Context{
+	claimsOff, err := c.IsEnabled(ctx, ambientClaimsFlag, Context{
 		Claims: map[string]string{"role": "user"},
 	})
 	if err != nil {

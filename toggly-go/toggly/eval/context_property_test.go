@@ -70,3 +70,29 @@ func TestContextPropertyFailClosedAndIn(t *testing.T) {
 		t.Fatal("datetime gt should match")
 	}
 }
+
+func TestCompareContextContainsAndOrderedValues(t *testing.T) {
+	for _, tc := range []struct {
+		actual   any
+		op       string
+		expected string
+		kind     string
+		want     bool
+	}{
+		{[]string{"Admin", "Member"}, "contains", "admin", "string[]", true},
+		{[]any{"Admin", "Member"}, "contains", "member", "string[]", true},
+		{[]any{"Admin"}, "contains", "guest", "string[]", false},
+		{"Hello World", "contains", "world", "string", true},
+		{"blue", "in", " , RED, blue", "string", true},
+		{"blue", "in", " , RED", "string", false},
+		{3, "gt", "2", "number", true},
+		{3, "lte", "3", "number", true},
+		{3, "lt", "2", "number", false},
+		{"bad", "gt", "2", "number", false},
+		{"blue", "unknown", "blue", "string", false},
+	} {
+		if got := compareContext(tc.actual, tc.op, tc.expected, tc.kind); got != tc.want {
+			t.Errorf("compareContext(%v, %q, %q, %q) = %t, want %t", tc.actual, tc.op, tc.expected, tc.kind, got, tc.want)
+		}
+	}
+}
