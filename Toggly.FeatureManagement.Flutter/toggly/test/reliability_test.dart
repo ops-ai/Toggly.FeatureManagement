@@ -575,6 +575,76 @@ void main() {
     expect(errors, contains('Signature verification failed'));
   });
 
+  test('malformed signed cache stays closed when eviction fails', () async {
+    final provider = _ThrowingDeleteFlagsProvider();
+    final errors = <String>[];
+    final fixture = _buildSignedFlagsFixture(timestamp: 100);
+    provider.jwks = jsonEncode({...fixture.jwks, '_expiresAt': 0});
+    provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-1',
+      flags: fixture.defsJson,
+      timestamp: fixture.timestamp,
+      signature: 'not-base64',
+      keyId: fixture.kid,
+    );
+
+    await Toggly.init(
+      identity: 'user-1',
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        enableTelemetry: false,
+        enableLiveUpdates: false,
+        cacheProvider: provider,
+        onError: (message, error, stackTrace) => errors.add(message),
+      ),
+    );
+
+    expect(await Toggly.cachedFeatureFlags, {'FeatureA': false});
+    expect(provider.deletedFlags, 1);
+    expect(errors, contains('Signature verification failed'));
+    expect(errors, contains('Error clearing cached feature flags'));
+  });
+
+  test('propagates an error callback failure for malformed signed cache',
+      () async {
+    final provider = _MemoryCacheProvider();
+    final fixture = _buildSignedFlagsFixture(timestamp: 100);
+    provider.jwks = jsonEncode({...fixture.jwks, '_expiresAt': 0});
+    provider.flags['u:user-1'] = TogglyFeatureFlagsCache(
+      identity: 'u:user-1',
+      flags: fixture.defsJson,
+      timestamp: fixture.timestamp,
+      signature: 'not-base64',
+      keyId: fixture.kid,
+    );
+
+    await Toggly.init(
+      identity: 'user-1',
+      useSignedDefinitions: true,
+      flagDefaults: {'FeatureA': false},
+      config: TogglyConfig(
+        enableTelemetry: false,
+        enableLiveUpdates: false,
+        cacheProvider: provider,
+        onError: (message, error, stackTrace) {
+          throw StateError('consumer error handler failed');
+        },
+      ),
+    );
+
+    await expectLater(
+      Toggly.cachedFeatureFlags,
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'consumer error handler failed',
+        ),
+      ),
+    );
+  });
+
   test('clears cache and reports error when fresh signature verification fails',
       () async {
     final provider = _MemoryCacheProvider();

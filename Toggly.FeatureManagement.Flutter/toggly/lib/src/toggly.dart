@@ -21,6 +21,10 @@ enum _CachedFlagsVerification {
   stale,
 }
 
+class _JwksUnavailableException implements Exception {
+  const _JwksUnavailableException();
+}
+
 class _CachedFeatureFlags {
   _CachedFeatureFlags({
     required this.cache,
@@ -646,11 +650,15 @@ class Toggly with WidgetsBindingObserver {
         true,
         cache.keyId!,
       );
-    } catch (_) {
+    } on _JwksUnavailableException {
       // Cached definitions were previously accepted when written. If offline
       // validation cannot run due to transient JWK issues, keep the
       // last-known-good cache but do not use its revision conditionally.
       return _CachedFlagsVerification.unavailable;
+    } catch (error, stackTrace) {
+      _reportError(_signatureVerificationFailed, error, stackTrace);
+      await _clearCachedFeatureFlagsIfCurrent(generation);
+      return _CachedFlagsVerification.rejected;
     }
 
     if (generation != _generation) return _CachedFlagsVerification.stale;
@@ -1720,7 +1728,7 @@ class Toggly with WidgetsBindingObserver {
         Exception(_jwksFetchFailed),
         StackTrace.current,
       );
-      throw Exception(_jwksFetchFailed);
+      throw const _JwksUnavailableException();
     }
 
     final jwksList = List<Map<String, dynamic>>.from(jwksData['keys']);

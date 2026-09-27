@@ -1,3 +1,12 @@
+## 1.13.1
+
+2026-09-27
+
+### Fixed
+- Reject malformed or unverifiable signed flag caches before exposing their
+  values. Cached definitions remain available offline only when signature
+  verification cannot run because no usable JWK is available.
+
 ## 1.13.0
 
 2026-09-24
