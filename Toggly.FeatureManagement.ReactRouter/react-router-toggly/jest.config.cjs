@@ -42,6 +42,9 @@ const config = {
       testPathIgnorePatterns: ['/node_modules/', '.*smoke.*'],
       moduleNameMapper: {
         '^(\\.{1,2}/.*)\\.js$': '$1',
+        // jsdom resolves the package "browser" export (ESM); force CJS for Jest.
+        '^@ops-ai/toggly-signed-defs$':
+          '<rootDir>/node_modules/@ops-ai/toggly-signed-defs/dist/index.js',
       },
       transform: {
         '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.jest.json' }],

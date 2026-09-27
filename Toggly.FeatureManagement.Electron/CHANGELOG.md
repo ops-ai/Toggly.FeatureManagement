@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-09-26
+
+### Added
+
+- Opt-in `enableVariants` on `TogglyElectronConfig`. When set, the main-process client fetches `/evaluated-variants-signed` instead of `/evaluated-signed` and exposes `getVariant` / `getVariantValue` on the client, singleton helpers, IPC, preload bridge, and renderer wrappers.
+- Typed soft-null `getVariantValue<T>(…, isT?)` and exported `decodeVariantValue` helper matching the JS/Vue SDK contract: null when variants are disabled, the feature is off/local-gated, no variant is assigned, or an optional type guard fails.
+- Variant assignments persist in the offline disk cache alongside flags (distinct cache scope from boolean mode) and are restored after a conditional (304) refresh, network failure, or cold start. Feature checks record the assigned variant name in telemetry instead of always recording `enabled`.
+
 ## [1.1.0] - 2026-09-18
 
 ### Added

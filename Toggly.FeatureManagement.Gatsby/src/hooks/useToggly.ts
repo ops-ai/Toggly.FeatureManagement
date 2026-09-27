@@ -12,6 +12,8 @@ import {
   refreshFlags as storeRefreshFlags,
   setIdentity as storeSetIdentity,
   clearIdentity as storeClearIdentity,
+  getVariant as storeGetVariant,
+  getVariantValue as storeGetVariantValue,
   recordUsage,
   recordView,
   incrementCounter,
@@ -61,6 +63,8 @@ export function useToggly(): UseTogglyResult & {
     isReady,
     error,
     refreshFlags: storeRefreshFlags,
+    getVariant: storeGetVariant,
+    getVariantValue: storeGetVariantValue,
     setIdentity: storeSetIdentity,
     clearIdentity: storeClearIdentity,
     telemetry: {

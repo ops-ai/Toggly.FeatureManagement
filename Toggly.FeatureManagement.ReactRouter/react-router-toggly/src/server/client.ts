@@ -15,6 +15,9 @@ import {
   buildDefinitionsUrl,
   isFeatureEnabledLocal,
   parseDefinitionsPayload,
+  parseVariantDefsPayload,
+  variantDefsToFlags,
+  decodeVariantValue,
   snapshotEvaluatedBooleans,
   fetchWithTimeout,
   createLogger,
@@ -32,6 +35,8 @@ import type {
   DefinitionsByKey,
   EvalContext,
   FeatureDefinitionModel,
+  VariantResult,
+  EvaluatedVariantDef,
 } from '../core';
 import {
   applyLocalGate,
@@ -121,12 +126,19 @@ export class TogglyServerClient {
   private flags: FeatureFlags = {};
   /** Raw definitions-signed models keyed by featureKey. */
   private definitions: Map<string, FeatureDefinitionModel> = new Map();
+  /** Evaluated-variants-signed defs when `enableVariants`; otherwise null. */
+  private variants: Record<string, EvaluatedVariantDef> | null = null;
   private hooks: TogglyHook[] = [];
   private initialized = false;
   /** Dedupes concurrent cold-start definition fetches. */
   private definitionsLoadPromise: Promise<void> | null = null;
   /** Single-flight for definition GET so concurrent joiners are not double-counted. */
   private definitionsFetchInFlight: Promise<FeatureFlags> | null = null;
+  /**
+   * Serializes variants-mode init so concurrent identities cannot interleave
+   * shared `this.variants` / `this.flags` mutations.
+   */
+  private variantsInitChain: Promise<unknown> = Promise.resolve();
 
   // WebSocket live updates
   private ws: WebSocket | null = null;
@@ -145,14 +157,16 @@ export class TogglyServerClient {
   private telemetry: TelemetryRuntime | null = null;
 
   constructor(config: TogglyConfig) {
-    // Server always uses definitions-signed + local evaluation (OPS-825).
+    // Server defaults to definitions-signed + local evaluation (OPS-825).
+    // enableVariants forces the remote evaluated-variants-signed rail since
+    // variant assignment cannot be replicated by local rule evaluation.
     const telemetryFlags = resolveServerTelemetryFlags(config);
     const grpcClients = resolveGrpcClients({ ...config, ...telemetryFlags });
     this.config = mergeConfig({
       ...config,
       ...telemetryFlags,
       ...grpcClients,
-      evaluationMode: 'local',
+      evaluationMode: config.enableVariants ? 'remote' : 'local',
       telemetryTransport: config.telemetryTransport ?? 'grpc',
       telemetryAttachProcessHandlers:
         config.telemetryAttachProcessHandlers ??
@@ -207,12 +221,13 @@ export class TogglyServerClient {
     featureKey: string,
     enabled: boolean,
     identityOverride?: IdentityContext,
+    variant?: string,
   ): void {
     if (!this.telemetry?.usageEnabled) {
       return;
     }
     const identity = identityOverride?.identity ?? this.identity;
-    this.telemetry.recordCheck(featureKey, enabled, identity);
+    this.telemetry.recordCheck(featureKey, enabled, identity, variant);
   }
 
   /** Soft-fail wrapper — definition refresh must not throw from telemetry. */
@@ -356,6 +371,9 @@ export class TogglyServerClient {
    * shared mutable `this.flags` / `this.identity` (safe under concurrency).
    */
   snapshotFlags(identityOverride?: IdentityContext): FeatureFlags {
+    if (this.config.enableVariants) {
+      return { ...this.flags };
+    }
     return {
       ...(this.config.featureDefaults ?? {}),
       ...snapshotEvaluatedBooleans(
@@ -371,12 +389,21 @@ export class TogglyServerClient {
     entityContext?: TogglyEntityContext | null,
     identityOverride?: IdentityContext,
   ): boolean {
-    const evaluated = isFeatureEnabledLocal(
-      this.definitions as DefinitionsByKey,
-      featureKey,
-      this.buildEvalContext(identityOverride, entityContext),
-      this.config.featureDefaults?.[featureKey] ?? defaultValue,
-    );
+    let evaluated: boolean;
+    if (this.config.enableVariants) {
+      const raw = this.flags[featureKey];
+      evaluated =
+        typeof raw === 'boolean'
+          ? raw
+          : (this.config.featureDefaults?.[featureKey] ?? defaultValue);
+    } else {
+      evaluated = isFeatureEnabledLocal(
+        this.definitions as DefinitionsByKey,
+        featureKey,
+        this.buildEvalContext(identityOverride, entityContext),
+        this.config.featureDefaults?.[featureKey] ?? defaultValue,
+      );
+    }
     return applyLocalGate(evaluated, featureKey, this.localGates, this.localGateIndex);
   }
 
@@ -473,13 +500,63 @@ export class TogglyServerClient {
   }
 
   /**
-   * Initialize the client by fetching feature definitions.
-   * When already initialized, rebinds identity (including clearing it) and
-   * re-snapshots flags without re-fetching (definitions are identity-agnostic).
-   * Concurrent cold starts share one fetch; each caller still receives a
-   * request-local snapshot for its identity.
+   * Initialize the client and optionally bind identity.
+   * Local mode: concurrent cold starts share one definitions fetch; each caller
+   * still receives a request-local snapshot for its identity.
+   * Variants mode: inits are serialized so concurrent identities cannot
+   * interleave remote variant assignments on the shared client.
    */
   async init(identity?: string): Promise<FeatureFlags> {
+    if (this.config.enableVariants) {
+      return this.initWithVariants(identity);
+    }
+    return this.initWithLocalDefinitions(identity);
+  }
+
+  /**
+   * Variants are remote-evaluated; identity must be bound before fetch so
+   * `/evaluated-variants-signed` receives the correct `userId`.
+   */
+  private async initWithVariants(identity?: string): Promise<FeatureFlags> {
+    const run = async (): Promise<FeatureFlags> => {
+      const previousIdentity = this.identity;
+      const wasWarm = this.initialized && this.variants !== null;
+      const identityChanged = previousIdentity !== identity;
+
+      this.identity = identity;
+      if (!wasWarm || identityChanged) {
+        // Do not join an in-flight fetch started under a different identity.
+        if (identityChanged && this.definitionsFetchInFlight) {
+          await this.definitionsFetchInFlight.catch(() => undefined);
+        }
+        await this.fetchFlags();
+        this.initialized = true;
+        if (!wasWarm) {
+          this.startWebSocket();
+          if (identity) {
+            await this.executeBeforeIdentify(identity);
+            await this.executeAfterIdentify(identity);
+          }
+        }
+      }
+
+      this.flags = this.snapshotFlags({ identity });
+      if (wasWarm && !identityChanged) {
+        this.logger.debug('Client already initialized; re-snapshotted for identity.');
+      }
+      // Return a copy so a later serialized init cannot mutate the caller's snapshot.
+      return { ...this.flags };
+    };
+
+    const result = this.variantsInitChain.then(run, run);
+    this.variantsInitChain = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  private async initWithLocalDefinitions(identity?: string): Promise<FeatureFlags> {
     const wasWarm = this.initialized && this.definitions.size > 0;
 
     if (!wasWarm) {
@@ -531,51 +608,131 @@ export class TogglyServerClient {
     }
   }
 
+  private applyNoAppKeyDefaults(): FeatureFlags {
+    this.logger.debug('No appKey, using featureDefaults.');
+    this.definitions = new Map();
+    this.variants = this.config.enableVariants ? {} : null;
+    this.flags = this.config.featureDefaults ?? {};
+    return this.flags;
+  }
+
+  private applyParsedDefinitionsBody(parsed: unknown, useVariants: boolean): void {
+    if (useVariants) {
+      this.variants = parseVariantDefsPayload(parsed);
+      this.definitions = new Map();
+      this.flags = {
+        ...this.config.featureDefaults,
+        ...variantDefsToFlags(this.variants),
+      };
+      this.logger.debug(`Fetched ${Object.keys(this.variants).length} variant defs.`);
+      return;
+    }
+
+    this.variants = null;
+    this.definitions = parseDefinitionsPayload(parsed);
+    this.flags = {
+      ...this.config.featureDefaults,
+      ...snapshotEvaluatedBooleans(this.definitions, this.buildEvalContext()),
+    };
+    this.logger.debug(`Fetched ${this.definitions.size} definitions.`);
+  }
+
+  private hasLastKnownGoodDefinitions(useVariants: boolean): boolean {
+    if (this.definitions.size > 0) {
+      return true;
+    }
+    return Boolean(useVariants && this.variants && Object.keys(this.variants).length > 0);
+  }
+
+  private buildDefinitionsFetchUrl(useVariants: boolean, pin: string | null): string {
+    const identityContext =
+      useVariants && this.identity ? { identity: this.identity } : undefined;
+    return appendDefinitionsRevisionParam(
+      buildDefinitionsUrl(this.config, identityContext),
+      pin,
+    );
+  }
+
+  private noteNotModifiedResponse(responseRevision: string | null): FeatureFlags {
+    if (responseRevision) {
+      this.cacheDefinitionsRevision(responseRevision);
+    }
+    this.noteDefinitionCacheHit();
+    this.logger.debug('Definitions unchanged (304)');
+    return this.flags;
+  }
+
+  private noteAppliedDefinitionsRevision(
+    previousRevision: string | null,
+    responseRevision: string | null,
+  ): void {
+    if (responseRevision) {
+      this.cacheDefinitionsRevision(responseRevision);
+    }
+    if (this.definitionsRevisionsMatch(previousRevision, responseRevision)) {
+      this.noteDefinitionCacheHit();
+    } else {
+      this.noteDefinitionCacheMiss();
+    }
+  }
+
+  private recoverDefinitionsFetchError(
+    error: unknown,
+    outcomeRecorded: boolean,
+    useVariants: boolean,
+  ): FeatureFlags {
+    this.logger.warn(
+      'Failed to fetch flags, preserving last-known-good flags when available.',
+      error,
+    );
+    this.config.onError?.('Error fetching feature flags', error);
+
+    // Network error keeping last-good definitions only — not featureDefaults alone.
+    if (!outcomeRecorded && this.hasLastKnownGoodDefinitions(useVariants)) {
+      this.noteDefinitionCacheHit();
+    }
+
+    if (Object.keys(this.flags).length === 0) {
+      this.flags = this.config.featureDefaults ?? {};
+    }
+    return this.flags;
+  }
+
   private async performDefinitionsFetch(): Promise<FeatureFlags> {
     if (!this.config.appKey) {
-      this.logger.debug('No appKey, using featureDefaults.');
-      this.definitions = new Map();
-      this.flags = this.config.featureDefaults ?? {};
-      return this.flags;
+      return this.applyNoAppKeyDefaults();
     }
 
     let outcomeRecorded = false;
+    const useVariants = this.config.enableVariants === true;
 
     try {
       const pin = this.pendingDefinitionsPin;
       this.pendingDefinitionsPin = null;
       // Local mode: do not pass identity into URL builder (no evaluation query params).
-      const url = appendDefinitionsRevisionParam(
-        buildDefinitionsUrl(this.config),
-        pin,
-      );
+      // Variants mode is remote — include identity for userId targeting.
+      const url = this.buildDefinitionsFetchUrl(useVariants, pin);
       this.logger.debug(`Fetching definitions from: ${url}`);
 
       // Pin forces a cache-proof GET; do not treat prior etag as still current.
       const previousRevision = pin ? null : this.getDefinitionsRevision();
-      const headers = buildDefinitionFetchHeaders(
-        previousRevision ? { 'If-None-Match': previousRevision } : {},
-      );
-
+      const conditionalHeaders = previousRevision
+        ? { 'If-None-Match': previousRevision }
+        : undefined;
+      const headers = buildDefinitionFetchHeaders(conditionalHeaders);
       const response = await fetchWithTimeout(url, { headers }, this.config.timeout);
-
       const responseRevision = this.normalizeDefinitionsRevision(
         extractDefinitionsRevision(response),
       );
 
       if (response.status === 304) {
-        if (responseRevision) {
-          this.cacheDefinitionsRevision(responseRevision);
-        }
-        this.noteDefinitionCacheHit();
         outcomeRecorded = true;
-        this.logger.debug('Definitions unchanged (304)');
-        return this.flags;
+        return this.noteNotModifiedResponse(responseRevision);
       }
 
       if (!response.ok) {
         throw new TogglyNetworkError(
-          `HTTP ${response.status}: ${response.statusText}`
+          `HTTP ${response.status}: ${response.statusText}`,
         );
       }
 
@@ -587,43 +744,16 @@ export class TogglyServerClient {
         baseUrl: this.config.baseUrl ?? 'https://definitions.toggly.io',
         allowedKeyIds: this.config.allowedKeyIds,
         maxSignatureAgeSeconds: this.config.maxSignatureAgeSeconds,
-        headers: buildDefinitionFetchHeaders({}),
+        headers: buildDefinitionFetchHeaders(),
       });
 
-      this.definitions = parseDefinitionsPayload(parsed);
-      this.flags = {
-        ...(this.config.featureDefaults ?? {}),
-        ...snapshotEvaluatedBooleans(this.definitions, this.buildEvalContext()),
-      };
-      if (responseRevision) {
-        this.cacheDefinitionsRevision(responseRevision);
-      }
-      this.logger.debug(`Fetched ${this.definitions.size} definitions.`);
-
-      if (this.definitionsRevisionsMatch(previousRevision, responseRevision)) {
-        this.noteDefinitionCacheHit();
-      } else {
-        this.noteDefinitionCacheMiss();
-      }
+      this.applyParsedDefinitionsBody(parsed, useVariants);
+      this.noteAppliedDefinitionsRevision(previousRevision, responseRevision);
       outcomeRecorded = true;
-
-      // Execute afterRefresh hooks
       await this.executeAfterRefresh(this.flags);
-
       return this.flags;
     } catch (error) {
-      this.logger.warn('Failed to fetch flags, preserving last-known-good flags when available.', error);
-      this.config.onError?.('Error fetching feature flags', error);
-
-      // Network error keeping last-good definitions only — not featureDefaults alone.
-      if (!outcomeRecorded && this.definitions.size > 0) {
-        this.noteDefinitionCacheHit();
-      }
-
-      if (Object.keys(this.flags).length === 0) {
-        this.flags = this.config.featureDefaults ?? {};
-      }
-      return this.flags;
+      return this.recoverDefinitionsFetchError(error, outcomeRecorded, useVariants);
     }
   }
 
@@ -632,6 +762,39 @@ export class TogglyServerClient {
    */
   getFlags(): FeatureFlags {
     return { ...this.flags };
+  }
+
+  /**
+   * Current variant assignment for a feature (requires `enableVariants`).
+   * Soft-null when disabled, the feature is off/local-gated, or no variant is assigned.
+   */
+  getVariant(featureKey: string): VariantResult | null {
+    if (!this.config.enableVariants) return null;
+    const entry = this.variants?.[featureKey];
+    const enabled = applyLocalGate(
+      entry?.enabled === true,
+      featureKey,
+      this.localGates,
+      this.localGateIndex,
+    );
+    this.recordCheckForKey(
+      featureKey,
+      enabled,
+      undefined,
+      enabled && entry?.variant ? entry.variant : 'disabled',
+    );
+    if (!enabled || !entry?.variant) return null;
+    return { name: entry.variant, configurationValue: entry.configurationValue };
+  }
+
+  /**
+   * Configuration payload for the assigned variant, if any.
+   */
+  getVariantValue<T = unknown>(
+    featureKey: string,
+    isT?: (v: unknown) => v is T,
+  ): T | null {
+    return decodeVariantValue(this.getVariant(featureKey)?.configurationValue, isT);
   }
 
   /**

@@ -1,9 +1,11 @@
+import { decodeVariantValue } from '../decode-variant-value.js'
 import type {
   EntityContextInput,
   FeatureFlagsSnapshot,
   FeatureRequirement,
   SetContextInput,
   TogglyBridge,
+  VariantResult,
 } from '../types.js'
 
 function tryBridge(): TogglyBridge | null {
@@ -55,6 +57,26 @@ export function evaluateFeatureGate(
     entityContext,
     kind,
   )
+}
+
+/**
+ * Current variant assignment for a feature (requires main-process `enableVariants`).
+ * Null when variants are disabled, the feature is off/local-gated, or no variant
+ * is assigned, or `window.toggly` is unavailable.
+ */
+export function getVariant(key: string): VariantResult | null {
+  return tryBridge()?.getVariant(key) ?? null
+}
+
+/**
+ * Configuration payload for the assigned variant, if any.
+ * Optional `isT` type guard soft-fails to null on mismatch.
+ */
+export function getVariantValue<T = unknown>(
+  key: string,
+  isT?: (value: unknown) => value is T,
+): T | null {
+  return decodeVariantValue(getVariant(key)?.configurationValue, isT)
 }
 
 export function getFlags(): Promise<FeatureFlagsSnapshot> {
@@ -110,7 +132,9 @@ export type {
   FeatureFlagsSnapshot,
   FeatureRequirement,
   SetContextInput,
+  VariantResult,
 } from '../types.js'
+export { decodeVariantValue } from '../decode-variant-value.js'
 
 export function recordUsage(key: string, variant = 'enabled'): void {
   tryBridge()?.recordUsage(key, variant)

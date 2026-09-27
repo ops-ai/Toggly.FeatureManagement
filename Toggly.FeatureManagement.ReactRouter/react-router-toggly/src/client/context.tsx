@@ -22,8 +22,18 @@ import {
   mergeConfig,
   normalizeEntityContext,
   registerContext as registerEntityContext,
+  parseVariantDefsPayload,
+  variantDefsToFlags,
+  decodeVariantValue,
+  type TogglyEntityContext,
+  type VariantResult,
+  type EvaluatedVariantDef,
+  type FeatureFlags,
+  type ServerFeatureContext,
+  type IdentityContext,
+  type TogglyConfig,
+  type TogglyHook,
 } from '../core';
-import type { TogglyEntityContext } from '../core';
 import { createBrowserTelemetry, type FrontendTelemetry } from './telemetry';
 import { appendSdkQueryParams } from './sdk-identity';
 import {
@@ -32,13 +42,6 @@ import {
   type FlagGateIndex,
   type LocalGate,
 } from '@ops-ai/toggly-local-gates';
-import type {
-  FeatureFlags,
-  ServerFeatureContext,
-  IdentityContext,
-  TogglyConfig,
-  TogglyHook,
-} from '../core';
 
 /**
  * Toggly context value
@@ -74,6 +77,20 @@ export interface TogglyContextValue extends FrontendTelemetry {
   ) => boolean;
   /** Register a domain-object mapper for entity-context evaluation */
   registerContext: <T>(kind: string, mapper: (entity: T) => TogglyEntityContext) => void;
+  /**
+   * Current variant assignment for a feature (requires `enableVariants` in the
+   * provider config). Soft-null when variants are disabled, unassigned, or the
+   * effective flag is off — never throws.
+   */
+  getVariant: (featureKey: string) => VariantResult | null;
+  /**
+   * Configuration payload for the assigned variant, if any.
+   * Optional `isT` type guard soft-fails to null on mismatch.
+   */
+  getVariantValue: <T = unknown>(
+    featureKey: string,
+    isT?: (v: unknown) => v is T,
+  ) => T | null;
   /** Set user identity */
   identify: (identity: string, context?: IdentityContext) => Promise<void>;
   /** Clear user identity */
@@ -170,6 +187,10 @@ function TogglyProviderOwner({
     claims: { ...mergedConfig?.claims },
   });
   const flagsRef = useRef<FeatureFlags>(serverContext?.flags ?? mergedConfig?.featureDefaults ?? {});
+  // Raw evaluated-variants-signed defs (`enableVariants`); null until a remote
+  // variants fetch has resolved — server-hydrated boolean snapshots cannot
+  // carry variant assignment, so getVariant soft-nulls until refresh()/identify().
+  const variantsRef = useRef<Record<string, EvaluatedVariantDef> | null>(null);
   const generationRef = useRef(0);
   const updateRevisionRef = useRef(0);
   const [telemetry] = useState(() => createBrowserTelemetry({ ...config, ...contextRef.current }));
@@ -322,6 +343,15 @@ function TogglyProviderOwner({
         }
 
         const payload = await response.json();
+        if (mergedConfig.enableVariants === true) {
+          const defs = parseVariantDefsPayload(payload);
+          variantsRef.current = defs;
+          const newFlags = variantDefsToFlags(defs);
+          logger.debug(`Fetched ${Object.keys(newFlags).length} flags (variants).`);
+          return newFlags;
+        }
+
+        variantsRef.current = null;
         const newFlags =
           payload && typeof payload === 'object'
             ? (payload as FeatureFlags)
@@ -413,10 +443,38 @@ function TogglyProviderOwner({
     [captureEvaluation]
   );
 
+  const getVariant = useCallback(
+    (featureKey: string): VariantResult | null => {
+      if (!mergedConfig?.enableVariants) return null;
+      const entry = variantsRef.current?.[featureKey];
+      const enabled = applyLocalGate(
+        entry?.enabled === true,
+        featureKey,
+        localGatesRef.current,
+        localGateIndexRef.current,
+      );
+      const record = telemetry.captureCheck();
+      record(featureKey, enabled && entry?.variant ? entry.variant : 'disabled');
+      if (!enabled || !entry?.variant) return null;
+      return { name: entry.variant, configurationValue: entry.configurationValue };
+    },
+    [mergedConfig?.enableVariants, localGatesRevision, telemetry, flags],
+  );
+
+  const getVariantValue = useCallback(
+    <T = unknown>(featureKey: string, isT?: (v: unknown) => v is T): T | null => {
+      return decodeVariantValue(getVariant(featureKey)?.configurationValue, isT);
+    },
+    [getVariant],
+  );
+
   const installContext = useCallback((target: typeof contextRef.current) => {
     contextRef.current = target;
     telemetry.setContext(target);
     flagsRef.current = mergedConfig?.featureDefaults ?? {};
+    // Previous identity's variant assignment must not leak while the new
+    // identity's fetch is in flight.
+    variantsRef.current = null;
     setFlags(flagsRef.current);
     setIdentity(target.identity);
   }, [mergedConfig?.featureDefaults, telemetry]);
@@ -735,6 +793,8 @@ function TogglyProviderOwner({
       isDisabled,
       evaluateGate,
       registerContext,
+      getVariant,
+      getVariantValue,
       identify,
       reset,
       refresh,
@@ -753,6 +813,8 @@ function TogglyProviderOwner({
       isDisabled,
       evaluateGate,
       registerContext,
+      getVariant,
+      getVariantValue,
       identify,
       reset,
       refresh,

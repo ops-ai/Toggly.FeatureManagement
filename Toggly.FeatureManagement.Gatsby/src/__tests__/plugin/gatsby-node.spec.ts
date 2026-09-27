@@ -236,7 +236,7 @@ describe('gatsby-node', () => {
       expect(Joi.object).toHaveBeenCalled();
     });
 
-    it('declares groups, claims, and signing options accepted by init', () => {
+    it('declares groups, claims, signing, and enableVariants options accepted by init', () => {
       const Joi = createMockJoi();
       pluginOptionsSchema!({ Joi } as any);
 
@@ -254,6 +254,7 @@ describe('gatsby-node', () => {
           'verifySignatures',
           'allowedKeyIds',
           'maxSignatureAgeSeconds',
+          'enableVariants',
         ])
       );
     });

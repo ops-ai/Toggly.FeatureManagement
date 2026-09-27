@@ -38,6 +38,7 @@ describe('ipc-channels', () => {
   it('uses toggly: prefix', () => {
     expect(IPC_PREFIX).toBe('toggly:')
     expect(IPC_CHANNELS.isFeatureOn).toBe('toggly:isFeatureOn')
+    expect(IPC_CHANNELS.getVariant).toBe('toggly:getVariant')
     expect(IPC_CHANNELS.flagsUpdated).toBe('toggly:flags-updated')
   })
 })

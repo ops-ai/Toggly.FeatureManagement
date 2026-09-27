@@ -33,6 +33,7 @@ describe('DiskFeatureCache', () => {
       flags: { A: true },
       revision: 'rev-1',
       updatedAt: 123,
+      variants: null,
     })
   })
 

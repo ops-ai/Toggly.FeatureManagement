@@ -7,6 +7,7 @@ import type {
   FeatureRequirement,
   EvaluationResult,
   TogglyConfig,
+  EvaluatedVariantDef,
 } from './types';
 import {
   appendEvaluationContext,
@@ -24,6 +25,7 @@ import {
   type DefinitionsByKey,
   type EvalContext,
 } from '@ops-ai/toggly-eval';
+import { asVariantDefsRecord, unwrapDefsPayload } from '@ops-ai/toggly-signed-defs';
 
 /**
  * Default Toggly configuration
@@ -53,12 +55,14 @@ export function mergeConfig(config: TogglyConfig): TogglyConfig {
  *
  * - `evaluationMode: 'remote'` (default): `/evaluated-signed/...` + context query params
  * - `evaluationMode: 'local'`: `/definitions-signed/...` with no evaluation context params
+ * - `enableVariants: true` (remote only): `/evaluated-variants-signed/...` instead of
+ *   `/evaluated-signed/...`; identity is sent as `userId` rather than `u` (worker contract).
  */
 export function buildDefinitionsUrl(
   config: TogglyConfig,
   context?: string | TogglyEvaluationContext
 ): string {
-  const { baseUrl, appKey, environment, groups, claims, evaluationMode } =
+  const { baseUrl, appKey, environment, groups, claims, evaluationMode, enableVariants } =
     mergeConfig(config);
 
   if (!appKey) {
@@ -66,8 +70,13 @@ export function buildDefinitionsUrl(
   }
 
   const mode = evaluationMode ?? 'remote';
-  const pathSegment =
-    mode === 'local' ? 'definitions-signed' : 'evaluated-signed';
+  const useVariants = mode !== 'local' && enableVariants === true;
+  let pathSegment = 'evaluated-signed';
+  if (mode === 'local') {
+    pathSegment = 'definitions-signed';
+  } else if (useVariants) {
+    pathSegment = 'evaluated-variants-signed';
+  }
   const url = new URL(`${baseUrl}/${pathSegment}/${appKey}/${environment}`);
 
   if (mode === 'local') {
@@ -84,10 +93,46 @@ export function buildDefinitionsUrl(
       groups: fromParam?.groups ?? groups,
       claims: fromParam?.claims ?? claims,
     },
-    'evaluated',
+    useVariants ? 'variants' : 'evaluated',
   );
 
   return url.toString();
+}
+
+/**
+ * Parse an evaluated-variants-signed HTTP body into a variant defs record.
+ * Unwraps a `{ defs }` envelope (unverified path) or accepts an already-unwrapped
+ * verified payload; rejects error envelopes; coerces non-map shapes (arrays,
+ * primitives) to `{}`.
+ */
+export function parseVariantDefsPayload(
+  parsed: unknown,
+): Record<string, EvaluatedVariantDef> {
+  return asVariantDefsRecord<EvaluatedVariantDef>(unwrapDefsPayload(parsed));
+}
+
+/** Derive a boolean feature map from evaluated variant defs. */
+export function variantDefsToFlags(
+  defs: Record<string, EvaluatedVariantDef>,
+): FeatureFlags {
+  const out: FeatureFlags = {};
+  for (const key of Object.keys(defs)) {
+    out[key] = defs[key]?.enabled === true;
+  }
+  return out;
+}
+
+/**
+ * Soft-decode a variant configuration value as `T`.
+ * Missing/null -> null; with `isT` -> null when guard fails; otherwise value as T.
+ */
+export function decodeVariantValue<T = unknown>(
+  value: unknown,
+  isT?: (v: unknown) => v is T,
+): T | null {
+  if (value === null || value === undefined) return null;
+  if (isT) return isT(value) ? value : null;
+  return value as T;
 }
 
 /**

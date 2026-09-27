@@ -68,6 +68,14 @@ export interface TogglyConfig {
   localGates?: LocalGate[];
   /** Optional SDK error callback for reporting fetch/evaluation failures. */
   onError?: (message: string, error?: unknown) => void;
+  /**
+   * Use `/evaluated-variants-signed` and expose {@link TogglyContextValue.getVariant} /
+   * `getVariantValue` (client) or the equivalent {@link TogglyServerClient} methods
+   * (server). Only applies in `remote` evaluationMode client-side; the server
+   * package forces `remote` when this is set (mirrors the Nuxt/Astro OPS-825
+   * override — server otherwise defaults to `definitions-signed` + local eval).
+   */
+  enableVariants?: boolean;
   /** Host-minted browser capability; takes precedence over client identity targeting. */
   instanceId?: string;
   /** Initial browser identity; hydrated server identity takes precedence. */
@@ -149,6 +157,23 @@ export interface IdentityContext {
  * Feature flags state (boolean or entity gate per flag)
  */
 export type FeatureFlags = EvaluatedDefinitions;
+
+/**
+ * Assigned variant for a feature (aligned with @ops-ai/feature-flags-toggly).
+ */
+export interface VariantResult {
+  name: string;
+  configurationValue?: unknown;
+}
+
+/**
+ * Raw evaluated entry from `/evaluated-variants-signed` `defs`.
+ */
+export interface EvaluatedVariantDef {
+  enabled: boolean;
+  variant?: string;
+  configurationValue?: unknown;
+}
 
 /**
  * Feature evaluation options

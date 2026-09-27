@@ -112,6 +112,12 @@ describe('registerTogglyIpc', () => {
       ?. (event, ['Feature', 'Off'], 'any', false)
     expect(event.returnValue).toBe(true)
 
+    syncHandlers.get(IPC_CHANNELS.getVariant)?.(event, 'Feature')
+    expect(event.returnValue).toBeNull()
+
+    syncHandlers.get(IPC_CHANNELS.getVariant)?.(event, 123)
+    expect(event.returnValue).toBeNull()
+
     const flags = await handlers.get(IPC_CHANNELS.getFlags)?.({})
     expect(flags).toMatchObject({ Feature: true })
 

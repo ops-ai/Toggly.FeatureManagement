@@ -18,6 +18,8 @@ export type {
   TogglyTelemetry,
   TogglyReadableAtom,
   TogglyWritableAtom,
+  VariantResult,
+  EvaluatedVariantDef,
 } from './types/index.js';
 
 // Export hooks
@@ -31,12 +33,15 @@ export {
   $flags,
   $isReady,
   $error,
+  $variants,
   $flag,
   $gate,
   initTogglyClient,
   refreshFlags,
   setIdentity,
   clearIdentity,
+  getVariant,
+  getVariantValue,
   stopRefreshInterval,
   disposeTogglyClient,
   recordUsage,
@@ -45,6 +50,8 @@ export {
   setGauge,
   flushTelemetry,
 } from './client/store.js';
+
+export { decodeVariantValue } from './decode-variant-value.js';
 
 // Export server client (for SSR/SSG use cases)
 export { createTogglyServerClient, TogglyServer } from './server/toggly-server.js';

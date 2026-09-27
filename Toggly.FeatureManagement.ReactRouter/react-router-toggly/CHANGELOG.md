@@ -1,6 +1,17 @@
 # Changelog
 
 
+## [1.2.0] - 2026-09-26
+
+### Added
+- Opt-in `enableVariants` on `TogglyConfig`. When set, the browser client fetches
+  `/evaluated-variants-signed` instead of `/evaluated-signed`, and the server
+  client switches from `definitions-signed` local eval to remote variant
+  assignment. Exposes `getVariant` / `getVariantValue` on the provider context
+  and `TogglyServerClient` [OPS-1425].
+- Typed soft-null `getVariantValue<T>(…, isT?)` and exported `decodeVariantValue`
+  matching the JS/Vue SDK contract.
+
 ## [1.1.0] - 2026-09-18
 
 ### Added

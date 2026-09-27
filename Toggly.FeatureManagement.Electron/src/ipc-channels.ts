@@ -5,6 +5,7 @@ export const IPC_CHANNELS = {
   isFeatureOn: `${IPC_PREFIX}isFeatureOn`,
   isFeatureOff: `${IPC_PREFIX}isFeatureOff`,
   evaluateFeatureGate: `${IPC_PREFIX}evaluateFeatureGate`,
+  getVariant: `${IPC_PREFIX}getVariant`,
   recordUsage: `${IPC_PREFIX}recordUsage`,
   recordView: `${IPC_PREFIX}recordView`,
   incrementCounter: `${IPC_PREFIX}incrementCounter`,

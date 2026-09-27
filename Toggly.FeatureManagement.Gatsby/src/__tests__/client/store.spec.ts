@@ -215,6 +215,68 @@ describe('Client Store', () => {
       expect(store.$isReady.get()).toBe(true);
     });
 
+    it('should fetch evaluated-variants-signed when enableVariants is true', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: { get: () => null },
+        text: async () =>
+          JSON.stringify({
+            defs: {
+              V: { enabled: true, variant: 'A', configurationValue: { x: 1 } },
+              Off: { enabled: false, variant: 'control' },
+            },
+          }),
+        json: async () => ({
+          defs: {
+            V: { enabled: true, variant: 'A', configurationValue: { x: 1 } },
+            Off: { enabled: false, variant: 'control' },
+          },
+        }),
+      } as Response);
+
+      await store.initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: true,
+        featureFlagsRefreshInterval: 0,
+        enableLiveUpdates: false,
+      });
+
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/evaluated-variants-signed/test-key/Production'),
+        expect.anything(),
+      );
+      expect(store.$flags.get()).toEqual({ V: true, Off: false });
+      expect(store.getVariant('V')).toEqual({ name: 'A', configurationValue: { x: 1 } });
+      expect(store.getVariantValue('V')).toEqual({ x: 1 });
+      expect(store.getVariant('Off')).toBeNull();
+      expect(store.getVariantValue('Off')).toBeNull();
+      expect(store.getVariant('Missing')).toBeNull();
+      expect(
+        store.getVariantValue('V', (v): v is { x: number } =>
+          typeof v === 'object' && v !== null && typeof (v as { x?: unknown }).x === 'number',
+        ),
+      ).toEqual({ x: 1 });
+      expect(store.getVariantValue('V', (v): v is number => typeof v === 'number')).toBeNull();
+    });
+
+    it('getVariant returns null when enableVariants is false', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockOkResponse({ F: true }));
+
+      await store.initTogglyClient({
+        appKey: 'test-key',
+        environment: 'Production',
+        enableVariants: false,
+        featureFlagsRefreshInterval: 0,
+        enableLiveUpdates: false,
+      });
+
+      expect(store.getVariant('F')).toBeNull();
+      expect(store.getVariantValue('F')).toBeNull();
+    });
+
     it('should replace an initialized owner when its app key changes', async () => {
       vi.spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce(mockOkResponse({ F1: true }))

@@ -17,6 +17,8 @@ import type {
   GateRequirement,
   TogglyReadableAtom,
   TogglyWritableAtom,
+  VariantResult,
+  EvaluatedVariantDef,
 } from '../types/index.js';
 import {
   appendEvaluationContext,
@@ -35,6 +37,8 @@ import {
   type LocalGate,
 } from '@ops-ai/toggly-local-gates';
 import { HookExecutor } from './hooks.js';
+import { parseVariantDefinitions, variantDefsToFlags } from '../variant.js';
+import { decodeVariantValue } from '../decode-variant-value.js';
 import { buildDefinitionFetchHeaders } from '../sdk-identity.js';
 import {
   parseEvaluatedResponseBody,
@@ -58,6 +62,7 @@ type ClientStoreState = {
   isReady: TogglyWritableAtom<boolean>;
   error: TogglyWritableAtom<Error | null>;
   localGatesRevision: TogglyWritableAtom<number>;
+  variants: TogglyWritableAtom<Record<string, EvaluatedVariantDef>>;
   clientInstance: TogglyClientInstance | null;
   clientInitPromise: Promise<void> | null;
 };
@@ -72,6 +77,7 @@ const createClientStore = (): ClientStoreState => ({
   isReady: atom<boolean>(false),
   error: atom<Error | null>(null),
   localGatesRevision: atom(0),
+  variants: atom<Record<string, EvaluatedVariantDef>>({}),
   clientInstance: null,
   clientInitPromise: null,
 });
@@ -92,6 +98,9 @@ export const $error = clientStore.error;
 
 /** Bumped when device-local gates change so computed atoms re-evaluate. */
 export const $localGatesRevision = clientStore.localGatesRevision;
+
+/** Atom containing evaluated variant definitions (empty unless `enableVariants` is true). */
+export const $variants = clientStore.variants;
 
 const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000;
 
@@ -177,6 +186,7 @@ function isBrowser(): boolean {
 class TogglyClientInstance {
   private config: ClientConfig;
   private cache: Flags | null = null;
+  private variantCache: Record<string, EvaluatedVariantDef> | null = null;
   private refreshInterval: ReturnType<typeof setInterval> | null = null;
   public hookExecutor = new HookExecutor();
   private localGates: LocalGate[] = [];
@@ -211,6 +221,7 @@ class TogglyClientInstance {
       isDebug: false,
       connectTimeout: 5 * 1000,
       allFeaturesEnabledDuringBuild: false,
+      enableVariants: false,
       enableTelemetry: true,
       enableUsageTracking: true,
       enableMetrics: true,
@@ -347,14 +358,17 @@ class TogglyClientInstance {
   }
 
   private getApiUrl(): string {
-    const { baseURI, appKey, environment, instanceId, identity, groups, claims } = this.config;
+    const { baseURI, appKey, environment, instanceId, identity, groups, claims, enableVariants } = this.config;
 
     if (!appKey) {
       return '';
     }
 
     const url = new URL(baseURI);
-    url.pathname = `${url.pathname.replace(/\/$/, '')}/evaluated-signed/${appKey}/${environment}`;
+    const path = enableVariants
+      ? `/evaluated-variants-signed/${appKey}/${environment}`
+      : `/evaluated-signed/${appKey}/${environment}`;
+    url.pathname = `${url.pathname.replace(/\/$/, '')}${path}`;
 
     url.searchParams.delete('i');
     if (instanceId) {
@@ -363,14 +377,17 @@ class TogglyClientInstance {
       }
       url.searchParams.set('i', instanceId);
     }
-    else appendEvaluationContext(url, { identity, groups, claims }, 'evaluated');
+    else appendEvaluationContext(url, { identity, groups, claims }, enableVariants ? 'variants' : 'evaluated');
 
     return url.toString();
   }
 
-  async fetchFlags(requestVersion = this.requestVersion): Promise<Flags> {
+  async fetchFlags(
+    requestVersion = this.requestVersion,
+  ): Promise<{ flags: Flags; variantDefs: Record<string, EvaluatedVariantDef> | null }> {
     const generation = this.generation;
     const url = this.getApiUrl();
+    const enableVariants = this.config.enableVariants === true;
     const controller = new AbortController();
     this.controllers.add(controller);
     const timeoutId = setTimeout(() => controller.abort(), this.config.connectTimeout);
@@ -381,7 +398,10 @@ class TogglyClientInstance {
       }
       clearTimeout(timeoutId);
       this.controllers.delete(controller);
-      return { ...this.config.flagDefaults };
+      return {
+        flags: { ...this.config.flagDefaults },
+        variantDefs: enableVariants ? {} : null,
+      };
     }
 
     try {
@@ -399,7 +419,8 @@ class TogglyClientInstance {
         signal: controller.signal,
       });
 
-      if (generation !== this.generation || requestVersion !== this.requestVersion || this.destroyed) return {};
+      if (generation !== this.generation || requestVersion !== this.requestVersion || this.destroyed)
+        return { flags: {}, variantDefs: null };
 
       if (response.status === 304) {
         if (this.cache) {
@@ -408,9 +429,12 @@ class TogglyClientInstance {
           }
           this.cacheDefinitionsRevision(extractDefinitionsRevision(response));
           this.lastError = null;
-          return { ...this.cache };
+          return { flags: { ...this.cache }, variantDefs: this.variantCache };
         }
-        return { ...this.config.flagDefaults };
+        return {
+          flags: { ...this.config.flagDefaults },
+          variantDefs: enableVariants ? {} : null,
+        };
       }
 
       if (!response.ok) {
@@ -427,20 +451,39 @@ class TogglyClientInstance {
         maxSignatureAgeSeconds: this.config.maxSignatureAgeSeconds,
         headers: buildDefinitionFetchHeaders({ Accept: 'application/json' }),
       });
-      const flags = unwrapDefsPayload(payload) as Flags;
-      if (generation !== this.generation || requestVersion !== this.requestVersion || this.destroyed) return {};
+
+      let flags: Flags;
+      let variantDefs: Record<string, EvaluatedVariantDef> | null;
+      if (enableVariants) {
+        variantDefs = parseVariantDefinitions(unwrapDefsPayload(payload));
+        flags = {
+          ...this.config.flagDefaults,
+          ...variantDefsToFlags(variantDefs),
+        };
+      } else {
+        flags = unwrapDefsPayload(payload) as Flags;
+        variantDefs = null;
+      }
+
+      if (generation !== this.generation || requestVersion !== this.requestVersion || this.destroyed)
+        return { flags: {}, variantDefs: null };
       this.cache = flags;
+      this.variantCache = variantDefs;
       this.cachedDefinitionsRevision = null;
       this.cacheDefinitionsRevision(responseRevision);
 
       if (this.config.isDebug) {
         console.log('[Toggly Client] Fetched flags:', flags);
+        if (enableVariants && variantDefs) {
+          console.log('[Toggly Client] Fetched variant defs:', variantDefs);
+        }
       }
 
       this.lastError = null;
-      return flags;
+      return { flags, variantDefs };
     } catch (error) {
-      if (generation !== this.generation || requestVersion !== this.requestVersion || this.destroyed) return {};
+      if (generation !== this.generation || requestVersion !== this.requestVersion || this.destroyed)
+        return { flags: {}, variantDefs: null };
       const fetchError = error instanceof Error ? error : new Error(String(error));
       this.lastError = fetchError;
       if (!this.destroyed) {
@@ -457,14 +500,17 @@ class TogglyClientInstance {
         if (this.config.isDebug) {
           console.log('[Toggly Client] Using cached flags');
         }
-        return { ...this.cache };
+        return { flags: { ...this.cache }, variantDefs: this.variantCache };
       }
 
       if (this.config.isDebug) {
         console.log('[Toggly Client] Using flag defaults');
       }
 
-      return { ...this.config.flagDefaults };
+      return {
+        flags: { ...this.config.flagDefaults },
+        variantDefs: enableVariants ? {} : null,
+      };
     } finally {
       clearTimeout(timeoutId);
       this.controllers.delete(controller);
@@ -633,10 +679,13 @@ class TogglyClientInstance {
     const requestVersion = ++this.requestVersion;
     const isCurrent = () => !this.destroyed && generation === this.generation && requestVersion === this.requestVersion;
     try {
-      const flags = await this.fetchFlags(requestVersion);
+      const { flags, variantDefs } = await this.fetchFlags(requestVersion);
       if (!isCurrent()) return;
       this.cache = flags;
+      this.variantCache = variantDefs;
       $flags.set(flags);
+      if (!isCurrent()) return;
+      $variants.set(variantDefs ?? {});
       if (!isCurrent()) return;
       $isReady.set(true);
       if (!isCurrent()) return;
@@ -669,10 +718,13 @@ class TogglyClientInstance {
     const requestVersion = ++this.requestVersion;
     const isCurrent = () => !this.destroyed && generation === this.generation && requestVersion === this.requestVersion;
     try {
-      const flags = await this.fetchFlags(requestVersion);
+      const { flags, variantDefs } = await this.fetchFlags(requestVersion);
       if (!isCurrent()) return;
       this.cache = flags;
+      this.variantCache = variantDefs;
       $flags.set(flags);
+      if (!isCurrent()) return;
+      $variants.set(variantDefs ?? {});
       if (!isCurrent()) return;
       $isReady.set(true);
       if (!isCurrent()) return;
@@ -739,11 +791,13 @@ class TogglyClientInstance {
       claims: config.claims ? { ...config.claims } : undefined,
       flagDefaults: config.flagDefaults ?? this.config.flagDefaults };
     this.cache = null;
+    this.variantCache = null;
     this.clearDefinitionsRevision();
     this.pendingDefinitionsPin = null;
     this.reporter?.setContext({ instanceId: this.config.instanceId, identity: this.config.identity });
     $isReady.set(false);
     $flags.set({ ...this.config.flagDefaults });
+    $variants.set({});
     $error.set(null);
     const generation = this.generation;
     await this.refresh();
@@ -761,6 +815,27 @@ class TogglyClientInstance {
     void this.updateContext({ ...this.config, identity: undefined });
   }
 
+  /**
+   * Current variant assignment for a feature (requires `enableVariants`).
+   * Soft-null when disabled, the feature is off/local-gated, or no variant is assigned.
+   */
+  resolveVariant(featureKey: string): VariantResult | null {
+    if (!this.config.enableVariants) return null;
+    const entry = this.variantCache?.[featureKey];
+    const variant = entry?.variant;
+    const configurationValue = entry?.configurationValue;
+    const evaluate = this.captureEvaluation();
+    const enabled = evaluate(
+      featureKey,
+      entry ? entry.enabled === true : this.cache?.[featureKey],
+      false,
+      null,
+    );
+    const record = this.captureCheck();
+    record?.(featureKey, enabled && variant ? variant : 'disabled');
+    if (!variant || !enabled) return null;
+    return { name: variant, configurationValue };
+  }
 }
 
 /**
@@ -825,6 +900,23 @@ export function clearIdentity(): void {
   }
 
   clientStore.clientInstance.clearIdentity();
+}
+
+/**
+ * Current variant assignment for a feature (requires `enableVariants` in config).
+ */
+export function getVariant(featureKey: string): VariantResult | null {
+  return clientStore.clientInstance?.resolveVariant(featureKey) ?? null;
+}
+
+/**
+ * Configuration payload for the assigned variant, if any.
+ */
+export function getVariantValue<T = unknown>(
+  featureKey: string,
+  isT?: (v: unknown) => v is T,
+): T | null {
+  return decodeVariantValue(getVariant(featureKey)?.configurationValue, isT);
 }
 
 /**
