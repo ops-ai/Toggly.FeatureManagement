@@ -322,3 +322,37 @@ func TestFeatureGate_UsesAmbientContext(t *testing.T) {
 		t.Fatalf("expected header request on gate eval: %#v", e.lastCtx.Request)
 	}
 }
+
+func TestFeatureGateBuilderMergesHeadersAndCustomHandlers(t *testing.T) {
+	e := &fakeEval{on: map[string]bool{"On": true}}
+	gate := FeatureGate(e, "On", WithContextBuilder(func(*http.Request) toggly.Context {
+		return toggly.Context{Identity: "builder-user"}
+	}))
+	h := gate(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("User-Agent", "GateUA")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNoContent || e.lastCtx.Identity != "builder-user" || e.lastCtx.Request == nil || e.lastCtx.Request.UserAgent != "GateUA" {
+		t.Fatalf("status = %d, context = %#v", rr.Code, e.lastCtx)
+	}
+
+	e.err = fmt.Errorf("evaluation unavailable")
+	errorGate := FeatureGate(e, "On", WithErrorHandler(func(w http.ResponseWriter, _ *http.Request, _ error) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	rr = httptest.NewRecorder()
+	errorGate(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("custom error status = %d", rr.Code)
+	}
+
+	denyGate := FeatureGate(nil, "On", WithDenyHandler(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	rr = httptest.NewRecorder()
+	denyGate(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("custom deny status = %d", rr.Code)
+	}
+}

@@ -77,30 +77,7 @@ func Assign(def definitions.FeatureDefinitionModel, baseEnabled bool, targeting 
 		return Assignment{Reason: ReasonNone, Enabled: baseEnabled}
 	}
 
-	var (
-		variantName string
-		reason      Reason
-	)
-
-	if !baseEnabled {
-		reason = ReasonDefaultWhenDisabled
-		if def.Allocation != nil && def.Allocation.DefaultWhenDisabled != nil {
-			variantName = *def.Allocation.DefaultWhenDisabled
-		}
-	} else {
-		reason = ReasonDefaultWhenEnabled
-		if a := def.Allocation; a != nil {
-			if v := matchUser(a.User, targeting.UserID, ignoreCase); v != "" {
-				variantName, reason = v, ReasonUser
-			} else if v := matchGroup(a.Group, targeting.Groups, ignoreCase); v != "" {
-				variantName, reason = v, ReasonGroup
-			} else if v := matchPercentile(a.Percentile, a.Seed, def.FeatureKey, targeting.UserID, ignoreCase); v != "" {
-				variantName, reason = v, ReasonPercentile
-			} else if a.DefaultWhenEnabled != nil {
-				variantName = *a.DefaultWhenEnabled
-			}
-		}
-	}
+	variantName, reason := resolveVariantName(def, baseEnabled, targeting, ignoreCase)
 
 	result := Assignment{Reason: reason, Enabled: baseEnabled}
 	if variantName == "" {
@@ -122,6 +99,32 @@ func Assign(def definitions.FeatureDefinitionModel, baseEnabled bool, targeting 
 		break
 	}
 	return result
+}
+
+func resolveVariantName(def definitions.FeatureDefinitionModel, baseEnabled bool, targeting TargetingContext, ignoreCase bool) (string, Reason) {
+	a := def.Allocation
+	if !baseEnabled {
+		if a != nil && a.DefaultWhenDisabled != nil {
+			return *a.DefaultWhenDisabled, ReasonDefaultWhenDisabled
+		}
+		return "", ReasonDefaultWhenDisabled
+	}
+	if a == nil {
+		return "", ReasonDefaultWhenEnabled
+	}
+	if name := matchUser(a.User, targeting.UserID, ignoreCase); name != "" {
+		return name, ReasonUser
+	}
+	if name := matchGroup(a.Group, targeting.Groups, ignoreCase); name != "" {
+		return name, ReasonGroup
+	}
+	if name := matchPercentile(a.Percentile, a.Seed, def.FeatureKey, targeting.UserID, ignoreCase); name != "" {
+		return name, ReasonPercentile
+	}
+	if a.DefaultWhenEnabled != nil {
+		return *a.DefaultWhenEnabled, ReasonDefaultWhenEnabled
+	}
+	return "", ReasonDefaultWhenEnabled
 }
 
 // matchUser returns the first User allocation's variant whose Users contains

@@ -24,7 +24,7 @@ func TestBatcher_MeasureIncrementObserve_VariantValues(t *testing.T) {
 		t.Fatalf("envelope: %+v", msg)
 	}
 
-	findStat := func(metric string, feature string) map[string]float64 {
+	findStat := func(metric, feature string) map[string]float64 {
 		for _, s := range msg.Stats {
 			f := ""
 			if s.Feature != nil {

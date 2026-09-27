@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.11.1
+
+2026-09-27
+
+### Fixed
+- Reject unsafe custom PostgreSQL and SQLite snapshot table identifiers before
+  constructing SQL, preventing identifier injection.
+- Require encrypted live-update WebSockets for remote hosts; local loopback
+  endpoints remain available for development and tests.
+
+### Changed
+- User-Agent and live-update `sdkVersion` report `toggly-go/0.11.1`.
+
 ## 0.11.0
 
 2026-09-24

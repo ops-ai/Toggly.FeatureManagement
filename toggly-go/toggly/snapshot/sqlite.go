@@ -62,6 +62,9 @@ func NewSQLiteProvider(opts SQLiteOptions) *SQLiteProvider {
 }
 
 func (s *SQLiteProvider) ensureTable(ctx context.Context) error {
+	if err := validateSnapshotTableName(s.tableName); err != nil {
+		return err
+	}
 	if s.tableCreated || !s.autoCreate {
 		return nil
 	}

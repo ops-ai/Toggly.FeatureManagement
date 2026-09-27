@@ -28,6 +28,36 @@ jobs:
     defaults:
       run:
         working-directory: toggly-go
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: toggly
+          POSTGRES_PASSWORD: toggly-test
+          POSTGRES_DB: toggly_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U toggly -d toggly_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      mongodb:
+        image: mongo:8
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1}).ok'"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      POSTGRES_TEST_URL: postgres://toggly:toggly-test@127.0.0.1:5432/toggly_test?sslmode=disable
+      MONGO_TEST_URI: mongodb://127.0.0.1:27017
+      REDIS_TEST_ADDR: 127.0.0.1:6379
     
     steps:
       - name: Checkout code
@@ -146,6 +176,16 @@ jobs:
     defaults:
       run:
         working-directory: toggly-go-mongodb-v2
+    services:
+      mongodb:
+        image: mongo:8
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1}).ok'"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      MONGO_TEST_URI: mongodb://127.0.0.1:27017
 
     steps:
       - name: Checkout code
@@ -179,8 +219,19 @@ jobs:
           args: --timeout=5m
           working-directory: toggly-go-mongodb-v2
 
-      - name: Run tests with the race detector
-        run: go test -v -race -timeout 5m ./...
+      - name: Run tests with the race detector and coverage
+        run: go test -v -race -timeout 5m -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Display module coverage
+        run: go tool cover -func=coverage.out
+
+      - name: Upload MongoDB v2 coverage artifact
+        if: matrix.go-version == '1.25.x'
+        uses: actions/upload-artifact@v7
+        with:
+          name: go-mongodb-v2-coverage
+          path: toggly-go-mongodb-v2/coverage.out
+          retention-days: 7
 
   mongodb-v2-consumer:
     name: MongoDB Driver v2 Packed Module Consumer

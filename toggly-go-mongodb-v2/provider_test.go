@@ -243,6 +243,18 @@ func TestMongoDBProvider_DriverV2Integration(t *testing.T) {
 	if err != nil || definitionsOutput != nil {
 		t.Fatalf("definitions after clear = %#v, %v; want nil, nil", definitionsOutput, err)
 	}
+	jwksOutput, err = provider.LoadJWKS(ctx)
+	if err != nil || jwksOutput != nil {
+		t.Fatalf("JWKS after clear = %#v, %v; want nil, nil", jwksOutput, err)
+	}
+
+	// A malformed persisted document must not be promoted into a snapshot.
+	if _, err := collection.InsertOne(ctx, mongoDocument{ID: "toggly_definitions", Data: "invalid-json"}); err != nil {
+		t.Fatalf("insert malformed definitions document: %v", err)
+	}
+	if _, err := provider.LoadDefinitions(ctx); err == nil {
+		t.Fatal("malformed persisted definitions were accepted")
+	}
 }
 
 var _ snapshot.Provider = (*MongoDBProvider)(nil)

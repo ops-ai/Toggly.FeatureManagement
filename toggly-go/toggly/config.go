@@ -1,6 +1,7 @@
 package toggly
 
 import (
+	"strings"
 	"time"
 
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/metrics"
@@ -93,21 +94,15 @@ func (c *Config) applyDefaults() {
 	if c.BaseURL == "" {
 		c.BaseURL = "https://app.toggly.io/"
 	}
-	if c.BaseURL != "" && c.BaseURL[len(c.BaseURL)-1] != '/' {
-		c.BaseURL += "/"
-	}
+	c.BaseURL = withTrailingSlash(c.BaseURL)
 	if c.MetricsURL == "" {
 		c.MetricsURL = "https://metrics.toggly.io/"
 	}
-	if c.MetricsURL != "" && c.MetricsURL[len(c.MetricsURL)-1] != '/' {
-		c.MetricsURL += "/"
-	}
+	c.MetricsURL = withTrailingSlash(c.MetricsURL)
 	if c.DefinitionsURL == "" {
 		c.DefinitionsURL = "https://definitions.toggly.io/"
 	}
-	if c.DefinitionsURL != "" && c.DefinitionsURL[len(c.DefinitionsURL)-1] != '/' {
-		c.DefinitionsURL += "/"
-	}
+	c.DefinitionsURL = withTrailingSlash(c.DefinitionsURL)
 	if c.RefreshInterval == 0 {
 		c.RefreshInterval = 5 * time.Minute
 	}
@@ -126,4 +121,11 @@ func (c *Config) applyDefaults() {
 	if c.MetricsFlushInterval == 0 {
 		c.MetricsFlushInterval = time.Minute
 	}
+}
+
+func withTrailingSlash(value string) string {
+	if value != "" && !strings.HasSuffix(value, "/") {
+		return value + "/"
+	}
+	return value
 }
