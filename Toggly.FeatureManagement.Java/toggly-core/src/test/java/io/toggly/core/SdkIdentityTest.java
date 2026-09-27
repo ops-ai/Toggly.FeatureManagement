@@ -14,7 +14,7 @@ class SdkIdentityTest {
         String projectVersion = System.getProperty("toggly.project.version");
 
         assertNotNull(projectVersion, "Maven must provide the project version to this release contract test");
-        assertEquals(projectVersion, SdkIdentity.SDK_VERSION);
+        assertEquals(SdkIdentity.SDK_VERSION, projectVersion);
         assertEquals("toggly-java/" + projectVersion, SdkIdentity.userAgent());
         assertEquals(projectVersion, URI.create(SdkIdentity.appendSdkQueryParams(
                 "wss://definitions.toggly.io/app/ws", null)).getQuery().split("sdkVersion=")[1]);
