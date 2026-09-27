@@ -33,6 +33,7 @@ class WsSyncMessage {
 
 /// Simple service to simplify [Timer] instances management across the package.
 class SyncService {
+  static const _flagsUpdatedMessage = 'flags-updated';
   static final SyncService _instance = SyncService._internal();
 
   Timer? refreshFeatureFlagsTimer;
@@ -188,7 +189,7 @@ class SyncService {
         return;
       }
 
-      if (data == 'update' || data == 'flags-updated') {
+      if (data == 'update' || data == _flagsUpdatedMessage) {
         if (kDebugMode) {
           print('Toggly: Received WebSocket text update: $data');
         }
@@ -200,47 +201,7 @@ class SyncService {
         jsonDecode(data) as Map<String, dynamic>,
       );
 
-      if (message.type == 'ping') {
-        return;
-      }
-
-      if (message.type == 'sync') {
-        if (kDebugMode) {
-          print(
-            'Toggly: Received WebSocket sync (unchanged: ${message.unchanged})',
-          );
-        }
-        onSyncMessage?.call(
-          unchanged: message.unchanged == true,
-          etag: message.etag,
-        );
-        return;
-      }
-
-      if (message.type == 'signing-key-updated') {
-        if (kDebugMode) {
-          print('Toggly: Received WebSocket signing-key-updated');
-        }
-        requestRefresh(forceJwksRefresh: true);
-        return;
-      }
-
-      if (message.type == 'flags-updated' || message.type == 'update') {
-        if (kDebugMode) {
-          print(
-              'Toggly: Received WebSocket flags update (type: ${message.type})');
-        }
-        if (_shouldFetchOnFlagsUpdated(message)) {
-          // Never set revision from WS before HTTP confirms — that poisons
-          // If-None-Match and yields a stale 304. Pass etag via refresh pin.
-          requestRefresh(pinnedRevision: message.etag);
-          return;
-        }
-        if (message.etag != null && message.etag!.isNotEmpty) {
-          onDefinitionsRevisionUpdated?.call(message.etag!);
-        }
-        return;
-      }
+      _handleParsedWebSocketMessage(message);
     } catch (e) {
       if (kDebugMode) {
         print('Toggly: Error parsing WebSocket message: $e');
@@ -248,8 +209,54 @@ class SyncService {
     }
   }
 
+  void _handleParsedWebSocketMessage(WsSyncMessage message) {
+    if (message.type == 'ping') {
+      return;
+    }
+
+    if (message.type == 'sync') {
+      if (kDebugMode) {
+        print(
+          'Toggly: Received WebSocket sync (unchanged: ${message.unchanged})',
+        );
+      }
+      onSyncMessage?.call(
+        unchanged: message.unchanged == true,
+        etag: message.etag,
+      );
+      return;
+    }
+
+    if (message.type == 'signing-key-updated') {
+      if (kDebugMode) {
+        print('Toggly: Received WebSocket signing-key-updated');
+      }
+      requestRefresh(forceJwksRefresh: true);
+      return;
+    }
+
+    if (message.type == _flagsUpdatedMessage || message.type == 'update') {
+      _handleFlagsUpdatedMessage(message);
+    }
+  }
+
+  void _handleFlagsUpdatedMessage(WsSyncMessage message) {
+    if (kDebugMode) {
+      print('Toggly: Received WebSocket flags update (type: ${message.type})');
+    }
+    if (_shouldFetchOnFlagsUpdated(message)) {
+      // Never set revision from WS before HTTP confirms — that poisons
+      // If-None-Match and yields a stale 304. Pass etag via refresh pin.
+      requestRefresh(pinnedRevision: message.etag);
+      return;
+    }
+    if (message.etag != null && message.etag!.isNotEmpty) {
+      onDefinitionsRevisionUpdated?.call(message.etag!);
+    }
+  }
+
   bool _shouldFetchOnFlagsUpdated(WsSyncMessage message) {
-    if (message.type != 'flags-updated') {
+    if (message.type != _flagsUpdatedMessage) {
       return true;
     }
     final cached = _cachedRevision;

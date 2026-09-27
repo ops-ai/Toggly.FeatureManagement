@@ -18,6 +18,14 @@ import 'services/telemetry_reporter.dart';
 ///
 /// Allows enabling and disabling of features easily. Can be used with or without Toggly.io.
 class Toggly with WidgetsBindingObserver {
+  static const _signatureVerificationFailed = 'Signature verification failed';
+  static const _invalidJwksReceived = 'Invalid JWKs received from server';
+  static const _keyNotTrusted = 'Key ID not in trusted whitelist';
+  static const _jwksFetchFailed = 'Failed to fetch JWKs';
+  static const _invalidVariantsSignature = 'Invalid variants signature';
+  static const _missingJwkCoordinates =
+      'Invalid JWK: missing x or y coordinates';
+
   static const Uuid _uuid = Uuid();
   static late String? _appKey;
   static String _environment = 'Production';
@@ -193,6 +201,46 @@ class Toggly with WidgetsBindingObserver {
     return Map<String, bool>.from(Toggly._flagDefaults);
   }
 
+  static bool _canReuseTelemetry(String? appKey, TogglyConfig config) =>
+      _telemetry != null &&
+      _telemetry!.isEnabled &&
+      appKey != null &&
+      appKey.isNotEmpty &&
+      config.enableTelemetry &&
+      _config.metricsBaseUrl == config.metricsBaseUrl &&
+      _config.telemetryFlushIntervalMs == config.telemetryFlushIntervalMs &&
+      _config.onTelemetryDiagnostic == config.onTelemetryDiagnostic;
+
+  static void _configureLocalState(TogglyConfig config, String? identity) {
+    final cacheProvider = config.cacheProvider;
+    final maxCacheKeys = config.maxCacheKeys;
+    if (cacheProvider != null && maxCacheKeys != null && maxCacheKeys > 0) {
+      Toggly._cache = LruTogglyCacheProvider(
+        cacheProvider,
+        maxCacheKeys: maxCacheKeys,
+      );
+    } else {
+      Toggly._cache = cacheProvider;
+    }
+
+    _localGatesChangedController?.close();
+    _localGatesChangedController = StreamController<void>.broadcast();
+    if (config.localGates != null) {
+      setLocalGates(config.localGates!);
+    } else {
+      _localGates = [];
+      _localGateIndex = {};
+    }
+
+    // An absent identity reuses the ephemeral in-memory device id. Stable
+    // targeting and offline restart require an explicit identity.
+    if (identity != null) {
+      Toggly._identity = identity;
+    } else {
+      Toggly._identity = (Toggly._deviceId ??= _uuid.v4());
+    }
+  }
+
   /// Initialize Toggly either by providing [flagDefaults] (to allow usage
   /// without Toggly.io) or by providing your [appKey] and [environment] from
   /// your Toggly.io application.
@@ -221,14 +269,7 @@ class Toggly with WidgetsBindingObserver {
     } catch (_) {
       // A binding may not exist in a pure Dart host.
     }
-    final reuseTelemetry = _telemetry != null &&
-        _telemetry!.isEnabled &&
-        appKey != null &&
-        appKey.isNotEmpty &&
-        config.enableTelemetry &&
-        _config.metricsBaseUrl == config.metricsBaseUrl &&
-        _config.telemetryFlushIntervalMs == config.telemetryFlushIntervalMs &&
-        _config.onTelemetryDiagnostic == config.onTelemetryDiagnostic;
+    final reuseTelemetry = _canReuseTelemetry(appKey, config);
     if (!reuseTelemetry) {
       _telemetry?.dispose(flush: false);
       _telemetry = null;
@@ -245,34 +286,7 @@ class Toggly with WidgetsBindingObserver {
     Toggly._appKey = appKey;
     Toggly._environment = environment ?? 'Production';
     Toggly._config = config;
-    final cacheProvider = config.cacheProvider;
-    final maxCacheKeys = config.maxCacheKeys;
-    if (cacheProvider != null && maxCacheKeys != null && maxCacheKeys > 0) {
-      Toggly._cache = LruTogglyCacheProvider(
-        cacheProvider,
-        maxCacheKeys: maxCacheKeys,
-      );
-    } else {
-      Toggly._cache = cacheProvider;
-    }
-
-    _localGatesChangedController?.close();
-    _localGatesChangedController = StreamController<void>.broadcast();
-    if (config.localGates != null) {
-      setLocalGates(config.localGates!);
-    } else {
-      _localGates = [];
-      _localGateIndex = {};
-    }
-
-    // Use the provided identity, or fall back to an ephemeral in-memory
-    // device id. The fallback is not persisted: stable targeting and offline
-    // restart require the app to pass an explicit [identity].
-    if (identity != null) {
-      Toggly._identity = identity;
-    } else {
-      Toggly._identity = (Toggly._deviceId ??= _uuid.v4());
-    }
+    _configureLocalState(config, identity);
     _instanceId = _normalizedToken(instanceId);
     if (reuseTelemetry) {
       _telemetry!.setContext(
@@ -604,7 +618,7 @@ class Toggly with WidgetsBindingObserver {
 
           if (!isValid) {
             _reportError(
-              'Signature verification failed',
+              _signatureVerificationFailed,
               Exception('Invalid signature'),
               StackTrace.current,
             );
@@ -861,7 +875,7 @@ class Toggly with WidgetsBindingObserver {
           if (generation != _generation) {
             return TogglyLoadFeatureFlagsResponse.cached;
           }
-          _reportError('Signature verification failed', e, stack);
+          _reportError(_signatureVerificationFailed, e, stack);
           if (generation != _generation) {
             return TogglyLoadFeatureFlagsResponse.cached;
           }
@@ -869,7 +883,7 @@ class Toggly with WidgetsBindingObserver {
           if (generation != _generation) {
             return TogglyLoadFeatureFlagsResponse.cached;
           }
-          throw Exception('Signature verification failed');
+          throw Exception(_signatureVerificationFailed);
         }
 
         _applyDefinitionsRevision(response);
@@ -929,7 +943,7 @@ class Toggly with WidgetsBindingObserver {
         return TogglyLoadFeatureFlagsResponse.error;
       }
 
-      if (e.toString().contains('Signature verification failed')) {
+      if (e.toString().contains(_signatureVerificationFailed)) {
         return TogglyLoadFeatureFlagsResponse.error;
       }
 
@@ -1037,7 +1051,7 @@ class Toggly with WidgetsBindingObserver {
         );
         if (generation != _generation) return;
         if (!isValid) {
-          throw Exception('Invalid variants signature');
+          throw Exception(_invalidVariantsSignature);
         }
         if (kDebugMode) {
           print('Toggly variants signature verification successful');
@@ -1120,6 +1134,28 @@ class Toggly with WidgetsBindingObserver {
     await Toggly._cache?.deleteVariants(Toggly._contextCacheKey);
   }
 
+  static Future<bool> _validateCachedVariantSignature(
+      TogglyVariantsCache cache, int generation) async {
+    if (cache.timestamp == null ||
+        cache.signature == null ||
+        cache.keyId == null) {
+      throw Exception('Variants cache missing signature metadata');
+    }
+    final isValid = await _verifySignature(
+      cache.variants,
+      cache.signature!,
+      cache.timestamp!,
+      true,
+      cache.keyId!,
+    );
+    if (generation != _generation) return false;
+    if (!isValid) {
+      _lastError = _invalidVariantsSignature;
+      throw Exception(_invalidVariantsSignature);
+    }
+    return true;
+  }
+
   static Future<Map<String, dynamic>>
       _readVerifiedVariantDefsFromCache() async {
     final generation = _generation;
@@ -1133,22 +1169,9 @@ class Toggly with WidgetsBindingObserver {
         return {};
       }
 
-      if (Toggly._useSignedDefinitions) {
-        if (vc.timestamp == null || vc.signature == null || vc.keyId == null) {
-          throw Exception('Variants cache missing signature metadata');
-        }
-        final isValid = await _verifySignature(
-          vc.variants,
-          vc.signature!,
-          vc.timestamp!,
-          true,
-          vc.keyId!,
-        );
-        if (generation != _generation) return {};
-        if (!isValid) {
-          _lastError = 'Invalid variants signature';
-          throw Exception('Invalid variants signature');
-        }
+      if (_useSignedDefinitions &&
+          !await _validateCachedVariantSignature(vc, generation)) {
+        return {};
       }
 
       final defs = Map<String, dynamic>.from(jsonDecode(vc.variants));
@@ -1377,11 +1400,11 @@ class Toggly with WidgetsBindingObserver {
       // Validate fetched keys
       if (!_validateJwks(keys)) {
         _reportError(
-          'Invalid JWKs received from server',
-          Exception('Invalid JWKs received from server'),
+          _invalidJwksReceived,
+          Exception(_invalidJwksReceived),
           StackTrace.current,
         );
-        throw Exception('Invalid JWKs received from server');
+        throw Exception(_invalidJwksReceived);
       }
 
       jwksData['_expiresAt'] =
@@ -1410,9 +1433,9 @@ class Toggly with WidgetsBindingObserver {
       for (var key in keys) {
         if (key['x'] == null || key['y'] == null) {
           if (kDebugMode) {
-            print('Invalid JWK: missing x or y coordinates');
+            print(_missingJwkCoordinates);
           }
-          _lastError = 'Invalid JWK: missing x or y coordinates';
+          _lastError = _missingJwkCoordinates;
           return false;
         }
 
@@ -1586,33 +1609,7 @@ class Toggly with WidgetsBindingObserver {
 
     final first = text[start];
     if (first == '{' || first == '[') {
-      var depth = 0;
-      var inString = false;
-      var escape = false;
-      for (var j = start; j < text.length; j++) {
-        final c = text[j];
-        if (inString) {
-          if (escape) {
-            escape = false;
-          } else if (c == '\\') {
-            escape = true;
-          } else if (c == '"') {
-            inString = false;
-          }
-          continue;
-        }
-        if (c == '"') {
-          inString = true;
-        } else if (c == '{' || c == '[') {
-          depth++;
-        } else if (c == '}' || c == ']') {
-          depth--;
-          if (depth == 0) {
-            return text.substring(start, j + 1);
-          }
-        }
-      }
-      return null;
+      return _extractJsonContainer(text, start);
     }
 
     if (first == '"') {
@@ -1634,6 +1631,30 @@ class Toggly with WidgetsBindingObserver {
     return text.substring(start, j);
   }
 
+  static String? _extractJsonContainer(String text, int start) {
+    var depth = 0;
+    for (var j = start; j < text.length; j++) {
+      final c = text[j];
+      if (c == '"') {
+        final stringEnd = _findJsonStringEnd(text, j);
+        if (stringEnd == null) {
+          return null;
+        }
+        j = stringEnd;
+        continue;
+      }
+      if (c == '{' || c == '[') {
+        depth++;
+      } else if (c == '}' || c == ']') {
+        depth--;
+        if (depth == 0) {
+          return text.substring(start, j + 1);
+        }
+      }
+    }
+    return null;
+  }
+
   static bool _isJsonWhitespace(int codeUnit) =>
       codeUnit == 0x20 || // space
       codeUnit == 0x09 || // tab
@@ -1645,7 +1666,7 @@ class Toggly with WidgetsBindingObserver {
       int timestamp, bool allowOfflineValidation, String keyId) async {
     if (signature.isEmpty || keyId.isEmpty) {
       _reportError(
-        'Signature verification failed',
+        _signatureVerificationFailed,
         Exception('Empty signature or key ID'),
         StackTrace.current,
       );
@@ -1656,11 +1677,11 @@ class Toggly with WidgetsBindingObserver {
     if (Toggly._config.trustedKeyIds != null &&
         !Toggly._config.trustedKeyIds!.contains(keyId)) {
       _reportError(
-        'Key ID not in trusted whitelist',
-        Exception('Key ID not in trusted whitelist'),
+        _keyNotTrusted,
+        Exception(_keyNotTrusted),
         StackTrace.current,
       );
-      throw Exception('Key ID not in trusted whitelist');
+      throw Exception(_keyNotTrusted);
     }
 
     // Get JWKs
@@ -1668,11 +1689,11 @@ class Toggly with WidgetsBindingObserver {
         await _fetchAndCacheJwks(ignoreExpiration: allowOfflineValidation);
     if (jwksData == null) {
       _reportError(
-        'Failed to fetch JWKs',
-        Exception('Failed to fetch JWKs'),
+        _jwksFetchFailed,
+        Exception(_jwksFetchFailed),
         StackTrace.current,
       );
-      throw Exception('Failed to fetch JWKs');
+      throw Exception(_jwksFetchFailed);
     }
 
     final jwksList = List<Map<String, dynamic>>.from(jwksData['keys']);
@@ -1700,11 +1721,11 @@ class Toggly with WidgetsBindingObserver {
     try {
       if (jwk['x'] == null || jwk['y'] == null) {
         _reportError(
-          'Invalid JWK: missing x or y coordinates',
-          Exception('Invalid JWK: missing x or y coordinates'),
+          _missingJwkCoordinates,
+          Exception(_missingJwkCoordinates),
           StackTrace.current,
         );
-        throw Exception('Invalid JWK: missing x or y coordinates');
+        throw Exception(_missingJwkCoordinates);
       }
 
       if (kDebugMode) {
@@ -1789,8 +1810,8 @@ class Toggly with WidgetsBindingObserver {
 
       return isValid;
     } catch (e, stack) {
-      _reportError('Signature verification failed', e, stack);
-      throw Exception('Signature verification failed');
+      _reportError(_signatureVerificationFailed, e, stack);
+      throw Exception(_signatureVerificationFailed);
     }
   }
 
@@ -1877,13 +1898,11 @@ class Toggly with WidgetsBindingObserver {
         final enabled = applyLocalGate(remote, key, localGates, localIndex);
         if (telemetry != null && attribution != null && telemetry.isEnabled) {
           try {
-            final assignment = variants[key];
-            final variant = enabled
-                ? (assignment?.enabled == true
-                    ? assignment?.name ?? 'enabled'
-                    : 'enabled')
-                : 'disabled';
-            telemetry.recordCapturedCheck(attribution, key, variant);
+            telemetry.recordCapturedCheck(
+              attribution,
+              key,
+              _capturedVariantName(enabled, variants[key]),
+            );
           } catch (_) {
             // Optional reporting must never change the evaluated boolean.
           }
@@ -1891,6 +1910,16 @@ class Toggly with WidgetsBindingObserver {
         return enabled;
       },
     );
+  }
+
+  static String _capturedVariantName(bool enabled, VariantResult? assignment) {
+    if (!enabled) {
+      return 'disabled';
+    }
+    if (assignment?.enabled != true) {
+      return 'enabled';
+    }
+    return assignment?.name ?? 'enabled';
   }
 
   /// Cancels registered timers and closes the feature flags stream.

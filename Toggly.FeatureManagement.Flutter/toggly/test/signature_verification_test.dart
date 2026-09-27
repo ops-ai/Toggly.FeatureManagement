@@ -39,11 +39,12 @@ class _SignedFixture {
   final String singleHashSignatureBase64;
 }
 
-_SignedFixture _buildWebCryptoSignedFixture() {
+_SignedFixture _buildWebCryptoSignedFixture({
+  String defsJson = '{"PresalePhotos":true,"OrderSales":false}',
+}) {
   final ec = getP256();
   final priv = ec.generatePrivateKey();
   final pub = priv.publicKey;
-  const defsJson = '{"PresalePhotos":true,"OrderSales":false}';
   const timestamp = 1783915396;
   final dataToVerify = '$defsJson|$timestamp';
 
@@ -181,6 +182,35 @@ void main() {
     },
   );
 
+  test('signed JSON extraction ignores escaped quotes and braces in keys',
+      () async {
+    const featureKey = 'brace"}marker';
+    final fixture = _buildWebCryptoSignedFixture(
+      defsJson: jsonEncode({featureKey: true}),
+    );
+    _installInterceptors(
+      definitionsBody: fixture.rawBody,
+      jwks: fixture.jwks,
+    );
+
+    await Toggly.init(
+      appKey: 'app-key',
+      environment: 'TestFlight',
+      identity: 'ApplicationUsers/1-C',
+      useSignedDefinitions: true,
+      flagDefaults: {featureKey: false},
+      config: const TogglyConfig(
+        enableTelemetry: false,
+        baseURI: 'https://example.test',
+        enableLiveUpdates: false,
+        featureFlagsRefreshInterval: 3600000,
+      ),
+    );
+
+    expect(Toggly.debug()['lastError'], isNull);
+    expect(Toggly.featureFlagsSnapshot[featureKey], isTrue);
+  });
+
   test(
     'useSignedDefinitions rejects single-SHA256 signatures (production mismatch)',
     () async {
@@ -222,6 +252,35 @@ void main() {
       expect(Toggly.featureFlagsSnapshot['PresalePhotos'], false);
     },
   );
+
+  test('signed definitions reject keys outside the trusted whitelist',
+      () async {
+    final fixture = _buildWebCryptoSignedFixture();
+    _installInterceptors(
+      definitionsBody: fixture.rawBody,
+      jwks: fixture.jwks,
+    );
+    final errors = <String>[];
+
+    await Toggly.init(
+      appKey: 'app-key',
+      environment: 'TestFlight',
+      identity: 'ApplicationUsers/1-C',
+      useSignedDefinitions: true,
+      flagDefaults: const {'PresalePhotos': false},
+      config: TogglyConfig(
+        enableTelemetry: false,
+        baseURI: 'https://example.test',
+        enableLiveUpdates: false,
+        trustedKeyIds: const ['different-key'],
+        onError: (message, error, stack) => errors.add(message),
+      ),
+    );
+
+    expect(errors, contains('Key ID not in trusted whitelist'));
+    expect(Toggly.debug()['lastSynced'], isNull);
+    expect(Toggly.featureFlagsSnapshot['PresalePhotos'], isFalse);
+  });
 
   test(
     'rejects envelopes that nest signed defs under data (top-level only)',

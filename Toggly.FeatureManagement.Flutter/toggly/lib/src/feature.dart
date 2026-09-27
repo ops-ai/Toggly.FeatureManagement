@@ -61,7 +61,7 @@ class _FeatureGateStreamScopeState extends State<_FeatureGateStreamScope> {
 /// show/hide or conditional styling instead of returning an empty placeholder.
 class FeatureGateBuilder extends StatelessWidget {
   const FeatureGateBuilder({
-    Key? key,
+    super.key,
     required this.featureKeys,
     this.requirement = FeatureRequirement.all,
     this.negate = false,
@@ -73,7 +73,7 @@ class FeatureGateBuilder extends StatelessWidget {
     /// Treated as disabled until the variant resolves to a match.
     this.variant,
     required this.builder,
-  }) : super(key: key);
+  });
 
   final List<String> featureKeys;
   final FeatureRequirement requirement;
@@ -136,7 +136,7 @@ class FeatureGateBuilder extends StatelessWidget {
 /// [negate] parameters.
 class Feature extends StatelessWidget {
   const Feature({
-    Key? key,
+    super.key,
     this.child,
     this.children,
     required this.featureKeys,
@@ -149,11 +149,10 @@ class Feature extends StatelessWidget {
             'Either child or children must be provided'),
         assert(child == null || children == null,
             'Cannot provide both child and children'),
-        _builder = null,
-        super(key: key);
+        _builder = null;
 
   const Feature.builder({
-    Key? key,
+    super.key,
     required this.featureKeys,
     this.requirement = FeatureRequirement.all,
     this.negate = false,
@@ -163,8 +162,7 @@ class Feature extends StatelessWidget {
     required Widget Function(BuildContext context, bool enabled) builder,
   })  : child = null,
         children = null,
-        _builder = builder,
-        super(key: key);
+        _builder = builder;
 
   final Widget? child;
   final List<Widget>? children;
