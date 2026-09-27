@@ -25,8 +25,8 @@ type FeatureProps = {
 }
 
 class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
-  static contextType = context
-  context!: React.ContextType<typeof context>
+  static readonly contextType = context
+  readonly context!: React.ContextType<typeof context>
   private subscribedService?: TogglyService
   private mounted = false
   private evaluation = 0
@@ -39,14 +39,8 @@ class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
   }
 
   private buildGate(): string[] {
-    var gate: string[] = []
-    if (this.props.featureKey) {
-      gate.push(this.props.featureKey)
-    }
-    if (this.props.featureKeys) {
-      gate = gate.concat(this.props.featureKeys as string[])
-    }
-    return gate
+    const featureKeys = this.props.featureKeys ?? []
+    return this.props.featureKey ? [this.props.featureKey, ...featureKeys] : [...featureKeys]
   }
 
   private applyVariantFilter(isEnabled: boolean): boolean {

@@ -96,6 +96,29 @@ describe('Toggly Service', () => {
       expect(calls).toContain('F1');
     });
 
+    it('keeps initial feature, group, claim and local-gate state independent from configuration inputs', async () => {
+      const groups = ['beta'];
+      const claims = { plan: 'trial' };
+      const service = new Toggly({
+        enableTelemetry: false,
+        featureDefaults: { Enabled: true },
+        groups,
+        claims,
+        localGates: [{
+          id: 'disable-enabled',
+          flagKeys: ['Enabled'],
+          isEnabled: () => false,
+        }],
+      });
+
+      groups.push('mutated-after-construction');
+      claims.plan = 'changed-after-construction';
+
+      expect((service as any)._groups).toEqual(['beta']);
+      expect((service as any)._claims).toEqual({ plan: 'trial' });
+      expect(await service.isFeatureOn('Enabled')).toBe(false);
+    });
+
     it('should merge config with defaults', () => {
       const service = new Toggly({
         enableTelemetry: false, appKey: 'key',
@@ -169,6 +192,38 @@ describe('Toggly Service', () => {
           headers: expect.objectContaining({ 'If-None-Match': 'rev123' }),
         }),
       );
+    });
+
+    it('normalizes quoted ETags without regex backtracking', async () => {
+      const longRevision = 'r'.repeat(100_000);
+      const cases = [
+        { revision: '"quoted"', expected: 'quoted' },
+        { revision: 'W/"weak"', expected: 'W/"weak' },
+        { revision: '"malformed', expected: 'malformed' },
+        { revision: `"${longRevision}"`, expected: longRevision },
+      ];
+
+      for (const { revision, expected } of cases) {
+        localStorage.clear();
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: { get: (key: string) => (key === 'ETag' ? revision : null) },
+          json: () => Promise.resolve({ ApiFlag: true }),
+          text: () => Promise.resolve(JSON.stringify({ ApiFlag: true })),
+        });
+        const service = new Toggly({
+          enableTelemetry: false,
+          appKey: 'test-key',
+          environment: 'Production',
+          enableLiveUpdates: false,
+        });
+
+        await service._loadFeatures(true);
+
+        expect((service as any)._cachedDefinitionsRevision).toBe(expected);
+      }
     });
 
     it('should preserve cached flags when API returns non-2xx', async () => {
@@ -1062,13 +1117,13 @@ describe('Toggly Service', () => {
       const service = new Toggly({ enableTelemetry: false, appKey: 'my-key', environment: 'Production', featureDefaults: {} });
       service.startWebSocket();
       expect(MockWebSocket.instances).toHaveLength(1);
-      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/my-key/ws?sdk=react&sdkVersion=1.13.0');
+      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/my-key/ws?sdk=react&sdkVersion=1.13.1');
     });
 
     it('should create ws:// URL for http:// baseURI', () => {
       const service = new Toggly({ enableTelemetry: false, appKey: 'k', baseURI: 'http://local', featureDefaults: {} });
       service.startWebSocket();
-      expect(MockWebSocket.instances[0].url).toBe('ws://local/k/ws?sdk=react&sdkVersion=1.13.0');
+      expect(MockWebSocket.instances[0].url).toBe('ws://local/k/ws?sdk=react&sdkVersion=1.13.1');
     });
 
     it('should set _wsConnected=true on open', () => {
@@ -1151,7 +1206,7 @@ describe('Toggly Service', () => {
       localStorage.setItem('toggly:revision:k:Production:v2:evaluated:', 'rev123');
       const service = new Toggly({ enableTelemetry: false, appKey: 'k', environment: 'Production', featureDefaults: {} });
       service.startWebSocket();
-      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/k/ws?rev=rev123&sdk=react&sdkVersion=1.13.0');
+      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/k/ws?rev=rev123&sdk=react&sdkVersion=1.13.1');
     });
 
     it('should prefer in-memory revision cache over localStorage', () => {
@@ -1160,7 +1215,7 @@ describe('Toggly Service', () => {
       (service as any)._cachedDefinitionsRevision = 'memory-rev';
       service.startWebSocket();
       expect(MockWebSocket.instances[0].url).toBe(
-        'wss://definitions.toggly.io/k/ws?rev=memory-rev&sdk=react&sdkVersion=1.13.0',
+        'wss://definitions.toggly.io/k/ws?rev=memory-rev&sdk=react&sdkVersion=1.13.1',
       );
     });
 
@@ -1171,7 +1226,7 @@ describe('Toggly Service', () => {
       const service = new Toggly({ enableTelemetry: false, appKey: 'k', environment: 'Production', featureDefaults: {} });
       service.startWebSocket();
       expect(MockWebSocket.instances).toHaveLength(1);
-      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/k/ws?sdk=react&sdkVersion=1.13.0');
+      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/k/ws?sdk=react&sdkVersion=1.13.1');
       getItem.mockRestore();
     });
 

@@ -88,12 +88,12 @@ interface TogglyService {
     _featuresLoaded: () => Promise<{
         [key: string]: boolean;
     } | null>;
-    _evaluateFeatureGate: (gate: string[], requirement: string, negate: boolean, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string) => Promise<boolean>;
-    evaluateFeatureGate: (featureKeys: string[], requirement: string, negate: boolean, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string) => Promise<boolean>;
-    isFeatureOn: (featureKey: string, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string) => Promise<boolean>;
-    isFeatureOff: (featureKey: string, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string) => Promise<boolean>;
+    _evaluateFeatureGate: (gate: string[], requirement: string, negate: boolean, context?: TogglyEntityContextInput, kind?: string) => Promise<boolean>;
+    evaluateFeatureGate: (featureKeys: string[], requirement: string, negate: boolean, context?: TogglyEntityContextInput, kind?: string) => Promise<boolean>;
+    isFeatureOn: (featureKey: string, context?: TogglyEntityContextInput, kind?: string) => Promise<boolean>;
+    isFeatureOff: (featureKey: string, context?: TogglyEntityContextInput, kind?: string) => Promise<boolean>;
     getVariant: (featureKey: string) => VariantResult | null;
-    getVariantValue: (featureKey: string) => unknown | null;
+    getVariantValue: <T = unknown>(featureKey: string, isT?: (v: unknown) => v is T) => T | null;
     /** @internal Silent projection for cached UI state or an already evaluated component gate. */
     _getVariantSnapshot?: (featureKey: string) => VariantResult | null;
     recordUsage: (featureKey: string, variant?: string) => void;
@@ -109,16 +109,17 @@ interface TogglyService {
     setContext: (context: TogglyContextUpdate) => Promise<void>;
     registerContext: <T>(kind: string, mapper: (entity: T) => TogglyEntityContext) => void;
 }
+type TogglyEntityContextInput = TogglyEntityContext | Record<string, unknown> | null;
 declare class Toggly implements TogglyService {
     private _config;
     private _features;
     private _variants;
     private _loadingFeatures;
-    private _hookExecutor;
-    private _featuresRefreshListeners;
+    private readonly _hookExecutor;
+    private readonly _featuresRefreshListeners;
     private _localGates;
     private _localGateIndex;
-    private _localGatesChangedListeners;
+    private readonly _localGatesChangedListeners;
     private _lastError;
     private _groups;
     private _claims;
@@ -135,11 +136,16 @@ declare class Toggly implements TogglyService {
     _cachedDefinitionsRevision: string | null;
     _pendingDefinitionsPin: string | null;
     _lastFallbackRefresh: number;
-    private _jwks;
+    private readonly _jwks;
     static readonly FALLBACK_REFRESH_INTERVAL: number;
     shouldShowFeatureDuringEvaluation: boolean;
     get lastError(): string | undefined;
     private _reportError;
+    private _applyInitialDefaults;
+    private _applyFeatureDefaults;
+    private _applyDefaultEnvironment;
+    private _initializeConfiguredState;
+    private _seedCachedFeatures;
     constructor(config: TogglyOptions);
     private _ensureTelemetry;
     private get _definitionsRevision();
@@ -165,10 +171,10 @@ declare class Toggly implements TogglyService {
     } | null>;
     private _captureEvaluation;
     private _getEffectiveFlagValue;
-    _evaluateFeatureGate: (gate: string[], requirement?: string, negate?: boolean, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string, snapshot?: EvaluationSnapshot) => Promise<boolean>;
-    evaluateFeatureGate: (featureKeys: string[], requirement?: string, negate?: boolean, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string) => Promise<boolean>;
-    isFeatureOn: (featureKey: string, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string) => Promise<boolean>;
-    isFeatureOff: (featureKey: string, context?: TogglyEntityContext | Record<string, unknown> | null, kind?: string) => Promise<boolean>;
+    _evaluateFeatureGate: (gate: string[], requirement?: string, negate?: boolean, context?: TogglyEntityContextInput, kind?: string, snapshot?: EvaluationSnapshot) => Promise<boolean>;
+    evaluateFeatureGate: (featureKeys: string[], requirement?: string, negate?: boolean, context?: TogglyEntityContextInput, kind?: string) => Promise<boolean>;
+    isFeatureOn: (featureKey: string, context?: TogglyEntityContextInput, kind?: string) => Promise<boolean>;
+    isFeatureOff: (featureKey: string, context?: TogglyEntityContextInput, kind?: string) => Promise<boolean>;
     registerContext: <T>(kind: string, mapper: (entity: T) => TogglyEntityContext) => void;
     /**
      * Current variant assignment for a feature (requires {@link TogglyOptions.enableVariants} and loaded data).
@@ -178,8 +184,9 @@ declare class Toggly implements TogglyService {
     _getVariantSnapshot(featureKey: string): VariantResult | null;
     /**
      * Configuration payload for the assigned variant, if any.
+     * Optional `isT` type guard soft-fails to null on mismatch.
      */
-    getVariantValue(featureKey: string): unknown | null;
+    getVariantValue<T = unknown>(featureKey: string, isT?: (v: unknown) => v is T): T | null;
     /**
      * Subscribe to feature (and variant) data updates after HTTP refresh or WebSocket-driven reload.
      * @returns Unsubscribe function.
@@ -250,8 +257,8 @@ type FeatureProps = {
 declare class Feature extends React__default.Component<FeatureProps, {
     shouldShow: boolean;
 }> {
-    static contextType: React__default.Context<TogglyContext>;
-    context: React__default.ContextType<typeof context>;
+    static readonly contextType: React__default.Context<TogglyContext>;
+    readonly context: React__default.ContextType<typeof context>;
     private subscribedService?;
     private mounted;
     private evaluation;
@@ -278,6 +285,12 @@ declare function createTogglyProvider(config: TogglyOptions): Promise<({ childre
  */
 declare function useVariant(featureKey: string): VariantResult | null;
 
+/**
+ * Soft-decode a variant configuration value as `T`.
+ * Missing/null → null; with `isT` → null when guard fails; otherwise value as T.
+ */
+declare function decodeVariantValue<T = unknown>(value: unknown, isT?: (v: unknown) => v is T): T | null;
+
 interface UseFeatureFlagOptions {
     defaultValue?: boolean;
     negate?: boolean;
@@ -301,4 +314,4 @@ declare function useFeatureFlag(featureKey: string, options?: UseFeatureFlagOpti
  */
 declare function useFeatureGate(featureKeys: string[], options?: UseFeatureGateOptions): UseFeatureFlagResult;
 
-export { Consumer, EvaluatedVariantDef, Feature, Provider, Toggly, TogglyContext, TogglyContextUpdate, TogglyOptions, TogglyService, UseFeatureFlagOptions, UseFeatureFlagResult, UseFeatureGateOptions, VariantResult, context, createTogglyProvider, useFeatureFlag, useFeatureGate, useVariant };
+export { Consumer, EvaluatedVariantDef, Feature, Provider, Toggly, TogglyContext, TogglyContextUpdate, TogglyOptions, TogglyService, UseFeatureFlagOptions, UseFeatureFlagResult, UseFeatureGateOptions, VariantResult, context, createTogglyProvider, decodeVariantValue, useFeatureFlag, useFeatureGate, useVariant };

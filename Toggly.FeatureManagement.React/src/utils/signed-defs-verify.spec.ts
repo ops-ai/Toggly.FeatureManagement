@@ -311,14 +311,14 @@ describe('signed-defs-verify', () => {
   it('base64ToBytes decodes standard and url-safe input', () => {
     expect(Buffer.from(base64ToBytes('YQ==')).toString('utf8')).toBe('a');
     expect(Buffer.from(base64ToBytes('YQ')).toString('utf8')).toBe('a');
-    expect(Buffer.from(base64ToBytes('-_8')).length).toBe(2);
+    expect(Buffer.from(base64ToBytes('-_8'))).toHaveLength(2);
   });
 
   it('converts DER signatures to P1363 for WebCrypto', () => {
     const { privateKey } = makeSignedKey();
     const hash = sha256ForSigning('{"a":1}|1');
     const p1363 = derSignatureToP1363(Uint8Array.from(signDer(privateKey, hash)));
-    expect(p1363.length).toBe(64);
+    expect(p1363).toHaveLength(64);
   });
 
   it('rejects invalid DER signatures', () => {
@@ -389,7 +389,7 @@ describe('signed-defs-verify', () => {
       expect(verifySpy).toHaveBeenCalled();
       const dataArg = verifySpy.mock.calls[0][3] as BufferSource;
       const dataBytes = new Uint8Array(dataArg as ArrayBuffer);
-      expect(dataBytes.length).toBe(32);
+      expect(dataBytes).toHaveLength(32);
       const expectedFirst = createHash('sha256').update(`${defs}|${timestamp}`, 'utf8').digest();
       expect(Buffer.from(dataBytes)).toEqual(expectedFirst);
     });
@@ -404,7 +404,7 @@ describe('signed-defs-verify', () => {
       await verifySignedDefinitions(defs, { signature, timestamp, kid: jwk.kid }, { keys: [jwk] });
 
       const sigArg = new Uint8Array(verifySpy.mock.calls[0][2] as ArrayBuffer);
-      expect(sigArg.length).toBe(64);
+      expect(sigArg).toHaveLength(64);
     });
 
     it('rejects when subtle.verify returns false', async () => {
@@ -431,7 +431,7 @@ describe('signed-defs-verify', () => {
   it('rejects invalid signatures through the Node entry without global WebCrypto', () => {
     const { jwk } = makeSignedKey();
     // A real Node process avoids Jest's jsdom browser export condition.
-    execFileSync(process.execPath, ['-e', `
+    expect(execFileSync(process.execPath, ['-e', `
       const assert = require('node:assert/strict');
       const { verifySignedDefinitions } = require('@ops-ai/toggly-signed-defs');
       Object.defineProperty(globalThis, 'crypto', { value: undefined, configurable: true });
@@ -439,7 +439,7 @@ describe('signed-defs-verify', () => {
       assert.rejects(verifySignedDefinitions('{"a":1}',
         { signature: Buffer.alloc(64).toString('base64'), timestamp: 1, kid: jwk.kid },
         { keys: [jwk] }), /invalid signature/).catch(error => { console.error(error); process.exitCode = 1; });
-    `, JSON.stringify(jwk)], { cwd: process.cwd(), timeout: 10000 });
+    `, JSON.stringify(jwk)], { cwd: process.cwd(), timeout: 10000 })).toHaveLength(0);
   });
   it('decodes base64 via atob when Buffer is unavailable', () => {
     const originalBuffer = globalThis.Buffer;

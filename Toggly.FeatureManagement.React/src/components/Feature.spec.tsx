@@ -1,9 +1,7 @@
 import React from 'react';
 import { render, screen, act, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import Feature from './Feature';
-import { Provider } from '../contexts/toggly.context';
-import { Toggly, TogglyService } from '../services';
+import { Feature, Provider, Toggly, type TogglyService } from '../index';
 
 const mockFetch = jest.fn();
 (global as any).fetch = mockFetch;
@@ -94,6 +92,28 @@ describe('Feature Component', () => {
       });
 
       expect(screen.queryByTestId('content')).not.toBeInTheDocument();
+    });
+
+    it('does not expose caller-owned feature keys to a custom Provider service', async () => {
+      const featureKeys = ['A', 'B'];
+      const evaluateFeatureGate = jest.fn(async (gate: string[]) => {
+        gate.push('mutated-by-service');
+        return true;
+      });
+      const customService = {
+        evaluateFeatureGate,
+        subscribeFeaturesRefresh: () => () => {},
+        subscribeLocalGatesChanged: () => () => {},
+      } as unknown as TogglyService;
+
+      renderFeature(customService, { featureKeys });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('content')).toBeInTheDocument();
+      });
+
+      expect(evaluateFeatureGate).toHaveBeenCalledTimes(1);
+      expect(featureKeys).toEqual(['A', 'B']);
     });
   });
 

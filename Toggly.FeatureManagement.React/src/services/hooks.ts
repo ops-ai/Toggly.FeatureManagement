@@ -4,7 +4,7 @@ import type { Hook, EvaluationSeriesData, IdentitySeriesData } from '@ops-ai/tog
  * Internal class that manages hook registration and execution
  */
 export class HookExecutor {
-  private hooks: Hook[] = [];
+  private readonly hooks: Hook[] = [];
 
   /**
    * Register a new hook
@@ -13,8 +13,7 @@ export class HookExecutor {
     const metadata = hook.getMetadata();
     
     // Check for duplicate hook names
-    const existingHook = this.hooks.find(h => h.getMetadata().name === metadata.name);
-    if (existingHook) {
+    if (this.hooks.some(hook => hook.getMetadata().name === metadata.name)) {
       console.warn(`[Toggly] Hook with name "${metadata.name}" already registered. Skipping.`);
       return;
     }
