@@ -10,6 +10,7 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.core.annotation.Order;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Arrays;
 
@@ -53,7 +54,8 @@ public class FeatureAspect {
         return getDefaultValue(joinPoint, featureEnabled.defaultValue());
     }
 
-    private Object invokeFallback(ProceedingJoinPoint joinPoint, String fallbackMethodName) throws Throwable {
+    private Object invokeFallback(ProceedingJoinPoint joinPoint, String fallbackMethodName)
+            throws IllegalAccessException, InvocationTargetException {
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         Method originalMethod = signature.getMethod();
         Object target = joinPoint.getTarget();
