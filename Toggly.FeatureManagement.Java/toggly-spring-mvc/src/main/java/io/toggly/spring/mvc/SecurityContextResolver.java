@@ -84,14 +84,8 @@ public class SecurityContextResolver implements ContextResolver {
                 if (authClass.isInstance(principal)) {
                     Object authorities = authClass.getMethod("getAuthorities")
                             .invoke(principal);
-                    if (authorities instanceof Collection) {
-                        for (Object authority : (Collection<?>) authorities) {
-                            Object roleStr = authority.getClass()
-                                    .getMethod("getAuthority").invoke(authority);
-                            if (roleStr != null) {
-                                roles.add(roleStr.toString());
-                            }
-                        }
+                    if (authorities instanceof Collection<?> collection) {
+                        addAuthorityNames(collection, roles);
                     }
                 }
             } catch (ReflectiveOperationException | LinkageError e) {
@@ -99,5 +93,16 @@ public class SecurityContextResolver implements ContextResolver {
             }
             return roles;
         });
+    }
+
+    private static void addAuthorityNames(Collection<?> authorities, Set<String> roles)
+            throws ReflectiveOperationException {
+        for (Object authority : authorities) {
+            Object roleStr = authority.getClass()
+                    .getMethod("getAuthority").invoke(authority);
+            if (roleStr != null) {
+                roles.add(roleStr.toString());
+            }
+        }
     }
 }
