@@ -1,6 +1,7 @@
 import React, {
   useState,
   useEffect,
+  useMemo,
   useRef,
   ReactNode,
 } from 'react';
@@ -133,7 +134,7 @@ function tryCreateNetInfoProvider(): NetworkInfoProvider | undefined {
  * </TogglyProvider>
  * ```
  */
-export function TogglyProvider(props: TogglyProviderProps): React.ReactElement {
+export function TogglyProvider(props: Readonly<TogglyProviderProps>): React.ReactElement {
   // A new app/environment/collector is a different owner, including all child hook state.
   const ownerKey = JSON.stringify([props.appKey, props.environment, props.baseURI,
     props.enableTelemetry, props.metricsBaseUrl, props.telemetryFlushIntervalMs]);
@@ -144,11 +145,11 @@ export function TogglyProvider(props: TogglyProviderProps): React.ReactElement {
 
 function TogglyProviderOwner({
   children, onReady, onError, loadingComponent, waitForInit = true, ownerKey, currentOwnerKey, ...config
-}: TogglyProviderProps & {ownerKey: string; currentOwnerKey: React.MutableRefObject<string>}): React.ReactElement {
+}: Readonly<TogglyProviderProps & {ownerKey: string; currentOwnerKey: React.RefObject<string>}>): React.ReactElement {
   const [isReady, setIsReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [_featuresRevision, setFeaturesRevision] = useState(0);
+  const [featuresRevision, setFeaturesRevision] = useState(0);
   const togglyRef = useRef<TogglyService | null>(null);
   const initialConfig = useRef(config);
   const callbacks = useRef({ onReady, onError });
@@ -185,7 +186,12 @@ function TogglyProviderOwner({
     service.on('error', event => {
       if (!retired) {
         const payload = event.data as { error?: unknown } | undefined;
-        setError(new Error(String(payload?.error ?? 'Toggly error')));
+        const cause = payload?.error;
+        const message = typeof cause === 'string' ? cause
+          : cause instanceof Error ? cause.message
+          : cause && typeof cause === 'object' && 'message' in cause && typeof cause.message === 'string'
+            ? cause.message : 'Toggly error';
+        setError(new Error(message));
       }
     });
     void service.init().then(() => {
@@ -233,14 +239,15 @@ function TogglyProviderOwner({
   }, [config.identity, config.instanceId, JSON.stringify(config.groups), JSON.stringify(config.claims)]);
 
   // Create context value
-  const contextValue: TogglyContextValue | null = togglyRef.current
+  const owner = togglyRef.current;
+  const contextValue: TogglyContextValue | null = useMemo(() => owner
     ? {
-        toggly: togglyRef.current,
+        toggly: owner,
         isReady,
         isLoading,
         error,
       }
-    : null;
+    : null, [owner, isReady, isLoading, error, featuresRevision]);
 
   // Show loading state if configured and not ready
   if (waitForInit && isLoading) {

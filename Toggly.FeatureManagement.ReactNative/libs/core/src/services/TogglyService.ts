@@ -1,5 +1,4 @@
 import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
-import type { CacheLruIndex, Hook, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
 import {
   appendEvaluationContext,
   isCacheLruEnabled,
@@ -12,7 +11,10 @@ import {
   serializeCacheLruIndex,
   toBooleanDefinitions,
   touchCacheLruKey,
+  type CacheLruIndex,
+  type Hook,
   type TogglyEntityContext,
+  type TogglyEvaluationContext,
 } from '@ops-ai/toggly-hooks-types';
 import {
   applyLocalGate,
@@ -103,6 +105,15 @@ async function mutateCache(storage: TogglyStorage, key: string, value: string | 
 
 type CachedBody = TogglyFeatureFlagsCache & { writeId?: string; variants?: string };
 type CachedRevision = { context: string; revision: string; writeId?: string };
+type EntityInput = TogglyEntityContext | Record<string, unknown> | null;
+
+function unquoteRevision(revision: string): string {
+  let start = 0;
+  let end = revision.length;
+  while (start < end && revision[start] === '"') start++;
+  while (end > start && revision[end - 1] === '"') end--;
+  return revision.slice(start, end);
+}
 
 /** Project raw evaluated-variants defs onto the boolean flags shape used for gate evaluation. */
 function variantDefsToFlags(defs: Record<string, EvaluatedVariantDef>): FeatureFlags {
@@ -191,7 +202,7 @@ async function sha256(message: string): Promise<string> {
  * Provides feature flag evaluation, caching, and lifecycle management.
  */
 export class TogglyService {
-  private config: Required<
+  private readonly config: Required<
     Pick<
       TogglyConfig,
       | 'baseURI'
@@ -206,9 +217,9 @@ export class TogglyService {
   > &
     TogglyConfig;
 
-  private storage: TogglyStorage;
-  private hookExecutor: HookExecutor;
-  private eventEmitter: EventEmitter;
+  private readonly storage: TogglyStorage;
+  private readonly hookExecutor: HookExecutor;
+  private readonly eventEmitter: EventEmitter;
 
   private features: FeatureFlags | null = null;
   /** Raw evaluated-variants defs when {@link TogglyConfig.enableVariants} is set; null otherwise. */
@@ -319,7 +330,7 @@ export class TogglyService {
 
   /** Decode the paired variant-defs body written alongside a variants-mode flags cache entry. */
   private decodeCachedVariants(body: CachedBody | null, context: string): Record<string, EvaluatedVariantDef> | null {
-    if (!body || body.identity !== context || typeof body.variants !== 'string') return null;
+    if (body?.identity !== context || typeof body.variants !== 'string') return null;
     try {
       const parsed = JSON.parse(body.variants) as unknown;
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
@@ -357,7 +368,7 @@ export class TogglyService {
 
   private async cacheDefinitionsRevision(revision: string | null | undefined): Promise<void> {
     if (this.disposed || !revision) return;
-    const normalized = revision.replace(/^"+|"+$/g, '');
+    const normalized = unquoteRevision(revision);
     const context = this.getContextCacheKey();
     const generation = this.generation;
     const operation = this.refreshOperation;
@@ -443,7 +454,7 @@ export class TogglyService {
     });
     // Snapshot startup targeting before native subscriptions or asynchronous storage.
     this.groups = [...(config.groups ?? [])];
-    this.claims = { ...(config.claims ?? {}) };
+    this.claims = { ...config.claims };
     this.storage = config.storage ?? new MemoryStorage();
     this.hookExecutor = new HookExecutor();
     this.eventEmitter = new EventEmitter();
@@ -906,6 +917,18 @@ export class TogglyService {
     if (!this.disposed && revisionKey === cacheKey) await mutateCache(this.storage, STORAGE_KEYS.ETAG, null);
   }
 
+  private async evictCacheKey(key: string): Promise<boolean> {
+    if (this.disposed) return false;
+    try {
+      await this.removePairedRevision(key);
+      if (this.disposed) return false;
+      await mutateCache(this.storage, key, null);
+    } catch {
+      // One storage removal must not prevent eviction of other cache keys.
+    }
+    return !this.disposed;
+  }
+
   private async enforceMaxCacheKeys(protectKeys: string[]): Promise<void> {
     const maxKeys = this.config.maxCacheKeys;
     if (!isCacheLruEnabled(maxKeys)) {
@@ -922,14 +945,7 @@ export class TogglyService {
           return;
         }
         for (const key of toEvict) {
-          if (this.disposed) return;
-          try {
-            await this.removePairedRevision(key);
-            if (this.disposed) return;
-            await mutateCache(this.storage, key, null);
-          } catch {
-            /* ignore per-key removal failures */
-          }
+          if (!(await this.evictCacheKey(key))) return;
         }
         index = removeCacheLruKeys(index, toEvict);
         await this.saveLruIndex(index);
@@ -1214,7 +1230,7 @@ export class TogglyService {
     featureKeys: string[],
     requirement: FeatureRequirement = 'all',
     negate = false,
-    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    entity?: EntityInput,
     kind?: string,
   ): Promise<boolean> {
     await this.ensureFeaturesLoaded();
@@ -1277,7 +1293,7 @@ export class TogglyService {
 
   async isFeatureOn(
     featureKey: string,
-    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    entity?: EntityInput,
     kind?: string,
   ): Promise<boolean> {
     return this.evaluateFeatureGate([featureKey], 'all', false, entity, kind);
@@ -1288,7 +1304,7 @@ export class TogglyService {
    */
   async isFeatureOff(
     featureKey: string,
-    entity?: TogglyEntityContext | Record<string, unknown> | null,
+    entity?: EntityInput,
     kind?: string,
   ): Promise<boolean> {
     return this.evaluateFeatureGate([featureKey], 'all', true, entity, kind);

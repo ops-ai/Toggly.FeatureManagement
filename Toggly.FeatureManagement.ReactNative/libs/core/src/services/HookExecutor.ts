@@ -19,7 +19,7 @@ export class HookExecutor {
     const metadata = hook.getMetadata();
 
     // Check for duplicate hook names
-    const existingHook = this.hooks.find(
+    const existingHook = this.hooks.some(
       (h) => h.getMetadata().name === metadata.name
     );
     if (existingHook) {
