@@ -1,7 +1,7 @@
 require('cross-fetch/polyfill');
 
-const { webcrypto } = require('crypto');
-const { TextEncoder, TextDecoder } = require('util');
+const { webcrypto } = require('node:crypto');
+const { TextEncoder, TextDecoder } = require('node:util');
 
 // Force Node WebCrypto — jsdom may expose an incomplete crypto.subtle.
 Object.defineProperty(globalThis, 'crypto', {

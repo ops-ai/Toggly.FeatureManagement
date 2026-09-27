@@ -1,3 +1,12 @@
+## 1.10.1
+
+2026-09-27
+
+### Fixed
+- Keep definition refresh responsive when HTTP revision headers contain long
+  quoted values.
+- Include the typed variant value API in the published TypeScript declarations.
+
 ## 1.10.0
 
 2026-09-24
