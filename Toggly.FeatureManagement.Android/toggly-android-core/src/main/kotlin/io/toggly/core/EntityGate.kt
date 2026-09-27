@@ -348,7 +348,7 @@ fun evaluateStoredFeatureKeys(
     negate: Boolean,
     isEnabled: (String) -> Boolean
 ): Boolean {
-    if (featureKeys.isNotEmpty() && (features == null || features.isEmpty())) {
+    if (featureKeys.isNotEmpty() && features.isNullOrEmpty()) {
         return negate
     }
     return evaluateResolvedKeys(featureKeys, requirementAll, negate, isEnabled)
