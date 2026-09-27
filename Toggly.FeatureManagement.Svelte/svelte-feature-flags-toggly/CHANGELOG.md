@@ -1,3 +1,11 @@
+## 1.12.1
+
+2026-09-27
+
+### Fixed
+- Reliably remove inherited duplicate identity, group, and claim query
+  parameters when a host-minted `instanceId` is used for definitions.
+
 ## 1.12.0
 
 2026-09-24
