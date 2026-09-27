@@ -109,6 +109,15 @@ function tryCreateNetInfoProvider(): NetworkInfoProvider | undefined {
   }
 }
 
+function getServiceErrorMessage(cause: unknown): string {
+  if (typeof cause === 'string') return cause;
+  if (cause instanceof Error) return cause.message;
+  if (cause && typeof cause === 'object' && 'message' in cause && typeof cause.message === 'string') {
+    return cause.message;
+  }
+  return 'Toggly error';
+}
+
 /**
  * TogglyProvider component that initializes and provides Toggly context
  *
@@ -186,12 +195,7 @@ function TogglyProviderOwner({
     service.on('error', event => {
       if (!retired) {
         const payload = event.data as { error?: unknown } | undefined;
-        const cause = payload?.error;
-        const message = typeof cause === 'string' ? cause
-          : cause instanceof Error ? cause.message
-          : cause && typeof cause === 'object' && 'message' in cause && typeof cause.message === 'string'
-            ? cause.message : 'Toggly error';
-        setError(new Error(message));
+        setError(new Error(getServiceErrorMessage(payload?.error)));
       }
     });
     void service.init().then(() => {
