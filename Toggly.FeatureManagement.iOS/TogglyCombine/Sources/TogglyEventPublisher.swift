@@ -24,7 +24,8 @@ public struct TogglyEventPublisher: Publisher {
     }
 }
 
-private final class TogglyEventSubscription<S: Subscriber>: Subscription where S.Input == TogglyEvent, S.Failure == Never {
+private final class TogglyEventSubscription<S: Subscriber>: Subscription
+where S.Input == TogglyEvent, S.Failure == Never {
     private let lock = NSRecursiveLock()
     private var subscriber: S?
     private let service: TogglyService?
@@ -111,7 +112,8 @@ public struct FeatureChangedPublisher: Publisher {
     }
 }
 
-private final class FeatureChangedSubscription<S: Subscriber>: Subscription where S.Input == FeatureChangedEvent, S.Failure == Never {
+private final class FeatureChangedSubscription<S: Subscriber>: Subscription
+where S.Input == FeatureChangedEvent, S.Failure == Never {
     private let lock = NSRecursiveLock()
     private var subscriber: S?
     private let featureKey: String?
