@@ -8,6 +8,12 @@ import (
 	"time"
 )
 
+const (
+	providerCheckoutFlow      = "checkout-flow"
+	providerGetVariantError   = "GetVariant: %v"
+	providerUnexpectedVariant = "unexpected variant: %#v"
+)
+
 const catalogVariantsDefsJSON = `[
   {
     "featureKey": "checkout-flow",
@@ -90,12 +96,12 @@ func newCatalogVariantsClient(t *testing.T) *Client {
 func TestClient_GetVariant_UserAllocation(t *testing.T) {
 	c := newCatalogVariantsClient(t)
 
-	v, err := c.GetVariant(context.Background(), "checkout-flow", Context{Identity: "alice"})
+	v, err := c.GetVariant(context.Background(), providerCheckoutFlow, Context{Identity: "alice"})
 	if err != nil {
-		t.Fatalf("GetVariant: %v", err)
+		t.Fatalf(providerGetVariantError, err)
 	}
 	if v == nil || v.Name != "A" || !v.Enabled {
-		t.Fatalf("unexpected variant: %#v", v)
+		t.Fatalf(providerUnexpectedVariant, v)
 	}
 	if m, ok := v.ConfigurationValue.(map[string]any); !ok || m["color"] != "blue" {
 		t.Fatalf("unexpected configuration value: %#v", v.ConfigurationValue)
@@ -105,12 +111,12 @@ func TestClient_GetVariant_UserAllocation(t *testing.T) {
 func TestClient_GetVariant_FallsBackToDefaultWhenEnabled(t *testing.T) {
 	c := newCatalogVariantsClient(t)
 
-	v, err := c.GetVariant(context.Background(), "checkout-flow", Context{Identity: "carol"})
+	v, err := c.GetVariant(context.Background(), providerCheckoutFlow, Context{Identity: "carol"})
 	if err != nil {
-		t.Fatalf("GetVariant: %v", err)
+		t.Fatalf(providerGetVariantError, err)
 	}
 	if v == nil || v.Name != "B" || !v.Enabled {
-		t.Fatalf("unexpected variant: %#v", v)
+		t.Fatalf(providerUnexpectedVariant, v)
 	}
 }
 
@@ -119,12 +125,12 @@ func TestClient_GetVariant_StatusOverrideFlipsDisabledFeature(t *testing.T) {
 
 	v, err := c.GetVariant(context.Background(), "kill-switch", Context{Identity: "anyone"})
 	if err != nil {
-		t.Fatalf("GetVariant: %v", err)
+		t.Fatalf(providerGetVariantError, err)
 	}
 	// kill-switch has no enabled filters (base disabled), but StatusOverride:
 	// Enabled on the DefaultWhenDisabled variant flips the effective enabled state.
 	if v == nil || v.Name != "Off" || !v.Enabled {
-		t.Fatalf("unexpected variant: %#v", v)
+		t.Fatalf(providerUnexpectedVariant, v)
 	}
 }
 
@@ -133,7 +139,7 @@ func TestClient_GetVariant_NoVariantsConfigured_ReturnsNil(t *testing.T) {
 
 	v, err := c.GetVariant(context.Background(), "no-variants-feature", Context{Identity: "alice"})
 	if err != nil {
-		t.Fatalf("GetVariant: %v", err)
+		t.Fatalf(providerGetVariantError, err)
 	}
 	if v != nil {
 		t.Fatalf("expected nil variant, got %#v", v)
@@ -145,7 +151,7 @@ func TestClient_GetVariant_UnknownFeature_ReturnsNil(t *testing.T) {
 
 	v, err := c.GetVariant(context.Background(), "does-not-exist", Context{Identity: "alice"})
 	if err != nil {
-		t.Fatalf("GetVariant: %v", err)
+		t.Fatalf(providerGetVariantError, err)
 	}
 	if v != nil {
 		t.Fatalf("expected nil variant, got %#v", v)
@@ -164,9 +170,9 @@ func TestClient_GetVariant_UsesAmbientContext(t *testing.T) {
 	c := newCatalogVariantsClient(t)
 
 	ctx := WithEvalContext(context.Background(), Context{Identity: "bob"})
-	v, err := c.GetVariant(ctx, "checkout-flow", Context{})
+	v, err := c.GetVariant(ctx, providerCheckoutFlow, Context{})
 	if err != nil {
-		t.Fatalf("GetVariant: %v", err)
+		t.Fatalf(providerGetVariantError, err)
 	}
 	if v == nil || v.Name != "A" {
 		t.Fatalf("expected ambient identity to resolve variant A, got %#v", v)
@@ -176,7 +182,7 @@ func TestClient_GetVariant_UsesAmbientContext(t *testing.T) {
 func TestClient_GetVariantValue(t *testing.T) {
 	c := newCatalogVariantsClient(t)
 
-	value, err := c.GetVariantValue(context.Background(), "checkout-flow", Context{Identity: "alice"})
+	value, err := c.GetVariantValue(context.Background(), providerCheckoutFlow, Context{Identity: "alice"})
 	if err != nil {
 		t.Fatalf("GetVariantValue: %v", err)
 	}
@@ -198,7 +204,7 @@ type checkoutConfig struct {
 func TestGetVariantValueAs_Object(t *testing.T) {
 	c := newCatalogVariantsClient(t)
 
-	cfg, ok := GetVariantValueAs[checkoutConfig](c, context.Background(), "checkout-flow", Context{Identity: "alice"})
+	cfg, ok := GetVariantValueAs[checkoutConfig](c, context.Background(), providerCheckoutFlow, Context{Identity: "alice"})
 	if !ok {
 		t.Fatal("expected typed bind to succeed")
 	}
@@ -210,7 +216,7 @@ func TestGetVariantValueAs_Object(t *testing.T) {
 func TestGetVariantValueAs_Mismatch(t *testing.T) {
 	c := newCatalogVariantsClient(t)
 
-	_, ok := GetVariantValueAs[string](c, context.Background(), "checkout-flow", Context{Identity: "alice"})
+	_, ok := GetVariantValueAs[string](c, context.Background(), providerCheckoutFlow, Context{Identity: "alice"})
 	if ok {
 		t.Fatal("expected mismatch to soft-fail")
 	}

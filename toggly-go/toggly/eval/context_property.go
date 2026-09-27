@@ -121,36 +121,44 @@ func compareContext(actual any, op, expected, valueType string) bool {
 	case "gt", "gte", "lt", "lte":
 		return compareOrdered(actual, expected, valueType, op)
 	case "in":
-		actualS := fmt.Sprint(actual)
-		for _, c := range strings.Split(expected, ",") {
-			c = strings.TrimSpace(c)
-			if c != "" && strings.EqualFold(c, actualS) {
-				return true
-			}
-		}
-		return false
+		return compareIn(actual, expected)
 	case "contains":
-		if valueType == "string[]" {
-			switch t := actual.(type) {
-			case []any:
-				for _, v := range t {
-					if strings.EqualFold(fmt.Sprint(v), expected) {
-						return true
-					}
-				}
-			case []string:
-				for _, v := range t {
-					if strings.EqualFold(v, expected) {
-						return true
-					}
-				}
-			}
-			return false
-		}
-		return strings.Contains(strings.ToLower(fmt.Sprint(actual)), strings.ToLower(expected))
+		return compareContains(actual, expected, valueType)
 	default:
 		return false
 	}
+}
+
+func compareIn(actual any, expected string) bool {
+	actualS := fmt.Sprint(actual)
+	for _, candidate := range strings.Split(expected, ",") {
+		candidate = strings.TrimSpace(candidate)
+		if candidate != "" && strings.EqualFold(candidate, actualS) {
+			return true
+		}
+	}
+	return false
+}
+
+func compareContains(actual any, expected, valueType string) bool {
+	if valueType != "string[]" {
+		return strings.Contains(strings.ToLower(fmt.Sprint(actual)), strings.ToLower(expected))
+	}
+	switch values := actual.(type) {
+	case []any:
+		for _, value := range values {
+			if strings.EqualFold(fmt.Sprint(value), expected) {
+				return true
+			}
+		}
+	case []string:
+		for _, value := range values {
+			if strings.EqualFold(value, expected) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func compareOrdered(actual any, expected, valueType, op string) bool {

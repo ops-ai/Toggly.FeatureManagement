@@ -516,25 +516,11 @@ func normalizeETag(etag string) string {
 }
 
 func (p *definitionsProvider) loadOrFetchJWKS(ctx context.Context) (*definitions.JWKSet, error) {
-	// fast path
-	p.jwksMu.Lock()
-	if p.jwks != nil && time.Now().Before(p.jwksExpiry) {
-		jwks := p.jwks
-		p.jwksMu.Unlock()
-		return jwks, nil
+	if cached := p.cachedJWKS(); cached != nil {
+		return cached, nil
 	}
-	p.jwksMu.Unlock()
-
-	// snapshot path
-	if p.snap != nil {
-		snap, err := p.snap.LoadJWKS(ctx)
-		if err == nil && snap != nil && time.Now().Before(snap.Expiry) {
-			p.jwksMu.Lock()
-			p.jwks = &snap.Set
-			p.jwksExpiry = snap.Expiry
-			p.jwksMu.Unlock()
-			return &snap.Set, nil
-		}
+	if snap := p.loadJWKSFromSnapshot(ctx); snap != nil {
+		return snap, nil
 	}
 
 	// fetch
@@ -562,15 +548,7 @@ func (p *definitionsProvider) loadOrFetchJWKS(ctx context.Context) (*definitions
 		return nil, fmt.Errorf("decode jwks: %w", err)
 	}
 
-	exp := time.Now().Add(30 * 24 * time.Hour)
-	for _, k := range jwks.Keys {
-		if k.Exp != nil {
-			t := time.Unix(*k.Exp, 0)
-			if t.Before(exp) {
-				exp = t
-			}
-		}
-	}
+	exp := computeJWKSExpiry(jwks.Keys)
 
 	p.jwksMu.Lock()
 	p.jwks = &jwks
@@ -581,6 +559,42 @@ func (p *definitionsProvider) loadOrFetchJWKS(ctx context.Context) (*definitions
 		_ = p.snap.SaveJWKS(ctx, snapshot.JWKSnap{Set: jwks, Expiry: exp})
 	}
 	return &jwks, nil
+}
+
+func (p *definitionsProvider) cachedJWKS() *definitions.JWKSet {
+	p.jwksMu.Lock()
+	defer p.jwksMu.Unlock()
+	if p.jwks != nil && time.Now().Before(p.jwksExpiry) {
+		return p.jwks
+	}
+	return nil
+}
+
+func (p *definitionsProvider) loadJWKSFromSnapshot(ctx context.Context) *definitions.JWKSet {
+	if p.snap == nil {
+		return nil
+	}
+	snap, err := p.snap.LoadJWKS(ctx)
+	if err != nil || snap == nil || !time.Now().Before(snap.Expiry) {
+		return nil
+	}
+	p.jwksMu.Lock()
+	p.jwks = &snap.Set
+	p.jwksExpiry = snap.Expiry
+	p.jwksMu.Unlock()
+	return &snap.Set
+}
+
+func computeJWKSExpiry(keys []definitions.JWK) time.Time {
+	expiry := time.Now().Add(30 * 24 * time.Hour)
+	for _, key := range keys {
+		if key.Exp != nil {
+			if candidate := time.Unix(*key.Exp, 0); candidate.Before(expiry) {
+				expiry = candidate
+			}
+		}
+	}
+	return expiry
 }
 
 func (p *definitionsProvider) applyDefinitions(defs []definitions.FeatureDefinitionModel) {

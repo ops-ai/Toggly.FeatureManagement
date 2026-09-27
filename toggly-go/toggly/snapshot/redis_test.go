@@ -10,6 +10,10 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+const (
+	redisLoadDefinitionsError = "failed to load definitions: %v"
+)
+
 func getRedisClient(t *testing.T) *redis.Client {
 	t.Helper()
 	addr := os.Getenv("REDIS_TEST_ADDR")
@@ -100,7 +104,7 @@ func TestRedisProvider_SaveAndLoadDefinitions(t *testing.T) {
 	// Load
 	snap, err := provider.LoadDefinitions(ctx)
 	if err != nil {
-		t.Fatalf("failed to load definitions: %v", err)
+		t.Fatalf(redisLoadDefinitionsError, err)
 	}
 
 	if snap == nil {
@@ -162,7 +166,7 @@ func TestRedisProvider_SaveDefinitions_Updates(t *testing.T) {
 	// Load and verify
 	snap, err := provider.LoadDefinitions(ctx)
 	if err != nil {
-		t.Fatalf("failed to load definitions: %v", err)
+		t.Fatalf(redisLoadDefinitionsError, err)
 	}
 
 	if len(snap.Defs) != 1 {
@@ -408,7 +412,7 @@ func TestRedisProvider_RoundTrip(t *testing.T) {
 
 	loadedDefs, err := provider.LoadDefinitions(ctx)
 	if err != nil {
-		t.Fatalf("failed to load definitions: %v", err)
+		t.Fatalf(redisLoadDefinitionsError, err)
 	}
 	loadedJWKS, err := provider.LoadJWKS(ctx)
 	if err != nil {

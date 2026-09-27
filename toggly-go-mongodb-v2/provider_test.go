@@ -3,6 +3,7 @@ package mongodbv2
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"os"
 	"reflect"
 	"testing"
@@ -140,6 +141,21 @@ func TestDefinitionsSnapshot_EmptyOrMalformedDocument(t *testing.T) {
 	}
 }
 
+func TestDefinitionsDocumentRejectsNonJSONFilterParameters(t *testing.T) {
+	_, err := definitionsDocument("toggly_definitions", snapshot.DefinitionsSnapshot{
+		Defs: []definitions.FeatureDefinitionModel{{
+			FeatureKey: "checkout",
+			Filters: []definitions.FeatureFilter{{
+				Name:       "Percentage",
+				Parameters: map[string]any{"ratio": math.NaN()},
+			}},
+		}},
+	})
+	if err == nil {
+		t.Fatal("non-JSON filter parameter was accepted for persistence")
+	}
+}
+
 func TestJWKS_DocumentRoundTripUsesRetainedLayout(t *testing.T) {
 	expiry := time.Date(2026, time.September, 12, 10, 0, 0, 0, time.UTC)
 	input := snapshot.JWKSnap{
@@ -205,6 +221,12 @@ func TestMongoDBProvider_DriverV2Integration(t *testing.T) {
 	defer func() { _ = collection.Drop(context.Background()) }()
 
 	provider := NewMongoDBProvider(MongoDBOptions{Collection: collection})
+	definitionsInput, jwksInput := assertMongoDBSnapshotRoundTrip(t, ctx, provider)
+	assertMongoDBFailurePaths(t, ctx, collection, provider, definitionsInput, jwksInput)
+}
+
+func assertMongoDBSnapshotRoundTrip(t *testing.T, ctx context.Context, provider *MongoDBProvider) (snapshot.DefinitionsSnapshot, snapshot.JWKSnap) {
+	t.Helper()
 	definitionsInput := snapshot.DefinitionsSnapshot{
 		Defs:      []definitions.FeatureDefinitionModel{{FeatureKey: "checkout"}},
 		Signature: "signature",
@@ -242,6 +264,48 @@ func TestMongoDBProvider_DriverV2Integration(t *testing.T) {
 	definitionsOutput, err = provider.LoadDefinitions(ctx)
 	if err != nil || definitionsOutput != nil {
 		t.Fatalf("definitions after clear = %#v, %v; want nil, nil", definitionsOutput, err)
+	}
+	jwksOutput, err = provider.LoadJWKS(ctx)
+	if err != nil || jwksOutput != nil {
+		t.Fatalf("JWKS after clear = %#v, %v; want nil, nil", jwksOutput, err)
+	}
+	return definitionsInput, jwksInput
+}
+
+func assertMongoDBFailurePaths(t *testing.T, ctx context.Context, collection *mongo.Collection, provider *MongoDBProvider, definitionsInput snapshot.DefinitionsSnapshot, jwksInput snapshot.JWKSnap) {
+	t.Helper()
+	// A malformed persisted document must not be promoted into a snapshot.
+	if _, err := collection.InsertOne(ctx, mongoDocument{ID: "toggly_definitions", Data: "invalid-json"}); err != nil {
+		t.Fatalf("insert malformed definitions document: %v", err)
+	}
+	if _, err := provider.LoadDefinitions(ctx); err == nil {
+		t.Fatal("malformed persisted definitions were accepted")
+	}
+	if _, err := collection.InsertOne(ctx, mongoDocument{ID: "toggly_jwks", Data: "invalid-json"}); err != nil {
+		t.Fatalf("insert malformed JWKS document: %v", err)
+	}
+	if _, err := provider.LoadJWKS(ctx); err == nil {
+		t.Fatal("malformed persisted JWKS were accepted")
+	}
+
+	// Database errors must surface for every operation instead of appearing as
+	// an absent snapshot or a successful save/clear.
+	canceled, cancelNow := context.WithCancel(ctx)
+	cancelNow()
+	if _, err := provider.LoadDefinitions(canceled); err == nil {
+		t.Fatal("LoadDefinitions hid a canceled database request")
+	}
+	if err := provider.SaveDefinitions(canceled, definitionsInput); err == nil {
+		t.Fatal("SaveDefinitions hid a canceled database request")
+	}
+	if err := provider.Clear(canceled); err == nil {
+		t.Fatal("Clear hid a canceled database request")
+	}
+	if _, err := provider.LoadJWKS(canceled); err == nil {
+		t.Fatal("LoadJWKS hid a canceled database request")
+	}
+	if err := provider.SaveJWKS(canceled, jwksInput); err == nil {
+		t.Fatal("SaveJWKS hid a canceled database request")
 	}
 }
 

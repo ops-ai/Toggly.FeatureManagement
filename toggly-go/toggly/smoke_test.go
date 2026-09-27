@@ -8,6 +8,12 @@ import (
 )
 
 const (
+	smokeDefinitionsURL = "https://definitions.toggly.io/"
+	smokeNewClientError = "NewClient failed: %v"
+	smokeMissingAppKey  = "TOGGLY_SMOKE_APP_KEY_BACKEND is not set"
+)
+
+const (
 	smokeEnvName = "Production"
 	flagOn       = "FlagOn"
 	flagOff      = "FlagOff"
@@ -16,19 +22,19 @@ const (
 func TestSmoke_UnsignedDefinitions(t *testing.T) {
 	appKey := os.Getenv("TOGGLY_SMOKE_APP_KEY_BACKEND")
 	if appKey == "" {
-		t.Skip("TOGGLY_SMOKE_APP_KEY_BACKEND is not set")
+		t.Skip(smokeMissingAppKey)
 	}
 
 	client, err := NewClient(Config{
 		AppKey:               appKey,
 		Environment:          smokeEnvName,
-		DefinitionsURL:       "https://definitions.toggly.io/",
+		DefinitionsURL:       smokeDefinitionsURL,
 		UseSignedDefinitions: false,
 		RefreshInterval:      30 * time.Second,
 		HTTPTimeout:          10 * time.Second,
 	})
 	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
+		t.Fatalf(smokeNewClientError, err)
 	}
 	defer func() { _ = client.Close() }()
 
@@ -38,19 +44,19 @@ func TestSmoke_UnsignedDefinitions(t *testing.T) {
 func TestSmoke_SignedDefinitions(t *testing.T) {
 	appKey := os.Getenv("TOGGLY_SMOKE_APP_KEY_BACKEND")
 	if appKey == "" {
-		t.Skip("TOGGLY_SMOKE_APP_KEY_BACKEND is not set")
+		t.Skip(smokeMissingAppKey)
 	}
 
 	client, err := NewClient(Config{
 		AppKey:               appKey,
 		Environment:          smokeEnvName,
-		DefinitionsURL:       "https://definitions.toggly.io/",
+		DefinitionsURL:       smokeDefinitionsURL,
 		UseSignedDefinitions: true,
 		RefreshInterval:      30 * time.Second,
 		HTTPTimeout:          10 * time.Second,
 	})
 	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
+		t.Fatalf(smokeNewClientError, err)
 	}
 	defer func() { _ = client.Close() }()
 
@@ -60,19 +66,19 @@ func TestSmoke_SignedDefinitions(t *testing.T) {
 func TestSmoke_WebSocket(t *testing.T) {
 	appKey := os.Getenv("TOGGLY_SMOKE_APP_KEY_BACKEND")
 	if appKey == "" {
-		t.Skip("TOGGLY_SMOKE_APP_KEY_BACKEND is not set")
+		t.Skip(smokeMissingAppKey)
 	}
 
 	client, err := NewClient(Config{
 		AppKey:            appKey,
 		Environment:       smokeEnvName,
-		DefinitionsURL:    "https://definitions.toggly.io/",
+		DefinitionsURL:    smokeDefinitionsURL,
 		EnableLiveUpdates: true,
 		RefreshInterval:   30 * time.Second,
 		HTTPTimeout:       10 * time.Second,
 	})
 	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
+		t.Fatalf(smokeNewClientError, err)
 	}
 	defer func() { _ = client.Close() }()
 

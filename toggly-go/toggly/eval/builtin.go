@@ -87,17 +87,8 @@ func (TargetingEvaluator) Evaluate(featureKey string, params map[string]any, ctx
 	identity := ctx.Identity
 	groups := ctx.Groups
 
-	exclusionUsers := collectIndexedValues(params, []string{"Audience.Exclusion.Users", "Audience:Exclusion:Users"})
-	if identity != "" && contains(exclusionUsers, identity, ignoreCase) {
+	if excludedFromAudience(params, identity, groups, ignoreCase) {
 		return false, nil
-	}
-	exclusionGroups := collectIndexedValues(params, []string{"Audience.Exclusion.Groups", "Audience:Exclusion:Groups"})
-	if len(groups) > 0 {
-		for _, eg := range exclusionGroups {
-			if contains(groups, eg, ignoreCase) {
-				return false, nil
-			}
-		}
 	}
 
 	if identity != "" {
@@ -131,6 +122,20 @@ func (TargetingEvaluator) Evaluate(featureKey string, params map[string]any, ctx
 	}
 
 	return ComputePercentile(identity, featureKey) < pct, nil
+}
+
+func excludedFromAudience(params map[string]any, identity string, groups []string, ignoreCase bool) bool {
+	exclusionUsers := collectIndexedValues(params, []string{"Audience.Exclusion.Users", "Audience:Exclusion:Users"})
+	if identity != "" && contains(exclusionUsers, identity, ignoreCase) {
+		return true
+	}
+	exclusionGroups := collectIndexedValues(params, []string{"Audience.Exclusion.Groups", "Audience:Exclusion:Groups"})
+	for _, excludedGroup := range exclusionGroups {
+		if contains(groups, excludedGroup, ignoreCase) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseTime(s string) (time.Time, bool) {

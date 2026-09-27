@@ -10,6 +10,11 @@ import (
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 )
 
+const (
+	sqliteLoadDefinitionsError = "failed to load definitions: %v"
+	sqliteLoadJWKSError        = "failed to load JWKS: %v"
+)
+
 func newTestSQLiteDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("sqlite3", ":memory:")
@@ -70,7 +75,7 @@ func TestSQLiteProvider_SaveAndLoadDefinitions(t *testing.T) {
 	// Load
 	snap, err := provider.LoadDefinitions(ctx)
 	if err != nil {
-		t.Fatalf("failed to load definitions: %v", err)
+		t.Fatalf(sqliteLoadDefinitionsError, err)
 	}
 
 	if snap == nil {
@@ -132,7 +137,7 @@ func TestSQLiteProvider_SaveDefinitions_Updates(t *testing.T) {
 	// Load and verify
 	snap, err := provider.LoadDefinitions(ctx)
 	if err != nil {
-		t.Fatalf("failed to load definitions: %v", err)
+		t.Fatalf(sqliteLoadDefinitionsError, err)
 	}
 
 	if len(snap.Defs) != 1 {
@@ -195,7 +200,7 @@ func TestSQLiteProvider_SaveAndLoadJWKS(t *testing.T) {
 	// Load
 	snap, err := provider.LoadJWKS(ctx)
 	if err != nil {
-		t.Fatalf("failed to load JWKS: %v", err)
+		t.Fatalf(sqliteLoadJWKSError, err)
 	}
 
 	if snap == nil {
@@ -246,7 +251,7 @@ func TestSQLiteProvider_SaveJWKS_Updates(t *testing.T) {
 	// Load and verify
 	snap, err := provider.LoadJWKS(ctx)
 	if err != nil {
-		t.Fatalf("failed to load JWKS: %v", err)
+		t.Fatalf(sqliteLoadJWKSError, err)
 	}
 
 	if snap.Set.Keys[0].Kid != "key-2" {
@@ -345,11 +350,11 @@ func TestSQLiteProvider_RoundTrip(t *testing.T) {
 	// Load both and verify
 	loadedDefs, err := provider.LoadDefinitions(ctx)
 	if err != nil {
-		t.Fatalf("failed to load definitions: %v", err)
+		t.Fatalf(sqliteLoadDefinitionsError, err)
 	}
 	loadedJWKS, err := provider.LoadJWKS(ctx)
 	if err != nil {
-		t.Fatalf("failed to load JWKS: %v", err)
+		t.Fatalf(sqliteLoadJWKSError, err)
 	}
 
 	if len(loadedDefs.Defs) != 2 {
@@ -378,7 +383,7 @@ func TestSQLiteProvider_EmptyDefinitions(t *testing.T) {
 	// Load and verify
 	snap, err := provider.LoadDefinitions(ctx)
 	if err != nil {
-		t.Fatalf("failed to load definitions: %v", err)
+		t.Fatalf(sqliteLoadDefinitionsError, err)
 	}
 	if snap == nil {
 		t.Fatal("expected non-nil snapshot")

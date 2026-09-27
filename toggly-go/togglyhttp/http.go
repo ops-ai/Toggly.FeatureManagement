@@ -145,15 +145,7 @@ func FeatureGate(e Evaluator, featureKey string, opts ...GateOption) func(http.H
 				return
 			}
 
-			evalCtx, ok := togglyctx.From(r.Context())
-			if !ok {
-				if cfg.buildCtx != nil {
-					evalCtx = cfg.buildCtx(r)
-					evalCtx.Request = mergeRequestFromHeaders(r.Header, evalCtx.Request)
-				} else {
-					evalCtx = FromHttpRequest(r)
-				}
-			}
+			evalCtx := gateEvaluationContext(r, cfg.buildCtx)
 
 			enabled, err := e.IsEnabled(r.Context(), featureKey, evalCtx)
 			if err != nil {
@@ -167,4 +159,16 @@ func FeatureGate(e Evaluator, featureKey string, opts ...GateOption) func(http.H
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func gateEvaluationContext(r *http.Request, build ContextBuilder) toggly.Context {
+	if ambient, ok := togglyctx.From(r.Context()); ok {
+		return ambient
+	}
+	if build == nil {
+		return FromHttpRequest(r)
+	}
+	evalCtx := build(r)
+	evalCtx.Request = mergeRequestFromHeaders(r.Header, evalCtx.Request)
+	return evalCtx
 }

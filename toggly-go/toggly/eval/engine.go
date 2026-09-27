@@ -48,43 +48,41 @@ func (e *Engine) Evaluate(def definitions.FeatureDefinitionModel, ctx Context) (
 }
 
 func (e *Engine) evaluateGroup(featureKey string, filters []definitions.FeatureFilter, req definitions.RequirementType, ctx Context) (bool, error) {
-	if req == "" {
-		req = definitions.RequirementAny
-	}
 	if len(filters) == 0 {
 		return false, nil
 	}
-	switch req {
-	case definitions.RequirementAll:
-		for _, f := range filters {
-			ev, ok := e.reg.get(f.Name)
-			if !ok {
-				return false, nil
-			}
-			okVal, err := ev.Evaluate(featureKey, f.Parameters, ctx)
-			if err != nil || !okVal {
-				return false, nil
-			}
-		}
-		return true, nil
-	case definitions.RequirementAny:
-		fallthrough
-	default:
-		for _, f := range filters {
-			ev, ok := e.reg.get(f.Name)
-			if !ok {
-				continue
-			}
-			okVal, err := ev.Evaluate(featureKey, f.Parameters, ctx)
-			if err != nil {
-				continue
-			}
-			if okVal {
-				return true, nil
-			}
-		}
-		return false, nil
+	if req == definitions.RequirementAll {
+		return e.evaluateAll(featureKey, filters, ctx), nil
 	}
+	return e.evaluateAny(featureKey, filters, ctx), nil
+}
+
+func (e *Engine) evaluateAll(featureKey string, filters []definitions.FeatureFilter, ctx Context) bool {
+	for _, f := range filters {
+		ev, ok := e.reg.get(f.Name)
+		if !ok {
+			return false
+		}
+		okVal, err := ev.Evaluate(featureKey, f.Parameters, ctx)
+		if err != nil || !okVal {
+			return false
+		}
+	}
+	return true
+}
+
+func (e *Engine) evaluateAny(featureKey string, filters []definitions.FeatureFilter, ctx Context) bool {
+	for _, f := range filters {
+		ev, ok := e.reg.get(f.Name)
+		if !ok {
+			continue
+		}
+		okVal, err := ev.Evaluate(featureKey, f.Parameters, ctx)
+		if err == nil && okVal {
+			return true
+		}
+	}
+	return false
 }
 
 // RandFloat64 returns a float in [0,1) for evaluators that need randomness.

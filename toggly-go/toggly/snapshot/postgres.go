@@ -63,6 +63,9 @@ func NewPostgresProvider(opts PostgresOptions) *PostgresProvider {
 }
 
 func (p *PostgresProvider) ensureTable(ctx context.Context) error {
+	if err := validateSnapshotTableName(p.tableName); err != nil {
+		return err
+	}
 	if p.tableCreated || !p.autoCreate {
 		return nil
 	}
