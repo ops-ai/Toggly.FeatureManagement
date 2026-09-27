@@ -211,6 +211,36 @@ class Toggly with WidgetsBindingObserver {
       _config.telemetryFlushIntervalMs == config.telemetryFlushIntervalMs &&
       _config.onTelemetryDiagnostic == config.onTelemetryDiagnostic;
 
+  static void _configureLocalState(TogglyConfig config, String? identity) {
+    final cacheProvider = config.cacheProvider;
+    final maxCacheKeys = config.maxCacheKeys;
+    if (cacheProvider != null && maxCacheKeys != null && maxCacheKeys > 0) {
+      Toggly._cache = LruTogglyCacheProvider(
+        cacheProvider,
+        maxCacheKeys: maxCacheKeys,
+      );
+    } else {
+      Toggly._cache = cacheProvider;
+    }
+
+    _localGatesChangedController?.close();
+    _localGatesChangedController = StreamController<void>.broadcast();
+    if (config.localGates != null) {
+      setLocalGates(config.localGates!);
+    } else {
+      _localGates = [];
+      _localGateIndex = {};
+    }
+
+    // An absent identity reuses the ephemeral in-memory device id. Stable
+    // targeting and offline restart require an explicit identity.
+    if (identity != null) {
+      Toggly._identity = identity;
+    } else {
+      Toggly._identity = (Toggly._deviceId ??= _uuid.v4());
+    }
+  }
+
   /// Initialize Toggly either by providing [flagDefaults] (to allow usage
   /// without Toggly.io) or by providing your [appKey] and [environment] from
   /// your Toggly.io application.
@@ -256,34 +286,7 @@ class Toggly with WidgetsBindingObserver {
     Toggly._appKey = appKey;
     Toggly._environment = environment ?? 'Production';
     Toggly._config = config;
-    final cacheProvider = config.cacheProvider;
-    final maxCacheKeys = config.maxCacheKeys;
-    if (cacheProvider != null && maxCacheKeys != null && maxCacheKeys > 0) {
-      Toggly._cache = LruTogglyCacheProvider(
-        cacheProvider,
-        maxCacheKeys: maxCacheKeys,
-      );
-    } else {
-      Toggly._cache = cacheProvider;
-    }
-
-    _localGatesChangedController?.close();
-    _localGatesChangedController = StreamController<void>.broadcast();
-    if (config.localGates != null) {
-      setLocalGates(config.localGates!);
-    } else {
-      _localGates = [];
-      _localGateIndex = {};
-    }
-
-    // Use the provided identity, or fall back to an ephemeral in-memory
-    // device id. The fallback is not persisted: stable targeting and offline
-    // restart require the app to pass an explicit [identity].
-    if (identity != null) {
-      Toggly._identity = identity;
-    } else {
-      Toggly._identity = (Toggly._deviceId ??= _uuid.v4());
-    }
+    _configureLocalState(config, identity);
     _instanceId = _normalizedToken(instanceId);
     if (reuseTelemetry) {
       _telemetry!.setContext(

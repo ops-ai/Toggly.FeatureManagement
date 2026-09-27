@@ -169,6 +169,27 @@ void main() {
       );
     }
 
+    test('init tracks persisted flags when a positive cache limit is set',
+        () async {
+      addTearDown(Toggly.dispose);
+      inner.flags['u:alice'] = _flags('u:alice');
+
+      await Toggly.init(
+        identity: 'alice',
+        useSignedDefinitions: false,
+        flagDefaults: {'A': true},
+        config: TogglyConfig(
+          cacheProvider: inner,
+          maxCacheKeys: 1,
+          enableTelemetry: false,
+          enableLiveUpdates: false,
+        ),
+      );
+
+      expect(parseCacheLruIndex(inner.lruIndex).entries.keys,
+          contains('flags:u:alice'));
+    });
+
     test('unlimited maxCacheKeys retains all entries', () async {
       final provider = wrap(maxCacheKeys: 0);
       await provider.writeFlags(_flags('u1'));
