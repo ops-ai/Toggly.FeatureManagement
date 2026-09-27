@@ -193,12 +193,12 @@ func parseEntityGate(_ obj: [String: Any]) -> EntityGate? {
     let rules: [EntityGateRule] = rulesRaw.compactMap { item in
         guard let rule = item as? [String: Any],
               let property = rule["property"] as? String,
-              let op = rule["op"] as? String else {
+              let operation = rule["op"] as? String else {
             return nil
         }
         let value = stringifyJSON(rule["value"])
         let type = rule["type"] as? String
-        return EntityGateRule(property: property, op: op, value: value, type: type)
+        return EntityGateRule(property: property, op: operation, value: value, type: type)
     }
     let requirement = (obj["requirement"] as? String) ?? "all"
     return EntityGate(requirement: requirement, rules: rules)
@@ -219,19 +219,19 @@ private func evaluateRule(_ rule: EntityGateRule, attributes: [String: Any]) -> 
         return false
     }
     let actual = attributes[actualKey]
-    let op = rule.op.lowercased()
+    let operation = rule.op.lowercased()
     let valueType = rule.type ?? "string"
 
-    if equalityOps.contains(op) {
-        return compareEquality(actual, expected: rule.value, shouldEqual: op == "eq")
+    if equalityOps.contains(operation) {
+        return compareEquality(actual, expected: rule.value, shouldEqual: operation == "eq")
     }
-    if comparisonOps.contains(op) {
-        return compareOrdered(actual, expected: rule.value, valueType: valueType, op: op)
+    if comparisonOps.contains(operation) {
+        return compareOrdered(actual, expected: rule.value, valueType: valueType, op: operation)
     }
-    if inOps.contains(op) {
+    if inOps.contains(operation) {
         return compareIn(actual, expected: rule.value)
     }
-    if containsOps.contains(op) {
+    if containsOps.contains(operation) {
         return compareContains(actual, expected: rule.value, valueType: valueType)
     }
     return false
@@ -264,12 +264,12 @@ private func compareEquality(_ actual: Any?, expected: String, shouldEqual: Bool
     return shouldEqual ? equal : !equal
 }
 
-private func compareOrdered(_ actual: Any?, expected: String, valueType: String, op: String) -> Bool {
+private func compareOrdered(_ actual: Any?, expected: String, valueType: String, op operation: String) -> Bool {
     if valueType == "datetime" {
         guard let actualDate = parseDateTime(actual), let expectedDate = parseDateTime(expected) else {
             return false
         }
-        return compareNumbers(actualDate, expectedDate, op: op)
+        return compareNumbers(actualDate, expectedDate, op: operation)
     }
     guard valueType == "number" else {
         return false
@@ -277,11 +277,11 @@ private func compareOrdered(_ actual: Any?, expected: String, valueType: String,
     guard let actualNumber = parseNumber(actual), let expectedNumber = parseNumber(expected) else {
         return false
     }
-    return compareNumbers(actualNumber, expectedNumber, op: op)
+    return compareNumbers(actualNumber, expectedNumber, op: operation)
 }
 
-private func compareNumbers(_ actual: Double, _ expected: Double, op: String) -> Bool {
-    switch op {
+private func compareNumbers(_ actual: Double, _ expected: Double, op operation: String) -> Bool {
+    switch operation {
     case "gt": return actual > expected
     case "gte": return actual >= expected
     case "lt": return actual < expected

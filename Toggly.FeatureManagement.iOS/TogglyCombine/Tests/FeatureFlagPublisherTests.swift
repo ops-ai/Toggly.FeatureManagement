@@ -130,10 +130,18 @@ final class FeatureFlagPublisherTests: XCTestCase {
             else { Task { await service.setIdentity("bob", instanceId: "minted-b"); changed.fulfill() } }
         }.store(in: &cancellables)
         await fulfillment(of: [first], timeout: 2)
-        for _ in 0..<100 {
-            if await service.stateChangeHandlerCount > 0 { break }
-            await Task.yield()
+        // The initial value can arrive before the async subscription installs
+        // its change handler. Wait for that observable setup before publishing.
+        var handlerInstalled = false
+        for _ in 0..<200 {
+            if await service.stateChangeHandlerCount == 1 {
+                handlerInstalled = true
+                break
+            }
+            try await Task.sleep(nanoseconds: 10_000_000)
         }
+        XCTAssertTrue(handlerInstalled, "feature change handler was not installed")
+        guard handlerInstalled else { return }
         await service.notifyFeatureChanges(previousFlags: ["publisher-flag": true], newFlags: ["publisher-flag": false])
         await fulfillment(of: [changed], timeout: 2)
         for _ in 0..<100 { await Task.yield() }

@@ -224,9 +224,9 @@ enum SignedDefsVerify {
     }
 
     /// Compute kid = SHA1(x_bytes || y_bytes).hexUpper + "ES256".
-    static func computeKid(x: String, y: String) throws -> String {
-        let xBytes = try base64ToData(x)
-        let yBytes = try base64ToData(y)
+    static func computeKid(x xCoordinate: String, y yCoordinate: String) throws -> String {
+        let xBytes = try base64ToData(xCoordinate)
+        let yBytes = try base64ToData(yCoordinate)
         var combined = Data()
         combined.append(xBytes)
         combined.append(yBytes)
@@ -278,11 +278,11 @@ enum SignedDefsVerify {
         if let crv = matching.crv, crv != "P-256" {
             throw SignedDefsVerifyError.unsupportedCurve(crv)
         }
-        guard let x = matching.x, let y = matching.y else {
+        guard let xCoordinate = matching.x, let yCoordinate = matching.y else {
             throw SignedDefsVerifyError.missingCoordinates
         }
 
-        let expectedKid = try computeKid(x: x, y: y)
+        let expectedKid = try computeKid(x: xCoordinate, y: yCoordinate)
         if matching.kid != expectedKid {
             throw SignedDefsVerifyError.invalidKid(expected: expectedKid, got: matching.kid)
         }
@@ -295,7 +295,7 @@ enum SignedDefsVerify {
         let firstDigest = Data(SHA256.hash(data: payloadData))
         let doubleDigest = Data(SHA256.hash(data: firstDigest))
         let signatureData = try base64ToData(signature)
-        let publicKey = try createPublicKey(x: x, y: y)
+        let publicKey = try createPublicKey(x: xCoordinate, y: yCoordinate)
 
         let derSignature: Data
         if signatureData.count == 64 {
@@ -308,7 +308,7 @@ enum SignedDefsVerify {
         }
 
         var error: Unmanaged<CFError>?
-        let ok = SecKeyVerifySignature(
+        let isValid = SecKeyVerifySignature(
             publicKey,
             .ecdsaSignatureDigestX962SHA256,
             doubleDigest as CFData,
@@ -316,7 +316,7 @@ enum SignedDefsVerify {
             &error
         )
 
-        if !ok {
+        if !isValid {
             throw SignedDefsVerifyError.invalidSignature
         }
     }
@@ -419,9 +419,9 @@ enum SignedDefsVerify {
             .replacingOccurrences(of: "=", with: "")
     }
 
-    private static func createPublicKey(x: String, y: String) throws -> SecKey {
-        var xBytes = try base64ToData(x)
-        var yBytes = try base64ToData(y)
+    private static func createPublicKey(x xCoordinate: String, y yCoordinate: String) throws -> SecKey {
+        var xBytes = try base64ToData(xCoordinate)
+        var yBytes = try base64ToData(yCoordinate)
         xBytes = padLeft(xBytes, to: 32)
         yBytes = padLeft(yBytes, to: 32)
 
@@ -452,15 +452,15 @@ enum SignedDefsVerify {
     /// Convert IEEE P1363 (r||s) to X9.62 / DER ECDSA signature.
     static func p1363ToDER(_ signature: Data) -> Data? {
         guard signature.count == 64 else { return nil }
-        let r = encodeASN1Integer(signature.prefix(32))
-        let s = encodeASN1Integer(signature.suffix(32))
+        let firstComponent = encodeASN1Integer(signature.prefix(32))
+        let secondComponent = encodeASN1Integer(signature.suffix(32))
 
         var sequence = Data()
         sequence.append(0x30)
-        let contentLength = r.count + s.count
+        let contentLength = firstComponent.count + secondComponent.count
         sequence.append(contentsOf: encodeLength(contentLength))
-        sequence.append(r)
-        sequence.append(s)
+        sequence.append(firstComponent)
+        sequence.append(secondComponent)
         return sequence
     }
 
@@ -473,13 +473,13 @@ enum SignedDefsVerify {
         guard let (_, afterLength) = readLength(der, at: index) else { return nil }
         index = afterLength
 
-        guard let (r, afterR) = readASN1Integer(der, at: index) else { return nil }
+        guard let (firstComponent, afterR) = readASN1Integer(der, at: index) else { return nil }
         index = afterR
-        guard let (s, _) = readASN1Integer(der, at: index) else { return nil }
+        guard let (secondComponent, _) = readASN1Integer(der, at: index) else { return nil }
 
         var result = Data()
-        result.append(padLeft(r, to: 32))
-        result.append(padLeft(s, to: 32))
+        result.append(padLeft(firstComponent, to: 32))
+        result.append(padLeft(secondComponent, to: 32))
         return result
     }
 
