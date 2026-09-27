@@ -758,8 +758,7 @@ var HookExecutor = /** @class */ (function () {
     HookExecutor.prototype.addHook = function (hook) {
         var metadata = hook.getMetadata();
         // Check for duplicate hook names
-        var existingHook = this.hooks.find(function (h) { return h.getMetadata().name === metadata.name; });
-        if (existingHook) {
+        if (this.hooks.some(function (hook) { return hook.getMetadata().name === metadata.name; })) {
             console.warn("[Toggly] Hook with name \"".concat(metadata.name, "\" already registered. Skipping."));
             return;
         }
@@ -958,8 +957,20 @@ var HookExecutor = /** @class */ (function () {
     return HookExecutor;
 }());
 
+/**
+ * Soft-decode a variant configuration value as `T`.
+ * Missing/null → null; with `isT` → null when guard fails; otherwise value as T.
+ */
+function decodeVariantValue(value, isT) {
+    if (value === null || value === undefined)
+        return null;
+    if (isT)
+        return isT(value) ? value : null;
+    return value;
+}
+
 var SDK_ID = 'react';
-var SDK_VERSION = '1.12.0';
+var SDK_VERSION = '1.13.1';
 var SDK_HEADER_ID = 'X-Toggly-Sdk';
 var SDK_HEADER_VERSION = 'X-Toggly-Sdk-Version';
 function sdkUserAgent() {
@@ -1014,7 +1025,8 @@ function buildWebSocketUrl(baseUri, appKey, cachedEtag) {
     }
     appendSdkQueryParams(params);
     var query = params.toString();
-    return "".concat(wsBase, "/").concat(appKey, "/ws").concat(query ? "?".concat(query) : '');
+    var querySuffix = query ? "?".concat(query) : '';
+    return "".concat(wsBase, "/").concat(appKey, "/ws").concat(querySuffix);
 }
 function getNextReconnectDelayMs(attempt) {
     return Math.min(WS_RECONNECT_BASE_MS * Math.pow(2, attempt), WS_RECONNECT_MAX_MS);
@@ -1091,7 +1103,7 @@ function appendDefinitionsRevisionParam(url, rev) {
 
 var canUseStorage = (function () {
     try {
-        return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+        return globalThis.window !== undefined && globalThis.window.localStorage !== undefined;
     }
     catch (_a) {
         return false;
@@ -1101,6 +1113,9 @@ var CACHE_PREFIX = 'toggly:flags:';
 var VARIANTS_CACHE_PREFIX = 'toggly:variants:';
 var REVISION_CACHE_PREFIX = 'toggly:revision:';
 var CACHE_LRU_KEY = 'toggly:cache-lru';
+function stripEtagQuotes(revision) {
+    return revision === null || revision === void 0 ? void 0 : revision.replace(/^"+/, '').replace(/"+$/, '');
+}
 function getCacheKey(appKey, environment, contextKey) {
     if (contextKey === void 0) { contextKey = ''; }
     var suffix = contextKey ? ":".concat(contextKey) : '';
@@ -1285,7 +1300,7 @@ function writeCachedVariants(appKey, environment, variants, contextKey, maxCache
 var Toggly = /** @class */ (function () {
     function Toggly(config) {
         var _this = this;
-        var _a, _b, _c;
+        var _a, _b;
         this._config = {
             baseURI: 'https://definitions.toggly.io',
             verifySignatures: false,
@@ -1343,9 +1358,18 @@ var Toggly = /** @class */ (function () {
                         appKey = (_a = this._config.appKey) !== null && _a !== void 0 ? _a : '';
                         env = (_b = this._config.environment) !== null && _b !== void 0 ? _b : 'Production';
                         scope = this._bodyCacheKey();
-                        this._variants = this._canPersist && this._config.enableVariants ? readCachedVariants(appKey, env, scope, this._config.maxCacheKeys) : null;
-                        this._features = this._variants ? variantDefsToFlags(this._variants)
-                            : (_c = (this._canPersist ? readCachedFlags(appKey, env, scope, this._config.maxCacheKeys) : null)) !== null && _c !== void 0 ? _c : __assign({}, this._config.featureDefaults);
+                        this._variants = this._canPersist && this._config.enableVariants
+                            ? readCachedVariants(appKey, env, scope, this._config.maxCacheKeys)
+                            : null;
+                        if (this._variants) {
+                            this._features = variantDefsToFlags(this._variants);
+                        }
+                        else {
+                            this._features = this._canPersist
+                                ? readCachedFlags(appKey, env, scope, this._config.maxCacheKeys)
+                                : null;
+                            (_c = this._features) !== null && _c !== void 0 ? _c : (this._features = __assign({}, this._config.featureDefaults));
+                        }
                         (_d = this._telemetry) === null || _d === void 0 ? void 0 : _d.setContext({ instanceId: this._config.instanceId, identity: this._config.identity });
                         generation = this._generation;
                         this.notifyFeaturesRefresh();
@@ -1365,9 +1389,9 @@ var Toggly = /** @class */ (function () {
             return __awaiter(_this, void 0, void 0, function () {
                 var generation, now, isInitialLoad, appKey, env, contextKey, parsed, mode, path, keys_2, _i, keys_1, key, url, pin, fetchUrl, loaded, parsedDefs, defs, error_1, recovered;
                 var _this = this;
-                var _a, _b, _c, _d, _e, _f, _g;
-                return __generator(this, function (_h) {
-                    switch (_h.label) {
+                var _a, _b, _c, _d, _e;
+                return __generator(this, function (_f) {
+                    switch (_f.label) {
                         case 0:
                             if (this._disposed)
                                 return [2 /*return*/, this._booleanFeatures()];
@@ -1385,8 +1409,8 @@ var Toggly = /** @class */ (function () {
                                     checkIfApiCallFinished();
                                 })];
                         case 1:
-                            _h.sent();
-                            _h.label = 2;
+                            _f.sent();
+                            _f.label = 2;
                         case 2:
                             if (generation !== this._generation || this._disposed)
                                 return [2 /*return*/, this._booleanFeatures()
@@ -1409,9 +1433,9 @@ var Toggly = /** @class */ (function () {
                             appKey = (_a = this._config.appKey) !== null && _a !== void 0 ? _a : '';
                             env = (_b = this._config.environment) !== null && _b !== void 0 ? _b : 'Production';
                             contextKey = this._bodyCacheKey();
-                            _h.label = 3;
+                            _f.label = 3;
                         case 3:
-                            _h.trys.push([3, 7, 10, 11]);
+                            _f.trys.push([3, 7, 10, 11]);
                             parsed = new URL((_c = this._config.baseURI) !== null && _c !== void 0 ? _c : 'https://definitions.toggly.io');
                             mode = this._config.enableVariants ? 'variants' : 'evaluated';
                             path = this._config.enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed';
@@ -1438,11 +1462,11 @@ var Toggly = /** @class */ (function () {
                                     headers: buildDefinitionFetchHeaders(),
                                 })];
                         case 4:
-                            loaded = _h.sent();
+                            loaded = _f.sent();
                             if (generation !== this._generation || this._disposed)
                                 return [2 /*return*/, this._booleanFeatures()];
                             if (loaded.notModified) {
-                                this._cacheDefinitionsRevision((_e = loaded.revision) === null || _e === void 0 ? void 0 : _e.replace(/^"+|"+$/g, ''));
+                                this._cacheDefinitionsRevision(stripEtagQuotes(loaded.revision));
                                 if (isInitialLoad)
                                     this.startWebSocket();
                                 return [2 /*return*/, this._booleanFeatures()];
@@ -1464,19 +1488,19 @@ var Toggly = /** @class */ (function () {
                                     writeCachedFlags(appKey, env, this._features, contextKey, this._config.maxCacheKeys);
                                 }
                             }
-                            this._cacheDefinitionsRevision((_f = loaded.revision) === null || _f === void 0 ? void 0 : _f.replace(/^"+|"+$/g, ''));
+                            this._cacheDefinitionsRevision(stripEtagQuotes(loaded.revision));
                             if (!this._features) return [3 /*break*/, 6];
                             return [4 /*yield*/, this._hookExecutor.executeAfterRefresh(dist.toBooleanDefinitions(this._features))];
                         case 5:
-                            _h.sent();
-                            _h.label = 6;
+                            _f.sent();
+                            _f.label = 6;
                         case 6:
                             if (generation !== this._generation || this._disposed)
                                 return [2 /*return*/, this._booleanFeatures()];
                             this.notifyFeaturesRefresh();
                             return [3 /*break*/, 11];
                         case 7:
-                            error_1 = _h.sent();
+                            error_1 = _f.sent();
                             if (generation !== this._generation || this._disposed)
                                 return [2 /*return*/, this._booleanFeatures()];
                             this._reportError('Error fetching feature flags', error_1);
@@ -1495,7 +1519,7 @@ var Toggly = /** @class */ (function () {
                                         ? readCachedFlags(appKey, env, contextKey, _this._config.maxCacheKeys)
                                         : null;
                                 },
-                                defaults: (_g = this._config.featureDefaults) !== null && _g !== void 0 ? _g : {},
+                                defaults: (_e = this._config.featureDefaults) !== null && _e !== void 0 ? _e : {},
                                 variantsToFlags: variantDefsToFlags,
                             });
                             if (recovered) {
@@ -1509,8 +1533,8 @@ var Toggly = /** @class */ (function () {
                             if (!this._features) return [3 /*break*/, 9];
                             return [4 /*yield*/, this._hookExecutor.executeAfterRefresh(dist.toBooleanDefinitions(this._features))];
                         case 8:
-                            _h.sent();
-                            _h.label = 9;
+                            _f.sent();
+                            _f.label = 9;
                         case 9:
                             if (generation !== this._generation || this._disposed)
                                 return [2 /*return*/, this._booleanFeatures()];
@@ -1714,20 +1738,18 @@ var Toggly = /** @class */ (function () {
         }); };
         if (!config.appKey) {
             if (config.featureDefaults) {
-                this._features = (_a = config.featureDefaults) !== null && _a !== void 0 ? _a : {};
+                this._features = config.featureDefaults;
                 console.warn('Toggly --- Using feature defaults as no application key provided when initializing the Toggly');
             }
             else {
                 console.warn('Toggly --- A valid application key is required to connect to your Toggly.io application for evaluating your features.');
             }
         }
-        else {
-            if (!config.environment) {
-                config.environment = 'Production';
-                console.warn('Toggly --- Using Production environment as no environment provided when initializing the Toggly');
-            }
+        else if (!config.environment) {
+            config.environment = 'Production';
+            console.warn('Toggly --- Using Production environment as no environment provided when initializing the Toggly');
         }
-        this._config = Object.assign({}, this._config, config, { instanceId: ((_b = config.instanceId) === null || _b === void 0 ? void 0 : _b.trim()) || undefined });
+        this._config = __assign(__assign(__assign({}, this._config), config), { instanceId: ((_a = config.instanceId) === null || _a === void 0 ? void 0 : _a.trim()) || undefined });
         this.shouldShowFeatureDuringEvaluation = this._config.showFeatureDuringEvaluation;
         // Register initial hooks
         if (this._config.hooks) {
@@ -1741,7 +1763,7 @@ var Toggly = /** @class */ (function () {
         // Seed in-memory features (and variants) from localStorage for instant availability
         if (this._features === null && this._canPersist && this._config.appKey) {
             var appKey = this._config.appKey;
-            var env = (_c = this._config.environment) !== null && _c !== void 0 ? _c : 'Production';
+            var env = (_b = this._config.environment) !== null && _b !== void 0 ? _b : 'Production';
             var contextKey = this._bodyCacheKey();
             if (this._config.enableVariants) {
                 var vCached = readCachedVariants(appKey, env, contextKey, this._config.maxCacheKeys);
@@ -1888,15 +1910,18 @@ var Toggly = /** @class */ (function () {
         var context = this._getEvaluationContext();
         if (!context.groups && !context.claims && !((_a = context.identity) === null || _a === void 0 ? void 0 : _a.includes('|')))
             return dist.evaluationContextCacheKey(context);
-        return "v2:".concat(encodeURIComponent(JSON.stringify([
-            (_b = context.identity) !== null && _b !== void 0 ? _b : '',
-            __spreadArray([], ((_c = context.groups) !== null && _c !== void 0 ? _c : []), true).sort(function (left, right) { return left < right ? -1 : left > right ? 1 : 0; }),
-            Object.entries((_d = dist.normalizeEvaluationClaims(context.claims)) !== null && _d !== void 0 ? _d : {}).sort(function (_a, _b) {
-                var a = _a[0];
-                var b = _b[0];
-                return a.localeCompare(b);
-            }),
-        ])));
+        var groups = __spreadArray([], ((_b = context.groups) !== null && _b !== void 0 ? _b : []), true).sort(function (left, right) {
+            if (left === right)
+                return 0;
+            return left < right ? -1 : 1;
+        });
+        var claims = Object.entries((_c = dist.normalizeEvaluationClaims(context.claims)) !== null && _c !== void 0 ? _c : {})
+            .sort(function (_a, _b) {
+            var left = _a[0];
+            var right = _b[0];
+            return left.localeCompare(right);
+        });
+        return "v2:".concat(encodeURIComponent(JSON.stringify([(_d = context.identity) !== null && _d !== void 0 ? _d : '', groups, claims])));
     };
     Toggly.prototype._bodyCacheKey = function () {
         // Legacy bodies were shared across modes and cannot validate a scoped revision.
@@ -1945,11 +1970,11 @@ var Toggly = /** @class */ (function () {
     };
     /**
      * Configuration payload for the assigned variant, if any.
+     * Optional `isT` type guard soft-fails to null on mismatch.
      */
-    Toggly.prototype.getVariantValue = function (featureKey) {
-        var _a;
+    Toggly.prototype.getVariantValue = function (featureKey, isT) {
         var variant = this.getVariant(featureKey);
-        return (_a = variant === null || variant === void 0 ? void 0 : variant.configurationValue) !== null && _a !== void 0 ? _a : null;
+        return decodeVariantValue(variant === null || variant === void 0 ? void 0 : variant.configurationValue, isT);
     };
     /**
      * Subscribe to feature (and variant) data updates after HTTP refresh or WebSocket-driven reload.
@@ -2090,14 +2115,9 @@ var Feature = /** @class */ (function (_super) {
         return _this;
     }
     Feature.prototype.buildGate = function () {
-        var gate = [];
-        if (this.props.featureKey) {
-            gate.push(this.props.featureKey);
-        }
-        if (this.props.featureKeys) {
-            gate = gate.concat(this.props.featureKeys);
-        }
-        return gate;
+        var _a;
+        var featureKeys = (_a = this.props.featureKeys) !== null && _a !== void 0 ? _a : [];
+        return this.props.featureKey ? __spreadArray([this.props.featureKey], featureKeys, true) : __spreadArray([], featureKeys, true);
     };
     Feature.prototype.applyVariantFilter = function (isEnabled) {
         var _a = this.props, variant = _a.variant, featureKey = _a.featureKey;
@@ -2345,6 +2365,7 @@ exports.Provider = Provider;
 exports.Toggly = Toggly;
 exports.context = context;
 exports.createTogglyProvider = createTogglyProvider;
+exports.decodeVariantValue = decodeVariantValue;
 exports.isEntityGate = dist.isEntityGate;
 exports.mapEntityContext = dist.mapEntityContext;
 exports.normalizeEntityContext = dist.normalizeEntityContext;

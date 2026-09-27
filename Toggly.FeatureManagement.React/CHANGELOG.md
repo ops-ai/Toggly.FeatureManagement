@@ -1,3 +1,10 @@
+## 1.13.1
+
+2026-09-27
+
+### Fixed
+- Prevent custom Provider services from mutating the caller-owned `featureKeys` array passed to `<Feature>`.
+
 ## 1.13.0
 
 2026-09-24

@@ -40,7 +40,7 @@ class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
 
   private buildGate(): string[] {
     const featureKeys = this.props.featureKeys ?? []
-    return this.props.featureKey ? [this.props.featureKey, ...featureKeys] : featureKeys
+    return this.props.featureKey ? [this.props.featureKey, ...featureKeys] : [...featureKeys]
   }
 
   private applyVariantFilter(isEnabled: boolean): boolean {
