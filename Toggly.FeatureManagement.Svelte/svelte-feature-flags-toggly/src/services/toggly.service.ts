@@ -604,9 +604,7 @@ export class Toggly implements TogglyService {
         this._features = variantDefsToFlags(cachedVariants)
       }
     }
-    if (this._features === null) {
-      this._features = readCachedFlags(appKey, environment, contextKey, this._config.maxCacheKeys)
-    }
+    this._features ??= readCachedFlags(appKey, environment, contextKey, this._config.maxCacheKeys)
   }
 
   private get _canPersist(): boolean {
@@ -718,11 +716,13 @@ export class Toggly implements TogglyService {
   }
 
   private _replaceEvaluationContextWithInstanceId(scopedUrl: URL, instanceId: string): void {
-    for (const key of [...scopedUrl.searchParams.keys()]) {
+    const targetingKeys = new Set<string>()
+    scopedUrl.searchParams.forEach((_value, key) => {
       if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) {
-        scopedUrl.searchParams.delete(key)
+        targetingKeys.add(key)
       }
-    }
+    })
+    targetingKeys.forEach(key => scopedUrl.searchParams.delete(key))
     scopedUrl.searchParams.set('i', instanceId)
   }
 
