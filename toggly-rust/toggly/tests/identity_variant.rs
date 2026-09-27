@@ -1,5 +1,5 @@
 //! Ambient / config identity precedence for catalog-local get_variant.
-use toggly::{EvalContext, TogglyClient, TogglyConfig};
+use toggly::{EvalContext, Requirement, TogglyClient, TogglyConfig};
 use wiremock::matchers::{method, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -39,6 +39,59 @@ async fn client_against(server: &MockServer, identity: Option<&str>) -> TogglyCl
         builder = builder.identity(id);
     }
     TogglyClient::new(builder.build()).await.expect("client")
+}
+
+#[tokio::test]
+async fn gate_short_circuits_for_all_any_and_negated_checks() {
+    let server = MockServer::start().await;
+    let client = client_against(&server, None).await;
+    let context = EvalContext::default();
+
+    assert!(!client
+        .evaluate_gate(&[], Requirement::All, context.clone(), false)
+        .await
+        .unwrap());
+    assert!(!client
+        .evaluate_gate(
+            &["checkout-flow", "missing"],
+            Requirement::All,
+            context.clone(),
+            false
+        )
+        .await
+        .unwrap());
+    assert!(client
+        .evaluate_gate(
+            &["missing", "checkout-flow"],
+            Requirement::Any,
+            context.clone(),
+            false
+        )
+        .await
+        .unwrap());
+    assert!(client
+        .evaluate_gate(&["missing"], Requirement::All, context.clone(), true)
+        .await
+        .unwrap());
+    assert!(!client
+        .evaluate_gate(
+            &["missing", "checkout-flow"],
+            Requirement::All,
+            context.clone(),
+            true
+        )
+        .await
+        .unwrap());
+    assert!(client
+        .evaluate_gate(
+            &["checkout-flow", "missing"],
+            Requirement::Any,
+            context,
+            true
+        )
+        .await
+        .unwrap());
+    client.close().await;
 }
 
 #[tokio::test]

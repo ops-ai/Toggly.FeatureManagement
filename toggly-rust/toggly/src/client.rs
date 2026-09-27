@@ -284,32 +284,14 @@ impl TogglyClient {
             return Ok(false);
         }
 
-        match requirement {
-            Requirement::All => {
-                for key in feature_keys {
-                    let mut enabled = self.is_enabled(key, context.clone()).await?;
-                    if negate {
-                        enabled = !enabled;
-                    }
-                    if !enabled {
-                        return Ok(false);
-                    }
-                }
-                Ok(true)
-            }
-            Requirement::Any => {
-                for key in feature_keys {
-                    let mut enabled = self.is_enabled(key, context.clone()).await?;
-                    if negate {
-                        enabled = !enabled;
-                    }
-                    if enabled {
-                        return Ok(true);
-                    }
-                }
-                Ok(false)
+        let any = matches!(requirement, Requirement::Any);
+        for key in feature_keys {
+            let enabled = self.is_enabled(key, context.clone()).await? ^ negate;
+            if enabled == any {
+                return Ok(any);
             }
         }
+        Ok(!any)
     }
 
     /// Get all feature keys.

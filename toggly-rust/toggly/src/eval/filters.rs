@@ -312,27 +312,15 @@ impl Evaluator for TimeWindowEvaluator {
     ) -> crate::Result<bool> {
         let now = chrono::Utc::now();
 
-        if let Some(start) = param(filter, "Start").or_else(|| param(filter, "start")) {
-            if let Some(start_str) = start.as_str() {
-                if let Ok(start_time) = chrono::DateTime::parse_from_rfc3339(start_str) {
-                    if now < start_time {
-                        return Ok(false);
-                    }
-                }
-            }
-        }
+        let start = param(filter, "Start")
+            .and_then(|value| value.as_str())
+            .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok());
+        let end = param(filter, "End")
+            .and_then(|value| value.as_str())
+            .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok());
 
-        if let Some(end) = param(filter, "End").or_else(|| param(filter, "end")) {
-            if let Some(end_str) = end.as_str() {
-                if let Ok(end_time) = chrono::DateTime::parse_from_rfc3339(end_str) {
-                    if now > end_time {
-                        return Ok(false);
-                    }
-                }
-            }
-        }
-
-        Ok(true)
+        Ok(start.is_none_or(|boundary| now >= boundary)
+            && end.is_none_or(|boundary| now <= boundary))
     }
 }
 
@@ -340,6 +328,40 @@ impl Evaluator for TimeWindowEvaluator {
 pub struct ContextualTargetingEvaluator;
 
 impl ContextualTargetingEvaluator {
+    fn compare_strings(
+        actual: &serde_json::Value,
+        expected: &serde_json::Value,
+        compare: impl FnOnce(&str, &str) -> bool,
+    ) -> bool {
+        actual
+            .as_str()
+            .zip(expected.as_str())
+            .is_some_and(|(actual, expected)| compare(actual, expected))
+    }
+
+    fn compare_numbers(
+        actual: &serde_json::Value,
+        expected: &serde_json::Value,
+        compare: impl FnOnce(f64, f64) -> bool,
+    ) -> bool {
+        actual
+            .as_f64()
+            .zip(expected.as_f64())
+            .is_some_and(|(actual, expected)| compare(actual, expected))
+    }
+
+    fn matches_regex(actual: &serde_json::Value, expected: &serde_json::Value) -> bool {
+        actual
+            .as_str()
+            .zip(expected.as_str())
+            .and_then(|(actual, pattern)| {
+                regex::Regex::new(pattern)
+                    .ok()
+                    .map(|re| re.is_match(actual))
+            })
+            .unwrap_or(false)
+    }
+
     fn evaluate_condition(
         context: &EvalContext,
         trait_name: &str,
@@ -355,67 +377,25 @@ impl ContextualTargetingEvaluator {
             "Equals" | "equals" | "eq" => actual_value == expected_value,
             "NotEquals" | "notEquals" | "ne" => actual_value != expected_value,
             "Contains" | "contains" => {
-                if let (Some(actual), Some(expected)) =
-                    (actual_value.as_str(), expected_value.as_str())
-                {
-                    actual.contains(expected)
-                } else {
-                    false
-                }
+                Self::compare_strings(actual_value, expected_value, |a, b| a.contains(b))
             }
             "StartsWith" | "startsWith" => {
-                if let (Some(actual), Some(expected)) =
-                    (actual_value.as_str(), expected_value.as_str())
-                {
-                    actual.starts_with(expected)
-                } else {
-                    false
-                }
+                Self::compare_strings(actual_value, expected_value, |a, b| a.starts_with(b))
             }
             "EndsWith" | "endsWith" => {
-                if let (Some(actual), Some(expected)) =
-                    (actual_value.as_str(), expected_value.as_str())
-                {
-                    actual.ends_with(expected)
-                } else {
-                    false
-                }
+                Self::compare_strings(actual_value, expected_value, |a, b| a.ends_with(b))
             }
             "GreaterThan" | "greaterThan" | "gt" => {
-                if let (Some(actual), Some(expected)) =
-                    (actual_value.as_f64(), expected_value.as_f64())
-                {
-                    actual > expected
-                } else {
-                    false
-                }
+                Self::compare_numbers(actual_value, expected_value, |a, b| a > b)
             }
             "LessThan" | "lessThan" | "lt" => {
-                if let (Some(actual), Some(expected)) =
-                    (actual_value.as_f64(), expected_value.as_f64())
-                {
-                    actual < expected
-                } else {
-                    false
-                }
+                Self::compare_numbers(actual_value, expected_value, |a, b| a < b)
             }
             "GreaterThanOrEqual" | "greaterThanOrEqual" | "gte" => {
-                if let (Some(actual), Some(expected)) =
-                    (actual_value.as_f64(), expected_value.as_f64())
-                {
-                    actual >= expected
-                } else {
-                    false
-                }
+                Self::compare_numbers(actual_value, expected_value, |a, b| a >= b)
             }
             "LessThanOrEqual" | "lessThanOrEqual" | "lte" => {
-                if let (Some(actual), Some(expected)) =
-                    (actual_value.as_f64(), expected_value.as_f64())
-                {
-                    actual <= expected
-                } else {
-                    false
-                }
+                Self::compare_numbers(actual_value, expected_value, |a, b| a <= b)
             }
             "In" | "in" => {
                 if let Some(arr) = expected_value.as_array() {
@@ -433,17 +413,7 @@ impl ContextualTargetingEvaluator {
             }
             "Exists" | "exists" => true,
             "NotExists" | "notExists" => false,
-            "Matches" | "matches" | "regex" => {
-                if let (Some(actual), Some(pattern)) =
-                    (actual_value.as_str(), expected_value.as_str())
-                {
-                    regex::Regex::new(pattern)
-                        .map(|re| re.is_match(actual))
-                        .unwrap_or(false)
-                } else {
-                    false
-                }
-            }
+            "Matches" | "matches" | "regex" => Self::matches_regex(actual_value, expected_value),
             _ => false,
         }
     }
@@ -768,6 +738,65 @@ mod tests {
 
         let context = EvalContext::builder().traits(traits).build();
         assert!(evaluator.evaluate("test", &filter, &context).unwrap());
+    }
+
+    #[test]
+    fn time_window_respects_valid_boundaries_and_ignores_malformed_dates() {
+        let evaluator = TimeWindowEvaluator;
+        let context = EvalContext::default();
+        for (parameters, expected) in [
+            (serde_json::json!({"Start": "2999-01-01T00:00:00Z"}), false),
+            (serde_json::json!({"End": "2000-01-01T00:00:00Z"}), false),
+            (
+                serde_json::json!({"Start": "2000-01-01T00:00:00Z", "End": "2999-01-01T00:00:00Z"}),
+                true,
+            ),
+            (
+                serde_json::json!({"Start": "invalid", "End": "invalid"}),
+                true,
+            ),
+        ] {
+            let filter = make_filter("TimeWindow", parameters);
+            assert_eq!(
+                evaluator.evaluate("test", &filter, &context).unwrap(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn contextual_targeting_handles_string_number_array_and_regex_conditions() {
+        let evaluator = ContextualTargetingEvaluator;
+        let mut traits = HashMap::new();
+        traits.insert("name".to_string(), serde_json::json!("alice"));
+        traits.insert("age".to_string(), serde_json::json!(25));
+        traits.insert("roles".to_string(), serde_json::json!(["admin", "editor"]));
+        let context = EvalContext::builder().traits(traits).build();
+
+        for (trait_name, operator, value, expected) in [
+            ("name", "Contains", serde_json::json!("lic"), true),
+            ("name", "StartsWith", serde_json::json!("ali"), true),
+            ("name", "EndsWith", serde_json::json!("ice"), true),
+            ("name", "NotEquals", serde_json::json!("bob"), true),
+            ("name", "Matches", serde_json::json!("^a.*e$"), true),
+            ("name", "Matches", serde_json::json!("["), false),
+            ("age", "GreaterThanOrEqual", serde_json::json!(25), true),
+            ("age", "LessThan", serde_json::json!(25), false),
+            ("roles", "In", serde_json::json!(["admin", "editor"]), false),
+            ("missing", "NotExists", serde_json::json!(null), true),
+        ] {
+            let filter = make_filter(
+                "ContextualTargeting",
+                serde_json::json!({
+                    "Conditions": [{"trait": trait_name, "operator": operator, "value": value}]
+                }),
+            );
+            assert_eq!(
+                evaluator.evaluate("test", &filter, &context).unwrap(),
+                expected,
+                "{operator}"
+            );
+        }
     }
 
     #[test]
