@@ -75,6 +75,8 @@ type DefinitionsRequest = {
   pin: string | null
 }
 
+type DefinitionsRequestScope = Omit<DefinitionsRequest, 'fetchUrl' | 'pin'>
+
 function getCacheKey(appKey: string, environment: string, contextKey = '', variants = false): string {
   const suffix = contextKey ? `:${contextKey}` : ''
   return `${variants ? VARIANT_FLAGS_CACHE_PREFIX : CACHE_PREFIX}${appKey}:${environment}${suffix}`
@@ -578,13 +580,18 @@ export class Toggly implements TogglyService {
     return true
   }
 
-  private _buildDefinitionsRequest(): DefinitionsRequest {
+  private _getDefinitionsRequestScope(): DefinitionsRequestScope {
+    return {
+      appKey: this._config.appKey ?? '',
+      environment: this._config.environment ?? 'Production',
+      contextKey: this._contextCacheKey(),
+    }
+  }
+
+  private _buildDefinitionsRequest(scope: DefinitionsRequestScope): DefinitionsRequest {
     const parsed = new URL(this._config.baseURI ?? 'https://definitions.toggly.io')
-    const appKey = this._config.appKey ?? ''
-    const environment = this._config.environment ?? 'Production'
-    const contextKey = this._contextCacheKey()
     const endpoint = this._config.enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed'
-    parsed.pathname = `${parsed.pathname.replace(/\/$/, '')}/${endpoint}/${appKey}/${environment}`
+    parsed.pathname = `${parsed.pathname.replace(/\/$/, '')}/${endpoint}/${scope.appKey}/${scope.environment}`
     appendEvaluationContext(parsed, this._getEvaluationContext(), this._config.enableVariants ? 'variants' : 'evaluated')
     // Only the current context may supply an instance token.
     parsed.searchParams.delete('i')
@@ -601,9 +608,7 @@ export class Toggly implements TogglyService {
     const pin = this._pendingDefinitionsPin
     this._pendingDefinitionsPin = null
     return {
-      appKey,
-      environment,
-      contextKey,
+      ...scope,
       fetchUrl: appendDefinitionsRevisionParam(parsed.toString(), pin),
       pin,
     }
@@ -650,7 +655,7 @@ export class Toggly implements TogglyService {
     error: unknown,
     options: FeatureLoadOptions | undefined,
     generation: number,
-    request: DefinitionsRequest,
+    request: DefinitionsRequestScope,
   ): Promise<void> {
     if (!this._isCurrentGeneration(generation)) return
     this._reportError('Error fetching feature flags', error)
@@ -875,9 +880,10 @@ export class Toggly implements TogglyService {
 
     this._loadingFeatures = true
     const isInitialLoad = this._ws === null && !this._wsConnected
-    const request = this._buildDefinitionsRequest()
+    const requestScope = this._getDefinitionsRequestScope()
 
     try {
+      const request = this._buildDefinitionsRequest(requestScope)
       const loaded = await fetchEvaluatedSignedDefinitions(
         request.fetchUrl,
         this._jwks,
@@ -899,7 +905,7 @@ export class Toggly implements TogglyService {
       if (loaded.revision) this._cacheDefinitionsRevision(loaded.revision)
       await this._notifyAfterRefresh(generation)
     } catch (error) {
-      await this._handleLoadFailure(error, options, generation, request)
+      await this._handleLoadFailure(error, options, generation, requestScope)
     } finally {
       if (generation === this._generation) this._loadingFeatures = false
     }
@@ -1077,13 +1083,18 @@ export class Toggly implements TogglyService {
 
     this.stopWebSocket()
 
-    const wsUrl = buildWebSocketUrl(
-      this._config.baseURI ?? 'https://definitions.toggly.io',
-      this._config.appKey,
-      this._definitionsRevision,
-    )
-
-    const ws = new WebSocket(wsUrl)
+    let ws: WebSocket
+    try {
+      const wsUrl = buildWebSocketUrl(
+        this._config.baseURI ?? 'https://definitions.toggly.io',
+        this._config.appKey,
+        this._definitionsRevision,
+      )
+      ws = new WebSocket(wsUrl)
+    } catch (error) {
+      this._reportError('Error starting feature flag live updates', error)
+      return
+    }
     const generation = this._generation
     const current = () => !this._disposed && generation === this._generation && this._ws === ws
 

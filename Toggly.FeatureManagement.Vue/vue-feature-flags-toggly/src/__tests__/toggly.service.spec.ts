@@ -8,7 +8,7 @@ vi.stubGlobal('fetch', mockFetch);
 const SDK_FETCH_OPTIONS = expect.objectContaining({
   headers: expect.objectContaining({
     'X-Toggly-Sdk': 'vue',
-    'X-Toggly-Sdk-Version': '1.11.1',
+    'X-Toggly-Sdk-Version': '1.11.2',
   }),
 });
 
@@ -160,6 +160,66 @@ describe('Toggly Service', () => {
 
       const features = await service._loadFeatures();
       expect(features).toEqual({});
+    });
+
+    it('should use defaults when the definitions URL is malformed', async () => {
+      const service = new Toggly();
+      service.init({
+        appKey: 'key',
+        environment: 'Production',
+        baseURI: 'http://[malformed',
+        featureDefaults: { Fallback: true },
+        enableLiveUpdates: false,
+      });
+
+      await expect(service._loadFeatures(true)).resolves.toEqual({ Fallback: true });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should recover from malformed definitions URLs with live updates enabled', async () => {
+      const onError = vi.fn();
+      const service = new Toggly();
+      service.init({
+        appKey: 'key',
+        environment: 'Production',
+        baseURI: 'http://[malformed',
+        featureDefaults: { Fallback: true },
+        onError,
+      });
+
+      await expect(service._loadFeatures(true)).resolves.toEqual({ Fallback: true });
+      expect(onError).toHaveBeenCalledWith(
+        'Error starting feature flag live updates',
+        expect.anything(),
+      );
+      expect((service as unknown as { _loadingFeatures: boolean })._loadingFeatures).toBe(false);
+    });
+
+    it('should allow a successful refresh after a malformed definitions URL', async () => {
+      const service = new Toggly();
+      service.init({
+        appKey: 'key',
+        environment: 'Production',
+        baseURI: 'http://[malformed',
+        featureDefaults: { Fallback: true },
+        enableLiveUpdates: false,
+      });
+
+      await expect(service._loadFeatures(true, { strict: true })).rejects.toThrow();
+      (service as unknown as { _config: { baseURI: string } })._config.baseURI = 'https://custom.api';
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ Fresh: true }),
+        text: () => Promise.resolve(JSON.stringify({ Fresh: true })),
+      });
+
+      await expect(service._loadFeatures(true)).resolves.toEqual({ Fresh: true });
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://custom.api/evaluated-signed/key/Production',
+        SDK_FETCH_OPTIONS,
+      );
     });
 
     it('should not duplicate API calls during loading', async () => {
@@ -674,13 +734,13 @@ describe('Toggly Service', () => {
       const s = createWsService({ appKey: 'mykey', environment: 'Prod' });
       s.startWebSocket();
       expect(mockWsInstances).toHaveLength(1);
-      expect(mockWsInstances[0].url).toBe('wss://definitions.toggly.io/mykey/ws?sdk=vue&sdkVersion=1.11.1');
+      expect(mockWsInstances[0].url).toBe('wss://definitions.toggly.io/mykey/ws?sdk=vue&sdkVersion=1.11.2');
     });
 
     it('should build ws:// URL from http:// baseURI', () => {
       const s = createWsService({ appKey: 'mykey', baseURI: 'http://local.test', environment: 'Prod' });
       s.startWebSocket();
-      expect(mockWsInstances[0].url).toBe('ws://local.test/mykey/ws?sdk=vue&sdkVersion=1.11.1');
+      expect(mockWsInstances[0].url).toBe('ws://local.test/mykey/ws?sdk=vue&sdkVersion=1.11.2');
     });
 
     it('should set _wsConnected on onopen', () => {
