@@ -4,17 +4,18 @@ import { Toggly } from '../services/toggly.service'
 let owner: Toggly | undefined
 afterEach(() => { owner?.dispose(); owner = undefined; vi.unstubAllGlobals() })
 
-it.each([false, true])('builds the minted endpoint and scrubs all configured targeting fields (variants %s)', async enableVariants => {
+it.each([false, true])('removes repeated targeting query parameters while preserving unrelated values (variants %s)', async enableVariants => {
   const urls: URL[] = []
   vi.stubGlobal('fetch', vi.fn(async (input: string) => {
     urls.push(new URL(String(input)))
     return new Response(JSON.stringify({ defs: enableVariants ? { A: { enabled: true, variant: 'blue', configurationValue: 42 } } : { A: true } }))
   }))
-  owner = new Toggly({ appKey: 'url-app', environment: 'Test', baseURI: 'https://definitions.invalid/base/?u=old&u=older&userId=private&g=a&g=b&claim.plan=paid&claim.team=secret&keep=one&keep=two', instanceId: ' token ', identity: 'alice', groups: ['staff'], claims: { role: 'admin' }, enableVariants, enableTelemetry: false, enableLiveUpdates: false, persistCache: false })
+  owner = new Toggly({ appKey: 'url-app', environment: 'Test', baseURI: 'https://definitions.invalid/base/?u=old&u=older&userId=private&userId=former&g=a&g=b&claim.plan=paid&claim.plan=old&claim.team=secret&keep=one&keep=two', instanceId: ' token ', identity: 'alice', groups: ['staff'], claims: { role: 'admin' }, enableVariants, enableTelemetry: false, enableLiveUpdates: false, persistCache: false })
   await owner.refreshFlags()
   expect(urls.length).toBeGreaterThan(0)
   for (const url of urls) {
     expect(url.pathname).toBe(`/base/${enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed'}/url-app/Test`)
+    expect(['u', 'userId', 'g', 'claim.plan', 'claim.team'].every(key => !url.searchParams.has(key))).toBe(true)
     expect([...url.searchParams]).toEqual([['keep', 'one'], ['keep', 'two'], ['i', 'token']])
   }
   expect(await owner.evaluateFeatureGate(['A'])).toBe(true)
