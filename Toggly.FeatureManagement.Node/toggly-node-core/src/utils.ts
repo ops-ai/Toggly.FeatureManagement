@@ -1,21 +1,12 @@
 import type { FeatureDefinitions, FeatureRequirement } from './types.js'
 import { evaluateEvaluatedGate, type TogglyEntityContext } from '@ops-ai/toggly-hooks-types'
+import { randomUUID } from 'node:crypto'
 
 /**
  * Generate a UUID v4
  */
 export function generateUUID(): string {
-  // Use crypto.randomUUID if available (Node 19+), fallback to manual implementation
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-
-  // Manual UUID v4 implementation
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = Math.trunc(Math.random() * 16)
-    const v = c === 'x' ? r : (r & 0x3) | 0x8
-    return v.toString(16)
-  })
+  return randomUUID()
 }
 
 /**

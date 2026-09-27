@@ -1,3 +1,11 @@
+## 0.11.2
+
+2026-09-27
+
+### Fixed
+- Generate anonymous SDK UUIDs with Node's cryptographic UUID source on all
+  supported Node versions.
+
 ## 0.11.1
 
 2026-09-27

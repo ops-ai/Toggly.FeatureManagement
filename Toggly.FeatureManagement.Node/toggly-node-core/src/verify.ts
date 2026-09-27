@@ -84,35 +84,55 @@ export function extractRawJsonProperty(text: string, key: string): string | null
   let depth = 0
 
   while (index < text.length) {
-    const character = text[index]!
-    if (character === '"') {
-      const property = depth === 1 ? readTopLevelProperty(text, index) : null
-      if (property) {
-        if (property.name === key) {
-          return extractJsonValue(text, property.valueStart)
-        }
-        index = property.nextIndex
-        continue
-      }
-
-      const nextStringIndex = skipJsonString(text, index)
-      if (nextStringIndex == null) {
-        return null
-      }
-      index = nextStringIndex
-      continue
+    const scan = scanRawJsonCharacter(text, key, index, depth)
+    if ('value' in scan) {
+      return scan.value
     }
-
-    depth = updateContainerDepth(depth, character)
-    index += 1
+    index = scan.nextIndex
+    depth = scan.depth
   }
 
   return null
 }
 
-function skipJsonString(text: string, startQuote: number): number | null {
+type RawJsonScan =
+  | { depth: number; nextIndex: number }
+  | { value: string | null }
+
+function scanRawJsonCharacter(
+  text: string,
+  key: string,
+  index: number,
+  depth: number
+): RawJsonScan {
+  if (text[index] !== '"') {
+    return {
+      depth: updateContainerDepth(depth, text[index]!),
+      nextIndex: index + 1,
+    }
+  }
+
+  if (depth === 1) {
+    return scanTopLevelProperty(text, key, index)
+  }
+
+  return skipJsonString(text, index, depth)
+}
+
+function scanTopLevelProperty(text: string, key: string, index: number): RawJsonScan {
+  const property = readTopLevelProperty(text, index)
+  if (!property) {
+    return skipJsonString(text, index, 1)
+  }
+  if (property.name === key) {
+    return { value: extractJsonValue(text, property.valueStart) }
+  }
+  return { depth: 1, nextIndex: property.nextIndex }
+}
+
+function skipJsonString(text: string, startQuote: number, depth: number): RawJsonScan {
   const end = findStringEnd(text, startQuote)
-  return end == null ? null : end + 1
+  return end == null ? { value: null } : { depth, nextIndex: end + 1 }
 }
 
 function updateContainerDepth(depth: number, character: string): number {

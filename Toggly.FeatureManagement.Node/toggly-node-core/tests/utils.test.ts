@@ -15,6 +15,21 @@ import {
 
 describe('utils', () => {
   describe('generateUUID', () => {
+    it('uses Node cryptographic UUID generation without relying on Math.random', () => {
+      const mathRandom = vi.spyOn(Math, 'random')
+      vi.stubGlobal('crypto', undefined)
+
+      try {
+        expect(generateUUID()).toMatch(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+        )
+        expect(mathRandom).not.toHaveBeenCalled()
+      } finally {
+        vi.unstubAllGlobals()
+        mathRandom.mockRestore()
+      }
+    })
+
     it('should generate a valid UUID v4 format', () => {
       const uuid = generateUUID()
       expect(uuid).toMatch(
