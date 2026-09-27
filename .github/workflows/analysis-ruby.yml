@@ -305,19 +305,30 @@ jobs:
 
       - name: Organize coverage files
         run: |
+          set -euo pipefail
           mkdir -p coverage
           for pkg in core rails cache; do
             json=$(find coverage-artifacts/$pkg -name "coverage.json" 2>/dev/null | head -1)
-            if [ -n "$json" ]; then
-              cp "$json" "coverage/$pkg-coverage.json"
-              echo "Found coverage for $pkg: $json"
-            else
-              echo "No coverage found for $pkg"
-            fi
+            test -n "$json"
+            python3 - "$json" "$pkg" "coverage/$pkg-coverage.json" <<'PY'
+          import json
+          import sys
+
+          source, package, output = sys.argv[1:]
+          directory = {"core": "toggly", "rails": "toggly-rails", "cache": "toggly-cache"}[package]
+          with open(source, encoding="utf-8") as handle:
+              report = json.load(handle)
+          report["coverage"] = {
+              f"toggly-ruby/{directory}/{path}": result
+              for path, result in report["coverage"].items()
+          }
+          with open(output, "w", encoding="utf-8") as handle:
+              json.dump(report, handle)
+          PY
+            echo "Mapped coverage for $pkg: $json"
           done
           echo "Coverage files:"
-          ls -la coverage/ || echo "No coverage files found"
-        continue-on-error: true
+          ls -la coverage/
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.1
@@ -335,7 +346,7 @@ jobs:
             -Dsonar.tests=${{ env.SDK_ROOT }}
             -Dsonar.test.inclusions=**/spec/**,**/test/**,**/host-fixtures/**
             -Dsonar.ruby.coverage.reportPaths=coverage/core-coverage.json,coverage/rails-coverage.json,coverage/cache-coverage.json
-        continue-on-error: true
+            -Dsonar.qualitygate.wait=true
 
       - name: Download Dependency Check report (for SonarQube Server)
         uses: actions/download-artifact@v8
@@ -359,7 +370,7 @@ jobs:
             -Dsonar.test.inclusions=**/spec/**,**/test/**,**/host-fixtures/**
             -Dsonar.ruby.coverage.reportPaths=coverage/core-coverage.json,coverage/rails-coverage.json,coverage/cache-coverage.json
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
-        continue-on-error: true
+            -Dsonar.qualitygate.wait=true
 
   dependency-check:
     name: OWASP Dependency Check
@@ -423,7 +434,7 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: test-core,test-rails,test-cache,test-packed-hosts,smoke-test,lint,dependency-check
+          required-jobs: test-core,test-rails,test-cache,test-packed-hosts,smoke-test,lint,sonar,dependency-check
 
       - name: Generate summary
         run: |
