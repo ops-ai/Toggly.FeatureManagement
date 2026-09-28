@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.2
+## [1.0.2] - 2026-09-27
 
 ### Fixed
 - Add custom telemetry properties for feature flags first observed after the initial refresh.
