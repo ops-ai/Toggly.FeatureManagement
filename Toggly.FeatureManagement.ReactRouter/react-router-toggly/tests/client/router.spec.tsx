@@ -228,6 +228,7 @@ describe('RouterTogglyProvider', () => {
     );
 
     expect(mockUseRouteLoaderData).toHaveBeenCalledWith('root');
+    expect(mockUseLoaderData).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('child')).toHaveTextContent('Hello');
   });
 
@@ -295,6 +296,7 @@ describe('RouterTogglyProvider', () => {
     );
 
     expect(screen.getByTestId('child')).toHaveTextContent('Hello');
+    expect(mockUseRouteLoaderData).toHaveBeenCalledWith('');
   });
 });
 

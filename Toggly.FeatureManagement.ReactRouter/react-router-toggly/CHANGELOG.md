@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.2.1] - 2026-09-27
+
+### Fixed
+- Keep `RouterTogglyProvider` hook order stable when route selection changes while retaining loader and fallback context hydration [OPS-1451].
 
 ## [1.2.0] - 2026-09-26
 
