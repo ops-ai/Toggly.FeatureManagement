@@ -134,6 +134,9 @@ jobs:
       - name: Generate coverage report
         run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 
+      - name: Enforce Rocket adapter coverage
+        run: cargo llvm-cov --all-features -p toggly-rocket --ignore-filename-regex '/toggly/src/' --fail-under-lines 80.01
+
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
         with:
