@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/electron-feature-flags-toggly",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Toggly feature flags SDK for Electron \u2014 main-process evaluated-signed client with Flutter-like renderer DX",
   "keywords": [
     "feature-flags",

@@ -29,7 +29,8 @@ export function buildWebSocketUrl(
   }
   appendSdkQueryParams(params)
   const query = params.toString()
-  return `${wsBase}/${appKey}/ws${query ? `?${query}` : ''}`
+  const querySuffix = query ? `?${query}` : ''
+  return `${wsBase}/${appKey}/ws${querySuffix}`
 }
 
 export function getNextReconnectDelayMs(attempt: number): number {

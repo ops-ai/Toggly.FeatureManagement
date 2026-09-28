@@ -1,11 +1,11 @@
 import React, { useMemo, type ReactNode } from 'react'
 import { useFeatureGate } from './useFeatureFlag.js'
-import type { EntityContextInput, FeatureRequirement } from '../types.js'
+import type { EntityContextInput } from '../types.js'
 
 export interface FeatureProps {
   featureKey?: string
   featureKeys?: string[]
-  requirement?: FeatureRequirement | string
+  requirement?: string
   negate?: boolean
   context?: EntityContextInput
   contextKind?: string

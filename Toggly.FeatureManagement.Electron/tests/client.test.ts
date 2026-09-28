@@ -112,6 +112,18 @@ describe('ElectronTogglyClient', () => {
     expect(getToggly()).not.toBeNull()
   })
 
+  it('restores configured defaults on a no-appKey refresh', async () => {
+    const client = new ElectronTogglyClient({
+      userDataPath,
+      flagDefaults: { A: true },
+      enableLiveUpdates: false,
+    })
+    await client.init()
+    ;(client as any).features = { A: false }
+
+    expect(await client.refresh()).toEqual({ A: true })
+  })
+
   it('fetches evaluated-signed and caches flags', async () => {
     const fetchImpl = vi
       .fn()
@@ -205,6 +217,30 @@ describe('ElectronTogglyClient', () => {
     expect(flags.X).toBe(true)
   })
 
+  it('removes normal and long quote wrappers from definition revisions', async () => {
+    const longQuotes = '"'.repeat(20_000)
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockResponse(200, { defs: { A: true } }, { ETag: '""normal""' }),
+      )
+      .mockResolvedValueOnce(
+        mockResponse(200, { defs: { A: true } }, { ETag: `${longQuotes}pathological${longQuotes}` }),
+      )
+    const client = new ElectronTogglyClient({
+      userDataPath,
+      appKey: 'app-revision-quotes',
+      fetch: fetchImpl,
+      enableLiveUpdates: false,
+      enableTelemetry: false,
+    })
+
+    await client.init()
+    expect((client as any).cachedDefinitionsRevision).toBe('normal')
+    await client.refresh()
+    expect((client as any).cachedDefinitionsRevision).toBe('pathological')
+  })
+
   it('setContext and clearContext refresh flags', async () => {
     const fetchImpl = vi
       .fn()
@@ -292,6 +328,16 @@ describe('ElectronTogglyClient', () => {
     expect(evaluateFeatureGate(['A', 'B'], 'any')).toBe(true)
     expect(evaluateFeatureGate(['B'], 'all', true)).toBe(true)
     expect(evaluateFeatureGate([])).toBe(true)
+  })
+
+  it('treats an unrecognized gate requirement as all', async () => {
+    await initToggly({
+      userDataPath,
+      enableLiveUpdates: false,
+      flagDefaults: { A: true, B: false },
+    })
+
+    expect(evaluateFeatureGate(['A', 'B'], 'unsupported')).toBe(false)
   })
 
   it('throws setContext when not initialized', async () => {

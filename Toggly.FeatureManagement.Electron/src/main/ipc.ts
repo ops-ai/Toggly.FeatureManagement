@@ -1,9 +1,9 @@
 import type { BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '../ipc-channels.js'
-import { getToggly, type ElectronTogglyClient } from './client.js'
+import { getToggly } from './client.js'
+export { ElectronTogglyClient } from './client.js'
 import type {
   EntityContextInput,
-  FeatureRequirement,
   SetContextInput,
 } from '../types.js'
 
@@ -126,7 +126,7 @@ export function registerTogglyIpc(
     ([keys, requirement, negate, context, kind]) =>
       client.evaluateFeatureGate(
         keys as string[],
-        requirement as FeatureRequirement,
+        requirement as string,
         negate as boolean,
         context as EntityContextInput,
         kind as string | undefined,
@@ -249,8 +249,6 @@ export function registerTogglyIpc(
   broadcast(IPC_CHANNELS.evaluationsChanged)
   return unregister
 }
-
-export type { ElectronTogglyClient }
 
 function validKey(value: unknown): value is string {
   return (
