@@ -37,7 +37,7 @@ import type {
  * ```
  */
 export class AppInsightsHook implements Hook {
-  private options: ResolvedAppInsightsHookOptions;
+  private readonly options: ResolvedAppInsightsHookOptions;
   private previousFlags: Record<string, boolean> = {};
   private initialized = false;
   private telemetryInitializerAdded = false;
@@ -186,48 +186,61 @@ export class AppInsightsHook implements Hook {
     }
 
     try {
-      // Only track changes after initial load
       if (this.initialized) {
-        for (const [flagKey, newValue] of Object.entries(flags)) {
-          const oldValue = this.previousFlags[flagKey];
-          if (oldValue !== undefined && oldValue !== newValue) {
-            const properties: AppInsightsChangeEventProperties = {
-              feature_key: flagKey,
-              old_value: String(oldValue),
-              new_value: String(newValue),
-              event_category: 'toggly',
-              ...this.stringifyCustomProperties(this.options.customProperties),
-            };
-
-            this.trackEvent(this.options.changeEventName, properties);
-
-            if (this.options.setCustomProperties) {
-              this.updateFeatureProperty(flagKey, newValue);
-            }
-
-            if (this.options.debug) {
-              console.log('[Toggly AppInsights Hook] Feature changed:', flagKey, oldValue, '->', newValue);
-            }
-          }
-        }
+        this.trackFlagChanges(flags);
       } else {
-        // First refresh - set initial custom properties if enabled
-        if (this.options.setCustomProperties) {
-          for (const [flagKey, value] of Object.entries(flags)) {
-            this.updateFeatureProperty(flagKey, value);
-          }
-          // Ensure telemetry initializer is added
-          if (!this.telemetryInitializerAdded) {
-            this.addTelemetryInitializer();
-          }
-        }
-        this.initialized = true;
+        this.initializeFlags(flags);
       }
 
-      // Store current state for next comparison
       this.previousFlags = { ...flags };
     } catch (error) {
       console.error('[Toggly AppInsights Hook] Error processing refresh:', error);
+    }
+  }
+
+  private initializeFlags(flags: Record<string, boolean>): void {
+    if (this.options.setCustomProperties) {
+      this.updateFeatureProperties(flags);
+      this.addTelemetryInitializer();
+    }
+
+    this.initialized = true;
+  }
+
+  private trackFlagChanges(flags: Record<string, boolean>): void {
+    for (const [flagKey, newValue] of Object.entries(flags)) {
+      const oldValue = this.previousFlags[flagKey];
+
+      if (oldValue === undefined) {
+        if (this.options.setCustomProperties) {
+          this.updateFeatureProperty(flagKey, newValue);
+        }
+        continue;
+      }
+
+      if (oldValue !== newValue) {
+        this.trackFlagChange(flagKey, oldValue, newValue);
+      }
+    }
+  }
+
+  private trackFlagChange(flagKey: string, oldValue: boolean, newValue: boolean): void {
+    const properties: AppInsightsChangeEventProperties = {
+      feature_key: flagKey,
+      old_value: String(oldValue),
+      new_value: String(newValue),
+      event_category: 'toggly',
+      ...this.stringifyCustomProperties(this.options.customProperties),
+    };
+
+    this.trackEvent(this.options.changeEventName, properties);
+
+    if (this.options.setCustomProperties) {
+      this.updateFeatureProperty(flagKey, newValue);
+    }
+
+    if (this.options.debug) {
+      console.log('[Toggly AppInsights Hook] Feature changed:', flagKey, oldValue, '->', newValue);
     }
   }
 
@@ -254,6 +267,12 @@ export class AppInsightsHook implements Hook {
     this.currentFeatureProperties[propertyName] = propertyValue;
   }
 
+  private updateFeatureProperties(flags: Record<string, boolean>): void {
+    for (const [flagKey, value] of Object.entries(flags)) {
+      this.updateFeatureProperty(flagKey, value);
+    }
+  }
+
   /**
    * Add telemetry initializer to attach feature flags to all telemetry items.
    */
@@ -262,8 +281,7 @@ export class AppInsightsHook implements Hook {
     if (appInsights && appInsights.addTelemetryInitializer && !this.telemetryInitializerAdded) {
       appInsights.addTelemetryInitializer((item: any) => {
         // Add feature flag properties to all telemetry
-        if (item && item.data) {
-          item.data = item.data || {};
+        if (item?.data) {
           for (const [key, value] of Object.entries(this.currentFeatureProperties)) {
             item.data[key] = value;
           }
@@ -280,7 +298,7 @@ export class AppInsightsHook implements Hook {
    */
   private sanitizePropertyName(name: string): string {
     return name
-      .replace(/[^a-zA-Z0-9_]/g, '_')
+      .replace(/\W/g, '_')
       .substring(0, 150 - this.options.propertyPrefix.length);
   }
 
