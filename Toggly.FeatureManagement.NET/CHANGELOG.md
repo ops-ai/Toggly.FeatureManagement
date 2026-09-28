@@ -1,5 +1,11 @@
 # Changelog
 
+## All .NET SDK packages 3.11.2 - 2026-09-28
+
+### Changed
+- The internal context-hashing helper can no longer be instantiated. Public
+  APIs and feature-evaluation behavior are unchanged.
+
 ## All .NET SDK packages 3.11.1 - 2026-09-28
 
 ### Fixed
