@@ -1,10 +1,10 @@
 @model DashboardFeatureInput
 @{
     Layout = "_Layout";
-    var mount = (string?)ViewData["DashboardMount"] ?? "";
-    var basePath = $"{Context.Request.PathBase}{mount}";
     var current = ViewData["CurrentFeature"] as Toggly.FeatureManagement.Catalog.CatalogFeature;
-    var currentPath = current == null ? basePath + "/" : basePath + "/features/edit?key=" + Uri.EscapeDataString(current.Key);
+    var currentPath = current == null
+        ? Url.RouteUrl("TogglyDashboard.index")
+        : Url.RouteUrl("TogglyDashboard.edit", new { key = current.Key });
 }
 <section class="card">
     <h1>Catalog changed</h1>

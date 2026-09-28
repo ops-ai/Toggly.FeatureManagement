@@ -227,8 +227,34 @@ public sealed partial class DashboardMappingTests
             ["Description"] = "My unsaved description"
         });
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
-        (await response.Content.ReadAsStringAsync()).Should().Contain("My unsaved name").And.Contain("My unsaved description");
+        var html = await response.Content.ReadAsStringAsync();
+        html.Should().Contain("My unsaved name").And.Contain("My unsaved description");
+        var reloadLink = Regex.Match(html, "href=\"(?<url>[^\"]+)\"[^>]*>Reload current version</a>");
+        reloadLink.Success.Should().BeTrue();
+        (await host.Client.GetAsync(WebUtility.HtmlDecode(reloadLink.Groups["url"].Value)))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
         host.Feature("Checkout").Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("/features", null, "Feature01")]
+    [InlineData("/internal/flags", "/host", "Feature:Blue")]
+    public async Task Stale_edit_links_to_the_current_feature_at_the_dashboard_mount(string mount, string? pathBase, string key)
+    {
+        await using var host = await DashboardHost.StartAsync(mount, catalogExists: true, featureCount: 1, allowWrites: true, pathBase: pathBase);
+        host.Feature("Feature01")!.Key = key;
+        var root = (pathBase ?? string.Empty) + mount;
+
+        var response = await PostForm(host, $"{root}/features/edit?key={Uri.EscapeDataString(key)}", $"{root}/features/save", new()
+        {
+            ["ExpectedRevision"] = "stale", ["Key"] = key, ["Name"] = "Unsaved name"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var html = await response.Content.ReadAsStringAsync();
+        html.Should().Contain("Unsaved name").And.Contain("AlwaysOn")
+            .And.Contain($"href=\"{root}/features/edit?key={Uri.EscapeDataString(key)}\"");
+        host.Feature(key)!.Name.Should().Be("Feature 01");
     }
 
     [Fact]

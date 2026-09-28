@@ -1,5 +1,12 @@
 # Changelog
 
+## All .NET SDK packages 3.12.8 - 2026-10-04
+
+### Fixed
+- Dashboard conflict pages now generate reload links from the configured
+  routes, so nested mounts, host path bases, and encoded feature keys open
+  the current catalog or feature correctly.
+
 ## All .NET SDK packages 3.12.7 - 2026-10-03
 
 ### Fixed
