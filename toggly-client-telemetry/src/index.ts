@@ -15,10 +15,10 @@ const EXPIRY = 300000;
 function bytes(value: string): number {
   let size = 0;
   for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
+    const code = value.codePointAt(i)!;
     if (code < 0x80) size++;
     else if (code < 0x800) size += 2;
-    else if (code >= 0xd800 && code <= 0xdbff && value.charCodeAt(i + 1) >= 0xdc00 && value.charCodeAt(i + 1) <= 0xdfff) { size += 4; i++; }
+    else if (code > 0xffff) { size += 4; i++; }
     else size += 3;
   }
   return size;
@@ -53,6 +53,88 @@ function sameContext(a: Context, b: Context): boolean {
   return a.k === b.k && a.e === b.e && a.i === b.i && a.u === b.u;
 }
 
+function chunk(entry: Entry): number[] {
+  return entry.values.map(value => Math.min(MAX_VALUE, value));
+}
+
+function reservation(entry: Entry): { count: number; size: number } {
+  const count = Math.max(1, ...entry.values.map(value => Math.ceil(value / MAX_VALUE)));
+  const envelope: Envelope = { ...entry.context };
+  write(envelope, entry, chunk(entry));
+  return { count, size: bytes(JSON.stringify(envelope)) * count };
+}
+
+function conflictsWithBufferedMetricKind(entries: Entry[], entry: Entry): boolean {
+  return entries.some(existing =>
+    existing.key === entry.key
+    && existing.kind !== 'feature'
+    && entry.kind !== 'feature'
+    && existing.kind !== entry.kind,
+  );
+}
+
+function hasReachedVariantLimit(entries: Entry[], entry: Entry): boolean {
+  if (entry.kind !== 'feature') return false;
+  const variants = new Set(entries
+    .filter(existing => existing.kind === 'feature' && existing.key === entry.key)
+    .map(existing => existing.variant));
+  return !variants.has(entry.variant) && variants.size >= 16;
+}
+
+function admissionFailure(entries: Entry[], entry: Entry, old: Entry | undefined): TelemetryDiagnostic | undefined {
+  const proposed = reservation(entry);
+  if (proposed.size / proposed.count > MAX_BYTES) return 'invalid-event';
+  let count = proposed.count;
+  let size = proposed.size;
+  for (const existing of entries) {
+    if (existing === old) continue;
+    const used = reservation(existing);
+    count += used.count;
+    size += used.size;
+  }
+  return count > MAX_ENTRIES || size > MAX_BUFFER ? 'buffer-full' : undefined;
+}
+
+function retryDelay(response: TelemetryResponse | undefined, attemptNumber: number, born: number, now: () => number): number | undefined {
+  if (!response || ![429, 503].includes(response.status) || attemptNumber === 2) return undefined;
+  let delay = attemptNumber === 0 ? 30000 : 60000;
+  try {
+    const retry = response.headers?.get('Retry-After');
+    if (retry) {
+      const seconds = Number(retry);
+      const until = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(retry) - now();
+      if (Number.isFinite(until)) delay = Math.max(delay, until);
+    }
+  } catch { /* Unreadable Retry-After retains the default delay. */ }
+  return now() + delay >= born + EXPIRY ? undefined : delay;
+}
+
+function removeEntry(envelope: Envelope, entry: Entry): void {
+  if (entry.kind === 'feature') {
+    delete envelope.f![entry.key][entry.variant!];
+    if (!Object.keys(envelope.f![entry.key]).length) delete envelope.f![entry.key];
+    if (!Object.keys(envelope.f!).length) delete envelope.f;
+    return;
+  }
+  delete envelope.m![entry.key];
+  if (!Object.keys(envelope.m!).length) delete envelope.m;
+}
+
+function selectEnvelope(snapshot: Map<string, Entry>): { envelope: Envelope; selected: [string, Entry, number[]][] } {
+  const envelope: Envelope = { ...snapshot.values().next().value!.context };
+  const selected: [string, Entry, number[]][] = [];
+  for (const [id, entry] of snapshot) {
+    const values = chunk(entry);
+    write(envelope, entry, values);
+    if (bytes(JSON.stringify(envelope)) > MAX_BYTES) {
+      removeEntry(envelope, entry);
+      break;
+    }
+    selected.push([id, entry, values]);
+  }
+  return { envelope, selected };
+}
+
 /** Create one owner per client instance. Importing this package starts no work. */
 export function createTelemetryReporter(options: TelemetryOptions): TelemetryReporter {
   const optedOut = options.enableTelemetry === false;
@@ -73,7 +155,7 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
   try {
     const parsed = new URL(base);
     // URL.search/hash omit empty delimiters, so reject them in the input too.
-    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || /[?#]/.test(base)) throw new Error();
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || /[?#]/.test(base)) throw new Error('Invalid telemetry endpoint');
     // React Native's native URL accepts pathname writes but can ignore them.
     // Put the complete path in the constructor input instead.
     const path = parsed.pathname;
@@ -97,14 +179,6 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
   let periodic: ReturnType<typeof setTimeout> | undefined;
   let cancelRetry: (() => void) | undefined;
   let cleanups: Set<() => void> | undefined;
-  const chunk = (entry: Entry): number[] => entry.values.map(v => Math.min(MAX_VALUE, v));
-  function cost(entry: Entry): { count: number; size: number } {
-    const count = Math.max(1, ...entry.values.map(v => Math.ceil(v / MAX_VALUE)));
-    const envelope: Envelope = { ...entry.context }; write(envelope, entry, chunk(entry));
-    // Conservatively reserve each eventual chunk as a complete envelope. This
-    // bounds packetization as well as wire buffers, without allocating chunks.
-    return { count, size: bytes(JSON.stringify(envelope)) * count };
-  }
   function allEntries(): Entry[] { return [...(snapshot?.values() ?? []), ...sealed.flatMap(partition => [...partition.values()]), ...pending.values()]; }
   const hasQueued = (): boolean => sealed.length > 0 || pending.size > 0;
   function accept(entry: Entry): void {
@@ -113,20 +187,11 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
     const current = sameContext(entry.context, context);
     const old = current ? pending.get(id) : undefined;
     const entries = allEntries();
-    if (entries.some(e => e.key === entry.key && e.kind !== 'feature' && entry.kind !== 'feature' && e.kind !== entry.kind)) { diagnostic('metric-kind-conflict'); return; }
-    if (entry.kind === 'feature') {
-      const variants = new Set(entries.filter(e => e.kind === 'feature' && e.key === entry.key).map(e => e.variant));
-      if (!variants.has(entry.variant) && variants.size >= 16) { diagnostic('buffer-full'); return; }
-    }
+    if (conflictsWithBufferedMetricKind(entries, entry)) { diagnostic('metric-kind-conflict'); return; }
+    if (hasReachedVariantLimit(entries, entry)) { diagnostic('buffer-full'); return; }
     if (old && entry.kind !== 'gauge') entry.values = entry.values.map((v, i) => v + old.values[i]);
-    const proposed = cost(entry);
-    if (proposed.size / proposed.count > MAX_BYTES) { diagnostic('invalid-event'); return; }
-    let count = proposed.count; let size = proposed.size;
-    for (const existing of entries) {
-      if (existing === old) continue;
-      const used = cost(existing); count += used.count; size += used.size;
-    }
-    if (count > MAX_ENTRIES || size > MAX_BUFFER) { diagnostic('buffer-full'); return; }
+    const rejected = admissionFailure(entries, entry, old);
+    if (rejected) { diagnostic(rejected); return; }
     if (current) pending.set(id, entry);
     else {
       // A check evaluated before a host callback can be admitted afterward.
@@ -159,7 +224,14 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
     let timeout: ReturnType<typeof setTimeout> | undefined;
     let expired = false;
     const stopped = new Promise<undefined>(resolve => {
-      cancelAttempt = () => { expired = true; if (timeout !== undefined) clearTimeout(timeout); controller?.abort(); resolve(undefined); };
+      cancelAttempt = () => {
+        expired = true;
+        if (timeout !== undefined) {
+          clearTimeout(timeout);
+        }
+        controller?.abort();
+        resolve(undefined);
+      };
     });
     const work = async (): Promise<TelemetryResponse | undefined> => {
       let compressed: ArrayBuffer | undefined;
@@ -177,7 +249,12 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
         timeout = setTimeout(() => { expired = true; controller?.abort(); resolve(undefined); }, 5000);
       })]);
     } catch { return undefined; }
-    finally { if (timeout !== undefined) clearTimeout(timeout); cancelAttempt = undefined; }
+    finally {
+      if (timeout !== undefined) {
+        clearTimeout(timeout);
+      }
+      cancelAttempt = undefined;
+    }
   }
   function wait(delay: number): Promise<void> {
     return new Promise(resolve => {
@@ -191,17 +268,8 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
     for (let attemptNumber = 0; attemptNumber < 3; attemptNumber++) {
       const response = await attempt(body, exit, wire);
       if (response?.status === 202) return;
-      if (disposed || !response || ![429, 503].includes(response.status) || attemptNumber === 2) { diagnostic('transport-drop'); return; }
-      let delay = attemptNumber === 0 ? 30000 : 60000;
-      try {
-        const retry = response.headers?.get('Retry-After');
-        if (retry) {
-          const seconds = Number(retry);
-          const until = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(retry) - now();
-          if (Number.isFinite(until)) delay = Math.max(delay, until);
-        }
-      } catch { /* Unreadable Retry-After retains the default delay. */ }
-      if (now() + delay >= born + EXPIRY) { diagnostic('transport-drop'); return; }
+      const delay = retryDelay(response, attemptNumber, born, now);
+      if (disposed || delay === undefined) { diagnostic('transport-drop'); return; }
       await wait(delay);
       if (disposed || now() >= born + EXPIRY) return;
     }
@@ -213,21 +281,7 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
       snapshot = sealed.shift()!;
       const born = now();
       while (snapshot.size && !cancelled && (!disposed || finalRemaining > 0)) {
-        const envelope: Envelope = { ...snapshot.values().next().value!.context };
-        const selected: [string, Entry, number[]][] = [];
-        for (const [id, entry] of snapshot) {
-          const values = chunk(entry);
-          write(envelope, entry, values);
-          if (bytes(JSON.stringify(envelope)) > MAX_BYTES) {
-            if (entry.kind === 'feature') {
-              delete envelope.f![entry.key][entry.variant!];
-              if (!Object.keys(envelope.f![entry.key]).length) delete envelope.f![entry.key];
-              if (!Object.keys(envelope.f!).length) delete envelope.f;
-            } else { delete envelope.m![entry.key]; if (!Object.keys(envelope.m!).length) delete envelope.m; }
-            break;
-          }
-          selected.push([id, entry, values]);
-        }
+        const { envelope, selected } = selectEnvelope(snapshot);
         if (!selected.length) break;
         if (disposed) finalRemaining--;
         await send(JSON.stringify(envelope), born, keepalive || disposed);
