@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.0.2] - 2026-09-27
+
+### Fixed
+- Send GA4 events when `gtag` is exposed through `globalThis` in browser-compatible hosts.
+
 
 ## 1.0.1
 
