@@ -20,6 +20,13 @@ export function evaluateWithDefinitionDependencies<T>(
   return [flags.value, localGatesRevision.value, evaluate()][2] as T;
 }
 
+/** Evaluate a client-side gate while tracking definition and local-gate updates. */
+export function useGateEvaluation(evaluate: () => boolean): Readonly<Ref<boolean>> {
+  const flags = useStore($flags);
+  const localGatesRevision = useStore($localGatesRevision);
+  return computed(() => evaluateWithDefinitionDependencies(flags, localGatesRevision, evaluate));
+}
+
 /** @internal Preserve the SSR loading snapshot until the island mounts. */
 export function useTogglyReady(): Readonly<Ref<boolean>> {
   const ready = useStore($isReady);

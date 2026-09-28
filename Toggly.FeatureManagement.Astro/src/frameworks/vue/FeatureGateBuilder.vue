@@ -10,9 +10,8 @@
  */
 
 import { computed } from 'vue';
-import { useStore as storeToRef } from '@nanostores/vue';
-import { evaluateWithDefinitionDependencies, useTogglyReady } from './composables.js';
-import { $flags, $gate, $localGatesRevision } from '../../client/store.js';
+import { useGateEvaluation, useTogglyReady } from './composables.js';
+import { $gate } from '../../client/store.js';
 
 export interface FeatureGateBuilderProps {
   /** Single feature flag key to check */
@@ -36,8 +35,6 @@ const props = withDefaults(defineProps<FeatureGateBuilderProps>(), {
 });
 
 const isReady = useTogglyReady();
-const currentFlags = storeToRef($flags);
-const localGatesRevision = storeToRef($localGatesRevision);
 
 const flagKeys = computed(() => {
   const keys: string[] = [];
@@ -50,14 +47,14 @@ const flagKeys = computed(() => {
   return keys;
 });
 
+const gateEnabled = useGateEvaluation(
+  () => $gate(flagKeys.value, props.requirement, props.negate, props.context, props.contextKind).get(),
+);
+
 const enabled = computed(() => {
   if (!isReady.value) {
     return false;
   }
-  return evaluateWithDefinitionDependencies(
-    currentFlags,
-    localGatesRevision,
-    () => $gate(flagKeys.value, props.requirement, props.negate, props.context, props.contextKind).get(),
-  );
+  return gateEnabled.value;
 });
 </script>

@@ -9,9 +9,8 @@
  */
 
 import { computed } from 'vue';
-import { useStore as storeToRef } from '@nanostores/vue';
-import { evaluateWithDefinitionDependencies, useTogglyReady } from './composables.js';
-import { $flags, $gate, $localGatesRevision } from '../../client/store.js';
+import { useGateEvaluation, useTogglyReady } from './composables.js';
+import { $gate } from '../../client/store.js';
 import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 
 export interface FeatureProps {
@@ -36,8 +35,6 @@ const props = withDefaults(defineProps<FeatureProps>(), {
 });
 
 const isReady = useTogglyReady();
-const currentFlags = storeToRef($flags);
-const localGatesRevision = storeToRef($localGatesRevision);
 
 const flagKeys = computed(() => {
   const keys: string[] = [];
@@ -50,11 +47,7 @@ const flagKeys = computed(() => {
   return keys;
 });
 
-const isEnabled = computed(() => {
-  return evaluateWithDefinitionDependencies(
-    currentFlags,
-    localGatesRevision,
-    () => $gate(flagKeys.value, props.requirement, props.negate, props.context, props.contextKind).get(),
-  );
-});
+const isEnabled = useGateEvaluation(
+  () => $gate(flagKeys.value, props.requirement, props.negate, props.context, props.contextKind).get(),
+);
 </script>
