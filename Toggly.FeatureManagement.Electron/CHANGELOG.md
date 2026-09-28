@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.2] - 2026-09-28
+
+### Fixed
+
+- Definition refreshes use `cache: 'no-store'` so HTTP caches cannot replay a
+  stale evaluated GET under the same storage revision [OPS-1568].
+
 ## [1.2.1] - 2026-09-27
 
 ### Fixed

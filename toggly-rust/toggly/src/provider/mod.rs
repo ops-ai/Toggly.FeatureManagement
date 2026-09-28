@@ -722,10 +722,10 @@ impl DefinitionsProvider {
                 return Ok(RefreshCacheOutcome::Hit);
             }
             HttpCacheKind::SameRevision => {
-                debug!("Definitions revision matches existing (ETag or Last-Modified)");
-                Self::store_revision_headers(etag, last_modified, response_etag, response_lm);
-                *last_fetch.write() = Some(Instant::now());
-                return Ok(RefreshCacheOutcome::Hit);
+                // Same storage revision is a telemetry hit, but HTTP 200 still
+                // carries an authoritative body — apply it (parity with .NET /
+                // Node evaluated refresh). Fall through to parse.
+                debug!("Definitions revision matches existing; applying HTTP 200 body");
             }
             HttpCacheKind::ErrorStatus => {
                 let err = crate::Error::Provider(format!(
@@ -737,6 +737,8 @@ impl DefinitionsProvider {
             }
             HttpCacheKind::NewContent => {}
         }
+
+        let same_revision = matches!(kind, HttpCacheKind::SameRevision);
 
         let body_bytes = match response.bytes().await {
             Ok(b) => b,
@@ -772,7 +774,11 @@ impl DefinitionsProvider {
         *last_fetch.write() = Some(Instant::now());
         *last_error.write() = None;
         *last_error_time.write() = None;
-        Ok(RefreshCacheOutcome::Miss)
+        Ok(if same_revision {
+            RefreshCacheOutcome::Hit
+        } else {
+            RefreshCacheOutcome::Miss
+        })
     }
 
     async fn parse_response_body(
@@ -1271,6 +1277,55 @@ mod tests {
         provider.set_definition_cache_recorder(rec.clone());
         provider.refresh(false, false).await.unwrap();
         provider.refresh(true, false).await.unwrap();
+        assert_eq!(rec.snapshot(), (1, 1));
+    }
+
+    #[tokio::test]
+    async fn equal_etag_200_applies_flipped_body() {
+        let on_body = feature_json("feat-a");
+        let off_body = serde_json::json!([{
+            "featureKey": "feat-a",
+            "filters": [],
+            "metrics": [],
+            "securedFeature": false,
+            "clientSdkEnabled": true,
+            "requirementType": "Any"
+        }]);
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "\"same\"")
+                    .set_body_json(on_body),
+            )
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "\"same\"")
+                    .set_body_json(off_body),
+            )
+            .mount(&server)
+            .await;
+
+        let provider = provider_against(&server).await;
+        let rec = Arc::new(CountingRecorder::new());
+        provider.set_definition_cache_recorder(rec.clone());
+        provider.refresh(false, false).await.unwrap();
+        assert!(provider.contains("feat-a"));
+        let on = provider.get("feat-a").expect("feat-a present");
+        assert_eq!(on.filters.len(), 1);
+
+        provider.refresh(true, false).await.unwrap();
+        let off = provider.get("feat-a").expect("feat-a still present");
+        assert!(
+            off.filters.is_empty(),
+            "same-etag HTTP 200 must apply flipped body"
+        );
         assert_eq!(rec.snapshot(), (1, 1));
     }
 

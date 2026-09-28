@@ -378,7 +378,7 @@ func (p *definitionsProvider) refreshUnsigned(ctx context.Context) (refreshCache
 	if p.snap != nil {
 		_ = p.snap.SaveDefinitions(ctx, snapshot.DefinitionsSnapshot{Defs: defs})
 	}
-	return refreshCacheMiss, nil
+	return outcome, nil
 }
 
 func (p *definitionsProvider) refreshSigned(ctx context.Context) (refreshCacheOutcome, error) {
@@ -437,7 +437,7 @@ func (p *definitionsProvider) refreshSigned(ctx context.Context) (refreshCacheOu
 			ETag:      newETag,
 		})
 	}
-	return refreshCacheMiss, nil
+	return outcome, nil
 }
 
 func newRefreshGET(ctx context.Context, reqURL, etag string) (*http.Request, error) {
@@ -464,15 +464,17 @@ func evaluateRefreshHTTP(resp *http.Response, existingETag, failLabel string) (n
 		return "", nil, refreshCacheHit, true, fmt.Errorf("%s failed: %s: %s", failLabel, resp.Status, string(b))
 	}
 	newETag = resp.Header.Get("ETag")
-	// HTTP 200 whose etag matches existing (CDN replay) — cache hit.
-	if etagsMatch(existingETag, newETag) {
-		return newETag, nil, refreshCacheHit, true, nil
-	}
 	body, err = io.ReadAll(resp.Body)
 	if err != nil {
 		return newETag, nil, refreshCacheHit, true, err
 	}
-	return newETag, body, 0, false, nil
+	// Always apply HTTP 200 bodies. Equal revision is still a cache hit for
+	// telemetry (CDN replay), but callers must decode/apply the body.
+	outcome = refreshCacheMiss
+	if etagsMatch(existingETag, newETag) {
+		outcome = refreshCacheHit
+	}
+	return newETag, body, outcome, false, nil
 }
 
 func isCachedRevision(currentTS, incomingTS int64) bool {

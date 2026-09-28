@@ -32,6 +32,7 @@ describe('304 definitions revision persistence', () => {
     const restored = create(storage);
     expect((await restored.init()).flags).toEqual({ enabled: true });
     expect((fetch as jest.Mock).mock.calls[2][1].headers['If-None-Match']).toBe(updated ? 'revision-2' : 'revision-1');
+    expect((fetch as jest.Mock).mock.calls[2][1].cache).toBe('no-store');
     restored.dispose();
 
     (fetch as jest.Mock).mockRejectedValueOnce(new Error('offline'));

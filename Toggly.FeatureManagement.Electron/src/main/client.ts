@@ -709,10 +709,13 @@ export class ElectronTogglyClient {
       const url = appendDefinitionsRevisionParam(this.buildEvaluatedUrl(), pin)
       const headers = this.buildFetchHeaders(Boolean(pin))
 
+      // Bypass HTTP caches: evaluated bodies can change under the same storage
+      // revision (identity / groups / claims).
       const response = await this.fetchImpl(url, {
         method: 'GET',
         headers,
         signal: controller.signal,
+        cache: 'no-store',
       })
       return await this.handleRefreshResponse(response, headers, controller, current)
     } catch (error) {

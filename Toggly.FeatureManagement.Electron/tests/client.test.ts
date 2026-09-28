@@ -98,6 +98,7 @@ describe('ElectronTogglyClient', () => {
     const url = String(fetchImpl.mock.calls[0][0])
     expect(url).toContain('https://definitions.toggly.io/evaluated-signed/')
     expect(url).toContain('/Production')
+    expect(fetchImpl.mock.calls[0][1]?.cache).toBe('no-store')
   })
 
   it('init with defaults and no appKey uses flagDefaults', async () => {

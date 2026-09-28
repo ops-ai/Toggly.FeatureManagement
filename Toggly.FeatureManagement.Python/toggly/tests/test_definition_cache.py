@@ -74,11 +74,15 @@ class TestDefinitionCacheHelpers:
         )
         assert hit_304 == ConditionalGetHit(etag_to_store=None)
 
-        hit_same = resolve_conditional_get(
-            probe_http_cache(200, '"r"', {"ETag": '"r"'}),
-            resource_label="definitions",
+        # Same storage revision with HTTP 200 is not a conditional-GET hit:
+        # callers must parse and apply the body (evaluated-* can flip under one ETag).
+        assert (
+            resolve_conditional_get(
+                probe_http_cache(200, '"r"', {"ETag": '"r"'}),
+                resource_label="definitions",
+            )
+            is None
         )
-        assert hit_same == ConditionalGetHit(etag_to_store='"r"')
 
         assert (
             resolve_conditional_get(
