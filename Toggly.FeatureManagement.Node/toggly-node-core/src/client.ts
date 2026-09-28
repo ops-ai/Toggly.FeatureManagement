@@ -445,9 +445,13 @@ export function createTogglyClient(
 
       const response = await fetch(url, {
         method: 'GET',
-        headers,
+        headers: {
+          ...headers,
+          // Node/undici RequestInit typings omit `cache`; Cache-Control is the
+          // portable way to avoid intermediary HTTP caches on definition GETs.
+          'Cache-Control': 'no-store',
+        },
         signal: controller.signal,
-        cache: 'no-store',
       })
 
       clearTimeout(timeoutId)

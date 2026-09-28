@@ -317,8 +317,11 @@ describe('definition cache hit telemetry', () => {
     await client.refresh()
     expect(await client.isFeatureOn('feature-a')).toBe(false)
 
-    const refreshInit = mockFetch.mock.calls[1]?.[1] as { cache?: string } | undefined
-    expect(refreshInit?.cache).toBe('no-store')
+    const refreshInit = mockFetch.mock.calls[1]?.[1] as {
+      cache?: string
+      headers?: Record<string, string>
+    } | undefined
+    expect(refreshInit?.headers?.['Cache-Control']).toBe('no-store')
 
     await client.flushTelemetry()
     const payload = sendStats.mock.calls[0][0] as {
