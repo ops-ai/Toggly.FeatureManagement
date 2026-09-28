@@ -6,16 +6,20 @@ import semver from 'semver';
 
 const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url)));
 const npm = process.env.npm_execpath;
-assert.ok(npm, 'Run with npm run test:package');
-const [artifact] = JSON.parse(execFileSync(process.execPath, [npm, 'pack', '--dry-run', '--json'], { encoding: 'utf8' }));
-const files = new Set(artifact.files.map(({ path }) => `./${path}`));
-for (const [name, entry] of Object.entries(manifest.exports)) {
-  test(`packed export ${name} includes its implementation and public types`, () => {
-    for (const target of typeof entry === 'string' ? [entry] : Object.values(entry)) {
-      assert.ok(files.has(target), `Missing ${target} in npm artifact`);
-    }
-  });
+function packedFiles() {
+  assert.ok(npm, 'Run with npm run test:package');
+  const [artifact] = JSON.parse(execFileSync(process.execPath, [npm, 'pack', '--dry-run', '--json'], { encoding: 'utf8' }));
+  return new Set(artifact.files.map(({ path }) => `./${path}`));
 }
+
+test('packed artifact includes every public export implementation and type declaration', () => {
+  const files = packedFiles();
+  for (const [name, entry] of Object.entries(manifest.exports)) {
+    for (const target of typeof entry === 'string' ? [entry] : Object.values(entry)) {
+      assert.ok(files.has(target), `Missing ${target} for ${name} in npm artifact`);
+    }
+  }
+});
 for (const version of ['5.0.0', '5.18.2', '6.0.0', '6.4.8', '7.0.0', '7.3.2']) {
   test(`Astro ${version} can install the packed peer contract`, () => {
     assert.ok(semver.satisfies(version, manifest.peerDependencies.astro));

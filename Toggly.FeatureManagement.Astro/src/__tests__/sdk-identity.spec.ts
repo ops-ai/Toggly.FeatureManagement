@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {readFileSync} from 'node:fs';
 import {
   buildDefinitionFetchHeaders,
@@ -12,10 +12,6 @@ describe('sdk-identity', () => {
   it('reports the publishable manifest version', () => {
     expect(SDK_VERSION).toBe(JSON.parse(readFileSync('package.json', 'utf8')).version);
   });
-  afterEach(() => {
-    // jsdom restores window/document between tests; no cleanup needed
-  });
-
   it('builds user agent and custom headers helpers', () => {
     expect(sdkUserAgent()).toBe(`toggly-${SDK_ID}/${SDK_VERSION}`);
     expect(usesSdkCustomHeaders()).toBe(true);

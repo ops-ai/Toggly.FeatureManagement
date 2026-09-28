@@ -85,14 +85,14 @@ class TogglyClientInstance {
   private config: TogglyConfig;
   private disposed = false;
   private generation = 0;
-  private reporter: TelemetryReporter | undefined;
-  private detachTelemetry: (() => void) | undefined;
-  private requests = new Map<AbortController, ReturnType<typeof setTimeout>>();
+  private readonly reporter: TelemetryReporter | undefined;
+  private readonly detachTelemetry: (() => void) | undefined;
+  private readonly requests = new Map<AbortController, ReturnType<typeof setTimeout>>();
   private cache: Flags | null = null;
   private hasDefinitionsBody = false;
   private variantCache: Record<string, EvaluatedVariantDef> | null = null;
   private refreshInterval: NodeJS.Timeout | null = null;
-  public hookExecutor = new HookExecutor();
+  public readonly hookExecutor = new HookExecutor();
   private localGates: LocalGate[] = [];
   private localGateIndex: FlagGateIndex = new Map();
   private lastError: Error | null = null;
@@ -208,6 +208,7 @@ class TogglyClientInstance {
     // Attribution belongs to the current context, never to inherited URL defaults.
     url.searchParams.delete('i');
     if (instanceId?.trim()) {
+      // Deleting while iterating URLSearchParams skips subsequent duplicate keys.
       for (const key of [...url.searchParams.keys()]) {
         if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) {
           url.searchParams.delete(key);

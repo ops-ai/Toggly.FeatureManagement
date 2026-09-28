@@ -36,7 +36,7 @@ const props = withDefaults(defineProps<FeatureProps>(), {
 });
 
 const isReady = useTogglyReady();
-const flags = useStore($flags);
+const currentFlags = useStore($flags);
 const localGatesRevision = useStore($localGatesRevision);
 
 const flagKeys = computed(() => {
@@ -51,8 +51,8 @@ const flagKeys = computed(() => {
 });
 
 const isEnabled = computed(() => {
-  void flags.value;
-  void localGatesRevision.value;
+  currentFlags.value;
+  localGatesRevision.value;
   return $gate(flagKeys.value, props.requirement, props.negate, props.context, props.contextKind).get();
 });
 </script>

@@ -31,8 +31,8 @@ export function useFeatureFlag(
   const isReady = useTogglyReady();
 
   const enabled = computed(() => {
-    void flags.value;
-    void localGatesRevision.value;
+    flags.value;
+    localGatesRevision.value;
     return $flag(flagKey, defaultValue).get();
   });
 
@@ -55,8 +55,8 @@ export function useFeatureGate(
   const isReady = useTogglyReady();
 
   const enabled = computed(() => {
-    void flags.value;
-    void localGatesRevision.value;
+    flags.value;
+    localGatesRevision.value;
     return $gate(flagKeys, requirement, negate).get();
   });
 
