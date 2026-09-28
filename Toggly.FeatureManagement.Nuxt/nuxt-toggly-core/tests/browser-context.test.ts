@@ -9,7 +9,7 @@ const owners:ReturnType<typeof createTogglyClient>[]=[]
 function owner(config: TogglyConfig = {}) {const value=createTogglyClient({...options,...config});owners.push(value);return value}
 beforeEach(()=>{
  storage=new Map();vi.stubGlobal('localStorage',{getItem:(key:string)=>storage.get(key)??null,setItem:(key:string,value:string)=>storage.set(key,value)})
- vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({defs:{Flag:true,Gate:gate}}),{headers:{etag:'a'}})))
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({defs:{Flag:true,Gate:gate}}),{headers:{etag:'\"\"\"a\"\"\"'}})))
 })
 afterEach(()=>{owners.splice(0).forEach(value=>value.destroy());vi.unstubAllGlobals();vi.restoreAllMocks()})
 it('restores full mixed gates after replacement, offline and token ABA 304',async()=>{

@@ -34,17 +34,30 @@ describe('generateUUID', () => {
     )
   })
 
-  it('should fall back to Math.random implementation when crypto.randomUUID is unavailable', () => {
+  it('should use crypto.getRandomValues when crypto.randomUUID is unavailable', () => {
     const original = crypto.randomUUID
+    const randomValues = vi.spyOn(crypto, 'getRandomValues').mockImplementation((bytes) => {
+      bytes.set(Array.from({ length: bytes.length }, (_, index) => index))
+      return bytes
+    })
     ;(crypto as any).randomUUID = undefined
 
     try {
-      const uuid = generateUUID()
-      expect(uuid).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-      )
+      expect(generateUUID()).toBe('00010203-0405-4607-8809-0a0b0c0d0e0f')
+      expect(randomValues).toHaveBeenCalledWith(expect.any(Uint8Array))
     } finally {
       ;(crypto as any).randomUUID = original
+      randomValues.mockRestore()
+    }
+  })
+
+  it('requires an explicit identity when Web Crypto is unavailable', () => {
+    vi.stubGlobal('crypto', undefined)
+
+    try {
+      expect(() => generateUUID()).toThrow('Web Crypto is required')
+    } finally {
+      vi.unstubAllGlobals()
     }
   })
 })

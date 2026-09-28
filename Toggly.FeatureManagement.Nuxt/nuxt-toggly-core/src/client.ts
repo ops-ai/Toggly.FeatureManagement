@@ -63,7 +63,27 @@ function normalizeRevision(revision: string | null | undefined): string | null {
     return null
   }
 
-  return revision.replace(/^"+/, '').replace(/"+$/, '')
+  let first = 0
+  let last = revision.length
+  while (revision.charCodeAt(first) === 34) {
+    first += 1
+  }
+  while (last > first && revision.charCodeAt(last - 1) === 34) {
+    last -= 1
+  }
+  return revision.slice(first, last)
+}
+
+function revisionsMatch(
+  previous: string | null | undefined,
+  incoming: string | null | undefined,
+): boolean {
+  const a = normalizeRevision(previous)
+  const b = normalizeRevision(incoming)
+  if (!a || !b) {
+    return false
+  }
+  return a === b
 }
 
 /**
@@ -207,18 +227,6 @@ export function createTogglyClient(
     } catch (error) {
       console.debug('[Toggly] Failed to record definition cache miss:', error)
     }
-  }
-
-  function revisionsMatch(
-    previous: string | null | undefined,
-    incoming: string | null | undefined,
-  ): boolean {
-    const a = normalizeRevision(previous)
-    const b = normalizeRevision(incoming)
-    if (!a || !b) {
-      return false
-    }
-    return a === b
   }
 
   function getDefinitionsRevision(): string | null {
