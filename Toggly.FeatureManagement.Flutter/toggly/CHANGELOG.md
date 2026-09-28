@@ -1,3 +1,20 @@
+## 1.13.1
+
+2026-09-27
+
+### Fixed
+- Reject malformed or unverifiable signed flag caches before exposing their
+  values. Offline signed cache use requires a usable persisted or fetched JWK;
+  a matching persisted JWK still permits verified offline definitions.
+- Preserve signed caches that cannot currently be verified when an error
+  callback fails during JWK retrieval, so they can be verified later.
+- Remove identity-mismatched flag caches before notifying an error callback.
+- Keep flag-loading recovery when a consumer `onError` callback throws.
+- Preserve signed variant caches when JWKs are temporarily unavailable,
+  matching signed feature-flag offline behavior.
+- Retry retained signed variant caches in the same session after JWKs become
+  available, instead of retaining an empty fallback in memory.
+
 ## 1.13.0
 
 2026-09-24
