@@ -4,10 +4,12 @@ let attachments: WeakMap<TelemetryReporter, () => void> | undefined;
 /** Attach optional browser lifecycle behavior; returns an idempotent detach. */
 export function attachBrowserLifecycle(reporter: TelemetryReporter): () => void {
   const cleanups = lifecycleFor(reporter);
-  if (!cleanups || typeof window === 'undefined' || typeof document === 'undefined') return () => {};
+  if (!cleanups) return () => {};
+  const targetWindow = globalThis.window;
+  const targetDocument = globalThis.document;
+  if (!targetWindow || !targetDocument) return () => {};
   const existing = attachments?.get(reporter);
   if (existing) return existing;
-  const targetWindow = window; const targetDocument = document;
   const flush = (): void => { void reporter.flush({ keepalive: true }); };
   const hidden = (): void => { if (targetDocument.visibilityState === 'hidden') flush(); };
   targetWindow.addEventListener('pagehide', flush);
