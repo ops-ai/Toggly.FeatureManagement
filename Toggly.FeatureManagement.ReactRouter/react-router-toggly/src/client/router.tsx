@@ -44,42 +44,28 @@ export function RouterTogglyProvider({
   config,
   ...props
 }: RouterTogglyProviderProps): ReactElement {
-  // Get loader data
-  let serverContext: ServerFeatureContext | undefined;
-
-  try {
-    if (routeId) {
-      // Get from specific route
-      const routeData = useRouteLoaderData(routeId) as
-        | Record<string, unknown>
-        | undefined;
-      serverContext = routeData?.[TOGGLY_LOADER_KEY] as
-        | ServerFeatureContext
-        | undefined;
-    } else {
-      // Get from current route
-      const loaderData = useLoaderData() as Record<string, unknown>;
-      serverContext = loaderData?.[TOGGLY_LOADER_KEY] as
-        | ServerFeatureContext
-        | undefined;
-    }
-  } catch {
-    // Loader data not available (e.g., error boundary)
-    serverContext = fallbackContext;
-  }
+  // Call both hooks on every render. An empty route id safely produces no
+  // route data and keeps the hook order stable when routeId changes.
+  // Router context errors are surfaced to the application's Error Boundary.
+  const routeData = useRouteLoaderData(routeId ?? '') as Record<string, unknown> | undefined;
+  const loaderData = useLoaderData() as Record<string, unknown> | undefined;
+  const data = routeId ? routeData : loaderData;
+  const serverContext = data?.[TOGGLY_LOADER_KEY] as
+    | ServerFeatureContext
+    | undefined;
 
   // Use fallback if no server context
-  serverContext = serverContext ?? fallbackContext;
+  const resolvedServerContext = serverContext ?? fallbackContext;
 
   // Merge config with server context
-  const mergedConfig: TogglyConfig | undefined = config ?? (serverContext ? {
-    appKey: serverContext.appKey,
-    environment: serverContext.environment,
+  const mergedConfig: TogglyConfig | undefined = config ?? (resolvedServerContext ? {
+    appKey: resolvedServerContext.appKey,
+    environment: resolvedServerContext.environment,
   } : undefined);
 
   return (
     <TogglyProvider
-      serverContext={serverContext}
+      serverContext={resolvedServerContext}
       config={mergedConfig}
       {...props}
     >
