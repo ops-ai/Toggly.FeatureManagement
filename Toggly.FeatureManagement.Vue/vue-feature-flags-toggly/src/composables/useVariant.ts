@@ -4,7 +4,7 @@ import type { VariantResult } from '../variant.types'
 
 export interface UseVariantReturn {
   variant: Ref<VariantResult | null>
-  variantValue: Ref<unknown | null>
+  variantValue: Ref<unknown>
   isLoading: Ref<boolean>
   refresh: () => Promise<void>
 }
@@ -28,7 +28,7 @@ function resolveToggly(override?: Toggly): Toggly {
 export function useVariant(featureKey: string, togglyOverride?: Toggly): UseVariantReturn {
   const toggly = resolveToggly(togglyOverride)
   const variant = ref<VariantResult | null>(null) as Ref<VariantResult | null>
-  const variantValue = ref<unknown | null>(null) as Ref<unknown | null>
+  const variantValue = ref<unknown>(null) as Ref<unknown>
   const isLoading = ref(true)
   let active = true
   let request = 0

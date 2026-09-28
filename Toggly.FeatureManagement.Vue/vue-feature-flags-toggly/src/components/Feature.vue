@@ -84,7 +84,7 @@ export default defineComponent({
       // Check if we should show the feature during the evaluation of a feature flag
       this.shouldShow = this.$toggly.shouldShowFeatureDuringEvaluation
 
-      var gate: string[] = []
+      let gate: string[] = []
 
       if (this.featureKey) {
         gate.push(this.featureKey)

@@ -1,3 +1,17 @@
+## 1.11.2
+
+2026-09-27
+
+### Fixed
+- Recover from malformed definitions URLs so later feature refreshes can proceed.
+
+## 1.11.1
+
+2026-09-27
+
+### Fixed
+- Preserve complete HTTP ETag validators, including weak and quoted values, in conditional definitions requests.
+
 ## 1.11.0
 
 2026-09-24
