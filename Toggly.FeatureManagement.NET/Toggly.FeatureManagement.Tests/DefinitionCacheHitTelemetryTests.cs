@@ -335,6 +335,70 @@ public class DefinitionCacheHitTelemetryTests : IDisposable
     }
 
     [Fact]
+    public async Task RefreshFeatures_WhenSameETagOn200_AppliesFlippedBody()
+    {
+        var callCount = 0;
+        var onJson = JsonSerializer.Serialize(new List<FeatureDefinitionModel>
+        {
+            new()
+            {
+                FeatureKey = "new-dashboard",
+                Filters = new List<FeatureFilter>
+                {
+                    new() { Name = "AlwaysOn", Parameters = new Dictionary<string, string>() }
+                }
+            }
+        });
+        var offJson = JsonSerializer.Serialize(new List<FeatureDefinitionModel>
+        {
+            new()
+            {
+                FeatureKey = "new-dashboard",
+                Filters = new List<FeatureFilter>()
+            }
+        });
+
+        SetupHttpClient(_ =>
+        {
+            callCount++;
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(callCount == 1 ? onJson : offJson)
+            };
+            response.Headers.ETag = new EntityTagHeaderValue("\"same\"");
+            return response;
+        });
+
+        _provider = new TogglyFeatureProvider(
+            CreateSettings(),
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await WaitUntilLoadedAsync(_provider);
+        var onDef = await _provider.GetFeatureDefinitionAsync("new-dashboard");
+        onDef.Should().NotBeNull();
+        onDef!.EnabledFor.Should().Contain(f => f.Name == "AlwaysOn");
+
+        DrainInFlightRefresh(_provider);
+        _usageStatsMock.Invocations.Clear();
+
+        var refresh = typeof(TogglyFeatureProvider)
+            .GetMethod("RefreshFeatures", BindingFlags.NonPublic | BindingFlags.Instance);
+        var task = (Task)refresh!.Invoke(_provider, new object?[] { null })!;
+        await task;
+
+        var offDef = await _provider.GetFeatureDefinitionAsync("new-dashboard");
+        offDef.Should().NotBeNull();
+        offDef!.EnabledFor.Should().BeEmpty();
+
+        _usageStatsMock.Verify(x => x.RecordDefinitionCacheHit(), Times.Once);
+        _usageStatsMock.Verify(x => x.RecordDefinitionCacheMiss(), Times.Never);
+        callCount.Should().BeGreaterThanOrEqualTo(2);
+    }
+
+    [Fact]
     public async Task RefreshFeatures_WhenHttpFails_RecordsDefinitionCacheHit()
     {
         SetupHttpClient(_ => throw new HttpRequestException("network down"));

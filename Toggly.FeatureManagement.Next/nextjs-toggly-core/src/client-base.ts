@@ -569,6 +569,8 @@ export function createClient(
     defs: FeatureDefinitions
     outcome: 'hit' | 'miss'
     variants?: Record<string, EvaluatedVariantDef> | null
+    /** False for HTTP 304 (reuse in-memory); true when the 200 body must be applied. */
+    applyBody: boolean
   }
 
   function getPreviousDefinitionRevision(pin: string | null): string | null {
@@ -615,7 +617,12 @@ export function createClient(
         throw new Error('[Toggly] Definitions returned 304 without a matching snapshot')
       }
       cacheResponseRevision(responseRevision)
-      return { defs: { ...state.features }, outcome: 'hit', variants: useVariants ? state.variants : null }
+      return {
+        defs: { ...state.features },
+        outcome: 'hit',
+        variants: useVariants ? state.variants : null,
+        applyBody: false,
+      }
     }
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
@@ -639,7 +646,12 @@ export function createClient(
       const variantDefs = parseRemoteEvaluatedVariantsPayload(parsed)
       assertCurrent(expected)
       cacheResponseRevision(responseRevision)
-      return { defs: variantDefsToFlags(variantDefs), outcome, variants: variantDefs }
+      return {
+        defs: variantDefsToFlags(variantDefs),
+        outcome,
+        variants: variantDefs,
+        applyBody: true,
+      }
     }
     const defs = parseRemoteEvaluatedPayload(parsed, { verifySignatures: config.verifySignatures })
     assertCurrent(expected)
@@ -648,6 +660,7 @@ export function createClient(
       defs,
       outcome,
       variants: null,
+      applyBody: true,
     }
   }
 
@@ -658,7 +671,12 @@ export function createClient(
   async function fetchRemoteEvaluated(): Promise<RemoteEvaluatedResult> {
     if (!config.appKey) {
       console.warn('[Toggly] No appKey provided, using defaults only')
-      return { defs: { ...config.featureDefaults }, outcome: 'hit', variants: null }
+      return {
+        defs: { ...config.featureDefaults },
+        outcome: 'hit',
+        variants: null,
+        applyBody: true,
+      }
     }
 
     const useVariants = !!config.enableVariants
@@ -695,6 +713,8 @@ export function createClient(
   type LocalDefinitionsResult = {
     defs: Map<string, FeatureDefinitionModel>
     outcome: 'hit' | 'miss'
+    /** False for HTTP 304 (reuse in-memory); true when the 200 body must be applied. */
+    applyBody: boolean
   }
 
   function createLocalDefinitionsUrl(): string {
@@ -719,7 +739,7 @@ export function createClient(
         throw new Error('[Toggly] Definitions returned 304 without a matching snapshot')
       }
       cacheResponseRevision(responseRevision)
-      return { defs: state.definitions, outcome: 'hit' }
+      return { defs: state.definitions, outcome: 'hit', applyBody: false }
     }
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
@@ -740,6 +760,7 @@ export function createClient(
     return {
       defs,
       outcome: revisionsMatch(previousRevision, responseRevision) ? 'hit' : 'miss',
+      applyBody: true,
     }
   }
 
@@ -750,7 +771,7 @@ export function createClient(
   async function fetchLocalDefinitions(): Promise<LocalDefinitionsResult> {
     if (!config.appKey) {
       console.warn('[Toggly] No appKey provided, using defaults only')
-      return { defs: new Map(), outcome: 'hit' }
+      return { defs: new Map(), outcome: 'hit', applyBody: true }
     }
 
     const expected = generation
@@ -779,24 +800,26 @@ export function createClient(
   async function loadFeaturesFromApi(): Promise<'hit' | 'miss'> {
     const expected = generation
     if (isLocalMode()) {
-      const { defs, outcome } = await fetchLocalDefinitions()
+      const { defs, outcome, applyBody } = await fetchLocalDefinitions()
       assertCurrent(expected)
-      // Always apply parsed defs from a successful fetch (including same-rev 200).
-      // 304 returns the current in-memory map, so this is a no-op there.
-      applyLocalDefinitions(defs)
+      // Apply HTTP 200 bodies (including same-rev). Skip 304 — reuse in-memory.
+      if (applyBody) {
+        applyLocalDefinitions(defs)
+      }
       return outcome
     }
 
-    const { defs, outcome, variants } = await fetchRemoteEvaluated()
+    const { defs, outcome, variants, applyBody } = await fetchRemoteEvaluated()
     assertCurrent(expected)
-    // Always apply evaluated bodies from HTTP 200; 304 returns current features.
-    state.definitions = new Map()
-    state.features = {
-      ...config.featureDefaults,
-      ...defs,
+    if (applyBody) {
+      state.definitions = new Map()
+      state.features = {
+        ...config.featureDefaults,
+        ...defs,
+      }
+      state.variants = config.enableVariants ? (variants ?? null) : null
+      saveSnapshot()
     }
-    state.variants = config.enableVariants ? (variants ?? null) : null
-    saveSnapshot()
     return outcome
   }
 
