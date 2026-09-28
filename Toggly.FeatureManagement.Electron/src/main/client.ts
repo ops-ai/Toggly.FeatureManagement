@@ -49,7 +49,6 @@ import {
 import type {
   EntityContextInput,
   FeatureFlagsSnapshot,
-  FeatureRequirement,
   SetContextInput,
   TogglyElectronConfig,
 } from '../types.js'
@@ -69,7 +68,7 @@ function assertSuccessfulResponse(response: Response): void {
 }
 
 class HookExecutor {
-  private hooks: Hook[] = []
+  private readonly hooks: Hook[] = []
 
   addHook(hook: Hook): void {
     this.hooks.push(hook)
@@ -135,7 +134,7 @@ export type FlagsUpdatedListener = (flags: FeatureFlagsSnapshot) => void
 const replacementRetirement = new WeakMap<ElectronTogglyClient, () => void>()
 
 export class ElectronTogglyClient {
-  private config: Required<
+  private readonly config: Required<
     Pick<
       TogglyElectronConfig,
       | 'baseURI'
@@ -322,12 +321,15 @@ export class ElectronTogglyClient {
     return toBooleanDefinitions(this.features)
   }
 
+  private copyFlagDefaults(): EvaluatedDefinitions {
+    return { ...this.config.flagDefaults }
+  }
+
   private getFallbackFlags(): EvaluatedDefinitions {
     if (this.hasLoadedFlags) {
       return this.features
     }
-    const defaults = this.config.flagDefaults ?? {}
-    return { ...defaults }
+    return this.copyFlagDefaults()
   }
 
   private buildEvaluatedUrl(): string {
@@ -370,7 +372,7 @@ export class ElectronTogglyClient {
   private applyRevision(response: Response): void {
     const revision = extractDefinitionsRevision(response)
     if (revision) {
-      this.cachedDefinitionsRevision = revision.replace(/^"+|"+$/g, '')
+      this.cachedDefinitionsRevision = revision.replaceAll(/^"+|"+$/g, '')
     }
   }
 
@@ -474,7 +476,7 @@ export class ElectronTogglyClient {
 
   evaluateFeatureGate(
     keys: string[],
-    requirement: FeatureRequirement | string = 'all',
+    requirement: string = 'all',
     negate = false,
     entityContext?: EntityContextInput,
     kind?: string,
@@ -634,17 +636,54 @@ export class ElectronTogglyClient {
     this.hasLoadedFlags = true
   }
 
+  private refreshWithoutAppKey(): FeatureFlagsSnapshot {
+    this.features = this.copyFlagDefaults()
+    this.variants = null
+    this.hasLoadedFlags = true
+    this.notifyFlagsUpdated()
+    return this.getBooleanFlags()
+  }
+
+  private async handleRefreshResponse(
+    response: Response,
+    headers: Record<string, string>,
+    controller: AbortController,
+    current: () => boolean,
+  ): Promise<FeatureFlagsSnapshot> {
+    if (!current()) return this.getBooleanFlags()
+
+    if (response.status === 304) {
+      this.acceptNotModified(response)
+      await this.persistCache(true)
+      return this.getBooleanFlags()
+    }
+
+    assertSuccessfulResponse(response)
+    const bodyText = await readResponseBody(response)
+    const parsed = await parseEvaluatedResponseBody(
+      bodyText, this.definitionsParseOptions(headers, controller),
+    )
+
+    if (!current()) return this.getBooleanFlags()
+    if (this.config.enableVariants) {
+      this.acceptVariantDefinitions(parsed, response)
+    } else {
+      this.acceptDefinitions(this.evaluatedDefinitions(parsed), response)
+    }
+    await this.persistCache()
+    if (!current()) return this.getBooleanFlags()
+    await this.hookExecutor.executeAfterRefresh(this.getBooleanFlags(), current)
+    if (current()) this.notifyFlagsUpdated()
+    return this.getBooleanFlags()
+  }
+
   async refresh(): Promise<FeatureFlagsSnapshot> {
     if (this.disposed) {
       return this.getBooleanFlags()
     }
 
     if (!this.config.appKey) {
-      this.features = { ...(this.config.flagDefaults ?? {}) }
-      this.variants = null
-      this.hasLoadedFlags = true
-      this.notifyFlagsUpdated()
-      return this.getBooleanFlags()
+      return this.refreshWithoutAppKey()
     }
 
     const generation = ++this.generation
@@ -666,33 +705,7 @@ export class ElectronTogglyClient {
         headers,
         signal: controller.signal,
       })
-      if (!current())
-        return this.getBooleanFlags()
-
-      if (response.status === 304) {
-        this.acceptNotModified(response)
-        await this.persistCache(true)
-        return this.getBooleanFlags()
-      }
-
-      assertSuccessfulResponse(response)
-
-      const bodyText = await readResponseBody(response)
-      const parsed = await parseEvaluatedResponseBody(
-        bodyText, this.definitionsParseOptions(headers, controller),
-      )
-
-      if (!current()) return this.getBooleanFlags()
-      if (this.config.enableVariants) {
-        this.acceptVariantDefinitions(parsed, response)
-      } else {
-        this.acceptDefinitions(this.evaluatedDefinitions(parsed), response)
-      }
-      await this.persistCache()
-      if (!current()) return this.getBooleanFlags()
-      await this.hookExecutor.executeAfterRefresh(this.getBooleanFlags(), current)
-      if (current()) this.notifyFlagsUpdated()
-      return this.getBooleanFlags()
+      return await this.handleRefreshResponse(response, headers, controller, current)
     } catch (error) {
       if (!this.reportCurrentRefreshError(error, current)) return this.getBooleanFlags()
       if (!this.hasLoadedFlags) {
@@ -1025,7 +1038,7 @@ export function getVariantValue<T = unknown>(
 
 export function evaluateFeatureGate(
   keys: string[],
-  requirement?: FeatureRequirement | string,
+  requirement?: string,
   negate?: boolean,
   entityContext?: EntityContextInput,
   kind?: string,

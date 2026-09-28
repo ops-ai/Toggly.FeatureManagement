@@ -112,6 +112,18 @@ describe('ElectronTogglyClient', () => {
     expect(getToggly()).not.toBeNull()
   })
 
+  it('restores configured defaults on a no-appKey refresh', async () => {
+    const client = new ElectronTogglyClient({
+      userDataPath,
+      flagDefaults: { A: true },
+      enableLiveUpdates: false,
+    })
+    await client.init()
+    ;(client as any).features = { A: false }
+
+    expect(await client.refresh()).toEqual({ A: true })
+  })
+
   it('fetches evaluated-signed and caches flags', async () => {
     const fetchImpl = vi
       .fn()
@@ -292,6 +304,16 @@ describe('ElectronTogglyClient', () => {
     expect(evaluateFeatureGate(['A', 'B'], 'any')).toBe(true)
     expect(evaluateFeatureGate(['B'], 'all', true)).toBe(true)
     expect(evaluateFeatureGate([])).toBe(true)
+  })
+
+  it('treats an unrecognized gate requirement as all', async () => {
+    await initToggly({
+      userDataPath,
+      enableLiveUpdates: false,
+      flagDefaults: { A: true, B: false },
+    })
+
+    expect(evaluateFeatureGate(['A', 'B'], 'unsupported')).toBe(false)
   })
 
   it('throws setContext when not initialized', async () => {
