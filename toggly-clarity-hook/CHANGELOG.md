@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2
+
+2026-09-27
+
+### Changed
+- TypeScript declarations now mark resolved hook configuration as immutable.
 
 ## 1.1.1
 
