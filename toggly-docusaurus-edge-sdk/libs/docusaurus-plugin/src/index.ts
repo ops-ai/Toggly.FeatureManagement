@@ -603,11 +603,19 @@ function readFrontmatterScalar(frontmatter: string, key: string): string | undef
 }
 
 function firstValueOnOrAfterLine(frontmatter: string, start: number): string | undefined {
-  let valueStart = start;
-  while (valueStart < frontmatter.length && isWhitespace(frontmatter[valueStart])) valueStart += 1;
-  if (valueStart === frontmatter.length) return undefined;
+  const currentLineEnd = lineEnd(frontmatter, start);
+  const currentLineValue = frontmatter.slice(start, currentLineEnd).trim();
+  if (currentLineValue) return currentLineValue;
 
-  return frontmatter.slice(valueStart, lineEnd(frontmatter, valueStart)).trim();
+  let lineStart = nextLineStart(frontmatter, currentLineEnd);
+  while (lineStart !== undefined) {
+    const end = lineEnd(frontmatter, lineStart);
+    const value = frontmatter.slice(lineStart, end).trim();
+    if (value) return isWhitespace(frontmatter[lineStart]) ? value : undefined;
+    lineStart = nextLineStart(frontmatter, end);
+  }
+
+  return undefined;
 }
 
 function lineEnd(content: string, start: number): number {

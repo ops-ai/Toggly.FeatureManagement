@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type { LoadContext } from '@docusaurus/types';
+import { DEFAULT_PARSE_FRONT_MATTER, parseMarkdownFile } from '@docusaurus/utils';
 import { resolveContentRoots, discoverContentRootsFromConfig } from './index';
 
 // resolveContentRoots and discoverContentRootsFromConfig are pure functions
@@ -242,6 +243,7 @@ describe('togglyPlugin contentLoaded -> page feature mapping (integration)', () 
     writeFile('docs/double-quoted.mdx', frontmatter('"DoubleQuotedFeature"'));
     writeFile('docs/single-quoted.mdx', frontmatter("'SingleQuotedFeature'"));
     writeFile('docs/missing.mdx', '---\nx-feature: \n---\n\n# Missing\n');
+    writeFile('docs/sibling-key.mdx', '---\nx-feature:\ntitle: Intro\n---\n\n# Sibling key\n');
     writeFile('docs/long-whitespace.mdx', `---\nx-feature:${' '.repeat(32_768)}\n---\n\n# Long\n`);
 
     const mapping = await runPluginExtraction(tmpDir, []);
@@ -254,6 +256,20 @@ describe('togglyPlugin contentLoaded -> page feature mapping (integration)', () 
       '/docs/double-quoted': 'DoubleQuotedFeature',
       '/docs/single-quoted': 'SingleQuotedFeature',
     });
+  });
+
+  it('does not treat an unindented sibling key as an x-feature continuation', async () => {
+    const source = '---\nx-feature:\ntitle: Intro\n---\n\n# Sibling key\n';
+    const parsed = await parseMarkdownFile({
+      filePath: 'sibling-key.mdx',
+      fileContent: source,
+      parseFrontMatter: DEFAULT_PARSE_FRONT_MATTER,
+    });
+
+    expect(parsed.frontMatter).toEqual({ 'x-feature': null, title: 'Intro' });
+
+    writeFile('docs/sibling-key.mdx', source);
+    expect(await runPluginExtraction(tmpDir, [])).toEqual({});
   });
 });
 

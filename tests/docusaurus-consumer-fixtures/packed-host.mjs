@@ -436,7 +436,7 @@ export default function FallbackPage() { const {siteConfig}=useDocusaurusContext
   );
   write(
     'docs/blank-continuation.md',
-    '---\nslug: /blank-continuation\nx-feature: \n \t\n\t  BlankFeature\n---\n# Blank continuation page\n'
+    '---\nslug: /blank-continuation\nx-feature: \n  \n  BlankFeature\n---\n# Blank continuation page\n'
   );
   write(
     'docs/crlf.md',
@@ -451,6 +451,7 @@ export default function FallbackPage() { const {siteConfig}=useDocusaurusContext
     "---\nslug: /single-quoted\nx-feature: 'SingleQuotedFeature'\n---\n# Single quoted page\n"
   );
   write('docs/missing.md', '---\nslug: /missing\nx-feature: \n---\n# Missing page\n');
+  write('docs/sibling-key.md', '---\nslug: /sibling-key\nx-feature:\ntitle: Intro\n---\n# Sibling key page\n');
   write(
     'docs/long-whitespace.md',
     `---\nslug: /long-whitespace\nx-feature:${' '.repeat(32_768)}\n---\n# Long page\n`
@@ -563,6 +564,7 @@ console.log('PACKED_DOCUSAURUS_PUBLIC_CONSUMERS_PASS');
   assert.equal(mapping['/docs/double-quoted'], 'DoubleQuotedFeature');
   assert.equal(mapping['/docs/single-quoted'], 'SingleQuotedFeature');
   assert.equal(mapping['/docs/missing'], undefined);
+  assert.equal(mapping['/docs/sibling-key'], undefined);
   assert.equal(mapping['/docs/long-whitespace'], undefined);
   assert.match(
     readFileSync(join(runtimeOutput, 'docs/disabled/index.html'), 'utf8'),
