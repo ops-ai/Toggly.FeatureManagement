@@ -46,7 +46,7 @@ if [[ "$SCAN_FAIL" = 1 ]]; then exit 42; fi
         PR_NUMBER: '702',
         PR_SOURCE_BRANCH: 'catalog-updates',
         PR_BASE_BRANCH: 'develop',
-        PR_HEAD_SHA: 'fbd796d622e3ba751379bb0a8d2d485de66da6ac',
+        PR_HEAD_SHA: 'example-pr-head',
         SONAR_SERVER_TOKEN: 'test-token',
         SONAR_HOST_URL: 'https://sonar.example.test',
         GITHUB_WORKSPACE: '/tmp/sdk-fixture',
@@ -81,7 +81,7 @@ test('analyze checks out the PR head and supplies each PR field to Server begin'
     '/d:sonar.pullrequest.key=702',
     '/d:sonar.pullrequest.branch=catalog-updates',
     '/d:sonar.pullrequest.base=develop',
-    '/d:sonar.scm.revision=fbd796d622e3ba751379bb0a8d2d485de66da6ac',
+    '/d:sonar.scm.revision=example-pr-head',
     '/d:sonar.qualitygate.wait=true',
   ]) {
     assert.ok(calls[0].includes(argument), `missing scanner argument: ${argument}`);
