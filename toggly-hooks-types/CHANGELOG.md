@@ -1,11 +1,11 @@
 # Changelog
 
-## 1.4.6
+## [1.4.6] - 2026-09-27
 
 ### Fixed
 
-- Sort group entries with locale-aware comparison when generating evaluation
-  context cache keys.
+- Generate the same evaluation-context cache key when group names use
+  equivalent Unicode characters or arrive in a different order.
 
 ## 1.4.5
 

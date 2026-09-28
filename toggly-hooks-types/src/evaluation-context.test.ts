@@ -106,15 +106,25 @@ describe('evaluationContextCacheKey', () => {
 
   it('uses locale-aware comparison when sorting group cache-key entries', () => {
     const groups = ['z', 'ä'];
-    const expected = [...groups].sort((a, b) => a.localeCompare(b)).join(',');
     const compare = vi.spyOn(String.prototype, 'localeCompare');
 
     try {
-      expect(evaluationContextCacheKey({ groups })).toBe(`g:${expected}`);
+      expect(evaluationContextCacheKey({ groups })).toBe('g:ä,z');
       expect(compare).toHaveBeenCalled();
     } finally {
       compare.mockRestore();
     }
+  });
+
+  it('uses an ordinal tie-breaker for distinct strings that collate equally', () => {
+    const composed = 'é';
+    const decomposed = 'e\u0301';
+
+    const forward = evaluationContextCacheKey({ groups: [composed, decomposed] });
+    const reversed = evaluationContextCacheKey({ groups: [decomposed, composed] });
+
+    expect(forward).toBe(`g:${decomposed},${composed}`);
+    expect(reversed).toBe(forward);
   });
 });
 
