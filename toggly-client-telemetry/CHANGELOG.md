@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2 — 2026-09-27
+
+### Changed
+- Improved browser lifecycle adapter compatibility while preserving no-op
+  behavior when browser globals are unavailable.
+
 ## 1.1.1 — 2026-09-23
 
 ### Fixed
