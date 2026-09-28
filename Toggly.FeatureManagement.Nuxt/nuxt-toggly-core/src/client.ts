@@ -65,10 +65,10 @@ function normalizeRevision(revision: string | null | undefined): string | null {
 
   let first = 0
   let last = revision.length
-  while (revision.charCodeAt(first) === 34) {
+  while (revision.codePointAt(first) === 34) {
     first += 1
   }
-  while (last > first && revision.charCodeAt(last - 1) === 34) {
+  while (last > first && revision.codePointAt(last - 1) === 34) {
     last -= 1
   }
   return revision.slice(first, last)

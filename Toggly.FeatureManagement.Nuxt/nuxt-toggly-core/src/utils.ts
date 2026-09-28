@@ -6,7 +6,7 @@ import { evaluateEvaluatedGate } from '@ops-ai/toggly-hooks-types'
  */
 export function generateUUID(): string {
   if (typeof crypto === 'undefined') {
-    throw new Error('[Toggly] Web Crypto is required to generate an automatic identity. Configure identity explicitly in this runtime.')
+    throw new TypeError('[Toggly] Web Crypto is required to generate an automatic identity. Configure identity explicitly in this runtime.')
   }
   if (crypto.randomUUID) {
     return crypto.randomUUID()

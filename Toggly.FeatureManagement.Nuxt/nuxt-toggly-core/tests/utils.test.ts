@@ -55,6 +55,7 @@ describe('generateUUID', () => {
     vi.stubGlobal('crypto', undefined)
 
     try {
+      expect(() => generateUUID()).toThrow(TypeError)
       expect(() => generateUUID()).toThrow('Web Crypto is required')
     } finally {
       vi.unstubAllGlobals()
