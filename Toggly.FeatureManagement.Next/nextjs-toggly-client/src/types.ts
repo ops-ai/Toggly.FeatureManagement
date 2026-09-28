@@ -119,7 +119,7 @@ export interface UseVariantReturn {
   /** Assigned variant (name + optional configurationValue), or null */
   variant: VariantResult | null
   /** Shortcut for `variant?.configurationValue ?? null` */
-  variantValue: unknown | null
+  variantValue: unknown
   /** Whether the variant assignment is loading */
   isLoading: boolean
   /** Refresh the variant state */

@@ -3,6 +3,9 @@ import { NextRequest } from 'next/server'
 import {
   createFeatureMiddleware,
   createFeatureProxy,
+  createPathFeatureMiddleware,
+  createFeatureHandler,
+  withFeatureGate,
   isFeatureEnabledForRequest,
   getFeaturesForRequest,
 } from '../src/middleware'
@@ -202,5 +205,61 @@ describe('edge middleware identity safety [OPS-831]', () => {
       feature: { featureKey: 'vip-only', rewriteTo: '/waitlist' },
     })(request)
     expect(rewrite.headers.get('x-middleware-rewrite')).toBe('http://localhost/waitlist')
+  })
+
+  it('applies the first matching path gate and falls through when no route matches', async () => {
+    mockFetch.mockResolvedValue(createMockResponse([targeting('vip-only', 'alice')]))
+    const config = {
+      appKey: 'test-key',
+      cache: false,
+      enableUsageTracking: false,
+      enableMetrics: false,
+    }
+    const fallthrough = vi.fn(() => new Response('fallthrough'))
+    const middleware = createPathFeatureMiddleware({
+      config,
+      routes: [
+        { path: '/vip/*', feature: { featureKey: 'vip-only' } },
+        { path: /^\/regex/, feature: { featureKey: 'vip-only' } },
+      ],
+      fallthrough,
+    })
+
+    expect((await middleware(makeRequest('/vip/profile', 'alice'))).status).toBe(200)
+    expect((await middleware(makeRequest('/vip/profile', 'bob'))).status).toBe(404)
+    expect((await middleware(makeRequest('/regex', 'alice'))).status).toBe(200)
+    await expect((await middleware(makeRequest('/other'))).text()).resolves.toBe('fallthrough')
+    expect(fallthrough).toHaveBeenCalledTimes(1)
+  })
+
+  it('gates middleware and supplies evaluated context to handlers', async () => {
+    mockFetch.mockResolvedValue(createMockResponse([targeting('vip-only', 'alice')]))
+    const config = {
+      appKey: 'test-key',
+      cache: false,
+      enableUsageTracking: false,
+      enableMetrics: false,
+    }
+    const downstream = vi.fn(() => new Response('allowed'))
+    const gate = withFeatureGate(downstream as never, {
+      config,
+      featureKey: 'vip-only',
+    })
+
+    await expect((await gate(makeRequest('/vip', 'alice'))).text()).resolves.toBe('allowed')
+    expect((await gate(makeRequest('/vip', 'bob'))).status).toBe(404)
+    expect(downstream).toHaveBeenCalledTimes(1)
+
+    const handler = createFeatureHandler({
+      config,
+      featureKey: 'vip-only',
+      handler: (_request, context) => Response.json(context),
+    })
+    const body = await (await handler(makeRequest('/vip', 'alice'))).json()
+    expect(body).toMatchObject({
+      isEnabled: true,
+      featureKeys: ['vip-only'],
+      identity: 'alice',
+    })
   })
 })
