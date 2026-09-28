@@ -1,7 +1,18 @@
+const assert = require('node:assert/strict');
 const { execFileSync } = require('node:child_process');
 const { chmodSync, mkdtempSync, rmSync, writeFileSync } = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { test } = require('node:test');
+const { npmCommand } = require('./npm-command.cjs');
+
+test('builds a shell-free npm command on Windows', () => {
+  const nodeExecutable = 'C:\\Program Files\\nodejs\\node.exe';
+  assert.deepEqual(npmCommand(['--version'], { platform: 'win32', nodeExecutable }), {
+    executable: nodeExecutable,
+    args: ['C:\\Program Files\\nodejs\\node_modules\\npm\\bin\\npm-cli.js', '--version'],
+  });
+});
 
 const packageDirectory = path.resolve(__dirname, '..');
 const fakeNpmDirectory = mkdtempSync(path.join(os.tmpdir(), 'toggly-fake-npm-'));

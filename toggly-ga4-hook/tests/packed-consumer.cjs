@@ -3,18 +3,16 @@ const { execFileSync } = require('node:child_process');
 const { mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { npmCommand } = require('./npm-command.cjs');
 
 const packageDirectory = path.resolve(__dirname, '..');
 const packageName = JSON.parse(readFileSync(path.join(packageDirectory, 'package.json'), 'utf8')).name;
-const npmExecutable = path.join(
-  path.dirname(process.execPath),
-  process.platform === 'win32' ? 'npm.cmd' : 'npm',
-);
 const consumerDirectory = mkdtempSync(path.join(os.tmpdir(), 'toggly-ga4-hook-consumer-'));
 let tarballPath;
 
 try {
-  const packOutput = execFileSync(npmExecutable, ['pack', '--json', '--ignore-scripts'], {
+  const pack = npmCommand(['pack', '--json', '--ignore-scripts']);
+  const packOutput = execFileSync(pack.executable, pack.args, {
     cwd: packageDirectory,
     encoding: 'utf8',
   });
@@ -24,14 +22,15 @@ try {
     private: true,
     name: 'toggly-ga4-hook-packed-consumer',
   }));
-  execFileSync(npmExecutable, [
+  const install = npmCommand([
     'install',
     '--ignore-scripts',
     '--no-audit',
     '--no-fund',
     '--package-lock=false',
     tarballPath,
-  ], {
+  ]);
+  execFileSync(install.executable, install.args, {
     cwd: consumerDirectory,
     stdio: 'inherit',
   });
