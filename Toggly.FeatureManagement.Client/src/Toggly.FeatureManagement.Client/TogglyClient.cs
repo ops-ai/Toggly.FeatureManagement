@@ -365,11 +365,7 @@ public sealed partial class TogglyClient : IAsyncDisposable, IFrontendTelemetry,
         var defs = root.GetProperty("defs");
         var time = root.GetProperty("timestamp").GetInt64();
         var kid = root.GetProperty("kid").GetString()!;
-        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        if (time > now + 300 || time < now - options.MaximumSignatureAge.TotalSeconds || time < timestamp)
-            throw new CryptographicException("Stale signature.");
-        if (options.AllowedKeyIds.Count > 0 && !options.AllowedKeyIds.Contains(kid))
-            throw new CryptographicException("Signing key is not allowed.");
+        ValidateEnvelopeMetadata(time, kid);
         var signature = root.GetProperty("signature").GetString()!;
         if (!await verifier.VerifyAsync(defs.GetRawText(), time, signature, kid, keys, ct).ConfigureAwait(false))
         {
@@ -399,6 +395,15 @@ public sealed partial class TogglyClient : IAsyncDisposable, IFrontendTelemetry,
         }
         Notify();
         return keys;
+    }
+
+    private void ValidateEnvelopeMetadata(long time, string kid)
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        if (time > now + 300 || time < now - options.MaximumSignatureAge.TotalSeconds || time < timestamp)
+            throw new CryptographicException("Stale signature.");
+        if (options.AllowedKeyIds.Count > 0 && !options.AllowedKeyIds.Contains(kid))
+            throw new CryptographicException("Signing key is not allowed.");
     }
 
     private void Notify()
