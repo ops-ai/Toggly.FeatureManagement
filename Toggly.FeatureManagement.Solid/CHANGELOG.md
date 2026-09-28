@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 — 2026-09-27
+
+### Fixed
+
+- Improved Solid SDK runtime guards and maintainability without changing its public API.
+
 ## 0.5.0 — 2026-09-24
 
 ### Added

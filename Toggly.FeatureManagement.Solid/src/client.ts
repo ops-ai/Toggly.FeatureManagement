@@ -13,20 +13,25 @@ import {
   type EvaluatedVariantDef,
   type VariantResult,
 } from './variant.js';
-import {
-  evaluateResolvedKeys,
-  resolveEvaluatedDefinition,
-  type EvaluatedDefinitions,
-  type TogglyEntityContext,
-  type TogglyEvaluationContext,
+import type {
+  EvaluatedDefinitions,
+  TogglyEntityContext,
+  TogglyEvaluationContext,
 } from '@ops-ai/toggly-hooks-types';
+import { evaluateResolvedKeys, resolveEvaluatedDefinition } from '@ops-ai/toggly-hooks-types';
 import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions } from '@ops-ai/toggly-signed-defs';
-import { applyLocalGate, buildFlagGateIndex, type LocalGate } from '@ops-ai/toggly-local-gates';
+import { applyLocalGate, buildFlagGateIndex } from '@ops-ai/toggly-local-gates';
+import type { LocalGate } from '@ops-ai/toggly-local-gates';
 import { createTelemetryReporter, type TelemetryOptions } from '@ops-ai/toggly-client-telemetry';
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
 import { decodeVariantValue } from './decode-variant-value.js';
 
-export type { TogglyEntityContext, TogglyEvaluationContext, EvaluatedDefinitions, LocalGate };
+export type {
+  EvaluatedDefinitions,
+  TogglyEntityContext,
+  TogglyEvaluationContext,
+} from '@ops-ai/toggly-hooks-types';
+export type { LocalGate } from '@ops-ai/toggly-local-gates';
 export type { EvaluatedVariantDef, VariantResult } from './variant.js';
 export { decodeVariantValue } from './decode-variant-value.js';
 export interface TogglyOptions extends TogglyEvaluationContext {
@@ -73,6 +78,10 @@ export interface ClientState {
   definitions: EvaluatedDefinitions;
   loading: boolean;
   error: Error | undefined;
+}
+
+function isBrowserRuntime() {
+  return globalThis.window !== undefined && globalThis.document !== undefined;
 }
 
 /** One targeting session; create a distinct instance for each owner/request. */
@@ -126,10 +135,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
   let liveStarted = false;
   const requestTimeouts = new Set<ReturnType<typeof setTimeout>>();
   const reporter =
-    typeof window !== 'undefined' &&
-    typeof document !== 'undefined' &&
-    options.appKey?.trim() &&
-    options.enableTelemetry !== false
+    isBrowserRuntime() && options.appKey?.trim() && options.enableTelemetry !== false
       ? createTelemetryReporter({
           appKey: options.appKey,
           environment: options.environment,
@@ -219,43 +225,43 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
   ) {
     if (!isCurrent(current)) return;
     const { result, body } = remote;
-    if (!result.notModified) {
-      let definitions: unknown = result.defs;
-      if (config.verifySignatures) {
-        if (!body) throw new Error('Missing signed envelope');
-        const keys = await jwks.get({
-          ...config,
-          baseURI: definitionBaseURI(config.baseURI),
-          fetchImpl,
-        });
-        const verified = await verifyEnvelope(
-          body,
-          keys,
-          config,
-          timestamps.get(scope) ?? 0,
-          config.enableVariants,
-        );
-        if (!isCurrent(current)) return;
-        definitions = verified.definitions;
-        timestamps.set(scope, verified.timestamp);
-        persistence.write(scope, body, verified.keys);
-      }
-      // Complete validation and storage callbacks precede atomic body/revision adoption.
-      if (!isCurrent(current)) return;
-      hasAcceptedState = true;
-      revision = result.revision ?? null;
-      if (config.enableVariants) {
-        const projected = selectVariantDefinitions(definitions, expose);
-        variants = projected;
-        emit({ definitions: variantDefsToFlags(projected) });
-      } else {
-        const projected = selectDefinitions(definitions, expose);
-        emit({ definitions: projected });
-      }
-    } else {
+    if (result.notModified) {
       if (!hasAcceptedState)
         throw new Error('304 Not Modified without matching accepted definitions');
       revision = result.revision ?? revision;
+      return;
+    }
+    let definitions: unknown = result.defs;
+    if (config.verifySignatures) {
+      if (!body) throw new Error('Missing signed envelope');
+      const keys = await jwks.get({
+        ...config,
+        baseURI: definitionBaseURI(config.baseURI),
+        fetchImpl,
+      });
+      const verified = await verifyEnvelope(
+        body,
+        keys,
+        config,
+        timestamps.get(scope) ?? 0,
+        config.enableVariants,
+      );
+      if (!isCurrent(current)) return;
+      definitions = verified.definitions;
+      timestamps.set(scope, verified.timestamp);
+      persistence.write(scope, body, verified.keys);
+    }
+    // Complete validation and storage callbacks precede atomic body/revision adoption.
+    if (!isCurrent(current)) return;
+    hasAcceptedState = true;
+    revision = result.revision ?? null;
+    if (config.enableVariants) {
+      const projected = selectVariantDefinitions(definitions, expose);
+      variants = projected;
+      emit({ definitions: variantDefsToFlags(projected) });
+    } else {
+      const projected = selectDefinitions(definitions, expose);
+      emit({ definitions: projected });
     }
   }
 
@@ -299,67 +305,83 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
     return flags();
   }
 
-  function startSocket() {
-    if (
-      disposed ||
-      !config.appKey ||
-      config.enableLiveUpdates === false ||
-      typeof WebSocket === 'undefined'
-    )
-      return;
+  function socketUrl(): URL {
     const url = new URL(
-      `${config.baseURI.replace(/\/$/, '')}/${encodeURIComponent(config.appKey)}/ws`,
+      `${config.baseURI.replace(/\/$/, '')}/${encodeURIComponent(config.appKey!)}/ws`,
     );
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     url.searchParams.set('sdk', 'solidjs');
     url.searchParams.set('sdkVersion', '0.5.0');
     if (revision) url.searchParams.set('rev', revision);
+    return url;
+  }
+
+  function canStartSocket() {
+    return (
+      disposed === false &&
+      Boolean(config.appKey) &&
+      config.enableLiveUpdates !== false &&
+      typeof WebSocket !== 'undefined'
+    );
+  }
+
+  function scheduleSocketRefresh(message: { type?: unknown; etag?: unknown; unchanged?: unknown }) {
+    const changed =
+      ['flags-updated', 'update'].includes(String(message.type)) &&
+      (!message.etag || message.etag !== revision);
+    const synchronized =
+      message.type === 'sync' &&
+      message.unchanged !== true &&
+      (!revision || (message.etag && message.etag !== revision));
+    const signingKeyUpdated = message.type === 'signing-key-updated';
+    if (signingKeyUpdated) {
+      // Old in-flight key fetches may complete after invalidation. Retire
+      // the entire cache instance so they cannot refill the new epoch.
+      jwks = new InMemoryJwksCache();
+      persistence.invalidate();
+    }
+    if (!changed && !synchronized && !signingKeyUpdated) return;
+    // Invalidation retires pending work before the debounce window.
+    generation++;
+    controller?.abort();
+    clearTimeout(debounce);
+    // null means a server invalidation without a pin: it must bypass the
+    // prior conditional revision just as a revision-pinned fetch does.
+    const pin = typeof message.etag === 'string' ? message.etag : null;
+    debounce = setTimeout(() => {
+      void refresh(pin);
+    }, 300);
+  }
+
+  function handleSocketMessage(event: MessageEvent, ownedSocket: WebSocket) {
+    if (disposed || socket !== ownedSocket) return;
     try {
-      socket = new WebSocket(url);
-      const ownedSocket = socket;
-      socket.onmessage = (event) => {
+      const data = String(event.data);
+      scheduleSocketRefresh(
+        data === 'update' || data === 'flags-updated' ? { type: data } : JSON.parse(data),
+      );
+    } catch {
+      /* Ignore non-protocol messages. */
+    }
+  }
+
+  function scheduleSocketReconnect() {
+    if (!disposed) reconnect = setTimeout(startSocket, 5000);
+  }
+
+  function startSocket() {
+    if (!canStartSocket()) return;
+    try {
+      const ownedSocket = new WebSocket(socketUrl());
+      socket = ownedSocket;
+      ownedSocket.onmessage = (event) => handleSocketMessage(event, ownedSocket);
+      ownedSocket.onclose = () => {
         if (disposed || socket !== ownedSocket) return;
-        try {
-          const data = String(event.data);
-          const message =
-            data === 'update' || data === 'flags-updated' ? { type: data } : JSON.parse(data);
-          const changed =
-            ['flags-updated', 'update'].includes(message.type) &&
-            (!message.etag || message.etag !== revision);
-          const sync =
-            message.type === 'sync' &&
-            message.unchanged !== true &&
-            (!revision || (message.etag && message.etag !== revision));
-          if (message.type === 'signing-key-updated') {
-            // Old in-flight key fetches may complete after invalidation. Retire
-            // the entire cache instance so they cannot refill the new epoch.
-            jwks = new InMemoryJwksCache();
-            persistence.invalidate();
-          }
-          if (changed || sync || message.type === 'signing-key-updated') {
-            // Invalidation retires pending work before the debounce window.
-            generation++;
-            controller?.abort();
-            clearTimeout(debounce);
-            // null means a server invalidation without a pin: it must bypass the
-            // prior conditional revision just as a revision-pinned fetch does.
-            const pin = typeof message.etag === 'string' ? message.etag : null;
-            debounce = setTimeout(() => {
-              void refresh(pin);
-            }, 300);
-          }
-        } catch {
-          /* Ignore non-protocol messages. */
-        }
-      };
-      socket.onclose = () => {
-        if (!disposed && socket === ownedSocket) {
-          socket = undefined;
-          reconnect = setTimeout(startSocket, 5000);
-        }
+        socket = undefined;
+        scheduleSocketReconnect();
       };
     } catch {
-      reconnect = setTimeout(startSocket, 5000);
+      scheduleSocketReconnect();
     }
   }
 
@@ -413,7 +435,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
     refresh,
     /** Called by the browser provider on mount, never by module import. */
     start() {
-      if (disposed || liveStarted || typeof window === 'undefined') return;
+      if (disposed || liveStarted || !isBrowserRuntime()) return;
       liveStarted = true;
       if ((config.refreshInterval ?? 180000) > 0 && config.appKey)
         poll = setInterval(() => {

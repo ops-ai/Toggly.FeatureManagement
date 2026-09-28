@@ -182,7 +182,7 @@ describe('variants', () => {
         <Reader />
       </TogglyProvider>
     ));
-    await screen.findByText('null/null/null');
+    expect(await screen.findByText('null/null/null')).toBeTruthy();
   });
 
   it('exposes the assigned variant reactively via getVariant, getVariantValue and useVariant', async () => {

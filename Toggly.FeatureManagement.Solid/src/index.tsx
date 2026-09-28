@@ -142,11 +142,13 @@ export function createToggly(
 }
 const Context = createContext<Toggly>();
 /** Provide one browser session and replace its public state on route navigation. */
-export function TogglyProvider(props: {
-  config?: TogglyOptions;
-  snapshot?: TogglySnapshot;
-  children?: JSX.Element;
-}): JSX.Element {
+export function TogglyProvider(
+  props: Readonly<{
+    config?: TogglyOptions;
+    snapshot?: TogglySnapshot;
+    children?: JSX.Element;
+  }>,
+): JSX.Element {
   const snapshot = createMemo(() => props.snapshot);
   let previous = untrack(snapshot);
   const toggly = createToggly(props.config, previous);
@@ -198,7 +200,7 @@ export interface FeatureProps {
   children?: JSX.Element;
 }
 /** Show only reads the selected branch, preserving lazy children and Solid ownership. */
-export function Feature(props: FeatureProps): JSX.Element {
+export function Feature(props: Readonly<FeatureProps>): JSX.Element {
   const toggly = useToggly();
   const enabled = createMemo(() =>
     toggly.evaluate(
