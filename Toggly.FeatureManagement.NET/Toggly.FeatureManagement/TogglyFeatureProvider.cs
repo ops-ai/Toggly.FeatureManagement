@@ -636,14 +636,9 @@ namespace Toggly.FeatureManagement
                 }
 
                 var revision = ReadDefinitionsRevision(newDefinitionsRequest);
-                if (RevisionsMatch(revision))
-                {
-                    // HTTP 200 whose revision matches existing (CDN replay) — cache hit.
-                    RecordDefinitionCacheHit();
-                    _lastDefinitionsCheck = DateTime.UtcNow;
-                    _lastFallbackRefresh = DateTime.UtcNow;
-                    return true;
-                }
+                // Always apply the body on HTTP 200. Equal revision is still a
+                // cache hit for telemetry (CDN replay), but defs must update.
+                var sameRevision = RevisionsMatch(revision);
 
                 // Prefer verified raw defs for evaluation and persistence (same bytes that were signed).
                 var newDefinitions = System.Text.Json.JsonSerializer.Deserialize<List<FeatureDefinitionModel>>(
@@ -665,7 +660,10 @@ namespace Toggly.FeatureManagement
                     }).ConfigureAwait(false);
 
                 ApplyNewDefinitions(newDefinitions);
-                RecordDefinitionCacheMiss();
+                if (sameRevision)
+                    RecordDefinitionCacheHit();
+                else
+                    RecordDefinitionCacheMiss();
                 _loaded = true;
                 _lastRefresh = DateTime.UtcNow;
                 _lastDefinitionsCheck = DateTime.UtcNow;
@@ -700,13 +698,8 @@ namespace Toggly.FeatureManagement
                 }
 
                 var revision = ReadDefinitionsRevision(newDefinitionsRequest);
-                if (RevisionsMatch(revision))
-                {
-                    RecordDefinitionCacheHit();
-                    _lastDefinitionsCheck = DateTime.UtcNow;
-                    _lastFallbackRefresh = DateTime.UtcNow;
-                    return true;
-                }
+                // Always apply the body on HTTP 200 (see signed path above).
+                var sameRevision = RevisionsMatch(revision);
 
                 StoreDefinitionsRevision(revision);
                 if (_snapshotProvider != null)
@@ -717,7 +710,10 @@ namespace Toggly.FeatureManagement
                     }).ConfigureAwait(false);
 
                 ApplyNewDefinitions(newDefinitions);
-                RecordDefinitionCacheMiss();
+                if (sameRevision)
+                    RecordDefinitionCacheHit();
+                else
+                    RecordDefinitionCacheMiss();
                 _loaded = true;
                 _lastRefresh = DateTime.UtcNow;
                 _lastDefinitionsCheck = DateTime.UtcNow;

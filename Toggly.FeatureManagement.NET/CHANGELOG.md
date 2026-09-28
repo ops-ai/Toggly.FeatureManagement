@@ -1,5 +1,12 @@
 # Changelog
 
+## All .NET SDK packages 3.11.1 - 2026-09-28
+
+### Fixed
+- Apply HTTP 200 definition bodies even when the response revision matches the
+  cached ETag, so a refresh cannot keep a stale in-memory snapshot after a
+  successful definitions fetch.
+
 ## All .NET SDK packages 3.11.0 - 2026-09-24
 
 ### Added

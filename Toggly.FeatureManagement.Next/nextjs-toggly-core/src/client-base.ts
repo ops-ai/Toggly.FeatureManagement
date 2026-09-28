@@ -620,11 +620,10 @@ export function createClient(
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
-    if (revisionsMatch(previousRevision, responseRevision)) {
-      cacheResponseRevision(responseRevision)
-      return { defs: { ...state.features }, outcome: 'hit', variants: useVariants ? state.variants : null }
-    }
 
+    // Always parse the body on HTTP 200. Equal revision is still a cache hit for
+    // telemetry (CDN replay), but the body must still be applied — otherwise a
+    // stale in-memory snapshot can survive a successful refresh.
     const bodyText = await readResponseBody(response)
     const parsed = await parseEvaluatedResponseBody(bodyText, {
       verifySignatures: config.verifySignatures,
@@ -633,18 +632,21 @@ export function createClient(
       maxSignatureAgeSeconds: config.maxSignatureAgeSeconds,
       headers: buildDefinitionFetchHeaders({ 'Content-Type': 'application/json' }),
     })
+    const outcome: 'hit' | 'miss' = revisionsMatch(previousRevision, responseRevision)
+      ? 'hit'
+      : 'miss'
     if (useVariants) {
       const variantDefs = parseRemoteEvaluatedVariantsPayload(parsed)
       assertCurrent(expected)
       cacheResponseRevision(responseRevision)
-      return { defs: variantDefsToFlags(variantDefs), outcome: 'miss', variants: variantDefs }
+      return { defs: variantDefsToFlags(variantDefs), outcome, variants: variantDefs }
     }
     const defs = parseRemoteEvaluatedPayload(parsed, { verifySignatures: config.verifySignatures })
     assertCurrent(expected)
     cacheResponseRevision(responseRevision)
     return {
       defs,
-      outcome: 'miss',
+      outcome,
       variants: null,
     }
   }
@@ -677,7 +679,9 @@ export function createClient(
     const headers = buildFetchHeaders(previousRevision)
 
     try {
-      const response = await fetch(url, { method: 'GET', headers })
+      // Next.js App Router caches fetch() by default; definition refresh must
+      // always hit the network after flags-updated / explicit refresh.
+      const response = await fetch(url, { method: 'GET', headers, cache: 'no-store' })
       assertCurrent(expected)
       return await parseRemoteEvaluatedResponse(response, expected, previousRevision, useVariants)
     } catch (error) {
@@ -720,11 +724,8 @@ export function createClient(
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
-    if (revisionsMatch(previousRevision, responseRevision)) {
-      cacheResponseRevision(responseRevision)
-      return { defs: state.definitions, outcome: 'hit' }
-    }
 
+    // Always parse the body on HTTP 200 (see parseRemoteEvaluatedResponse).
     const bodyText = await readResponseBody(response)
     const parsed = await parseEvaluatedResponseBody(bodyText, {
       verifySignatures: config.verifySignatures,
@@ -736,7 +737,10 @@ export function createClient(
     const defs = parseDefinitionsPayload(parsed)
     assertCurrent(expected)
     cacheResponseRevision(responseRevision)
-    return { defs, outcome: 'miss' }
+    return {
+      defs,
+      outcome: revisionsMatch(previousRevision, responseRevision) ? 'hit' : 'miss',
+    }
   }
 
   /**
@@ -758,7 +762,9 @@ export function createClient(
     const headers = buildFetchHeaders(previousRevision)
 
     try {
-      const response = await fetch(url, { method: 'GET', headers })
+      // Next.js App Router caches fetch() by default; definition refresh must
+      // always hit the network after flags-updated / explicit refresh.
+      const response = await fetch(url, { method: 'GET', headers, cache: 'no-store' })
 
       assertCurrent(expected)
       return await parseLocalDefinitionsResponse(response, expected, previousRevision)
@@ -775,23 +781,22 @@ export function createClient(
     if (isLocalMode()) {
       const { defs, outcome } = await fetchLocalDefinitions()
       assertCurrent(expected)
-      if (outcome === 'miss') {
-        applyLocalDefinitions(defs)
-      }
+      // Always apply parsed defs from a successful fetch (including same-rev 200).
+      // 304 returns the current in-memory map, so this is a no-op there.
+      applyLocalDefinitions(defs)
       return outcome
     }
 
     const { defs, outcome, variants } = await fetchRemoteEvaluated()
     assertCurrent(expected)
-    if (outcome === 'miss') {
-      state.definitions = new Map()
-      state.features = {
-        ...config.featureDefaults,
-        ...defs,
-      }
-      state.variants = config.enableVariants ? (variants ?? null) : null
-      saveSnapshot()
+    // Always apply evaluated bodies from HTTP 200; 304 returns current features.
+    state.definitions = new Map()
+    state.features = {
+      ...config.featureDefaults,
+      ...defs,
     }
+    state.variants = config.enableVariants ? (variants ?? null) : null
+    saveSnapshot()
     return outcome
   }
 
