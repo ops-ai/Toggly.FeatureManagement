@@ -10,7 +10,7 @@
  */
 
 import { computed } from 'vue';
-import { useGateEvaluation, useTogglyReady } from './composables.js';
+import { useGateEvaluation as evaluateGate, useTogglyReady } from './composables.js';
 import { $gate } from '../../client/store.js';
 
 export interface FeatureGateBuilderProps {
@@ -47,7 +47,7 @@ const flagKeys = computed(() => {
   return keys;
 });
 
-const gateEnabled = useGateEvaluation(
+const gateEnabled = evaluateGate(
   () => $gate(flagKeys.value, props.requirement, props.negate, props.context, props.contextKind).get(),
 );
 

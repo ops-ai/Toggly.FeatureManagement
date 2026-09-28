@@ -9,7 +9,7 @@
  */
 
 import { computed } from 'vue';
-import { useGateEvaluation, useTogglyReady } from './composables.js';
+import { useGateEvaluation as evaluateGate, useTogglyReady } from './composables.js';
 import { $gate } from '../../client/store.js';
 import type { TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 
@@ -47,7 +47,7 @@ const flagKeys = computed(() => {
   return keys;
 });
 
-const isEnabled = useGateEvaluation(
+const isEnabled = evaluateGate(
   () => $gate(flagKeys.value, props.requirement, props.negate, props.context, props.contextKind).get(),
 );
 </script>
