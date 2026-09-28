@@ -31,6 +31,38 @@ function fromDefinitionArray(
   return definitions
 }
 
+type EvaluatedResponseData = FeatureDefinitionsResponse &
+  FeatureDefinitions & { error?: unknown }
+
+function errorEnvelopeMessage(data: EvaluatedResponseData): string | null {
+  if (
+    !('error' in data) ||
+    data.error == null ||
+    ('defs' in data && data.defs) ||
+    ('features' in data && Array.isArray(data.features))
+  ) {
+    return null
+  }
+
+  return typeof data.error === 'string' ? data.error : 'error envelope'
+}
+
+function definitionsFromEnvelope(data: EvaluatedResponseData): FeatureDefinitions | null {
+  if ('defs' in data && data.defs && typeof data.defs === 'object') {
+    return { ...data.defs }
+  }
+
+  if (!('features' in data) || !Array.isArray(data.features)) {
+    return null
+  }
+
+  const definitions: FeatureDefinitions = {}
+  for (const feature of data.features) {
+    definitions[feature.featureKey] = feature.enabled
+  }
+  return definitions
+}
+
 /**
  * Parse an evaluated-signed HTTP body into a boolean feature map.
  * Throws when the body is an error envelope or otherwise unsupported so callers
@@ -50,31 +82,16 @@ export function parseRemoteEvaluatedPayload(
     )
   }
 
-  const data = parsed as FeatureDefinitionsResponse &
-    FeatureDefinitions & { error?: unknown }
-
-  if (
-    'error' in data &&
-    data.error != null &&
-    !('defs' in data && data.defs) &&
-    !('features' in data && Array.isArray(data.features))
-  ) {
-    const message =
-      typeof data.error === 'string' ? data.error : 'error envelope'
+  const data = parsed as EvaluatedResponseData
+  const errorMessage = errorEnvelopeMessage(data)
+  if (errorMessage) {
     throw new Error(
-      `[Toggly] Evaluated-signed response error envelope: ${message}`,
+      `[Toggly] Evaluated-signed response error envelope: ${errorMessage}`,
     )
   }
 
-  if ('defs' in data && data.defs && typeof data.defs === 'object') {
-    return { ...data.defs }
-  }
-
-  if ('features' in data && Array.isArray(data.features)) {
-    const definitions: FeatureDefinitions = {}
-    for (const feature of data.features) {
-      definitions[feature.featureKey] = feature.enabled
-    }
+  const definitions = definitionsFromEnvelope(data)
+  if (definitions) {
     return definitions
   }
 

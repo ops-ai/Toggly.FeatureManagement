@@ -58,6 +58,14 @@ import {
 } from './parse-evaluated-payload'
 import { parseEvaluatedResponseBody, readResponseBody } from './signed-response'
 
+function normalizeRevision(revision: string | null | undefined): string | null {
+  if (!revision) {
+    return null
+  }
+
+  return revision.replace(/^"+/, '').replace(/"+$/, '')
+}
+
 /**
  * Create a new Toggly client instance
  */
@@ -199,13 +207,6 @@ export function createTogglyClient(
     } catch (error) {
       console.debug('[Toggly] Failed to record definition cache miss:', error)
     }
-  }
-
-  function normalizeRevision(revision: string | null | undefined): string | null {
-    if (!revision) {
-      return null
-    }
-    return revision.replace(/^"+|"+$/g, '')
   }
 
   function revisionsMatch(
