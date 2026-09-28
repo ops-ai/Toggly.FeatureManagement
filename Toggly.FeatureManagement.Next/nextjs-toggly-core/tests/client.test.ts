@@ -350,6 +350,32 @@ describe('createTogglyClient', () => {
   })
 
   describe('evaluated payload validation', () => {
+    it('reports a remote response body read failure through the fetch error callback', async () => {
+      const bodyError = new Error('remote body unavailable')
+      const onError = vi.fn()
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        text: async () => { throw bodyError },
+        json: async () => { throw bodyError },
+        headers: { get: () => null },
+      })
+
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        onError,
+        refreshInterval: 0,
+        enableLiveUpdates: false,
+      })
+
+      await client.init()
+
+      expect(onError).toHaveBeenCalledWith('Error fetching feature flags', bodyError)
+      expect(client.state.error).toBe(bodyError)
+      client.destroy()
+    })
+
     it('rejects a 2xx error envelope instead of latching empty success', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse({ error: 'boom' }))
 

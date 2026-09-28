@@ -53,6 +53,27 @@ describe('browser compact telemetry boundary', () => {
     expect(url.searchParams.get('claim.role')).toBe(evaluationMode === 'local' ? null : 'admin')
     expect(new Headers(options?.headers).get('x-toggly-identity')).toBe('owner')
   })
+  it('does not report a local parser failure after the browser client is superseded', async () => {
+    let rejectBody: ((error: Error) => void) | undefined
+    const onError = vi.fn()
+    fetchMock.mockImplementationOnce(async () => ({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: () => new Promise<string>((_resolve, reject) => { rejectBody = reject }),
+      headers: { get: () => null },
+    }))
+
+    const value = client({ evaluationMode: 'local', onError, enableTelemetry: false })
+    const pending = value.init()
+    await vi.waitFor(() => expect(rejectBody).toBeTypeOf('function'))
+    value.destroy()
+    rejectBody!(new Error('late local body'))
+    await pending
+
+    expect(onError).not.toHaveBeenCalled()
+    expect(value.state.error).toBeNull()
+  })
   it.each(['remote', 'local'] as const)('never revives configured tokens across %s context transitions', async evaluationMode => {
     fetchMock.mockImplementation(async (url, init) => {
       if (url.includes('/api/frontend/telemetry')) {sent.push({url,init:init!,body:JSON.parse(init!.body as string)}); return {status:202}}

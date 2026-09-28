@@ -57,6 +57,33 @@ describe('local evaluation mode', () => {
     vi.restoreAllMocks()
   })
 
+  it('reports a local response body read failure through the fetch error callback', async () => {
+    const bodyError = new Error('local body unavailable')
+    const onError = vi.fn()
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      text: async () => { throw bodyError },
+      json: async () => { throw bodyError },
+      headers: { get: () => null },
+    })
+
+    const client = createTogglyClient({
+      appKey: 'test-key',
+      evaluationMode: 'local',
+      onError,
+      refreshInterval: 0,
+      enableLiveUpdates: false,
+    })
+
+    await client.init()
+
+    expect(onError).toHaveBeenCalledWith('Error fetching feature flags', bodyError)
+    expect(client.state.error).toBe(bodyError)
+    client.destroy()
+  })
+
   it('fetches definitions-signed, not evaluated-signed', async () => {
     mockFetch.mockResolvedValueOnce(defsResponse([alwaysOn]))
 

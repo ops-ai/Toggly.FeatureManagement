@@ -76,6 +76,18 @@ function normalizeRevision(revision: string | null | undefined): string | null {
   return normalized
 }
 
+function revisionsMatch(
+  previous: string | null | undefined,
+  incoming: string | null | undefined,
+): boolean {
+  const a = normalizeRevision(previous)
+  const b = normalizeRevision(incoming)
+  if (!a || !b) {
+    return false
+  }
+  return a === b
+}
+
 function trimTrailingSlashes(pathname: string): string {
   let end = pathname.length
   while (end > 0 && pathname[end - 1] === '/') {
@@ -279,18 +291,6 @@ export function createClient(
     } catch (error) {
       console.debug('[Toggly] Failed to record definition cache miss:', error)
     }
-  }
-
-  function revisionsMatch(
-    previous: string | null | undefined,
-    incoming: string | null | undefined,
-  ): boolean {
-    const a = normalizeRevision(previous)
-    const b = normalizeRevision(incoming)
-    if (!a || !b) {
-      return false
-    }
-    return a === b
   }
 
   function getDefinitionsRevision(): string | null {
@@ -679,7 +679,7 @@ export function createClient(
     try {
       const response = await fetch(url, { method: 'GET', headers })
       assertCurrent(expected)
-      return parseRemoteEvaluatedResponse(response, expected, previousRevision, useVariants)
+      return await parseRemoteEvaluatedResponse(response, expected, previousRevision, useVariants)
     } catch (error) {
       assertCurrent(expected)
       console.error('[Toggly] Failed to fetch feature definitions:', error)
@@ -761,7 +761,7 @@ export function createClient(
       const response = await fetch(url, { method: 'GET', headers })
 
       assertCurrent(expected)
-      return parseLocalDefinitionsResponse(response, expected, previousRevision)
+      return await parseLocalDefinitionsResponse(response, expected, previousRevision)
     } catch (error) {
       assertCurrent(expected)
       console.error('[Toggly] Failed to fetch feature definitions:', error)
