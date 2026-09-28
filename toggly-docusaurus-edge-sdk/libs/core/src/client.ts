@@ -229,7 +229,7 @@ export function createTogglyClientCore(
   } else if (typeof globalThis !== 'undefined' && typeof globalThis.fetch === 'function') {
     resolvedFetch = globalThis.fetch.bind(globalThis);
   } else {
-    throw new Error('fetch is not available. Please provide a fetch implementation via config.fetch');
+    throw new TypeError('fetch is not available. Please provide a fetch implementation via config.fetch');
   }
 
   // WebSocket live-update support
@@ -363,7 +363,7 @@ export function createTogglyClientCore(
         clearTimeout(timeoutId);
         activeDefinitionRequests.delete(controller);
       }
-    } catch (error) {
+    } catch {
       // On error, try to use cached flags, otherwise use flagDefaults
       if (cache) {
         if (isDebug) {

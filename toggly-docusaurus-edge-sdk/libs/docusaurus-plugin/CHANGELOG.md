@@ -1,3 +1,11 @@
+## 0.10.1
+
+2026-09-27
+
+### Fixed
+- Preserve existing flag and fallback behavior while making browser provider
+  initialization and navbar gating easier to maintain.
+
 ## 0.10.0
 
 - Keep hook and Feature rendering on the authoritative snapshot when callers mutate public flag copies; retain one reporter through diagnostic callback re-entry and dispose all owned resources on unmount.

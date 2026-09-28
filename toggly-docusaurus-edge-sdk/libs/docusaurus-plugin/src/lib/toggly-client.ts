@@ -198,7 +198,7 @@ function createClient(
   } else if (typeof globalThis !== 'undefined' && typeof globalThis.fetch === 'function') {
     resolvedFetch = globalThis.fetch.bind(globalThis);
   } else {
-    throw new Error(
+    throw new TypeError(
       'fetch is not available. Please provide a fetch implementation via config.fetch'
     );
   }
@@ -292,7 +292,7 @@ function createClient(
       }
 
       return flags;
-    } catch (error) {
+    } catch {
       // On error, try to use cached flags, otherwise use flagDefaults
       if (cache) {
         if (isDebug) {

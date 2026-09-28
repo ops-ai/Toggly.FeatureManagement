@@ -263,7 +263,7 @@ describe('togglyPlugin injectHtmlTags script escaping', () => {
       .filter((t) => t.tagName === 'script')
       .map((t) => t.innerHTML);
 
-    expect(scripts.length).toBe(2);
+    expect(scripts).toHaveLength(2);
 
     const configScript = scripts.find((s) => s.includes('__TOGGLY_CONFIG__'));
     expect(configScript).toBeDefined();

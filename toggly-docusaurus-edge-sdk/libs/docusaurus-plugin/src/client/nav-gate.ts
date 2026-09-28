@@ -15,7 +15,7 @@
  *   reading the same mapping and using data-feature markers if desired.
  */
 
-import { createTogglyClient, type Flags } from '../lib/toggly-client.js';
+import { createTogglyClient, type Flags, type TogglyConfig } from '../lib/toggly-client.js';
 
 declare const __TOGGLY_CONFIG__: any;
 declare const __TOGGLY_PAGE_FEATURES__: Record<string, string>;
@@ -45,49 +45,59 @@ async function gateNavbar(): Promise<void> {
     return;
   }
 
-  const config =
-    (typeof window !== 'undefined' && (window as any).__TOGGLY_CONFIG__) || __TOGGLY_CONFIG__;
-  const client = createTogglyClient(config);
+  const client = createTogglyClient(readNavbarConfig());
 
   try {
-    let flags: Flags = {};
-    try {
-      flags = await client.getFlags();
-    } catch {
-      // If flags cannot be fetched, fail open: do nothing to avoid hiding links incorrectly
+    const flags = await fetchNavbarFlags(client);
+    if (!flags) {
       return;
     }
 
-    // If we received no flags at all, fail open
-    if (!flags || Object.keys(flags).length === 0) {
-      return;
-    }
-
-    // Query all navbar links
-    const links = Array.from(
-      document.querySelectorAll<HTMLAnchorElement>('a.navbar__item, a.navbar__link, a.menu__link')
-    );
-    for (const link of links) {
-      const path = normalizePath(link.getAttribute('href') || '');
-      if (!path) continue;
-
-      const feature = PAGE_FEATURES[path];
-      if (!feature) continue;
-
-      const enabled = client.evaluateFlag(feature, flags);
-      // Hide when the feature is explicitly false or not truthy
-      if (enabled !== true) {
-        const parent = link.parentElement;
-        if (parent && parent.childElementCount === 1) {
-          parent.remove(); // remove the li if link is sole child
-        } else {
-          link.remove();
-        }
-      }
+    for (const link of navbarLinks()) {
+      gateNavbarLink(link, flags, client);
     }
   } finally {
     client.dispose();
   }
+}
+
+function readNavbarConfig(): TogglyConfig | undefined {
+  return (typeof window !== 'undefined' && (window as any).__TOGGLY_CONFIG__) || __TOGGLY_CONFIG__;
+}
+
+async function fetchNavbarFlags(client: ReturnType<typeof createTogglyClient>): Promise<Flags | null> {
+  try {
+    const flags = await client.getFlags();
+    return Object.keys(flags).length > 0 ? flags : null;
+  } catch {
+    // If flags cannot be fetched, fail open: do nothing to avoid hiding links incorrectly.
+    return null;
+  }
+}
+
+function navbarLinks(): HTMLAnchorElement[] {
+  return Array.from(
+    document.querySelectorAll<HTMLAnchorElement>('a.navbar__item, a.navbar__link, a.menu__link')
+  );
+}
+
+function gateNavbarLink(
+  link: HTMLAnchorElement,
+  flags: Flags,
+  client: ReturnType<typeof createTogglyClient>
+): void {
+  const path = normalizePath(link.getAttribute('href') || '');
+  const feature = path ? PAGE_FEATURES[path] : undefined;
+  if (!feature || client.evaluateFlag(feature, flags) === true) {
+    return;
+  }
+
+  const parent = link.parentElement;
+  if (parent?.childElementCount === 1) {
+    parent.remove();
+    return;
+  }
+  link.remove();
 }
 
 /** Docusaurus invokes this after SPA navigation updates the page's links. */

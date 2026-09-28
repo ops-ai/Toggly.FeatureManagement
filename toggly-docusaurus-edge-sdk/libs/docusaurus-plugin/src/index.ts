@@ -6,8 +6,8 @@
  */
 
 import type { Plugin, LoadContext } from '@docusaurus/types';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { glob } from 'glob';
 import webpack from 'webpack';
 import { fetchBuildTimeFlags } from './lib/fetch-build-flags.js';
@@ -442,8 +442,8 @@ export function resolveContentRoots(
 }
 
 function normalizeContentRoot(root: TogglyContentRoot): TogglyContentRoot {
-  const trimmedPath = root.path.replace(/^[/\\]+|[/\\]+$/g, '');
-  const trimmedRouteBasePath = root.routeBasePath.replace(/^\/+|\/+$/g, '');
+  const trimmedPath = root.path.replace(/^[/\\]+/, '').replace(/[/\\]+$/, '');
+  const trimmedRouteBasePath = root.routeBasePath.replace(/^\/+/, '').replace(/\/+$/, '');
   return {
     path: trimmedPath,
     routeBasePath: trimmedRouteBasePath,
@@ -549,12 +549,14 @@ async function extractFromRoot(
     const featureKey = xFeatureMatch[1].trim().replace(/^["']|["']$/g, '');
 
     const normalized = file
-      .replace(/\\/g, '/')
+      .replaceAll('\\', '/')
       .split('/')
       .map(stripOrderPrefix)
       .join('/');
 
-    let relativeRoute = normalized.replace(/\.(md|mdx)$/, '');
+    let relativeRoute = normalized.endsWith('.mdx')
+      ? normalized.slice(0, -4)
+      : normalized.slice(0, -3);
 
     // Index files become the parent directory route
     if (path.basename(relativeRoute) === 'index') {
