@@ -69,10 +69,10 @@
         <spring-boot.version>3.5.16</spring-boot.version>
         <spring.version>6.1.0</spring.version>
         <servlet-api.version>6.1.0</servlet-api.version>
-        <caffeine.version>3.2.4</caffeine.version>
+        <caffeine.version>3.3.0</caffeine.version>
         <lettuce.version>6.3.0.RELEASE</lettuce.version>
-        <jackson.version>2.22.2</jackson.version>
-        <slf4j.version>2.0.19</slf4j.version>
+        <jackson.version>2.22.3</jackson.version>
+        <slf4j.version>2.0.20</slf4j.version>
         <micrometer.version>1.17.1</micrometer.version>
         <grpc.version>1.84.0</grpc.version>
         <protobuf.version>3.25.9</protobuf.version>
@@ -82,7 +82,7 @@
 
         <!-- Test dependencies -->
         <junit.version>5.10.1</junit.version>
-        <mockito.version>5.23.0</mockito.version>
+        <mockito.version>5.24.0</mockito.version>
         <assertj.version>3.27.7</assertj.version>
         <wiremock.version>3.13.2</wiremock.version>
 
