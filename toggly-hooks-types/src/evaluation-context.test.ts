@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   appendEvaluationContext,
   buildEvaluatedSignedUrl,
@@ -102,6 +102,19 @@ describe('evaluationContextCacheKey', () => {
       claims: { a: '2', z: '1' },
     });
     expect(a).toBe(b);
+  });
+
+  it('uses locale-aware comparison when sorting group cache-key entries', () => {
+    const groups = ['z', 'ä'];
+    const expected = [...groups].sort((a, b) => a.localeCompare(b)).join(',');
+    const compare = vi.spyOn(String.prototype, 'localeCompare');
+
+    try {
+      expect(evaluationContextCacheKey({ groups })).toBe(`g:${expected}`);
+      expect(compare).toHaveBeenCalled();
+    } finally {
+      compare.mockRestore();
+    }
   });
 });
 

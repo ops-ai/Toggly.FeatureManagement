@@ -79,7 +79,7 @@ function evaluationContextCacheKey(context) {
         parts.push(`u:${context.identity}`);
     }
     if (context.groups?.length) {
-        parts.push(`g:${[...context.groups].sort().join(',')}`);
+        parts.push(`g:${[...context.groups].sort((a, b) => a.localeCompare(b)).join(',')}`);
     }
     if (context.claims && Object.keys(context.claims).length > 0) {
         const normalized = normalizeEvaluationClaims(context.claims);

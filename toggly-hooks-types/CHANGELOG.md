@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.6
+
+### Fixed
+
+- Sort group entries with locale-aware comparison when generating evaluation
+  context cache keys.
 
 ## 1.4.5
 
