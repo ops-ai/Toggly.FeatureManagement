@@ -5,8 +5,8 @@
  */
 
 import type { AstroIntegration, AstroConfig } from 'astro';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { glob } from 'glob';
 import type { TogglyConfig, PageFeatureMapping } from '../types/index.js';
 import { createTogglyServerClient } from '../server/toggly-server.js';
@@ -17,6 +17,108 @@ export interface TogglyIntegrationOptions extends TogglyConfig {
   browserEnableUsageTracking?: boolean;
   /** Browser business metrics policy; omitted inherits enableMetrics. */
   browserEnableMetrics?: boolean;
+}
+
+interface FrontmatterBlock {
+  opener: string;
+  content: string;
+  closer: string;
+  whole: string;
+}
+
+function extractFrontmatter(source: string): FrontmatterBlock | null {
+  const openerEnd = source.indexOf('\n');
+  if (openerEnd === -1 || !/^---\s*$/.test(source.slice(0, openerEnd))) {
+    return null;
+  }
+
+  const closerStart = source.indexOf('\n---', openerEnd + 1);
+  if (closerStart === -1) {
+    return null;
+  }
+
+  const closerEnd = closerStart + 4;
+  return {
+    opener: source.slice(0, openerEnd + 1),
+    content: source.slice(openerEnd + 1, closerStart),
+    closer: source.slice(closerStart, closerEnd),
+    whole: source.slice(0, closerEnd),
+  };
+}
+
+function readFeatureKey(frontmatter: string): string | null {
+  for (const line of frontmatter.split('\n')) {
+    if (!line.startsWith('x-feature:')) {
+      continue;
+    }
+    const featureKey = line.slice('x-feature:'.length).trim();
+    return featureKey || null;
+  }
+  return null;
+}
+
+function removeFeatureDirective(frontmatter: string): string {
+  let lineStart = 0;
+  while (lineStart < frontmatter.length) {
+    const lineEnd = frontmatter.indexOf('\n', lineStart);
+    const end = lineEnd === -1 ? frontmatter.length : lineEnd;
+    if (frontmatter.slice(lineStart, end).startsWith('x-feature:')) {
+      return frontmatter.slice(0, lineStart) + frontmatter.slice(end + 1);
+    }
+    if (lineEnd === -1) {
+      return frontmatter;
+    }
+    lineStart = lineEnd + 1;
+  }
+  return frontmatter;
+}
+
+function featureDirectories(astroConfig: AstroConfig): { pagesDir: string; directories: string[] } {
+  const srcDir = astroConfig.srcDir?.pathname || path.join(process.cwd(), 'src');
+  const pagesDir = path.join(srcDir, 'pages');
+  const contentDir = path.join(srcDir, 'content');
+  return {
+    pagesDir,
+    directories: [pagesDir, contentDir].filter(directory => fs.existsSync(directory)),
+  };
+}
+
+function withBaseRoute(route: string, base: string): string {
+  return base === '/' ? route : path.join(base, route).replaceAll('\\', '/');
+}
+
+function featureMappingForFile(
+  directory: string,
+  file: string,
+  pagesDir: string,
+  base: string,
+): [string, string] | undefined {
+  const content = fs.readFileSync(path.join(directory, file), 'utf-8');
+  const frontmatter = extractFrontmatter(content);
+  const featureKey = frontmatter && readFeatureKey(frontmatter.content);
+  if (!featureKey) return undefined;
+
+  const route = withBaseRoute(convertFilePathToRoute(file, directory === pagesDir), base);
+  return [route, featureKey.replaceAll(/(^["'])|(["']$)/g, '')];
+}
+
+async function extractDirectoryFeatures(
+  directory: string,
+  pagesDir: string,
+  base: string,
+): Promise<PageFeatureMapping> {
+  const mapping: PageFeatureMapping = {};
+  const files = await glob('**/*.{astro,md,mdx}', {
+    cwd: directory,
+    absolute: false,
+    ignore: ['node_modules/**', '**/node_modules/**'],
+  });
+
+  for (const file of files) {
+    const feature = featureMappingForFile(directory, file, pagesDir, base);
+    if (feature) mapping[feature[0]] = feature[1];
+  }
+  return mapping;
 }
 
 /**
@@ -40,7 +142,6 @@ export default function togglyIntegration(
 
   let pageFeatureMapping: PageFeatureMapping = {};
   let astroConfig: AstroConfig;
-  let buildTimeClient: any = null;
 
   return {
     name: '@ops-ai/astro-feature-flags-toggly',
@@ -90,21 +191,17 @@ export default function togglyIntegration(
                   const code = fs.readFileSync(filePath, 'utf-8');
 
                   // Check if frontmatter contains x-feature:
-                  const frontmatterMatch = code.match(/^(---\s*\n)([\s\S]*?)(\n---)/);
-                  if (!frontmatterMatch) return null;
+                  const frontmatter = extractFrontmatter(code);
+                  if (!frontmatter) return null;
 
-                  const frontmatter = frontmatterMatch[2];
-                  if (!/^x-feature:\s*.+$/m.test(frontmatter)) return null;
+                  if (!readFeatureKey(frontmatter.content)) return null;
 
                   // Strip the x-feature line entirely so esbuild doesn't choke on it
-                  const updatedFrontmatter = frontmatter.replace(
-                    /^x-feature:\s*.+\n?/m,
-                    ''
-                  );
+                  const updatedFrontmatter = removeFeatureDirective(frontmatter.content);
 
                   return code.replace(
-                    frontmatterMatch[0],
-                    frontmatterMatch[1] + updatedFrontmatter + frontmatterMatch[3]
+                    frontmatter.whole,
+                    frontmatter.opener + updatedFrontmatter + frontmatter.closer
                   );
                 },
               },
@@ -141,8 +238,8 @@ export default function togglyIntegration(
           if (config.isDebug) {
             console.log('[Toggly Integration] Build mode: All features will be enabled');
           }
-          // Create a build-time client that enables all features
-          buildTimeClient = createTogglyServerClient(config, true);
+          // Create a build-time client that enables all features.
+          createTogglyServerClient(config, true);
         }
 
         // Extract page feature mapping from frontmatter
@@ -207,72 +304,19 @@ async function extractPageFeatures(
   astroConfig: AstroConfig,
   isDebug?: boolean
 ): Promise<PageFeatureMapping> {
-  const mapping: PageFeatureMapping = {};
-
-  // Determine source directory
-  const srcDir = astroConfig.srcDir?.pathname || path.join(process.cwd(), 'src');
-  const pagesDir = path.join(srcDir, 'pages');
-  const contentDir = path.join(srcDir, 'content');
-
-  // Check if directories exist
-  const dirsToScan: string[] = [];
-  if (fs.existsSync(pagesDir)) {
-    dirsToScan.push(pagesDir);
-  }
-  if (fs.existsSync(contentDir)) {
-    dirsToScan.push(contentDir);
-  }
-
-  if (dirsToScan.length === 0) {
+  const { pagesDir, directories } = featureDirectories(astroConfig);
+  if (directories.length === 0) {
     if (isDebug) {
       console.warn('[Toggly Integration] No pages or content directories found');
     }
-    return mapping;
+    return {};
   }
 
-  for (const dir of dirsToScan) {
-    // Find all .astro, .md, .mdx files
-    const files = await glob('**/*.{astro,md,mdx}', {
-      cwd: dir,
-      absolute: false,
-      ignore: ['node_modules/**', '**/node_modules/**'],
-    });
-
-    for (const file of files) {
-      const filePath = path.join(dir, file);
-      const content = fs.readFileSync(filePath, 'utf-8');
-
-      // Extract frontmatter
-      const frontmatterMatch = content.match(/^---\s*\n([\s\S]*?)\n---/);
-      if (!frontmatterMatch) {
-        continue;
-      }
-
-      const frontmatter = frontmatterMatch[1];
-
-      // Look for x-feature in frontmatter
-      const xFeatureMatch = frontmatter.match(/^x-feature:\s*(.+)$/m);
-      if (!xFeatureMatch) {
-        continue;
-      }
-
-      let featureKey = xFeatureMatch[1].trim();
-      // Remove quotes if present
-      featureKey = featureKey.replace(/^["']|["']$/g, '');
-
-      // Convert file path to route
-      let route = convertFilePathToRoute(file, dir === pagesDir);
-
-      // Prepend base if configured
-      const base = astroConfig.base || '/';
-      if (base !== '/') {
-        route = path.join(base, route).replace(/\\/g, '/');
-      }
-
-      mapping[route] = featureKey;
-    }
+  const mapping: PageFeatureMapping = {};
+  const base = astroConfig.base || '/';
+  for (const directory of directories) {
+    Object.assign(mapping, await extractDirectoryFeatures(directory, pagesDir, base));
   }
-
   return mapping;
 }
 
@@ -355,5 +399,3 @@ export function createTogglyMiddleware(config: TogglyConfig) {
     }
   };
 }
-
-

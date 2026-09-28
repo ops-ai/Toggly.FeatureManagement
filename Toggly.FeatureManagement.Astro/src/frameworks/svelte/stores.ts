@@ -5,8 +5,7 @@
  */
 
 import { derived, get } from 'svelte/store';
-import { $flag, $gate, $isReady, $variants, $variant, $flags, $localGatesRevision } from '../../client/store.js';
-import type { VariantResult } from '../../types/index.js';
+import { $flag, $gate, $variant, $flags, $localGatesRevision } from '../../client/store.js';
 
 /**
  * Create a derived store for a specific feature flag (includes local post-filter gates).
@@ -25,10 +24,8 @@ export function featureGate(
   requirement: 'all' | 'any' = 'all',
   negate: boolean = false,
 ) {
-  const keysKey = flagKeys.join('\0');
   const gateAtom = $gate(flagKeys, requirement, negate);
   return derived([$flags, $localGatesRevision], () => {
-    void keysKey;
     return gateAtom.get();
   });
 }
@@ -52,4 +49,4 @@ export function readFeatureGate(
 }
 
 // Re-export base stores for direct use
-export { $flags as flags, $isReady as isReady, $variants as variants };
+export { $flags as flags, $isReady as isReady, $variants as variants } from '../../client/store.js';

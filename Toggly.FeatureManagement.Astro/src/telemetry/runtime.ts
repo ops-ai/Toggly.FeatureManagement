@@ -6,7 +6,7 @@ import {
   resolveMetricsBaseUrl,
   resolveTelemetryEnableFlag,
 } from './https-client.js'
-import { UsageBatcher, type UsageFlushBundle } from './usage-batcher.js'
+import { UsageBatcher } from './usage-batcher.js'
 
 /** Bound wait for request-scoped / signal close so hung flush cannot stall forever. */
 export const REQUEST_SCOPED_CLOSE_TIMEOUT_MS = 2_000
@@ -343,4 +343,4 @@ export class UsageTelemetryRuntime {
   }
 }
 
-export type { UsageFlushBundle }
+export type { UsageFlushBundle } from './usage-batcher.js'

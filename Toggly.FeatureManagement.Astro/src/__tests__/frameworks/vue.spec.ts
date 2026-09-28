@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ref, type Ref } from 'vue';
-import { $flags, $isReady, $variants, __resetClient } from '../../client/store.js';
+import { computed, ref, type Ref } from 'vue';
+import { $flags, $isReady, $localGatesRevision, $variants, __resetClient } from '../../client/store.js';
 
 // Mock @nanostores/vue to return reactive vue refs
 vi.mock('@nanostores/vue', () => ({
   useStore: vi.fn((store: any) => ref(store.get())),
 }));
 
-import { useFeatureFlag, useFeatureGate, useVariant } from '../../frameworks/vue/composables.js';
+import { evaluateWithDefinitionDependencies, useGateEvaluation, useFeatureFlag, useFeatureGate, useVariant } from '../../frameworks/vue/composables.js';
 import { useStore } from '@nanostores/vue';
 
 // Helper to get the inner value from a Ref
@@ -27,6 +27,48 @@ describe('Vue Framework Adapter - Composables', () => {
     $isReady.set(false);
     vi.clearAllMocks();
     resetMock();
+  });
+
+  it('re-evaluates when definition or local-gate dependencies change', () => {
+    const flags = ref({ Visible: true });
+    const revision = ref(0);
+    const result = ref(true);
+    let evaluations = 0;
+    const evaluated = computed(() => evaluateWithDefinitionDependencies(flags, revision, () => {
+      evaluations += 1;
+      return result.value;
+    }));
+
+    expect(evaluated.value).toBe(true);
+    flags.value = { Visible: false };
+    expect(evaluated.value).toBe(true);
+    revision.value += 1;
+    expect(evaluated.value).toBe(true);
+    expect(evaluations).toBe(3);
+  });
+
+  it('keeps shared gate evaluations reactive to definitions and local gates', () => {
+    const flags = ref({ Visible: true });
+    const revision = ref(0);
+    const result = ref(true);
+    let evaluations = 0;
+    vi.mocked(useStore).mockImplementation((store: any) => {
+      if (store === $flags) return flags;
+      if (store === $localGatesRevision) return revision;
+      return ref(store.get());
+    });
+
+    const enabled = useGateEvaluation(() => {
+      evaluations += 1;
+      return result.value;
+    });
+
+    expect(enabled.value).toBe(true);
+    flags.value = { Visible: false };
+    expect(enabled.value).toBe(true);
+    revision.value += 1;
+    expect(enabled.value).toBe(true);
+    expect(evaluations).toBe(3);
   });
 
   describe('useFeatureFlag', () => {

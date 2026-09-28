@@ -56,10 +56,10 @@ interface CachedFlags {
  * Server-side Toggly client implementation
  */
 export class TogglyServer implements TogglyClient {
-  private config: TogglyConfig;
+  private readonly config: TogglyConfig;
   private cache: CachedFlags | null = null;
   private fetchPromise: Promise<CachedFlags> | null = null;
-  private isBuildTime: boolean = false;
+  private readonly isBuildTime: boolean;
   private telemetry: UsageTelemetryRuntime | null = null;
   /**
    * Once we have counted a TTL skip for a given cache timestamp, further

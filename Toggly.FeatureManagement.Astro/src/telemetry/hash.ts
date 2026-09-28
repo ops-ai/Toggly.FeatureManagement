@@ -7,8 +7,8 @@ const utf8Encoder = new TextEncoder()
 export function hashIdentity(identity: string): number {
   let hash = 2166136261 // FNV offset basis
   const bytes = utf8Encoder.encode(identity)
-  for (let i = 0; i < bytes.length; i++) {
-    hash ^= bytes[i]!
+  for (const byte of bytes) {
+    hash ^= byte
     hash = Math.imul(hash, 16777619) // FNV prime
   }
   const unsigned = hash >>> 0

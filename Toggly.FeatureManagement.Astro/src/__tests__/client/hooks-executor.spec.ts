@@ -17,12 +17,14 @@ describe('HookExecutor', () => {
   });
 
   describe('addHook', () => {
-    it('should register a hook', () => {
+    it('should register a hook', async () => {
+      const afterRefresh = vi.fn();
       const hook = createMockHook('TestHook', {
-        afterRefresh: vi.fn(),
+        afterRefresh,
       });
       executor.addHook(hook);
-      // No error thrown
+      await executor.executeAfterRefresh({ Feature: true });
+      expect(afterRefresh).toHaveBeenCalledWith({ Feature: true });
     });
 
     it('should skip duplicate hook names and log warning', () => {
@@ -397,8 +399,7 @@ describe('HookExecutor', () => {
     it('should skip hooks without afterRefresh', async () => {
       executor.addHook(createMockHook('NoAfterRefresh'));
 
-      // Should not throw
-      await executor.executeAfterRefresh({ F1: true });
+      await expect(executor.executeAfterRefresh({ F1: true })).resolves.toBeUndefined();
     });
   });
 });

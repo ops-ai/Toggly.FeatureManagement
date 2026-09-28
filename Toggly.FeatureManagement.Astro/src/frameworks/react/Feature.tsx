@@ -19,7 +19,7 @@ export interface FeatureProps {
   /** Multiple feature flag keys to check */
   flags?: string[];
   /** Requirement for multiple flags: 'all' or 'any' (default: 'all') */
-  requirement?: 'all' | 'any';
+  requirement?: GateRequirement;
   /** If true, negates the result (default: false) */
   negate?: boolean;
   /** Entity instance or canonical entity context for entity-gated flags */
@@ -33,6 +33,8 @@ export interface FeatureProps {
   /** Render prop for conditional styling; always invoked with resolved gate boolean */
   render?: (enabled: boolean) => ReactNode;
 }
+
+export type GateRequirement = 'all' | 'any';
 
 // Islands render the loading state on the server. Keep that snapshot during
 // hydration even when the injected client has already fetched its flags.
@@ -58,7 +60,7 @@ function buildFlagKeys(flag?: string, flags?: string[]): string[] {
 function useGateEnabled(
   flag?: string,
   flags?: string[],
-  requirement: 'all' | 'any' = 'all',
+  requirement: GateRequirement = 'all',
   negate = false,
   context?: TogglyEntityContext | Record<string, unknown> | null,
   contextKind?: string,
@@ -85,7 +87,7 @@ export function Feature({
   children,
   loading = null,
   render,
-}: FeatureProps) {
+}: Readonly<FeatureProps>) {
   const isReady = useReady();
   const isEnabled = useGateEnabled(flag, flags, requirement, negate, context, contextKind);
 
@@ -127,7 +129,7 @@ export function useFeatureFlag(
  */
 export function useFeatureGate(
   flagKeys: string[],
-  requirement: 'all' | 'any' = 'all',
+  requirement: GateRequirement = 'all',
   negate: boolean = false,
   context?: TogglyEntityContext | Record<string, unknown> | null,
   contextKind?: string,
