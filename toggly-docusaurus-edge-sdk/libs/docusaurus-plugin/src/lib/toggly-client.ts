@@ -242,18 +242,30 @@ function createClient(
     return age < interval;
   };
 
-  const fetchFlags = async (): Promise<Flags> => {
-    if (disposed) return { ...(cache?.flags ?? flagDefaults) };
-    const url = getApiUrl();
+  const cachedOrDefaultFlags = (): Flags => ({ ...(cache?.flags ?? flagDefaults) });
 
-    // If no appKey, return flagDefaults
-    if (!url || !appKey) {
+  const defaultFlagsWithDiagnostic = (): Flags => {
+    if (isDebug) {
+      console.log(`Toggly.usedFlagDefaults - ${JSON.stringify(flagDefaults)}`);
+    }
+    return { ...flagDefaults };
+  };
+
+  const fallbackFlagsAfterError = (): Flags => {
+    if (cache) {
       if (isDebug) {
-        console.log(`Toggly.usedFlagDefaults - ${JSON.stringify(flagDefaults)}`);
+        console.log(`Toggly.loadedFromCache - ${JSON.stringify(cache.flags)}`);
       }
-      return { ...flagDefaults };
+      return { ...cache.flags };
     }
 
+    if (isDebug) {
+      console.log(`Toggly.loadedFromDefaults - ${JSON.stringify(flagDefaults)}`);
+    }
+    return { ...flagDefaults };
+  };
+
+  const fetchFlagsFromApi = async (url: string): Promise<Flags> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), connectTimeout);
     requests.set(controller, timeoutId);
@@ -267,9 +279,7 @@ function createClient(
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Failed to fetch flags from Toggly API: ${response.status} ${response.statusText}`
-        );
+        throw new Error(`Failed to fetch flags from Toggly API: ${response.status} ${response.statusText}`);
       }
 
       const bodyText = await readResponseBody(response);
@@ -292,23 +302,21 @@ function createClient(
       }
 
       return flags;
-    } catch {
-      // On error, try to use cached flags, otherwise use flagDefaults
-      if (cache) {
-        if (isDebug) {
-          console.log(`Toggly.loadedFromCache - ${JSON.stringify(cache.flags)}`);
-        }
-        return { ...cache.flags };
-      }
-
-      if (isDebug) {
-        console.log(`Toggly.loadedFromDefaults - ${JSON.stringify(flagDefaults)}`);
-      }
-
-      return { ...flagDefaults };
     } finally {
       clearTimeout(timeoutId);
       requests.delete(controller);
+    }
+  };
+
+  const fetchFlags = async (): Promise<Flags> => {
+    if (disposed) return cachedOrDefaultFlags();
+    const url = getApiUrl();
+    if (!url || !appKey) return defaultFlagsWithDiagnostic();
+
+    try {
+      return await fetchFlagsFromApi(url);
+    } catch {
+      return fallbackFlagsAfterError();
     }
   };
 

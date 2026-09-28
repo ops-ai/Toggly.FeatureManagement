@@ -306,77 +306,77 @@ export function createTogglyClientCore(
     return age < interval;
   };
 
-  const fetchFlags = async (): Promise<Flags> => {
-    if (disposed) return cache ? { ...cache.flags } : { ...flagDefaults };
-    const generation = definitionsGeneration;
-    const url = getApiUrl();
+  const cachedOrDefaultFlags = (): Flags => (cache ? { ...cache.flags } : { ...flagDefaults });
 
-    // If no appKey, return flagDefaults
-    if (!url || !appKey) {
+  const defaultFlagsWithDiagnostic = (): Flags => {
+    if (isDebug) {
+      console.log(`Toggly.usedFlagDefaults - ${JSON.stringify(flagDefaults)}`);
+    }
+    return { ...flagDefaults };
+  };
+
+  const fallbackFlagsAfterError = (): Flags => {
+    if (cache) {
       if (isDebug) {
-        console.log(`Toggly.usedFlagDefaults - ${JSON.stringify(flagDefaults)}`);
+        console.log(`Toggly.loadedFromCache - ${JSON.stringify(cache.flags)}`);
       }
-      return { ...flagDefaults };
+      return { ...cache.flags };
     }
 
+    if (isDebug) {
+      console.log(`Toggly.loadedFromDefaults - ${JSON.stringify(flagDefaults)}`);
+    }
+    return { ...flagDefaults };
+  };
+
+  const fetchFlagsFromApi = async (url: string, generation: number): Promise<Flags> => {
+    const controller = new AbortController();
+    activeDefinitionRequests.add(controller);
+    const timeoutId = setTimeout(() => controller.abort(), connectTimeout);
     try {
-      const controller = new AbortController();
-      activeDefinitionRequests.add(controller);
-      const timeoutId = setTimeout(() => controller.abort(), connectTimeout);
-      try {
-        const response = await resolvedFetch(url, {
-          method: 'GET',
-          headers: {
-            Accept: 'application/json',
-          },
-          signal: controller.signal,
-        });
+      const response = await resolvedFetch(url, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+        },
+        signal: controller.signal,
+      });
 
-        if (!response.ok) {
-          throw new Error(
-            `Failed to fetch flags from Toggly API: ${response.status} ${response.statusText}`
-          );
-        }
-
-        const bodyText = await readResponseBody(response);
-        const parsed = await parseEvaluatedResponseBody(bodyText, {
-          verifySignatures,
-          baseURI,
-          allowedKeyIds,
-          maxSignatureAgeSeconds,
-          headers: { Accept: 'application/json' },
-          fetchImpl: resolvedFetch,
-        });
-        const flags = (
-          verifySignatures ? (parsed as Flags) : unwrapDefsPayload(parsed)
-        ) as Flags;
-
-        if (isDebug) {
-          console.log(`Toggly.fetchFeatureFlags - ${JSON.stringify(flags)}`);
-        }
-
-        if (generation !== definitionsGeneration) {
-          return cache ? { ...cache.flags } : { ...flagDefaults };
-        }
-        return flags;
-      } finally {
-        clearTimeout(timeoutId);
-        activeDefinitionRequests.delete(controller);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch flags from Toggly API: ${response.status} ${response.statusText}`);
       }
-    } catch {
-      // On error, try to use cached flags, otherwise use flagDefaults
-      if (cache) {
-        if (isDebug) {
-          console.log(`Toggly.loadedFromCache - ${JSON.stringify(cache.flags)}`);
-        }
-        return { ...cache.flags };
-      }
+
+      const bodyText = await readResponseBody(response);
+      const parsed = await parseEvaluatedResponseBody(bodyText, {
+        verifySignatures,
+        baseURI,
+        allowedKeyIds,
+        maxSignatureAgeSeconds,
+        headers: { Accept: 'application/json' },
+        fetchImpl: resolvedFetch,
+      });
+      const flags = (verifySignatures ? (parsed as Flags) : unwrapDefsPayload(parsed)) as Flags;
 
       if (isDebug) {
-        console.log(`Toggly.loadedFromDefaults - ${JSON.stringify(flagDefaults)}`);
+        console.log(`Toggly.fetchFeatureFlags - ${JSON.stringify(flags)}`);
       }
 
-      return { ...flagDefaults };
+      return generation === definitionsGeneration ? flags : cachedOrDefaultFlags();
+    } finally {
+      clearTimeout(timeoutId);
+      activeDefinitionRequests.delete(controller);
+    }
+  };
+
+  const fetchFlags = async (): Promise<Flags> => {
+    if (disposed) return cachedOrDefaultFlags();
+    const url = getApiUrl();
+    if (!url || !appKey) return defaultFlagsWithDiagnostic();
+
+    try {
+      return await fetchFlagsFromApi(url, definitionsGeneration);
+    } catch {
+      return fallbackFlagsAfterError();
     }
   };
 

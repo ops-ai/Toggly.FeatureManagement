@@ -62,7 +62,9 @@ async function gateNavbar(): Promise<void> {
 }
 
 function readNavbarConfig(): TogglyConfig | undefined {
-  return (typeof window !== 'undefined' && (window as any).__TOGGLY_CONFIG__) || __TOGGLY_CONFIG__;
+  const runtimeConfig = (globalThis.window as { __TOGGLY_CONFIG__?: TogglyConfig } | undefined)
+    ?.__TOGGLY_CONFIG__;
+  return runtimeConfig ?? __TOGGLY_CONFIG__;
 }
 
 async function fetchNavbarFlags(client: ReturnType<typeof createTogglyClient>): Promise<Flags | null> {

@@ -442,12 +442,28 @@ export function resolveContentRoots(
 }
 
 function normalizeContentRoot(root: TogglyContentRoot): TogglyContentRoot {
-  const trimmedPath = root.path.replace(/^[/\\]+/, '').replace(/[/\\]+$/, '');
-  const trimmedRouteBasePath = root.routeBasePath.replace(/^\/+/, '').replace(/\/+$/, '');
+  const trimmedPath = trimPathSeparators(root.path);
+  const trimmedRouteBasePath = trimRouteSlashes(root.routeBasePath);
   return {
     path: trimmedPath,
     routeBasePath: trimmedRouteBasePath,
   };
+}
+
+function trimPathSeparators(value: string): string {
+  return trimEdgeCharacters(value, (character) => character === '/' || character === '\\');
+}
+
+function trimRouteSlashes(value: string): string {
+  return trimEdgeCharacters(value, (character) => character === '/');
+}
+
+function trimEdgeCharacters(value: string, isTrimmedCharacter: (character: string) => boolean): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && isTrimmedCharacter(value[start])) start += 1;
+  while (end > start && isTrimmedCharacter(value[end - 1])) end -= 1;
+  return value.slice(start, end);
 }
 
 function rootKey(root: TogglyContentRoot): string {
@@ -517,80 +533,71 @@ async function extractFromRoot(
   context: LoadContext,
   root: TogglyContentRoot,
 ): Promise<PageFeatureMapping> {
-  const { siteDir, baseUrl } = context;
-  const rootDir = path.isAbsolute(root.path)
-    ? root.path
-    : path.join(siteDir, root.path);
-  const pageFeatureMapping: PageFeatureMapping = {};
+  const rootDir = resolveRootDirectory(context.siteDir, root.path);
+  if (!fs.existsSync(rootDir)) return {};
 
-  if (!fs.existsSync(rootDir)) {
-    return pageFeatureMapping;
-  }
+  const files = await findContentFiles(rootDir);
+  return files.reduce<PageFeatureMapping>((mapping, file) => {
+    const featureKey = readFeatureKey(path.join(rootDir, file));
+    if (featureKey) {
+      mapping[routePathForFile(file, root.routeBasePath, context.baseUrl)] = featureKey;
+    }
+    return mapping;
+  }, {});
+}
 
-  const files = await glob('**/*.{md,mdx}', {
+function resolveRootDirectory(siteDir: string, contentPath: string): string {
+  return path.isAbsolute(contentPath) ? contentPath : path.join(siteDir, contentPath);
+}
+
+function findContentFiles(rootDir: string): Promise<string[]> {
+  return glob('**/*.{md,mdx}', {
     cwd: rootDir,
     absolute: false,
     ignore: ['node_modules/**'],
   });
+}
 
-  const stripOrderPrefix = (seg: string): string => seg.replace(/^\d+-/, '');
-  const normalizedRouteBase = root.routeBasePath; // already trimmed of slashes
+function readFeatureKey(filePath: string): string | undefined {
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const frontmatterMatch = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
+  const xFeatureMatch = frontmatterMatch?.[1].match(/^x-feature:\s*(.+)$/m);
+  return xFeatureMatch?.[1].trim().replace(/^["']|["']$/g, '');
+}
 
-  for (const file of files) {
-    const filePath = path.join(rootDir, file);
-    const content = fs.readFileSync(filePath, 'utf-8');
+function routePathForFile(file: string, routeBasePath: string, baseUrl: string): string {
+  const relativeRoute = relativeRouteForFile(file);
+  const routePath = routePathForRelativeRoute(relativeRoute, routeBasePath);
+  return prependBaseUrl(routePath, baseUrl);
+}
 
-    const frontmatterMatch = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
-    if (!frontmatterMatch) continue;
+function relativeRouteForFile(file: string): string {
+  const normalized = file
+    .replaceAll('\\', '/')
+    .split('/')
+    .map((segment) => segment.replace(/^\d+-/, ''))
+    .join('/');
+  const fileRoute = normalized.endsWith('.mdx') ? normalized.slice(0, -4) : normalized.slice(0, -3);
+  const relativeRoute = path.basename(fileRoute) === 'index' ? path.dirname(fileRoute) : fileRoute;
+  return relativeRoute === '.' ? '' : trimRouteSlashes(relativeRoute);
+}
 
-    const xFeatureMatch = frontmatterMatch[1].match(/^x-feature:\s*(.+)$/m);
-    if (!xFeatureMatch) continue;
+function routePathForRelativeRoute(relativeRoute: string, routeBasePath: string): string {
+  if (routeBasePath === '') return relativeRoute === '' ? '/' : `/${relativeRoute}`;
+  if (relativeRoute === '') return `/${routeBasePath}`;
+  return `/${routeBasePath}/${relativeRoute}`;
+}
 
-    const featureKey = xFeatureMatch[1].trim().replace(/^["']|["']$/g, '');
+function prependBaseUrl(routePath: string, baseUrl: string): string {
+  if (!baseUrl || baseUrl === '/') return routePath;
+  const normalizedBaseUrl = trimTrailingSlashes(baseUrl);
+  return routePath === '/' ? normalizedBaseUrl || '/' : normalizedBaseUrl + routePath;
+}
 
-    const normalized = file
-      .replaceAll('\\', '/')
-      .split('/')
-      .map(stripOrderPrefix)
-      .join('/');
-
-    let relativeRoute = normalized.endsWith('.mdx')
-      ? normalized.slice(0, -4)
-      : normalized.slice(0, -3);
-
-    // Index files become the parent directory route
-    if (path.basename(relativeRoute) === 'index') {
-      relativeRoute = path.dirname(relativeRoute);
-      if (relativeRoute === '.') {
-        relativeRoute = '';
-      }
-    }
-
-    relativeRoute = relativeRoute.replace(/^\/+/, '');
-
-    let routePath: string;
-    if (normalizedRouteBase === '') {
-      // Root-level routes (routeBasePath: '/') — file paths map directly under '/'.
-      routePath = relativeRoute === '' ? '/' : `/${relativeRoute}`;
-    } else if (relativeRoute === '') {
-      routePath = `/${normalizedRouteBase}`;
-    } else {
-      routePath = `/${normalizedRouteBase}/${relativeRoute}`;
-    }
-
-    routePath = routePath.replace(/\/+$/, '') || '/';
-
-    // Prepend baseUrl when the site is served from a subpath (e.g. GitHub Pages).
-    let fullRoutePath = routePath;
-    if (baseUrl && baseUrl !== '/') {
-      const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
-      fullRoutePath = routePath === '/' ? normalizedBaseUrl || '/' : normalizedBaseUrl + routePath;
-    }
-
-    pageFeatureMapping[fullRoutePath] = featureKey;
-  }
-
-  return pageFeatureMapping;
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') end -= 1;
+  return value.slice(0, end);
 }
 
 // Export React components and hooks

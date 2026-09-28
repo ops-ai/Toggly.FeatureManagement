@@ -115,6 +115,14 @@ describe('resolveContentRoots', () => {
     ]);
     expect(roots).toEqual([{ path: 'sdks', routeBasePath: 'sdks' }]);
   });
+
+  it('normalizes repeated path separators without altering interior separators', () => {
+    const ctx = makeContext(tmpDir, []);
+    const roots = resolveContentRoots(ctx, [
+      { path: '\\\\sdk\\guides\\\\', routeBasePath: '///sdk//guides///' },
+    ]);
+    expect(roots).toEqual([{ path: 'sdk\\guides', routeBasePath: 'sdk//guides' }]);
+  });
 });
 
 // ---------------------------------------------------------------------------
