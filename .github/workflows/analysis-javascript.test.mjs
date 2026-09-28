@@ -92,6 +92,17 @@ test('does not count packed Vue and Svelte host harnesses as production source',
   }
 });
 
+test('classifies CJS files under tests as test code in both Sonar scans', () => {
+  const scanExclusions = [...workflow.matchAll(/-Dsonar\.exclusions=([^\n]+)/g)].map((match) => match[1]);
+  const testInclusions = [...workflow.matchAll(/-Dsonar\.test\.inclusions=([^\n]+)/g)].map((match) => match[1]);
+
+  assert.equal(scanExclusions.length, 2, 'both Sonar scans must define source exclusions');
+  assert.equal(testInclusions.length, 2, 'both Sonar scans must define test inclusions');
+  for (const configuration of [...scanExclusions, ...testInclusions]) {
+    assert.ok(configuration.includes('**/tests/**/*.cjs'));
+  }
+});
+
 test('runs the Fastify 4 and 5 packed-host fixture on its valid Node 20 row', () => {
   const packedHostStep = workflow.match(/- name: Run packed host compatibility fixture\n\s+if: ([^\n]+)/)?.[1];
 

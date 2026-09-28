@@ -13,7 +13,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:packed": "node tests/packed-consumer.cjs",
+    "test:packed": "node tests/packed-consumer.cjs && node tests/packed-consumer-path.cjs",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run clean && npm run build"
   },

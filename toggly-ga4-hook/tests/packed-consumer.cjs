@@ -6,11 +6,15 @@ const path = require('node:path');
 
 const packageDirectory = path.resolve(__dirname, '..');
 const packageName = JSON.parse(readFileSync(path.join(packageDirectory, 'package.json'), 'utf8')).name;
+const npmExecutable = path.join(
+  path.dirname(process.execPath),
+  process.platform === 'win32' ? 'npm.cmd' : 'npm',
+);
 const consumerDirectory = mkdtempSync(path.join(os.tmpdir(), 'toggly-ga4-hook-consumer-'));
 let tarballPath;
 
 try {
-  const packOutput = execFileSync('npm', ['pack', '--json', '--ignore-scripts'], {
+  const packOutput = execFileSync(npmExecutable, ['pack', '--json', '--ignore-scripts'], {
     cwd: packageDirectory,
     encoding: 'utf8',
   });
@@ -20,7 +24,7 @@ try {
     private: true,
     name: 'toggly-ga4-hook-packed-consumer',
   }));
-  execFileSync('npm', [
+  execFileSync(npmExecutable, [
     'install',
     '--ignore-scripts',
     '--no-audit',
