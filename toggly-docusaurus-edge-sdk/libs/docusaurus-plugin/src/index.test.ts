@@ -233,6 +233,13 @@ describe('togglyPlugin contentLoaded -> page feature mapping (integration)', () 
     const mapping = await runPluginExtraction(tmpDir, []);
     expect(mapping).toEqual({ '/docs/feature': 'Features' });
   });
+
+  it('reads quoted x-feature values from frontmatter', async () => {
+    writeFile('docs/quoted.mdx', frontmatter('"QuotedFeature"'));
+
+    const mapping = await runPluginExtraction(tmpDir, []);
+    expect(mapping).toEqual({ '/docs/quoted': 'QuotedFeature' });
+  });
 });
 
 describe('togglyPlugin injectHtmlTags script escaping', () => {

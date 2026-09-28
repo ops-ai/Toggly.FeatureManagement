@@ -242,27 +242,26 @@ function createClient(
     return age < interval;
   };
 
-  const cachedOrDefaultFlags = (): Flags => ({ ...(cache?.flags ?? flagDefaults) });
+  const copyFlags = (flags: Flags): Flags => ({ ...flags });
 
-  const defaultFlagsWithDiagnostic = (): Flags => {
-    if (isDebug) {
-      console.log(`Toggly.usedFlagDefaults - ${JSON.stringify(flagDefaults)}`);
+  const fallbackFlags = (reason: 'missing-config' | 'request-failed' | 'disposed'): Flags => {
+    if (reason === 'missing-config') {
+      if (isDebug) console.log(`Toggly.usedFlagDefaults - ${JSON.stringify(flagDefaults)}`);
+      return copyFlags(flagDefaults);
     }
-    return { ...flagDefaults };
-  };
 
-  const fallbackFlagsAfterError = (): Flags => {
-    if (cache) {
-      if (isDebug) {
-        console.log(`Toggly.loadedFromCache - ${JSON.stringify(cache.flags)}`);
+    const cachedFlags = cache?.flags;
+    if (cachedFlags) {
+      if (isDebug && reason === 'request-failed') {
+        console.log(`Toggly.loadedFromCache - ${JSON.stringify(cachedFlags)}`);
       }
-      return { ...cache.flags };
+      return copyFlags(cachedFlags);
     }
 
-    if (isDebug) {
+    if (isDebug && reason === 'request-failed') {
       console.log(`Toggly.loadedFromDefaults - ${JSON.stringify(flagDefaults)}`);
     }
-    return { ...flagDefaults };
+    return copyFlags(flagDefaults);
   };
 
   const fetchFlagsFromApi = async (url: string): Promise<Flags> => {
@@ -309,14 +308,14 @@ function createClient(
   };
 
   const fetchFlags = async (): Promise<Flags> => {
-    if (disposed) return cachedOrDefaultFlags();
+    if (disposed) return fallbackFlags('disposed');
     const url = getApiUrl();
-    if (!url || !appKey) return defaultFlagsWithDiagnostic();
+    if (!url || !appKey) return fallbackFlags('missing-config');
 
     try {
       return await fetchFlagsFromApi(url);
     } catch {
-      return fallbackFlagsAfterError();
+      return fallbackFlags('request-failed');
     }
   };
 

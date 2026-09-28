@@ -561,8 +561,22 @@ function findContentFiles(rootDir: string): Promise<string[]> {
 function readFeatureKey(filePath: string): string | undefined {
   const content = fs.readFileSync(filePath, 'utf-8');
   const frontmatterMatch = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
-  const xFeatureMatch = frontmatterMatch?.[1].match(/^x-feature:\s*(.+)$/m);
-  return xFeatureMatch?.[1].trim().replace(/^["']|["']$/g, '');
+  const frontmatter = frontmatterMatch?.[1];
+  if (!frontmatter) return undefined;
+
+  for (const line of frontmatter.split('\n')) {
+    if (!line.startsWith('x-feature:')) continue;
+    return trimEdgeQuotes(line.slice('x-feature:'.length).trim());
+  }
+  return undefined;
+}
+
+function trimEdgeQuotes(value: string): string {
+  const startsWithQuote = value.startsWith('"') || value.startsWith("'");
+  const endsWithQuote = value.endsWith('"') || value.endsWith("'");
+  const start = startsWithQuote ? 1 : 0;
+  const end = endsWithQuote ? value.length - 1 : value.length;
+  return value.slice(start, Math.max(start, end));
 }
 
 function routePathForFile(file: string, routeBasePath: string, baseUrl: string): string {
