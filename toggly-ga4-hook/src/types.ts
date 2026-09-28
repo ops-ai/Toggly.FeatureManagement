@@ -1,6 +1,10 @@
 /**
  * Configuration options for the GA4Hook
  */
+export type GA4ParameterValue = string | number | boolean;
+
+export type GA4Parameters = Record<string, GA4ParameterValue>;
+
 export interface GA4HookOptions {
   /**
    * Enable or disable the hook. When disabled, no events are sent to GA4.
@@ -68,7 +72,7 @@ export interface GA4HookOptions {
   /**
    * Custom parameters to include with every event.
    */
-  customParameters?: Record<string, string | number | boolean>;
+  customParameters?: GA4Parameters;
 
   /**
    * Callback to check user consent before sending events.
@@ -90,7 +94,7 @@ export interface GA4HookOptions {
  */
 export type ResolvedGA4HookOptions = Required<Omit<GA4HookOptions, 'measurementId' | 'customParameters'>> & {
   measurementId?: string;
-  customParameters: Record<string, string | number | boolean>;
+  customParameters: GA4Parameters;
 };
 
 /**
@@ -100,7 +104,7 @@ export interface GA4EvaluationEventParams {
   feature_key: string;
   feature_enabled: boolean;
   event_category: string;
-  [key: string]: string | number | boolean;
+  [key: string]: GA4ParameterValue;
 }
 
 /**
@@ -111,7 +115,7 @@ export interface GA4ChangeEventParams {
   old_value: boolean;
   new_value: boolean;
   event_category: string;
-  [key: string]: string | number | boolean;
+  [key: string]: GA4ParameterValue;
 }
 
 /**
@@ -120,7 +124,7 @@ export interface GA4ChangeEventParams {
 export type GtagFunction = (
   command: 'config' | 'event' | 'set' | 'js',
   targetIdOrEventName: string | Date,
-  configOrEventParams?: Record<string, any>
+  configOrEventParams?: Record<string, unknown>
 ) => void;
 
 /**

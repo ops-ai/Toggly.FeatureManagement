@@ -81,3 +81,14 @@ test('JavaScript requires coverage and the packed browser telemetry host', () =>
   }]);
   assert.ok(result.requiredJobs.split(',').includes('test'));
 });
+
+test('GA4 Hook runs coverage and its packed public consumer', () => {
+  const result = filterAnalysisJs('GA4-Hook');
+  assert.deepEqual(result.testMatrix, [{
+    sdk: 'GA4-Hook',
+    path: 'toggly-ga4-hook',
+    'test-cmd': 'npm test -- --coverage && npm run test:packed',
+    'has-lint': false,
+  }]);
+  assert.ok(result.requiredJobs.split(',').includes('test'));
+});
