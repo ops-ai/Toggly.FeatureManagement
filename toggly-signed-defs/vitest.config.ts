@@ -7,6 +7,9 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: ['src/**/*.test.ts'],
       reporter: ['text', 'json-summary', 'lcov'],
+      thresholds: {
+        lines: 84,
+      },
     },
   },
 })
