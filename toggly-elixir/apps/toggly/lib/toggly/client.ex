@@ -153,6 +153,8 @@ defmodule Toggly.Client do
           {:ok, record_cache_hit(state)}
 
         {:ok, %{status: 200, body: body, headers: headers}} ->
+          # Always activate the HTTP 200 body. Equal ETag is still a cache hit
+          # via record_revision/3 (telemetry only) — never discard the payload.
           etag = header(headers, "etag")
           keys = if signed and is_nil(opts[:jwks]), do: fetch_keys(state), else: {:ok, state.jwks}
 
