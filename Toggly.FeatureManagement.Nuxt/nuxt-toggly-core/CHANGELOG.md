@@ -1,3 +1,8 @@
+## 1.15.1 — 2026-09-27
+
+### Fixed
+- Generate automatic client identities exclusively with Web Crypto. Supported runtimes without `crypto.randomUUID` now use `crypto.getRandomValues`; runtimes without Web Crypto must configure `identity` explicitly. [OPS-1536]
+
 ## 1.15.0 — 2026-09-24
 
 ### Added
