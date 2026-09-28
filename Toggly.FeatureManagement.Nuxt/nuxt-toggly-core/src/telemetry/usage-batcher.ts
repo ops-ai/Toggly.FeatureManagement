@@ -235,11 +235,7 @@ export class UsageBatcher {
     return this.perFeature.size
   }
 
-  buildAndReset(): UsageFlushBundle | null {
-    if (this.isEmpty()) {
-      return null
-    }
-
+  private createPayload(): FeatureStatPayload {
     const payload: FeatureStatPayload = {
       appKey: this.appKey,
       environment: this.environment,
@@ -263,6 +259,13 @@ export class UsageBatcher {
       payload.definitionCacheMisses = this.definitionCacheMisses
     }
 
+    return payload
+  }
+
+  private appendFeatureStats(payload: FeatureStatPayload): Pick<
+    UsageFlushBundle,
+    'uniqueUsersEnabled' | 'uniqueUsersDisabled' | 'uniqueUsersUsed'
+  > {
     const uniqueUsersEnabled: Record<string, number[]> = {}
     const uniqueUsersDisabled: Record<string, number[]> = {}
     const uniqueUsersUsed: Record<string, number[]> = {}
@@ -301,16 +304,29 @@ export class UsageBatcher {
       })
     }
 
+    return { uniqueUsersEnabled, uniqueUsersDisabled, uniqueUsersUsed }
+  }
+
+  private reset(): void {
     this.perFeature = new Map()
     this.appUnique = new Set()
     this.droppedFeatures = false
     this.definitionCacheHits = 0
     this.definitionCacheMisses = 0
+  }
+
+  buildAndReset(): UsageFlushBundle | null {
+    if (this.isEmpty()) {
+      return null
+    }
+
+    const payload = this.createPayload()
+    const uniqueUsers = this.appendFeatureStats(payload)
+    this.reset()
+
     return {
       payload,
-      uniqueUsersEnabled,
-      uniqueUsersDisabled,
-      uniqueUsersUsed,
+      ...uniqueUsers,
     }
   }
 
