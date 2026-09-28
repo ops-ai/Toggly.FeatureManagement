@@ -16,10 +16,12 @@ export function buildBrowserDefinitionsUrl(
   url.searchParams.delete('i');
   const instanceId = context.instanceId?.trim();
   if (instanceId) {
-    for (const key of [...url.searchParams.keys()]) {
-      if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.'))
-        url.searchParams.delete(key);
+    const retained = new URLSearchParams();
+    for (const [key, value] of url.searchParams) {
+      if (key !== 'u' && key !== 'userId' && key !== 'g' && !key.startsWith('claim.'))
+        retained.append(key, value);
     }
+    url.search = retained.toString();
     url.searchParams.set('i', instanceId);
   } else appendEvaluationContext(url, context, enableVariants ? 'variants' : 'evaluated');
   return url.toString();

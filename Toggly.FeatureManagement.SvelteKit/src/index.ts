@@ -21,8 +21,8 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
   // Configuration identity belongs to the layout owner, not mutable caller options.
   options = { ...options };
   const telemetry =
-    typeof window !== 'undefined' &&
-    typeof document !== 'undefined' &&
+    globalThis.window !== undefined &&
+    globalThis.document !== undefined &&
     options.appKey &&
     options.enableTelemetry !== false
       ? createTelemetryReporter({
@@ -130,7 +130,7 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
     isT?: (v: unknown) => v is T,
   ): T | null => decodeVariantValue(getVariant(featureKey)?.configurationValue, isT);
   const start = async (): Promise<void> => {
-    if (disposed || typeof window === 'undefined') return;
+    if (disposed || globalThis.window === undefined) return;
     mounted = true;
     stop?.();
     const ownGeneration = ++generation;

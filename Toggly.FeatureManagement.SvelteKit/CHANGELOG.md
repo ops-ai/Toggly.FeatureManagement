@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.2 — 2026-09-27
+
+### Fixed
+
+- Keep browser telemetry and refresh startup checks safe during server-side rendering.
+
+## 0.4.1 — 2026-09-27
+
+### Fixed
+
+- Keep host-minted instance targeting isolated from legacy browser evaluation parameters during signed refreshes.
+
 ## 0.4.0 — 2026-09-24
 
 ### Added

@@ -38,24 +38,14 @@ it('returns the assigned variant name and configuration value when the flag is e
   t.dispose();
 });
 
-it('returns null for a disabled flag even when a variant name is present', () => {
+it.each([
+  ['a disabled flag', 'off'],
+  ['an entry without a variant name', 'unnamed'],
+  ['a missing variant entry', 'missing'],
+])('returns null for %s', (_description, featureKey) => {
   const t = createToggly(baseSnapshot, { enableVariants: true });
-  expect(t.getVariant('off')).toBeNull();
-  expect(t.getVariantValue('off')).toBeNull();
-  t.dispose();
-});
-
-it('returns null when the entry has no variant name assigned', () => {
-  const t = createToggly(baseSnapshot, { enableVariants: true });
-  expect(t.getVariant('unnamed')).toBeNull();
-  expect(t.getVariantValue('unnamed')).toBeNull();
-  t.dispose();
-});
-
-it('returns null for a key missing from variants entirely', () => {
-  const t = createToggly(baseSnapshot, { enableVariants: true });
-  expect(t.getVariant('missing')).toBeNull();
-  expect(t.getVariantValue('missing')).toBeNull();
+  expect(t.getVariant(featureKey)).toBeNull();
+  expect(t.getVariantValue(featureKey)).toBeNull();
   t.dispose();
 });
 
