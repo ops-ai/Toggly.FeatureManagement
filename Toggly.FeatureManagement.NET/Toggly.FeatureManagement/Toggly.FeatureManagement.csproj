@@ -23,7 +23,10 @@
 
 	<!-- Common packages for all target frameworks -->
 	<ItemGroup>
-		<PackageReference Include="Azure.Messaging.WebPubSub" Version="1.*" />
+		<!-- Pin below 1.7: WebPubSub 1.7 pulls Azure.Core 1.63 which requires
+		     Microsoft.Extensions.Hosting.Abstractions / System.Text.Json 10.x and
+		     trips NU1605 against our intentional 3.1.0 / 8.0.5 floors. -->
+		<PackageReference Include="Azure.Messaging.WebPubSub" Version="1.6.0" />
 		<PackageReference Include="ConcurrentHashSet" Version="1.*" />
 		<PackageReference Include="Google.Protobuf" Version="3.25.0" />
 		<PackageReference Include="Grpc.Net.Client" Version="2.60.0" />
