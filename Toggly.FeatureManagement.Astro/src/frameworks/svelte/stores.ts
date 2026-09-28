@@ -5,7 +5,7 @@
  */
 
 import { derived, get } from 'svelte/store';
-import { $flag, $gate, $isReady, $variants, $variant, $flags, $localGatesRevision } from '../../client/store.js';
+import { $flag, $gate, $variant, $flags, $localGatesRevision } from '../../client/store.js';
 
 /**
  * Create a derived store for a specific feature flag (includes local post-filter gates).

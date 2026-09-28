@@ -73,6 +73,54 @@ function removeFeatureDirective(frontmatter: string): string {
   return frontmatter;
 }
 
+function featureDirectories(astroConfig: AstroConfig): { pagesDir: string; directories: string[] } {
+  const srcDir = astroConfig.srcDir?.pathname || path.join(process.cwd(), 'src');
+  const pagesDir = path.join(srcDir, 'pages');
+  const contentDir = path.join(srcDir, 'content');
+  return {
+    pagesDir,
+    directories: [pagesDir, contentDir].filter(directory => fs.existsSync(directory)),
+  };
+}
+
+function withBaseRoute(route: string, base: string): string {
+  return base === '/' ? route : path.join(base, route).replaceAll('\\', '/');
+}
+
+function featureMappingForFile(
+  directory: string,
+  file: string,
+  pagesDir: string,
+  base: string,
+): [string, string] | undefined {
+  const content = fs.readFileSync(path.join(directory, file), 'utf-8');
+  const frontmatter = extractFrontmatter(content);
+  const featureKey = frontmatter && readFeatureKey(frontmatter.content);
+  if (!featureKey) return undefined;
+
+  const route = withBaseRoute(convertFilePathToRoute(file, directory === pagesDir), base);
+  return [route, featureKey.replaceAll(/(^["'])|(["']$)/g, '')];
+}
+
+async function extractDirectoryFeatures(
+  directory: string,
+  pagesDir: string,
+  base: string,
+): Promise<PageFeatureMapping> {
+  const mapping: PageFeatureMapping = {};
+  const files = await glob('**/*.{astro,md,mdx}', {
+    cwd: directory,
+    absolute: false,
+    ignore: ['node_modules/**', '**/node_modules/**'],
+  });
+
+  for (const file of files) {
+    const feature = featureMappingForFile(directory, file, pagesDir, base);
+    if (feature) mapping[feature[0]] = feature[1];
+  }
+  return mapping;
+}
+
 /**
  * Toggly Astro Integration
  */
@@ -256,71 +304,22 @@ async function extractPageFeatures(
   astroConfig: AstroConfig,
   isDebug?: boolean
 ): Promise<PageFeatureMapping> {
-  const mapping: PageFeatureMapping = {};
-
-  // Determine source directory
-  const srcDir = astroConfig.srcDir?.pathname || path.join(process.cwd(), 'src');
-  const pagesDir = path.join(srcDir, 'pages');
-  const contentDir = path.join(srcDir, 'content');
-
-  // Check if directories exist
-  const dirsToScan: string[] = [];
-  if (fs.existsSync(pagesDir)) {
-    dirsToScan.push(pagesDir);
-  }
-  if (fs.existsSync(contentDir)) {
-    dirsToScan.push(contentDir);
-  }
-
-  if (dirsToScan.length === 0) {
+  const { pagesDir, directories } = featureDirectories(astroConfig);
+  if (directories.length === 0) {
     if (isDebug) {
       console.warn('[Toggly Integration] No pages or content directories found');
     }
-    return mapping;
+    return {};
   }
 
-  for (const dir of dirsToScan) {
-    // Find all .astro, .md, .mdx files
-    const files = await glob('**/*.{astro,md,mdx}', {
-      cwd: dir,
-      absolute: false,
-      ignore: ['node_modules/**', '**/node_modules/**'],
-    });
-
-    for (const file of files) {
-      const filePath = path.join(dir, file);
-      const content = fs.readFileSync(filePath, 'utf-8');
-
-      // Extract frontmatter
-      const frontmatter = extractFrontmatter(content);
-      if (!frontmatter) {
-        continue;
-      }
-
-      // Look for x-feature in frontmatter
-      const featureKey = readFeatureKey(frontmatter.content);
-      if (!featureKey) {
-        continue;
-      }
-
-      // Remove quotes if present
-      const normalizedFeatureKey = featureKey.replace(/^["']|["']$/g, '');
-
-      // Convert file path to route
-      let route = convertFilePathToRoute(file, dir === pagesDir);
-
-      // Prepend base if configured
-      const base = astroConfig.base || '/';
-      if (base !== '/') {
-        route = path.join(base, route).replaceAll('\\', '/');
-      }
-
-      mapping[route] = normalizedFeatureKey;
-    }
+  const mapping: PageFeatureMapping = {};
+  const base = astroConfig.base || '/';
+  for (const directory of directories) {
+    Object.assign(mapping, await extractDirectoryFeatures(directory, pagesDir, base));
   }
-
   return mapping;
 }
+
 /**
  * Convert file path to Astro route
  */

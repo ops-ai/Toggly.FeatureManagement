@@ -7,6 +7,19 @@ import { useStore } from '@nanostores/vue';
 import { $flag, $gate, $isReady, $variant, $flags, $localGatesRevision } from '../../client/store.js';
 import type { VariantResult } from '../../types/index.js';
 
+/**
+ * Evaluate after reading the stores that can change a local gate result.
+ * The tuple keeps both reads in Vue's computed dependency graph while the
+ * returned value remains the evaluator's boolean (or other result).
+ */
+export function evaluateWithDefinitionDependencies<T>(
+  flags: Readonly<Ref<unknown>>,
+  localGatesRevision: Readonly<Ref<unknown>>,
+  evaluate: () => T,
+): T {
+  return [flags.value, localGatesRevision.value, evaluate()][2] as T;
+}
+
 /** @internal Preserve the SSR loading snapshot until the island mounts. */
 export function useTogglyReady(): Readonly<Ref<boolean>> {
   const ready = useStore($isReady);
@@ -31,9 +44,11 @@ export function useFeatureFlag(
   const isReady = useTogglyReady();
 
   const enabled = computed(() => {
-    flags.value;
-    localGatesRevision.value;
-    return $flag(flagKey, defaultValue).get();
+    return evaluateWithDefinitionDependencies(
+      flags,
+      localGatesRevision,
+      () => $flag(flagKey, defaultValue).get(),
+    );
   });
 
   return { enabled, isReady };
@@ -55,9 +70,11 @@ export function useFeatureGate(
   const isReady = useTogglyReady();
 
   const enabled = computed(() => {
-    flags.value;
-    localGatesRevision.value;
-    return $gate(flagKeys, requirement, negate).get();
+    return evaluateWithDefinitionDependencies(
+      flags,
+      localGatesRevision,
+      () => $gate(flagKeys, requirement, negate).get(),
+    );
   });
 
   return { enabled, isReady };
