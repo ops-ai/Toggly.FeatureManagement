@@ -306,28 +306,7 @@ export function createTogglyClientCore(
     return age < interval;
   };
 
-  const cachedOrDefaultFlags = (): Flags => (cache ? { ...cache.flags } : { ...flagDefaults });
-
-  const defaultFlagsWithDiagnostic = (): Flags => {
-    if (isDebug) {
-      console.log(`Toggly.usedFlagDefaults - ${JSON.stringify(flagDefaults)}`);
-    }
-    return { ...flagDefaults };
-  };
-
-  const fallbackFlagsAfterError = (): Flags => {
-    if (cache) {
-      if (isDebug) {
-        console.log(`Toggly.loadedFromCache - ${JSON.stringify(cache.flags)}`);
-      }
-      return { ...cache.flags };
-    }
-
-    if (isDebug) {
-      console.log(`Toggly.loadedFromDefaults - ${JSON.stringify(flagDefaults)}`);
-    }
-    return { ...flagDefaults };
-  };
+  const flagsSnapshot = (flags: Flags | undefined): Flags => ({ ...(flags ?? flagDefaults) });
 
   const fetchFlagsFromApi = async (url: string, generation: number): Promise<Flags> => {
     const controller = new AbortController();
@@ -361,7 +340,7 @@ export function createTogglyClientCore(
         console.log(`Toggly.fetchFeatureFlags - ${JSON.stringify(flags)}`);
       }
 
-      return generation === definitionsGeneration ? flags : cachedOrDefaultFlags();
+      return generation === definitionsGeneration ? flags : flagsSnapshot(cache?.flags);
     } finally {
       clearTimeout(timeoutId);
       activeDefinitionRequests.delete(controller);
@@ -369,14 +348,25 @@ export function createTogglyClientCore(
   };
 
   const fetchFlags = async (): Promise<Flags> => {
-    if (disposed) return cachedOrDefaultFlags();
+    if (disposed) return flagsSnapshot(cache?.flags);
     const url = getApiUrl();
-    if (!url || !appKey) return defaultFlagsWithDiagnostic();
+    if (!url || !appKey) {
+      if (isDebug) console.log(`Toggly.usedFlagDefaults - ${JSON.stringify(flagDefaults)}`);
+      return flagsSnapshot(undefined);
+    }
 
     try {
       return await fetchFlagsFromApi(url, definitionsGeneration);
     } catch {
-      return fallbackFlagsAfterError();
+      const cachedFlags = cache?.flags;
+      if (isDebug) {
+        console.log(
+          cachedFlags
+            ? `Toggly.loadedFromCache - ${JSON.stringify(cachedFlags)}`
+            : `Toggly.loadedFromDefaults - ${JSON.stringify(flagDefaults)}`,
+        );
+      }
+      return flagsSnapshot(cachedFlags);
     }
   };
 

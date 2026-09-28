@@ -234,11 +234,26 @@ describe('togglyPlugin contentLoaded -> page feature mapping (integration)', () 
     expect(mapping).toEqual({ '/docs/feature': 'Features' });
   });
 
-  it('reads quoted x-feature values from frontmatter', async () => {
-    writeFile('docs/quoted.mdx', frontmatter('"QuotedFeature"'));
+  it('maps same-line and continuation x-feature scalars without regex backtracking', async () => {
+    writeFile('docs/same-line.mdx', frontmatter('SameLineFeature'));
+    writeFile('docs/continuation.mdx', '---\nx-feature:\n  RestrictedFeature\n---\n\n# Restricted\n');
+    writeFile('docs/blank-continuation.mdx', '---\nx-feature: \n \t\n\t  BlankFeature\n---\n\n# Blank\n');
+    writeFile('docs/crlf.mdx', '---\r\nx-feature:\r\n  CrlfFeature\r\n---\r\n\r\n# CRLF\r\n');
+    writeFile('docs/double-quoted.mdx', frontmatter('"DoubleQuotedFeature"'));
+    writeFile('docs/single-quoted.mdx', frontmatter("'SingleQuotedFeature'"));
+    writeFile('docs/missing.mdx', '---\nx-feature: \n---\n\n# Missing\n');
+    writeFile('docs/long-whitespace.mdx', `---\nx-feature:${' '.repeat(32_768)}\n---\n\n# Long\n`);
 
     const mapping = await runPluginExtraction(tmpDir, []);
-    expect(mapping).toEqual({ '/docs/quoted': 'QuotedFeature' });
+
+    expect(mapping).toEqual({
+      '/docs/same-line': 'SameLineFeature',
+      '/docs/continuation': 'RestrictedFeature',
+      '/docs/blank-continuation': 'BlankFeature',
+      '/docs/crlf': 'CrlfFeature',
+      '/docs/double-quoted': 'DoubleQuotedFeature',
+      '/docs/single-quoted': 'SingleQuotedFeature',
+    });
   });
 });
 

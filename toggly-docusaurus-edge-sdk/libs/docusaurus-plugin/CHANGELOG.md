@@ -1,3 +1,11 @@
+## 0.10.2
+
+2026-09-28
+
+### Fixed
+- Preserve `x-feature` page gates when frontmatter uses a YAML continuation,
+  blank whitespace, or CRLF line endings.
+
 ## 0.10.1
 
 2026-09-27

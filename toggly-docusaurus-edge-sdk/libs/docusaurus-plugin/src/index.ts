@@ -560,23 +560,87 @@ function findContentFiles(rootDir: string): Promise<string[]> {
 
 function readFeatureKey(filePath: string): string | undefined {
   const content = fs.readFileSync(filePath, 'utf-8');
-  const frontmatterMatch = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
-  const frontmatter = frontmatterMatch?.[1];
-  if (!frontmatter) return undefined;
+  const frontmatter = extractFrontmatter(content);
+  if (frontmatter === undefined) return undefined;
 
-  for (const line of frontmatter.split('\n')) {
-    if (!line.startsWith('x-feature:')) continue;
-    return trimEdgeQuotes(line.slice('x-feature:'.length).trim());
+  const featureValue = readFrontmatterScalar(frontmatter, 'x-feature');
+  return featureValue === undefined ? undefined : trimEdgeQuotes(featureValue);
+}
+
+function extractFrontmatter(content: string): string | undefined {
+  const openingEnd = lineEnd(content, 0);
+  const openingNext = nextLineStart(content, openingEnd);
+  if (openingNext === undefined || !isFrontmatterDelimiter(content, 0, openingEnd)) return undefined;
+
+  let lineStart = openingNext;
+  while (lineStart < content.length) {
+    const end = lineEnd(content, lineStart);
+    const next = nextLineStart(content, end);
+    if (isFrontmatterDelimiter(content, lineStart, end)) {
+      return next === undefined ? undefined : content.slice(openingNext, lineStart);
+    }
+    if (next === undefined) return undefined;
+    lineStart = next;
   }
+
   return undefined;
 }
 
+function readFrontmatterScalar(frontmatter: string, key: string): string | undefined {
+  let lineStart = 0;
+  while (lineStart < frontmatter.length) {
+    const end = lineEnd(frontmatter, lineStart);
+    const valueStart = lineStart + key.length;
+    if (frontmatter.startsWith(key, lineStart) && frontmatter[valueStart] === ':') {
+      return firstValueOnOrAfterLine(frontmatter, valueStart + 1);
+    }
+    const next = nextLineStart(frontmatter, end);
+    if (next === undefined) return undefined;
+    lineStart = next;
+  }
+
+  return undefined;
+}
+
+function firstValueOnOrAfterLine(frontmatter: string, start: number): string | undefined {
+  let valueStart = start;
+  while (valueStart < frontmatter.length && isWhitespace(frontmatter[valueStart])) valueStart += 1;
+  if (valueStart === frontmatter.length) return undefined;
+
+  return frontmatter.slice(valueStart, lineEnd(frontmatter, valueStart)).trim();
+}
+
+function lineEnd(content: string, start: number): number {
+  let end = start;
+  while (end < content.length && content[end] !== '\n' && content[end] !== '\r') end += 1;
+  return end;
+}
+
+function nextLineStart(content: string, end: number): number | undefined {
+  if (end === content.length) return undefined;
+  return content[end] === '\r' && content[end + 1] === '\n' ? end + 2 : end + 1;
+}
+
+function isFrontmatterDelimiter(content: string, start: number, end: number): boolean {
+  if (content.slice(start, start + 3) !== '---') return false;
+  for (let cursor = start + 3; cursor < end; cursor += 1) {
+    if (!isWhitespace(content[cursor])) return false;
+  }
+  return true;
+}
+
+function isWhitespace(character: string): boolean {
+  return character.trim() === '';
+}
+
 function trimEdgeQuotes(value: string): string {
-  const startsWithQuote = value.startsWith('"') || value.startsWith("'");
-  const endsWithQuote = value.endsWith('"') || value.endsWith("'");
-  const start = startsWithQuote ? 1 : 0;
-  const end = endsWithQuote ? value.length - 1 : value.length;
-  return value.slice(start, Math.max(start, end));
+  const start = isQuote(value[0]) ? 1 : 0;
+  const end = isQuote(value[value.length - 1]) ? value.length - 1 : value.length;
+  return value.slice(start, end);
+}
+
+function isQuote(character: string | undefined): boolean {
+  return character === '"' || character === "'";
 }
 
 function routePathForFile(file: string, routeBasePath: string, baseUrl: string): string {

@@ -430,6 +430,31 @@ export default function FallbackPage() { const {siteConfig}=useDocusaurusContext
     'docs/disabled.md',
     '---\nslug: /disabled\nx-feature: flagOff\n---\n# Disabled page\n\nDISABLED_DOC_CONTENT\n'
   );
+  write(
+    'docs/continuation.md',
+    '---\nslug: /continuation\nx-feature:\n  RestrictedFeature\n---\n# Continuation page\n'
+  );
+  write(
+    'docs/blank-continuation.md',
+    '---\nslug: /blank-continuation\nx-feature: \n \t\n\t  BlankFeature\n---\n# Blank continuation page\n'
+  );
+  write(
+    'docs/crlf.md',
+    '---\r\nslug: /crlf\r\nx-feature:\r\n  CrlfFeature\r\n---\r\n# CRLF page\r\n'
+  );
+  write(
+    'docs/double-quoted.md',
+    '---\nslug: /double-quoted\nx-feature: "DoubleQuotedFeature"\n---\n# Double quoted page\n'
+  );
+  write(
+    'docs/single-quoted.md',
+    "---\nslug: /single-quoted\nx-feature: 'SingleQuotedFeature'\n---\n# Single quoted page\n"
+  );
+  write('docs/missing.md', '---\nslug: /missing\nx-feature: \n---\n# Missing page\n');
+  write(
+    'docs/long-whitespace.md',
+    `---\nslug: /long-whitespace\nx-feature:${' '.repeat(32_768)}\n---\n# Long page\n`
+  );
   write('static/favicon.ico', '');
   write(
     'consumer.mts',
@@ -489,6 +514,28 @@ console.log('PACKED_DOCUSAURUS_PUBLIC_CONSUMERS_PASS');
 `
   );
   await runAsync(process.execPath, ['consumer.mjs']);
+  const { default: publicPlugin } = await import(
+    pathToFileURL(join(host, 'node_modules/@ops-ai/toggly-docusaurus-plugin/dist/index.js')).href
+  );
+  const publicPluginInstance = publicPlugin(
+    { siteDir: host, siteConfig: { plugins: [] }, baseUrl: '/' },
+    config
+  );
+  const publicPluginContent = await publicPluginInstance.loadContent();
+  const publicPluginState = {};
+  await publicPluginInstance.contentLoaded.call(publicPluginState, {
+    content: publicPluginContent,
+    actions: {},
+  });
+  assert.deepEqual(publicPluginState.__togglyPluginData.pageFeatureMapping, {
+    '/docs/enabled': 'flagOn',
+    '/docs/disabled': 'flagOff',
+    '/docs/continuation': 'RestrictedFeature',
+    '/docs/blank-continuation': 'BlankFeature',
+    '/docs/crlf': 'CrlfFeature',
+    '/docs/double-quoted': 'DoubleQuotedFeature',
+    '/docs/single-quoted': 'SingleQuotedFeature',
+  });
   const cli = join(host, 'node_modules/.bin/docusaurus');
   await runAsync(cli, ['build', '--out-dir', 'build-runtime'], {
     PACKED_STATIC: '0',
@@ -510,6 +557,13 @@ console.log('PACKED_DOCUSAURUS_PUBLIC_CONSUMERS_PASS');
   );
   assert.equal(mapping['/docs/enabled'], 'flagOn');
   assert.equal(mapping['/docs/disabled'], 'flagOff');
+  assert.equal(mapping['/docs/continuation'], 'RestrictedFeature');
+  assert.equal(mapping['/docs/blank-continuation'], 'BlankFeature');
+  assert.equal(mapping['/docs/crlf'], 'CrlfFeature');
+  assert.equal(mapping['/docs/double-quoted'], 'DoubleQuotedFeature');
+  assert.equal(mapping['/docs/single-quoted'], 'SingleQuotedFeature');
+  assert.equal(mapping['/docs/missing'], undefined);
+  assert.equal(mapping['/docs/long-whitespace'], undefined);
   assert.match(
     readFileSync(join(runtimeOutput, 'docs/disabled/index.html'), 'utf8'),
     /DISABLED_DOC_CONTENT/
