@@ -445,7 +445,12 @@ export function createTogglyClient(
 
       const response = await fetch(url, {
         method: 'GET',
-        headers,
+        headers: {
+          ...headers,
+          // Node/undici RequestInit typings omit `cache`; Cache-Control is the
+          // portable way to avoid intermediary HTTP caches on definition GETs.
+          'Cache-Control': 'no-store',
+        },
         signal: controller.signal,
       })
 
@@ -466,15 +471,8 @@ export function createTogglyClient(
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
-      // HTTP 200 whose revision matches existing (CDN replay) — cache hit, keep defs.
-      if (revisionsMatch(previousRevision, responseRevision)) {
-        if (responseRevision) {
-          cacheDefinitionsRevision(responseRevision)
-        }
-        logger.debug('Definitions revision unchanged (200 same etag/rev)')
-        return { defs: state.definitions, outcome: 'hit' }
-      }
-
+      // Always parse the body on HTTP 200. Equal revision is still a cache hit
+      // for telemetry (CDN replay), but the body must still be applied.
       const bodyText =
         typeof response.text === 'function'
           ? await response.text()
@@ -501,9 +499,16 @@ export function createTogglyClient(
         cacheDefinitionsRevision(responseRevision)
       }
 
-      logger.debug('Fetched', defsMap.size, 'definitions')
+      const outcome: 'hit' | 'miss' = revisionsMatch(previousRevision, responseRevision)
+        ? 'hit'
+        : 'miss'
+      logger.debug(
+        outcome === 'hit'
+          ? 'Definitions revision unchanged (200 same etag/rev); body applied'
+          : `Fetched ${defsMap.size} definitions`,
+      )
 
-      return { defs: defsMap, outcome: 'miss' }
+      return { defs: defsMap, outcome }
     } catch (error) {
       clearTimeout(timeoutId)
 

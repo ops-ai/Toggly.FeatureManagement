@@ -290,6 +290,60 @@ describe('definition cache hit telemetry', () => {
     client.destroy()
   })
 
+  it('does not wipe hydrated features on refresh when appKey is missing', async () => {
+    const sendStats = vi.fn().mockResolvedValue({ featureCount: 0 })
+    const client = createTogglyClient({
+      ...telemetryClientOptions(sendStats),
+      appKey: undefined,
+      featureDefaults: { 'feature-a': false },
+    })
+
+    await client.init()
+    // state getter returns a shallow copy; mutate the shared features object in place.
+    const features = client.state.features
+    Object.keys(features).forEach((key) => {
+      delete features[key]
+    })
+    Object.assign(features, { 'feature-a': true, hydrated: true })
+
+    await client.refresh()
+
+    expect(client.state.features).toEqual({ 'feature-a': true, hydrated: true })
+    expect(mockFetch).not.toHaveBeenCalled()
+    client.destroy()
+  })
+
+  it('applies HTTP 200 body even when revision matches (stale in-memory snapshot)', async () => {
+    mockFetch
+      .mockResolvedValueOnce(okResponse([def('feature-a')], 'rev-1'))
+      .mockResolvedValueOnce(
+        okResponse([def('feature-a', [])], 'rev-1'),
+      )
+
+    const sendStats = vi.fn().mockResolvedValue({ featureCount: 0 })
+    const client = createTogglyClient(telemetryClientOptions(sendStats))
+
+    await client.init()
+    expect(await client.isFeatureOn('feature-a')).toBe(true)
+
+    await client.refresh()
+    expect(await client.isFeatureOn('feature-a')).toBe(false)
+
+    const initInit = mockFetch.mock.calls[0]?.[1] as { cache?: string } | undefined
+    const refreshInit = mockFetch.mock.calls[1]?.[1] as { cache?: string } | undefined
+    expect(initInit?.cache).toBe('no-store')
+    expect(refreshInit?.cache).toBe('no-store')
+
+    await client.flushTelemetry()
+    const payload = sendStats.mock.calls[0][0] as {
+      definitionCacheHits?: number
+      definitionCacheMisses?: number
+    }
+    expect(payload.definitionCacheMisses).toBe(1)
+    expect(payload.definitionCacheHits).toBe(1)
+    client.destroy()
+  })
+
   it('records a miss when WS flags-updated applies a new revision via refresh', async () => {
     vi.useFakeTimers()
     mockFetch
