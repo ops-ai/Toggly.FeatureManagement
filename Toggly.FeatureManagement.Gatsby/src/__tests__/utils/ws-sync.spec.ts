@@ -4,6 +4,8 @@ import {
   extractDefinitionsRevision,
   getNextReconnectDelayMs,
   appendDefinitionsRevisionParam,
+  applyFlagsUpdatedPlan,
+  planFlagsUpdatedRefresh,
   shouldFetchOnFlagsUpdated,
   shouldFetchOnSigningKeyUpdated,
   shouldFetchOnSync,
@@ -113,7 +115,41 @@ describe('ws-sync', () => {
       expect(extractDefinitionsRevision({} as Response)).toBeNull();
     });
   });
-});
+
+  describe('applyFlagsUpdatedPlan', () => {
+    it('refreshes JWKS without touching the revision cache for a signing-key update', () => {
+      const refreshJwks = vi.fn();
+      const refreshPinned = vi.fn();
+      const cacheEtagIfPresent = vi.fn();
+
+      applyFlagsUpdatedPlan(
+        planFlagsUpdatedRefresh({ type: 'signing-key-updated', etag: 'kid-2' }, 'rev-1'),
+        { type: 'signing-key-updated', etag: 'kid-2' },
+        { refreshJwks, refreshPinned, cacheEtagIfPresent },
+      );
+
+      expect(refreshJwks).toHaveBeenCalledOnce();
+      expect(refreshPinned).not.toHaveBeenCalled();
+      expect(cacheEtagIfPresent).not.toHaveBeenCalled();
+    });
+
+    it('keeps a matching update revision without refetching definitions', () => {
+      const refreshJwks = vi.fn();
+      const refreshPinned = vi.fn();
+      const cacheEtagIfPresent = vi.fn();
+      const message = { type: 'flags-updated', etag: 'rev-1' };
+
+      applyFlagsUpdatedPlan(
+        planFlagsUpdatedRefresh(message, 'rev-1'),
+        message,
+        { refreshJwks, refreshPinned, cacheEtagIfPresent },
+      );
+
+      expect(refreshJwks).not.toHaveBeenCalled();
+      expect(refreshPinned).not.toHaveBeenCalled();
+      expect(cacheEtagIfPresent).toHaveBeenCalledWith('rev-1');
+    });
+  });
 
   describe('appendDefinitionsRevisionParam', () => {
     it('appends rev query param to absolute URLs', () => {
@@ -137,3 +173,4 @@ describe('ws-sync', () => {
       );
     });
   });
+});
