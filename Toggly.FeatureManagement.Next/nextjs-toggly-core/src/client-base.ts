@@ -671,11 +671,12 @@ export function createClient(
   async function fetchRemoteEvaluated(): Promise<RemoteEvaluatedResult> {
     if (!config.appKey) {
       console.warn('[Toggly] No appKey provided, using defaults only')
+      // No network body — do not wipe already-hydrated features on refresh.
       return {
         defs: { ...config.featureDefaults },
         outcome: 'hit',
         variants: null,
-        applyBody: true,
+        applyBody: false,
       }
     }
 
@@ -771,7 +772,8 @@ export function createClient(
   async function fetchLocalDefinitions(): Promise<LocalDefinitionsResult> {
     if (!config.appKey) {
       console.warn('[Toggly] No appKey provided, using defaults only')
-      return { defs: new Map(), outcome: 'hit', applyBody: true }
+      // No network body — do not wipe already-hydrated definitions on refresh.
+      return { defs: new Map(), outcome: 'hit', applyBody: false }
     }
 
     const expected = generation

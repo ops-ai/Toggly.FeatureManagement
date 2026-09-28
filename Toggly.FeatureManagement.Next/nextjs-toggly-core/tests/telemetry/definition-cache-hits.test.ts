@@ -290,6 +290,29 @@ describe('definition cache hit telemetry', () => {
     client.destroy()
   })
 
+  it('does not wipe hydrated features on refresh when appKey is missing', async () => {
+    const sendStats = vi.fn().mockResolvedValue({ featureCount: 0 })
+    const client = createTogglyClient({
+      ...telemetryClientOptions(sendStats),
+      appKey: undefined,
+      featureDefaults: { 'feature-a': false },
+    })
+
+    await client.init()
+    // state getter returns a shallow copy; mutate the shared features object in place.
+    const features = client.state.features
+    Object.keys(features).forEach((key) => {
+      delete features[key]
+    })
+    Object.assign(features, { 'feature-a': true, hydrated: true })
+
+    await client.refresh()
+
+    expect(client.state.features).toEqual({ 'feature-a': true, hydrated: true })
+    expect(mockFetch).not.toHaveBeenCalled()
+    client.destroy()
+  })
+
   it('applies HTTP 200 body even when revision matches (stale in-memory snapshot)', async () => {
     mockFetch
       .mockResolvedValueOnce(okResponse([def('feature-a')], 'rev-1'))
