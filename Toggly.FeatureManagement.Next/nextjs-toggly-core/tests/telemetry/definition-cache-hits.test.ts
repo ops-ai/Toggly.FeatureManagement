@@ -55,6 +55,19 @@ function notModified(revision?: string) {
   }
 }
 
+function invalidJsonResponse(revision: string) {
+  const headers = new Headers({ ETag: `\"${revision}\"` })
+  return {
+    ok: true,
+    status: 200,
+    headers,
+    text: async () => '{not valid json',
+    json: async () => {
+      throw new SyntaxError('Unexpected token')
+    },
+  }
+}
+
 function telemetryClientOptions(sendStats: ReturnType<typeof vi.fn>) {
   return {
     appKey: 'test-app',
@@ -69,6 +82,11 @@ function telemetryClientOptions(sendStats: ReturnType<typeof vi.fn>) {
     usageClient: { sendStats, close: vi.fn() },
     metricsClient: { sendMetrics: vi.fn(), close: vi.fn() },
   }
+}
+
+function requestedRevision(call: number): string | null {
+  const init = mockFetch.mock.calls[call]?.[1] as { headers?: HeadersInit } | undefined
+  return new Headers(init?.headers).get('If-None-Match')
 }
 
 describe('definition cache hit telemetry', () => {
@@ -100,6 +118,45 @@ describe('definition cache hit telemetry', () => {
     }
     expect(payload.definitionCacheMisses).toBe(1)
     expect(payload.definitionCacheHits).toBe(1)
+    client.destroy()
+  })
+
+  it('does not admit a remote response revision until its payload is valid', async () => {
+    mockFetch
+      .mockResolvedValueOnce(okResponse({ 'feature-a': true }, 'rev-1'))
+      .mockResolvedValueOnce(okResponse({ error: 'malformed response' }, 'rev-2'))
+      .mockResolvedValueOnce(notModified('rev-1'))
+
+    const sendStats = vi.fn().mockResolvedValue({ featureCount: 0 })
+    const client = createTogglyClient({
+      ...telemetryClientOptions(sendStats),
+      evaluationMode: 'remote',
+    })
+
+    await client.init()
+    await expect(client.refresh()).rejects.toThrow('malformed response')
+    await client.refresh()
+
+    expect(requestedRevision(2)).toBe('rev-1')
+    expect(await client.isFeatureOn('feature-a')).toBe(true)
+    client.destroy()
+  })
+
+  it('does not admit a local response revision until its definitions are valid', async () => {
+    mockFetch
+      .mockResolvedValueOnce(okResponse([def('feature-a')], 'rev-1'))
+      .mockResolvedValueOnce(invalidJsonResponse('rev-2'))
+      .mockResolvedValueOnce(notModified('rev-1'))
+
+    const sendStats = vi.fn().mockResolvedValue({ featureCount: 0 })
+    const client = createTogglyClient(telemetryClientOptions(sendStats))
+
+    await client.init()
+    await expect(client.refresh()).rejects.toThrow(/JSON/)
+    await client.refresh()
+
+    expect(requestedRevision(2)).toBe('rev-1')
+    expect(await client.isFeatureOn('feature-a')).toBe(true)
     client.destroy()
   })
 

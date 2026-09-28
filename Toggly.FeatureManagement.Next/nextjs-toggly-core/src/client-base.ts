@@ -62,6 +62,28 @@ import {
 } from '@ops-ai/toggly-eval'
 import type { ClientTelemetry, TelemetryPolicy } from './telemetry-policy'
 
+function normalizeRevision(revision: string | null | undefined): string | null {
+  if (!revision) {
+    return null
+  }
+  let normalized = revision
+  while (normalized.startsWith('"')) {
+    normalized = normalized.slice(1)
+  }
+  while (normalized.endsWith('"')) {
+    normalized = normalized.slice(0, -1)
+  }
+  return normalized
+}
+
+function trimTrailingSlashes(pathname: string): string {
+  let end = pathname.length
+  while (end > 0 && pathname[end - 1] === '/') {
+    end -= 1
+  }
+  return pathname.slice(0, end)
+}
+
 /**
  * Create a new Toggly client instance
  */
@@ -257,13 +279,6 @@ export function createClient(
     } catch (error) {
       console.debug('[Toggly] Failed to record definition cache miss:', error)
     }
-  }
-
-  function normalizeRevision(revision: string | null | undefined): string | null {
-    if (!revision) {
-      return null
-    }
-    return revision.replace(/^"+|"+$/g, '')
   }
 
   function revisionsMatch(
@@ -538,11 +553,11 @@ export function createClient(
 
   function frontendDefinitionsUrl(mode: 'evaluated' | 'definitions' | 'evaluated-variants'): URL {
     const url = new URL(config.baseUri)
-    url.pathname = `${url.pathname.replace(/\/+$/, '')}/${mode}-signed/${config.appKey}/${config.environment}`
+    url.pathname = `${trimTrailingSlashes(url.pathname)}/${mode}-signed/${config.appKey}/${config.environment}`
     url.searchParams.delete('i')
     const instanceId = config.instanceId?.trim()
     if (instanceId) {
-      for (const key of [...url.searchParams.keys()]) {
+      for (const key of new Set(url.searchParams.keys())) {
         if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) url.searchParams.delete(key)
       }
       url.searchParams.set('i', instanceId)
@@ -550,16 +565,95 @@ export function createClient(
     return url
   }
 
+  type RemoteEvaluatedResult = {
+    defs: FeatureDefinitions
+    outcome: 'hit' | 'miss'
+    variants?: Record<string, EvaluatedVariantDef> | null
+  }
+
+  function getPreviousDefinitionRevision(pin: string | null): string | null {
+    if (pin || (policy.frontend && !isLocalMode() && !hasRemoteSnapshot)) {
+      return null
+    }
+    return getDefinitionsRevision()
+  }
+
+  function createRemoteDefinitionsUrl(useVariants: boolean): URL {
+    const mode = useVariants ? 'evaluated-variants' : 'evaluated'
+    if (policy.frontend) {
+      return frontendDefinitionsUrl(mode)
+    }
+    const endpoint = useVariants
+      ? API_ENDPOINTS.evaluatedVariantsSigned(
+          config.baseUri,
+          config.appKey!,
+          config.environment,
+        )
+      : API_ENDPOINTS.evaluatedSigned(
+          config.baseUri,
+          config.appKey!,
+          config.environment,
+        )
+    return new URL(endpoint)
+  }
+
+  function cacheResponseRevision(revision: string | null): void {
+    if (revision) {
+      cacheDefinitionsRevision(revision)
+    }
+  }
+
+  async function parseRemoteEvaluatedResponse(
+    response: Response,
+    expected: number,
+    previousRevision: string | null,
+    useVariants: boolean,
+  ): Promise<RemoteEvaluatedResult> {
+    const responseRevision = normalizeRevision(extractDefinitionsRevision(response))
+    if (response.status === 304) {
+      if (policy.frontend && !isLocalMode() && !hasRemoteSnapshot) {
+        throw new Error('[Toggly] Definitions returned 304 without a matching snapshot')
+      }
+      cacheResponseRevision(responseRevision)
+      return { defs: { ...state.features }, outcome: 'hit', variants: useVariants ? state.variants : null }
+    }
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+    if (revisionsMatch(previousRevision, responseRevision)) {
+      cacheResponseRevision(responseRevision)
+      return { defs: { ...state.features }, outcome: 'hit', variants: useVariants ? state.variants : null }
+    }
+
+    const bodyText = await readResponseBody(response)
+    const parsed = await parseEvaluatedResponseBody(bodyText, {
+      verifySignatures: config.verifySignatures,
+      baseUri: config.baseUri,
+      allowedKeyIds: config.allowedKeyIds,
+      maxSignatureAgeSeconds: config.maxSignatureAgeSeconds,
+      headers: buildDefinitionFetchHeaders({ 'Content-Type': 'application/json' }),
+    })
+    if (useVariants) {
+      const variantDefs = parseRemoteEvaluatedVariantsPayload(parsed)
+      assertCurrent(expected)
+      cacheResponseRevision(responseRevision)
+      return { defs: variantDefsToFlags(variantDefs), outcome: 'miss', variants: variantDefs }
+    }
+    const defs = parseRemoteEvaluatedPayload(parsed, { verifySignatures: config.verifySignatures })
+    assertCurrent(expected)
+    cacheResponseRevision(responseRevision)
+    return {
+      defs,
+      outcome: 'miss',
+      variants: null,
+    }
+  }
+
   /**
    * Fetch evaluated-signed definitions (remote / client rail).
    * Returns defs plus whether this attempt applied a new revision (miss) or reused cache (hit).
    */
-  async function fetchRemoteEvaluated(): Promise<{
-    defs: FeatureDefinitions
-    outcome: 'hit' | 'miss'
-    /** Present (possibly null) only when `enableVariants` is set. */
-    variants?: Record<string, EvaluatedVariantDef> | null
-  }> {
+  async function fetchRemoteEvaluated(): Promise<RemoteEvaluatedResult> {
     if (!config.appKey) {
       console.warn('[Toggly] No appKey provided, using defaults only')
       return { defs: { ...config.featureDefaults }, outcome: 'hit', variants: null }
@@ -567,92 +661,25 @@ export function createClient(
 
     const useVariants = !!config.enableVariants
     const expected = generation
-    const fetchUrl = policy.frontend ? frontendDefinitionsUrl(useVariants ? 'evaluated-variants' : 'evaluated') : new URL(
-      useVariants
-        ? API_ENDPOINTS.evaluatedVariantsSigned(
-            config.baseUri,
-            config.appKey,
-            config.environment
-          )
-        : API_ENDPOINTS.evaluatedSigned(
-            config.baseUri,
-            config.appKey,
-            config.environment
-          )
-    )
+    const fetchUrl = createRemoteDefinitionsUrl(useVariants)
     if (config.instanceId?.trim()) fetchUrl.searchParams.set('i', config.instanceId.trim())
-    else appendEvaluationContext(
-      fetchUrl,
-      {
-        identity: config.identity,
-        groups: config.groups,
-        claims: config.claims,
-      },
-      useVariants ? 'variants' : 'evaluated',
-    )
+    else {
+      appendEvaluationContext(
+        fetchUrl,
+        { identity: config.identity, groups: config.groups, claims: config.claims },
+        useVariants ? 'variants' : 'evaluated',
+      )
+    }
     const pin = pendingDefinitionsPin
     pendingDefinitionsPin = null
     const url = appendDefinitionsRevisionParam(fetchUrl.toString(), pin)
-
-    // Pin forces a cache-proof GET; do not treat prior etag as still current.
-    const previousRevision = pin || (policy.frontend && !isLocalMode() && !hasRemoteSnapshot) ? null : getDefinitionsRevision()
+    const previousRevision = getPreviousDefinitionRevision(pin)
     const headers = buildFetchHeaders(previousRevision)
 
     try {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-      })
-
+      const response = await fetch(url, { method: 'GET', headers })
       assertCurrent(expected)
-      const responseRevision = normalizeRevision(extractDefinitionsRevision(response))
-
-      if (response.status === 304) {
-        if (policy.frontend && !isLocalMode() && !hasRemoteSnapshot) throw new Error('[Toggly] Definitions returned 304 without a matching snapshot')
-        if (responseRevision) {
-          cacheDefinitionsRevision(responseRevision)
-        }
-        return { defs: { ...state.features }, outcome: 'hit', variants: useVariants ? state.variants : null }
-      }
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-
-      // HTTP 200 whose revision matches existing (CDN replay) — cache hit.
-      if (revisionsMatch(previousRevision, responseRevision)) {
-        if (responseRevision) {
-          cacheDefinitionsRevision(responseRevision)
-        }
-        return { defs: { ...state.features }, outcome: 'hit', variants: useVariants ? state.variants : null }
-      }
-
-      const bodyText = await readResponseBody(response)
-      const parsed = await parseEvaluatedResponseBody(bodyText, {
-        verifySignatures: config.verifySignatures,
-        baseUri: config.baseUri,
-        allowedKeyIds: config.allowedKeyIds,
-        maxSignatureAgeSeconds: config.maxSignatureAgeSeconds,
-        headers: buildDefinitionFetchHeaders({
-          'Content-Type': 'application/json',
-        }),
-      })
-
-      assertCurrent(expected)
-      if (useVariants) {
-        const variantDefs = parseRemoteEvaluatedVariantsPayload(parsed)
-        if (responseRevision) {
-          cacheDefinitionsRevision(responseRevision)
-        }
-        return { defs: variantDefsToFlags(variantDefs), outcome: 'miss', variants: variantDefs }
-      }
-      const defs = parseRemoteEvaluatedPayload(parsed, {
-        verifySignatures: config.verifySignatures,
-      })
-      if (responseRevision) {
-        cacheDefinitionsRevision(responseRevision)
-      }
-      return { defs, outcome: 'miss', variants: null }
+      return parseRemoteEvaluatedResponse(response, expected, previousRevision, useVariants)
     } catch (error) {
       assertCurrent(expected)
       console.error('[Toggly] Failed to fetch feature definitions:', error)
@@ -661,14 +688,62 @@ export function createClient(
     }
   }
 
+  type LocalDefinitionsResult = {
+    defs: Map<string, FeatureDefinitionModel>
+    outcome: 'hit' | 'miss'
+  }
+
+  function createLocalDefinitionsUrl(): string {
+    if (policy.frontend) {
+      return frontendDefinitionsUrl('definitions').toString()
+    }
+    return API_ENDPOINTS.definitionsSigned(
+      config.baseUri,
+      config.appKey!,
+      config.environment,
+    )
+  }
+
+  async function parseLocalDefinitionsResponse(
+    response: Response,
+    expected: number,
+    previousRevision: string | null,
+  ): Promise<LocalDefinitionsResult> {
+    const responseRevision = normalizeRevision(extractDefinitionsRevision(response))
+    if (response.status === 304) {
+      if (policy.frontend && !isLocalMode() && !hasRemoteSnapshot) {
+        throw new Error('[Toggly] Definitions returned 304 without a matching snapshot')
+      }
+      cacheResponseRevision(responseRevision)
+      return { defs: state.definitions, outcome: 'hit' }
+    }
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+    if (revisionsMatch(previousRevision, responseRevision)) {
+      cacheResponseRevision(responseRevision)
+      return { defs: state.definitions, outcome: 'hit' }
+    }
+
+    const bodyText = await readResponseBody(response)
+    const parsed = await parseEvaluatedResponseBody(bodyText, {
+      verifySignatures: config.verifySignatures,
+      baseUri: config.baseUri,
+      allowedKeyIds: config.allowedKeyIds,
+      maxSignatureAgeSeconds: config.maxSignatureAgeSeconds,
+      headers: buildDefinitionFetchHeaders({ 'Content-Type': 'application/json' }),
+    })
+    const defs = parseDefinitionsPayload(parsed)
+    assertCurrent(expected)
+    cacheResponseRevision(responseRevision)
+    return { defs, outcome: 'miss' }
+  }
+
   /**
    * Fetch definitions-signed rules (local evaluation rail — no identity query).
    * Returns defs plus whether this attempt applied a new revision (miss) or reused cache (hit).
    */
-  async function fetchLocalDefinitions(): Promise<{
-    defs: Map<string, FeatureDefinitionModel>
-    outcome: 'hit' | 'miss'
-  }> {
+  async function fetchLocalDefinitions(): Promise<LocalDefinitionsResult> {
     if (!config.appKey) {
       console.warn('[Toggly] No appKey provided, using defaults only')
       return { defs: new Map(), outcome: 'hit' }
@@ -677,60 +752,16 @@ export function createClient(
     const expected = generation
     const pin = pendingDefinitionsPin
     pendingDefinitionsPin = null
-    const baseUrl = policy.frontend ? frontendDefinitionsUrl('definitions').toString() : API_ENDPOINTS.definitionsSigned(
-      config.baseUri,
-      config.appKey,
-      config.environment
-    )
+    const baseUrl = createLocalDefinitionsUrl()
     const url = appendDefinitionsRevisionParam(baseUrl, pin)
-    const previousRevision = pin || (policy.frontend && !isLocalMode() && !hasRemoteSnapshot) ? null : getDefinitionsRevision()
+    const previousRevision = getPreviousDefinitionRevision(pin)
     const headers = buildFetchHeaders(previousRevision)
 
     try {
-      const response = await fetch(url, {
-        method: 'GET',
-        headers,
-      })
+      const response = await fetch(url, { method: 'GET', headers })
 
       assertCurrent(expected)
-      const responseRevision = normalizeRevision(extractDefinitionsRevision(response))
-
-      if (response.status === 304) {
-        if (policy.frontend && !isLocalMode() && !hasRemoteSnapshot) throw new Error('[Toggly] Definitions returned 304 without a matching snapshot')
-        if (responseRevision) {
-          cacheDefinitionsRevision(responseRevision)
-        }
-        return { defs: state.definitions, outcome: 'hit' }
-      }
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-      }
-
-      if (revisionsMatch(previousRevision, responseRevision)) {
-        if (responseRevision) {
-          cacheDefinitionsRevision(responseRevision)
-        }
-        return { defs: state.definitions, outcome: 'hit' }
-      }
-
-      const bodyText = await readResponseBody(response)
-      const parsed = await parseEvaluatedResponseBody(bodyText, {
-        verifySignatures: config.verifySignatures,
-        baseUri: config.baseUri,
-        allowedKeyIds: config.allowedKeyIds,
-        maxSignatureAgeSeconds: config.maxSignatureAgeSeconds,
-        headers: buildDefinitionFetchHeaders({
-          'Content-Type': 'application/json',
-        }),
-      })
-
-      assertCurrent(expected)
-      const defs = parseDefinitionsPayload(parsed)
-      if (responseRevision) {
-        cacheDefinitionsRevision(responseRevision)
-      }
-      return { defs, outcome: 'miss' }
+      return parseLocalDefinitionsResponse(response, expected, previousRevision)
     } catch (error) {
       assertCurrent(expected)
       console.error('[Toggly] Failed to fetch feature definitions:', error)
@@ -974,6 +1005,60 @@ export function createClient(
     }
   }
 
+  async function evaluateFrontendFeatureGate(
+    featureKeys: string[],
+    requirement: FeatureRequirement,
+    negate: boolean,
+    entityContext: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null | undefined,
+    overrides: EvalContextArg | undefined,
+    snapshot: EvaluationSnapshot,
+  ): Promise<boolean> {
+    let result = requirement !== 'any'
+    for (const key of featureKeys) {
+      const dataMap = await hookExecutor.executeBeforeEvaluation(
+        key,
+        snapshot.ownerConfig.featureDefaults?.[key],
+      )
+      const enabled = evaluateAndRecordCheck(key, entityContext, overrides, snapshot)
+      void hookExecutor.executeAfterEvaluation(key, dataMap, enabled).catch(() => {})
+      result = enabled
+      if ((requirement === 'any' && enabled) || (requirement !== 'any' && !enabled)) {
+        break
+      }
+    }
+    return negate ? !result : result
+  }
+
+  async function evaluateServerFeatureGate(
+    featureKeys: string[],
+    requirement: FeatureRequirement,
+    negate: boolean,
+    entityContext: import('@ops-ai/toggly-hooks-types').TogglyEntityContext | null | undefined,
+    overrides: EvalContextArg | undefined,
+  ): Promise<boolean> {
+    const dataMaps: Array<{ key: string; dataMap: Map<string, EvaluationSeriesData | void> }> = []
+    for (const key of featureKeys) {
+      const dataMap = await hookExecutor.executeBeforeEvaluation(
+        key,
+        config.featureDefaults?.[key],
+      )
+      dataMaps.push({ key, dataMap })
+    }
+
+    const result = evaluateGateEffective(
+      featureKeys,
+      requirement,
+      negate,
+      entityContext,
+      overrides,
+    )
+    for (const { key, dataMap } of dataMaps) {
+      const keyResult = getEffectiveFlag(key, entityContext, overrides)
+      void hookExecutor.executeAfterEvaluation(key, dataMap, keyResult).catch(() => {})
+    }
+    return result
+  }
+
   const client: TogglyClient = {
     get state() {
       return { ...state, definitions: state.definitions }
@@ -1166,55 +1251,25 @@ export function createClient(
 
       if (policy.frontend && featureKeys.length === 0) return !negate
 
-      const snapshot = policy.frontend ? captureEvaluation() : undefined
       const entityContext = normalizeEntityContext(context, kind)
 
       if (policy.frontend) {
-        let result = requirement !== 'any'
-        for (const key of featureKeys) {
-          const dataMap = await hookExecutor.executeBeforeEvaluation(key, snapshot?.ownerConfig.featureDefaults?.[key])
-          const enabled = evaluateAndRecordCheck(key, entityContext, overrides, snapshot)
-          void hookExecutor.executeAfterEvaluation(key, dataMap, enabled).catch(() => {})
-          result = enabled
-          if ((requirement === 'any' && enabled) || (requirement !== 'any' && !enabled)) break
-        }
-        return negate ? !result : result
-      }
-
-      // Execute before hooks for each key
-      const dataMaps: Array<{
-        key: string
-        dataMap: Map<string, EvaluationSeriesData | void>
-      }> = []
-
-      for (const key of featureKeys) {
-        const dataMap = await hookExecutor.executeBeforeEvaluation(
-          key,
-          config.featureDefaults?.[key]
+        return evaluateFrontendFeatureGate(
+          featureKeys,
+          requirement,
+          negate,
+          entityContext,
+          overrides,
+          captureEvaluation(),
         )
-        dataMaps.push({ key, dataMap })
       }
-
-      // evaluateGateEffective records usage once per key
-      const result = evaluateGateEffective(
+      return evaluateServerFeatureGate(
         featureKeys,
         requirement,
         negate,
         entityContext,
         overrides,
       )
-
-      // Execute after hooks for each key (fire-and-forget)
-      for (const { key, dataMap } of dataMaps) {
-        const keyResult = getEffectiveFlag(key, entityContext, overrides)
-        hookExecutor
-          .executeAfterEvaluation(key, dataMap, keyResult)
-          .catch(() => {
-            // Errors already logged
-          })
-      }
-
-      return result
     },
 
     registerContext<T>(

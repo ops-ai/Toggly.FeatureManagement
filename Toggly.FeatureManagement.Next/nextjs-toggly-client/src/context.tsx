@@ -49,7 +49,7 @@ const TogglyContext = createContext<TogglyContextValue | undefined>(undefined)
  * }
  * ```
  */
-export function TogglyProvider(props: TogglyProviderProps): ReactNode {
+export function TogglyProvider(props: Readonly<TogglyProviderProps>): ReactNode {
   const ownerKey = JSON.stringify([props.config.appKey ?? '', props.config.environment ?? 'Production'])
   return <TogglyProviderOwner key={ownerKey} {...props} />
 }
@@ -59,7 +59,7 @@ function TogglyProviderOwner({
   initialFeatures,
   autoInit = true,
   children,
-}: TogglyProviderProps): ReactNode {
+}: Readonly<TogglyProviderProps>): ReactNode {
   const [boot] = useState(() => {
     const mergedConfig: TogglyClientConfig = {
       persistIdentity: true,

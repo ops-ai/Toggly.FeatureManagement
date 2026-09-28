@@ -46,10 +46,10 @@ function browserTelemetry(config: TogglyConfig): ClientTelemetry | null {
     recordDefinitionCacheMiss() {},
     measure() {if (metrics) diagnostic('Browser measure is unsupported; use telemetry.incrementCounter or telemetry.setGauge with the intended metric semantics.')},
     observe() {if (metrics) diagnostic('Browser observations are unsupported; use telemetry.setGauge for the latest value.')},
-    incrementCounter(key, value = 1, attribution) {
+    incrementCounter(key, value, attribution) {
       if (!metrics) return
       if (attribution?.feature !== undefined || attribution?.variant !== undefined) diagnostic('Browser metrics are app-level; legacy feature and variant attribution is omitted.')
-      getReporter().incrementCounter(key, value)
+      getReporter().incrementCounter(key, value ?? 1)
     },
     setGauge(key, value) {if (metrics) getReporter().setGauge(key, value)},
   }

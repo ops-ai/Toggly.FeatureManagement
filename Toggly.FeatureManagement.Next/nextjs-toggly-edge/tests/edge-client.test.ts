@@ -4,6 +4,8 @@ import {
   createEdgeClient,
   initEdgeToggly,
   getEdgeToggly,
+  flushEdgeTelemetry,
+  closeEdgeToggly,
   resetEdgeToggly,
 } from '../src/edge-client'
 import type { FeatureDefinitionModel } from '@ops-ai/nextjs-toggly-core'
@@ -269,6 +271,20 @@ describe('TogglyEdgeClient', () => {
       expect(bob).toBe(false)
       expect(client.identity).toBe(sharedBefore)
     })
+
+    it('evaluates default feature gates without fetched definitions', async () => {
+      const client = new TogglyEdgeClient({
+        appKey: 'test-key',
+        featureDefaults: { on: true, off: false },
+        enableUsageTracking: false,
+        enableMetrics: false,
+      })
+
+      expect(await client.evaluateFeatureGate(['on', 'off'], 'any')).toBe(true)
+      expect(await client.evaluateFeatureGate(['on', 'off'], 'all')).toBe(false)
+      expect(await client.evaluateFeatureGate(['on', 'off'], 'all', true)).toBe(true)
+      expect(client.getFeatures()).toEqual({ on: true, off: false })
+    })
   })
 
   describe('caching', () => {
@@ -351,6 +367,17 @@ describe('TogglyEdgeClient', () => {
       expect(client.isFeatureOnSync('feature-a')).toBe(true)
       expect(client.getState().error).toBeInstanceOf(Error)
     })
+
+    it('uses defaults without requesting definitions when appKey is absent', async () => {
+      const client = new TogglyEdgeClient({
+        featureDefaults: { fallback: true },
+        enableUsageTracking: false,
+        enableMetrics: false,
+      })
+
+      await expect(client.init()).resolves.toEqual({ fallback: true })
+      expect(mockFetch).not.toHaveBeenCalled()
+    })
   })
 })
 
@@ -403,6 +430,19 @@ describe('Global edge client', () => {
     expect(getEdgeToggly()).not.toBeNull()
 
     resetEdgeToggly()
+    expect(getEdgeToggly()).toBeNull()
+  })
+
+  it('flushes and closes the installed global client', async () => {
+    mockFetch.mockResolvedValueOnce(createMockResponse([]))
+    await initEdgeToggly({
+      appKey: 'test-key',
+      enableUsageTracking: false,
+      enableMetrics: false,
+    })
+
+    await expect(flushEdgeTelemetry()).resolves.toBeUndefined()
+    await expect(closeEdgeToggly()).resolves.toBeUndefined()
     expect(getEdgeToggly()).toBeNull()
   })
 })

@@ -1,3 +1,13 @@
+## 1.14.1
+
+2026-09-27
+
+### Fixed
+
+- Preserve the last accepted definition revision when a remote or local 200
+  response fails payload parsing, so a later 304 cannot validate stale
+  definitions.
+
 ## 1.14.0
 
 2026-09-24
