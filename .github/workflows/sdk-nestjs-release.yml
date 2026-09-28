@@ -94,7 +94,7 @@ jobs:
     strategy:
       matrix:
         node: [20, 22, 24]
-        nest: [10, 11]
+        nest: [10, 11, 12]
     defaults:
       run:
         working-directory: Toggly.FeatureManagement.NestJS

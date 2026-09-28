@@ -1,3 +1,14 @@
+## 0.4.0
+
+2026-09-28
+
+### Changed
+
+- Peer range for `@nestjs/common` and `@nestjs/core` is now
+  `^10.0.0 || ^11.0.0 || ^12.0.0` so Nest 12 hosts are supported alongside
+  Nest 10 and 11 [OPS-1565].
+- Release compat matrix installs Nest 10, 11, and 12 [OPS-1565].
+
 ## 0.3.0
 
 2026-09-24
