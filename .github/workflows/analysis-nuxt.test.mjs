@@ -22,7 +22,9 @@ function step(source, name) {
 test('Nuxt Sonar scans fail closed on missing credentials, scanner errors, and failed quality gates', () => {
   const sonar = job('sonar');
   assert.match(step(sonar, 'Validate SonarCloud credentials'), /test -n "\$\{SONAR_TOKEN\}"/);
-  assert.match(step(sonar, 'Validate SonarQube Server credentials'), /test -n "\$\{SONAR_SERVER_TOKEN\}" && test -n "\$\{SONAR_HOST_URL\}"/);
+  const serverCredentials = step(sonar, 'Validate SonarQube Server credentials');
+  assert.match(serverCredentials, /id: validate-sonarqube-server-credentials/);
+  assert.match(serverCredentials, /test -n "\$\{SONAR_SERVER_TOKEN\}" && test -n "\$\{SONAR_HOST_URL\}"/);
 
   for (const name of ['SonarCloud Scan', 'SonarQube Server Scan']) {
     const scan = step(sonar, name);
@@ -30,7 +32,10 @@ test('Nuxt Sonar scans fail closed on missing credentials, scanner errors, and f
     assert.doesNotMatch(scan, /continue-on-error: true|\|\| true/);
   }
 
-  assert.match(step(sonar, 'SonarQube Server Scan'), /if: \$\{\{ success\(\) \|\| failure\(\) \}\}/);
+  assert.match(
+    step(sonar, 'SonarQube Server Scan'),
+    /if: \$\{\{ \(success\(\) \|\| failure\(\)\) && steps\.validate-sonarqube-server-credentials\.outcome == 'success' \}\}/,
+  );
 });
 
 function reportingIsSkipped(serializedRunReportingInput) {
