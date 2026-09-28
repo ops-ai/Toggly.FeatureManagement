@@ -92,6 +92,44 @@ test('does not count packed Vue and Svelte host harnesses as production source',
   }
 });
 
+test('maps evaluator source, tests, and LCOV into both Sonar scans', () => {
+  const sources = [...workflow.matchAll(/-Dsonar\.sources=([^\n]+)/g)].map((match) => match[1]);
+  const tests = [...workflow.matchAll(/-Dsonar\.tests=([^\n]+)/g)].map((match) => match[1]);
+  const lcov = [...workflow.matchAll(/-Dsonar\.(?:javascript|typescript)\.lcov\.reportPaths=([^\n]+)/g)].map((match) => match[1]);
+  const sonarSetup = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+
+  assert.equal(sources.length, 2, 'both Sonar scans must declare sources');
+  assert.equal(tests.length, 2, 'both Sonar scans must declare tests');
+  for (const value of [...sources, ...tests]) assert.ok(value.split(',').includes('toggly-eval'));
+  assert.equal(lcov.length, 4, 'both scanners must receive JavaScript and TypeScript LCOV paths');
+  for (const value of lcov) assert.equal(value, 'coverage/*-lcov.info');
+  assert.match(sonarSetup, /\["Evaluator"\]="toggly-eval"/);
+  const analysisInstall = sonarSetup.match(/for dir in \\\n([\s\S]*?)toggly-appinsights-hook; do/)?.[1] ?? '';
+  assert.ok(analysisInstall.includes('toggly-eval'));
+  assert.match(testJob, /matrix\.sdk == 'Evaluator'/);
+});
+
+test('runs evaluator through only its locked dependency install', () => {
+  const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  const installSteps = [...testJob.matchAll(/\n      - name: (Install [^\n]+)\n([\s\S]*?)(?=\n      - name:|$)/g)].map(([, name, body]) => ({
+    name,
+    guard: body.match(/^        if: ([^\n]+)/m)?.[1] ?? '',
+    command: body.match(/^        run: ([^\n]+)/m)?.[1] ?? '',
+  }));
+  const guardSelectsSdk = (guard, sdk) => {
+    const included = [...guard.matchAll(/matrix\.sdk == '([^']+)'/g)].map(([, name]) => name);
+    const excluded = [...guard.matchAll(/matrix\.sdk != '([^']+)'/g)].map(([, name]) => name);
+    return (included.length === 0 || included.includes(sdk)) && !excluded.includes(sdk);
+  };
+
+  const evaluatorInstalls = installSteps.filter((step) => guardSelectsSdk(step.guard, 'Evaluator'));
+  assert.deepEqual(evaluatorInstalls.map(({ name, command }) => ({ name, command })), [{
+    name: 'Install locked standalone package dependencies',
+    command: 'npm ci',
+  }]);
+});
+
 test('classifies CJS files under tests as test code in both Sonar scans', () => {
   const scanExclusions = [...workflow.matchAll(/-Dsonar\.exclusions=([^\n]+)/g)].map((match) => match[1]);
   const testInclusions = [...workflow.matchAll(/-Dsonar\.test\.inclusions=([^\n]+)/g)].map((match) => match[1]);

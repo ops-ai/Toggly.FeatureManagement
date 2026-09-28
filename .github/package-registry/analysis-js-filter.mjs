@@ -28,6 +28,12 @@ const FULL_TEST_MATRIX = [
     'has-lint': false,
   },
   {
+    sdk: 'Evaluator',
+    path: 'toggly-eval',
+    'test-cmd': 'npm run test:coverage',
+    'has-lint': false,
+  },
+  {
     sdk: 'NestJS',
     path: 'Toggly.FeatureManagement.NestJS',
     'test-cmd': 'npm run test:coverage && npm run test:packed',
