@@ -128,6 +128,7 @@ test('requires the packed Docusaurus production host with a locked Node 24 insta
 
 test('runs Pages Function coverage in the Docusaurus gate and maps it into both Sonar scans', () => {
   const hostJob = workflow.match(/\n  test-docusaurus-host:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  const sonarJob = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   const pagesPath = 'toggly-docusaurus-edge-sdk/cloudflare/pages-function';
 
   assert.match(hostJob, /Install locked Pages Function dependencies/);
@@ -135,6 +136,7 @@ test('runs Pages Function coverage in the Docusaurus gate and maps it into both 
   assert.match(hostJob, /run: npm run typecheck && npm run lint && npm run test:coverage/);
   assert.match(hostJob, /name: coverage-Docusaurus-Pages/);
   assert.match(hostJob, new RegExp(`${pagesPath}/coverage/lcov\\.info`));
+  assert.match(sonarJob, /needs: \[prepare, build-shared-js-deps, test, test-node-server, test-docusaurus-host, dependency-check\]/);
   assert.match(workflow, /\["Docusaurus-Pages"\]="toggly-docusaurus-edge-sdk\/cloudflare\/pages-function"/);
 
   const testInclusions = [...workflow.matchAll(/-Dsonar\.test\.inclusions=([^\n]+)/g)].map((match) => match[1]);

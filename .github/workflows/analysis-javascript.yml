@@ -573,7 +573,7 @@ jobs:
   sonar:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
-    needs: [prepare, build-shared-js-deps, test, test-node-server, dependency-check]
+    needs: [prepare, build-shared-js-deps, test, test-node-server, test-docusaurus-host, dependency-check]
     if: |
       always() &&
       (github.event_name != 'workflow_call' || inputs.run_reporting)
