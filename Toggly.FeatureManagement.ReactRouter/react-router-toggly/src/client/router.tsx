@@ -24,22 +24,6 @@ export interface RouterTogglyProviderProps extends Omit<TogglyProviderProps, 'se
   fallbackContext?: ServerFeatureContext;
 }
 
-function useRouteLoaderDataSafely(routeId: string): Record<string, unknown> | undefined {
-  try {
-    return useRouteLoaderData(routeId) as Record<string, unknown> | undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function useLoaderDataSafely(): Record<string, unknown> | undefined {
-  try {
-    return useLoaderData() as Record<string, unknown>;
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * React Router-specific Toggly Provider that automatically hydrates from loader data
  *
@@ -62,8 +46,9 @@ export function RouterTogglyProvider({
 }: RouterTogglyProviderProps): ReactElement {
   // Call both hooks on every render. An empty route id safely produces no
   // route data and keeps the hook order stable when routeId changes.
-  const routeData = useRouteLoaderDataSafely(routeId ?? '');
-  const loaderData = useLoaderDataSafely();
+  // Router context errors are surfaced to the application's Error Boundary.
+  const routeData = useRouteLoaderData(routeId ?? '') as Record<string, unknown> | undefined;
+  const loaderData = useLoaderData() as Record<string, unknown> | undefined;
   const data = routeId ? routeData : loaderData;
   const serverContext = data?.[TOGGLY_LOADER_KEY] as
     | ServerFeatureContext

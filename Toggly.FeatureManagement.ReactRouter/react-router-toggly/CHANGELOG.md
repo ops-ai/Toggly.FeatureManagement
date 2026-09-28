@@ -4,6 +4,7 @@
 
 ### Fixed
 - Keep `RouterTogglyProvider` hook order stable when route selection changes while retaining loader and fallback context hydration [OPS-1451].
+- Surface invalid React Router context errors to the application's Error Boundary instead of intercepting loader hooks [OPS-1451].
 
 ## [1.2.0] - 2026-09-26
 
