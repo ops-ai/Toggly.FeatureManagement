@@ -81,7 +81,7 @@ export interface ClientState {
 }
 
 function isBrowserRuntime() {
-  return typeof globalThis.window !== 'undefined' && typeof globalThis.document !== 'undefined';
+  return globalThis.window !== undefined && globalThis.document !== undefined;
 }
 
 /** One targeting session; create a distinct instance for each owner/request. */
