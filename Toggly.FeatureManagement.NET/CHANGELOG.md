@@ -1,5 +1,11 @@
 # Changelog
 
+## All .NET SDK packages 3.11.1 - 2026-09-28
+
+### Fixed
+- Pin the Azure Web PubSub dependency graph to preserve restore compatibility
+  with .NET Standard 2.1 and .NET Core 3.1 applications.
+
 ## All .NET SDK packages 3.11.0 - 2026-09-24
 
 ### Added
