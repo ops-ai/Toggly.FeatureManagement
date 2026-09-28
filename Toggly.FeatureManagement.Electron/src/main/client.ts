@@ -58,6 +58,7 @@ const DEFAULT_ENVIRONMENT = 'Production'
 const DEFAULT_CONNECT_TIMEOUT = 5000
 const DEFAULT_REFRESH_INTERVAL = 3 * 60 * 1000
 const FALLBACK_REFRESH_INTERVAL = 20 * 60 * 1000
+const DOUBLE_QUOTE = '"'
 
 function snapshotContextInput(input: SetContextInput): SetContextInput {
   return { ...input, groups: input.groups && [...input.groups], claims: input.claims && { ...input.claims } }
@@ -65,6 +66,14 @@ function snapshotContextInput(input: SetContextInput): SetContextInput {
 
 function assertSuccessfulResponse(response: Response): void {
   if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`)
+}
+
+function trimRevisionQuotes(revision: string): string {
+  let start = 0
+  let end = revision.length
+  while (start < end && revision[start] === DOUBLE_QUOTE) start += 1
+  while (end > start && revision[end - 1] === DOUBLE_QUOTE) end -= 1
+  return revision.slice(start, end)
 }
 
 class HookExecutor {
@@ -372,7 +381,7 @@ export class ElectronTogglyClient {
   private applyRevision(response: Response): void {
     const revision = extractDefinitionsRevision(response)
     if (revision) {
-      this.cachedDefinitionsRevision = revision.replaceAll(/^"+|"+$/g, '')
+      this.cachedDefinitionsRevision = trimRevisionQuotes(revision)
     }
   }
 

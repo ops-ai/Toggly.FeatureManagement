@@ -217,6 +217,30 @@ describe('ElectronTogglyClient', () => {
     expect(flags.X).toBe(true)
   })
 
+  it('removes normal and long quote wrappers from definition revisions', async () => {
+    const longQuotes = '"'.repeat(20_000)
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockResponse(200, { defs: { A: true } }, { ETag: '""normal""' }),
+      )
+      .mockResolvedValueOnce(
+        mockResponse(200, { defs: { A: true } }, { ETag: `${longQuotes}pathological${longQuotes}` }),
+      )
+    const client = new ElectronTogglyClient({
+      userDataPath,
+      appKey: 'app-revision-quotes',
+      fetch: fetchImpl,
+      enableLiveUpdates: false,
+      enableTelemetry: false,
+    })
+
+    await client.init()
+    expect((client as any).cachedDefinitionsRevision).toBe('normal')
+    await client.refresh()
+    expect((client as any).cachedDefinitionsRevision).toBe('pathological')
+  })
+
   it('setContext and clearContext refresh flags', async () => {
     const fetchImpl = vi
       .fn()
