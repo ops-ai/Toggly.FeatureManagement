@@ -10,6 +10,8 @@ namespace Toggly.CLI.Tests;
 
 public class CommandCoverageTests
 {
+    private static readonly string[] ExpectedTrimmedTags = ["critical", "payments"];
+
     [Fact]
     public async Task UpdateFeature_SendsSelectedFieldsAndTrimmedTags()
     {
@@ -32,7 +34,7 @@ public class CommandCoverageTests
         Assert.Equal("Payments", document.RootElement.GetProperty("name").GetString());
         Assert.Equal("Billing", document.RootElement.GetProperty("category").GetString());
         Assert.Equal(
-            new[] { "critical", "payments" },
+            ExpectedTrimmedTags,
             document.RootElement.GetProperty("tags").EnumerateArray().Select(tag => tag.GetString()!).ToArray());
     }
 
