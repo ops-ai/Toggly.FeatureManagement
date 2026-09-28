@@ -15,6 +15,7 @@ import {
 } from '../../src/client/router';
 import { TOGGLY_LOADER_KEY, type ServerFeatureContext } from '../../src/core';
 import { useLoaderData, useRouteLoaderData } from 'react-router';
+import { useTogglyContext } from '../../src/client/context';
 
 // Mock react-router
 jest.mock('react-router', () => ({
@@ -24,6 +25,28 @@ jest.mock('react-router', () => ({
 
 const mockUseLoaderData = useLoaderData as jest.Mock;
 const mockUseRouteLoaderData = useRouteLoaderData as jest.Mock;
+
+function ContextProbe(): React.ReactElement {
+  const { flags, isReady } = useTogglyContext();
+  return <output data-testid="context-probe">{JSON.stringify({ flags, isReady })}</output>;
+}
+
+class TestErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { error: Error | undefined }
+> {
+  state = { error: undefined };
+
+  static getDerivedStateFromError(error: Error): { error: Error } {
+    return { error };
+  }
+
+  render(): React.ReactNode {
+    return this.state.error
+      ? <output data-testid="router-error">{this.state.error.message}</output>
+      : this.props.children;
+  }
+}
 
 describe('extractServerContext', () => {
   it('should extract server context from loader data', () => {
@@ -228,14 +251,12 @@ describe('RouterTogglyProvider', () => {
     );
 
     expect(mockUseRouteLoaderData).toHaveBeenCalledWith('root');
+    expect(mockUseLoaderData).toHaveBeenCalledTimes(1);
     expect(screen.getByTestId('child')).toHaveTextContent('Hello');
   });
 
-  it('should use fallbackContext when loader data throws', () => {
-    mockUseLoaderData.mockImplementation(() => {
-      throw new Error('No loader data');
-    });
-
+  it('should use fallbackContext when loader data is unavailable', () => {
+    mockUseLoaderData.mockReturnValue(undefined);
     const fallbackContext: ServerFeatureContext = {
       flags: { fallback: true },
       fetchedAt: Date.now(),
@@ -243,11 +264,33 @@ describe('RouterTogglyProvider', () => {
 
     render(
       <RouterTogglyProvider fallbackContext={fallbackContext}>
-        <div data-testid="child">Hello</div>
+        <ContextProbe />
       </RouterTogglyProvider>
     );
 
-    expect(screen.getByTestId('child')).toHaveTextContent('Hello');
+    expect(screen.getByTestId('context-probe')).toHaveTextContent(
+      JSON.stringify({ flags: { fallback: true }, isReady: true }),
+    );
+  });
+
+  it('should surface router hook errors to an error boundary', () => {
+    mockUseLoaderData.mockImplementation(() => {
+      throw new Error('No loader data');
+    });
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      render(
+        <TestErrorBoundary>
+          <RouterTogglyProvider fallbackContext={{ flags: { fallback: true }, fetchedAt: Date.now() }}>
+            <div data-testid="child">Hello</div>
+          </RouterTogglyProvider>
+        </TestErrorBoundary>
+      );
+      expect(screen.getByTestId('router-error')).toHaveTextContent('No loader data');
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it('should merge config with server context', () => {
@@ -295,6 +338,7 @@ describe('RouterTogglyProvider', () => {
     );
 
     expect(screen.getByTestId('child')).toHaveTextContent('Hello');
+    expect(mockUseRouteLoaderData).toHaveBeenCalledWith('');
   });
 });
 

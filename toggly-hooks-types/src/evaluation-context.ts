@@ -10,6 +10,20 @@ export type EvaluationUrlMode = 'evaluated' | 'variants';
 export const MAX_EVALUATION_CLAIMS = 20;
 
 /**
+ * Produces a stable English alphabetical order without relying on the host
+ * default locale.
+ * Unicode strings which collate equally use their ordinal representation as a
+ * deterministic tie-breaker so their input order never changes a cache key.
+ */
+function compareEvaluationContextKeys(a: string, b: string): number {
+  const collated = a.localeCompare(b, 'en');
+  if (collated !== 0 || a === b) {
+    return collated;
+  }
+  return a < b ? -1 : 1;
+}
+
+/**
  * Returns up to {@link MAX_EVALUATION_CLAIMS} claims, sorted by type for stable URLs and cache keys.
  * Extra entries are dropped deterministically (alphabetically last types first).
  */
@@ -22,7 +36,7 @@ export function normalizeEvaluationClaims(
 
   const entries = Object.entries(claims)
     .filter(([type, value]) => type && value !== undefined && value !== null && String(value).length > 0)
-    .sort(([a], [b]) => a.localeCompare(b));
+    .sort(([a], [b]) => compareEvaluationContextKeys(a, b));
 
   if (entries.length === 0) {
     return undefined;
@@ -103,14 +117,14 @@ export function evaluationContextCacheKey(context: TogglyEvaluationContext | und
   }
 
   if (context.groups?.length) {
-    parts.push(`g:${[...context.groups].sort().join(',')}`);
+    parts.push(`g:${[...context.groups].sort(compareEvaluationContextKeys).join(',')}`);
   }
 
   if (context.claims && Object.keys(context.claims).length > 0) {
     const normalized = normalizeEvaluationClaims(context.claims);
     if (normalized) {
       const claimPairs = Object.entries(normalized)
-        .sort(([a], [b]) => a.localeCompare(b))
+        .sort(([a], [b]) => compareEvaluationContextKeys(a, b))
         .map(([k, v]) => `${k}=${v}`);
       parts.push(`c:${claimPairs.join('&')}`);
     }

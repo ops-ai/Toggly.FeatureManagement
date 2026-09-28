@@ -68,6 +68,8 @@ export interface UsageFlushBundle {
   uniqueUsersUsed: Record<string, number[]>
 }
 
+type UsageIdentitySnapshots = Omit<UsageFlushBundle, 'payload'>
+
 function emptyVariant(): VariantStatsAgg {
   return { checkCount: 0, requestCount: 0, usedCount: 0, viewedCount: 0 }
 }
@@ -235,11 +237,7 @@ export class UsageBatcher {
     return this.perFeature.size
   }
 
-  buildAndReset(): UsageFlushBundle | null {
-    if (this.isEmpty()) {
-      return null
-    }
-
+  private buildPayload(): FeatureStatPayload {
     const payload: FeatureStatPayload = {
       appKey: this.appKey,
       environment: this.environment,
@@ -250,67 +248,72 @@ export class UsageBatcher {
       processStartTime: toProtobufTimestamp(this.processStartTime),
     }
 
-    if (this.instanceName) {
-      payload.instanceName = this.instanceName
-    }
-    if (this.appVersion) {
-      payload.appVersion = this.appVersion
-    }
-    if (this.definitionCacheHits > 0) {
-      payload.definitionCacheHits = this.definitionCacheHits
-    }
-    if (this.definitionCacheMisses > 0) {
-      payload.definitionCacheMisses = this.definitionCacheMisses
+    if (this.instanceName) payload.instanceName = this.instanceName
+    if (this.appVersion) payload.appVersion = this.appVersion
+    if (this.definitionCacheHits > 0) payload.definitionCacheHits = this.definitionCacheHits
+    if (this.definitionCacheMisses > 0) payload.definitionCacheMisses = this.definitionCacheMisses
+    return payload
+  }
+
+  private appendFeatureStat(
+    payload: FeatureStatPayload,
+    snapshots: UsageIdentitySnapshots,
+    feature: string,
+    agg: FeatureUsageAgg,
+  ): void {
+    const variantStats: Record<string, VariantStatsAgg> = {}
+    for (const [name, stats] of agg.variantStats) {
+      if (stats.checkCount > 0 || stats.requestCount > 0 || stats.usedCount > 0 || stats.viewedCount > 0) {
+        variantStats[name] = { ...stats }
+      }
     }
 
-    const uniqueUsersEnabled: Record<string, number[]> = {}
-    const uniqueUsersDisabled: Record<string, number[]> = {}
-    const uniqueUsersUsed: Record<string, number[]> = {}
+    if (agg.uniqueUsersEnabled.size > 0) snapshots.uniqueUsersEnabled[feature] = [...agg.uniqueUsersEnabled]
+    if (agg.uniqueUsersDisabled.size > 0) snapshots.uniqueUsersDisabled[feature] = [...agg.uniqueUsersDisabled]
+    if (agg.uniqueUsersUsed.size > 0) snapshots.uniqueUsersUsed[feature] = [...agg.uniqueUsersUsed]
 
+    payload.stats.push({
+      feature,
+      uniqueContextIdentifierEnabledCount: agg.uniqueUsersEnabled.size,
+      uniqueContextIdentifierDisabledCount: agg.uniqueUsersDisabled.size,
+      uniqueUsersUsedCount: agg.uniqueUsersUsed.size,
+      uniqueUserHashes: [...agg.uniqueUserHashes],
+      uniqueViewedUserHashes: [...agg.uniqueViewedUserHashes],
+      variantStats,
+    })
+  }
+
+  private buildIdentitySnapshots(payload: FeatureStatPayload): UsageIdentitySnapshots {
+    const snapshots: UsageIdentitySnapshots = {
+      uniqueUsersEnabled: {},
+      uniqueUsersDisabled: {},
+      uniqueUsersUsed: {},
+    }
     for (const [feature, agg] of this.perFeature) {
-      const variantStats: Record<string, VariantStatsAgg> = {}
-      for (const [name, stats] of agg.variantStats) {
-        if (
-          stats.checkCount > 0 ||
-          stats.requestCount > 0 ||
-          stats.usedCount > 0 ||
-          stats.viewedCount > 0
-        ) {
-          variantStats[name] = { ...stats }
-        }
-      }
-
-      if (agg.uniqueUsersEnabled.size > 0) {
-        uniqueUsersEnabled[feature] = [...agg.uniqueUsersEnabled]
-      }
-      if (agg.uniqueUsersDisabled.size > 0) {
-        uniqueUsersDisabled[feature] = [...agg.uniqueUsersDisabled]
-      }
-      if (agg.uniqueUsersUsed.size > 0) {
-        uniqueUsersUsed[feature] = [...agg.uniqueUsersUsed]
-      }
-
-      payload.stats.push({
-        feature,
-        uniqueContextIdentifierEnabledCount: agg.uniqueUsersEnabled.size,
-        uniqueContextIdentifierDisabledCount: agg.uniqueUsersDisabled.size,
-        uniqueUsersUsedCount: agg.uniqueUsersUsed.size,
-        uniqueUserHashes: [...agg.uniqueUserHashes],
-        uniqueViewedUserHashes: [...agg.uniqueViewedUserHashes],
-        variantStats,
-      })
+      this.appendFeatureStat(payload, snapshots, feature, agg)
     }
+    return snapshots
+  }
 
+  private reset(): void {
     this.perFeature = new Map()
     this.appUnique = new Set()
     this.droppedFeatures = false
     this.definitionCacheHits = 0
     this.definitionCacheMisses = 0
+  }
+
+  buildAndReset(): UsageFlushBundle | null {
+    if (this.isEmpty()) {
+      return null
+    }
+
+    const payload = this.buildPayload()
+    const snapshots = this.buildIdentitySnapshots(payload)
+    this.reset()
     return {
       payload,
-      uniqueUsersEnabled,
-      uniqueUsersDisabled,
-      uniqueUsersUsed,
+      ...snapshots,
     }
   }
 

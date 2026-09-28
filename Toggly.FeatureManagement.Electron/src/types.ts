@@ -5,6 +5,12 @@ import type {
   TogglyEntityContext,
 } from '@ops-ai/toggly-hooks-types'
 import type { VariantResult } from './variant.js'
+export type {
+  Hook,
+  EvaluatedDefinitions,
+  TogglyEntityContext,
+} from '@ops-ai/toggly-hooks-types'
+export type { EvaluatedVariantDef, VariantResult } from './variant.js'
 
 export type FeatureRequirement = 'all' | 'any'
 
@@ -82,7 +88,7 @@ export interface TogglyBridge extends TogglyTelemetry {
   ): boolean
   evaluateFeatureGate(
     keys: string[],
-    requirement?: FeatureRequirement | string,
+    requirement?: string,
     negate?: boolean,
     entityContext?: EntityContextInput,
     kind?: string,
@@ -111,6 +117,3 @@ declare global {
     toggly?: TogglyBridge
   }
 }
-
-export type { Hook, EvaluatedDefinitions, TogglyEntityContext }
-export type { EvaluatedVariantDef, VariantResult } from './variant.js'

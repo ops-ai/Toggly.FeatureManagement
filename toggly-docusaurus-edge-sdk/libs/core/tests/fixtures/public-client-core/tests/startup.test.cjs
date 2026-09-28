@@ -73,8 +73,8 @@ test('identical Vite fixture already on the port cannot satisfy child readiness'
     assert.ok(response.ok, 'the independently owned occupant remains available');
   } finally {
     clearTimeout(watchdog);
-    if (runner && runner.exitCode === null && runner.signalCode === null) runner.kill('SIGKILL');
-    if (occupant.exitCode === null && occupant.signalCode === null) {
+    if (runner?.exitCode === null && runner.signalCode === null) runner.kill('SIGKILL');
+    if (occupant?.exitCode === null && occupant.signalCode === null) {
       const exited = once(occupant, 'close');
       occupant.kill('SIGTERM');
       await exited;

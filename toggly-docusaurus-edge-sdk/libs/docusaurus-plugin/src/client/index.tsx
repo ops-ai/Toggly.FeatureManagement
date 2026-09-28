@@ -153,7 +153,7 @@ function transportCallbackKey(callback: object | undefined): number {
 export function TogglyProvider({
   config: providedConfig,
   children,
-}: TogglyProviderProps): React.JSX.Element {
+}: Readonly<TogglyProviderProps>): React.JSX.Element {
   const config =
     providedConfig ||
     (typeof window !== 'undefined' ? (window as any).__TOGGLY_CONFIG__ || {} : {});
@@ -224,6 +224,17 @@ function ProviderOwner({
   );
 }
 
+function initialFlags(
+  staticGating: boolean,
+  usePageSnapshot: boolean,
+  flagDefaults: Flags | undefined
+): Flags {
+  if (staticGating) {
+    return usePageSnapshot ? (readBuildFlagsSnapshot() ?? {}) : { ...flagDefaults };
+  }
+  return usePageSnapshot ? (readEdgeFlagsSnapshot() ?? {}) : {};
+}
+
 function TargetOwner({
   config,
   children,
@@ -239,13 +250,7 @@ function TargetOwner({
     createProviderClient({ ...config, flagDefaults: defaults }, telemetry)
   );
   const [flags, setFlags] = useState<Flags>(() =>
-    staticGating
-      ? usePageSnapshot
-        ? (readBuildFlagsSnapshot() ?? {})
-        : { ...config.flagDefaults }
-      : usePageSnapshot
-        ? (readEdgeFlagsSnapshot() ?? {})
-        : {}
+    initialFlags(staticGating, usePageSnapshot, config.flagDefaults)
   );
   const [isReady, setIsReady] = useState(
     () => staticGating || (usePageSnapshot && readEdgeFlagsSnapshot() !== null)
@@ -467,7 +472,7 @@ export function Feature({
   negate = false,
   defaultValue,
   as: Element = 'div',
-}: FeatureProps): React.JSX.Element {
+}: Readonly<FeatureProps>): React.JSX.Element {
   const context = useContext(TogglyContext);
   const renderSnapshot = useContext(RenderFlagsContext);
   const lastStatic = useRef<{
@@ -537,7 +542,7 @@ function FeatureClient({
   negate = false,
   defaultValue,
   as: Element = 'div',
-}: FeatureProps): React.JSX.Element {
+}: Readonly<FeatureProps>): React.JSX.Element {
   const { enabled, isReady } = useFlag(flag, defaultValue);
   const wrapperStyle = getWrapperStyle(Element);
   const show = negate ? !enabled : enabled;

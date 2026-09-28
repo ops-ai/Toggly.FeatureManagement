@@ -110,7 +110,7 @@ const FULL_TEST_MATRIX = [
   {
     sdk: 'GA4-Hook',
     path: 'toggly-ga4-hook',
-    'test-cmd': 'npm test -- --coverage',
+    'test-cmd': 'npm test -- --coverage && npm run test:packed',
     'has-lint': false,
   },
   {

@@ -29,7 +29,7 @@ import type { ClarityHookOptions, ResolvedClarityHookOptions } from './types';
  * ```
  */
 export class ClarityHook implements Hook {
-  private options: ResolvedClarityHookOptions;
+  private readonly options: ResolvedClarityHookOptions;
 
   constructor(options: ClarityHookOptions = {}) {
     this.options = {

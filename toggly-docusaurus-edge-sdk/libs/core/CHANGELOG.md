@@ -1,3 +1,11 @@
+## 0.5.2
+
+2026-09-27
+
+### Fixed
+- Classify a missing fetch implementation as invalid configuration while
+  preserving the existing evaluation fallback behavior.
+
 ## 0.5.1
 
 2026-09-20

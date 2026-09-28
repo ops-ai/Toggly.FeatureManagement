@@ -1,5 +1,12 @@
 import type { Hook, HookMetadata, EvaluationSeriesData, IdentitySeriesData } from '@ops-ai/toggly-hooks-types';
-import type { GA4HookOptions, ResolvedGA4HookOptions, GA4EvaluationEventParams, GA4ChangeEventParams } from './types';
+import type {
+  GA4ChangeEventParams,
+  GA4EvaluationEventParams,
+  GA4HookOptions,
+  GA4Parameters,
+  GtagFunction,
+  ResolvedGA4HookOptions,
+} from './types';
 
 /**
  * Google Analytics 4 hook for Toggly Feature Flags SDK.
@@ -32,7 +39,7 @@ import type { GA4HookOptions, ResolvedGA4HookOptions, GA4EvaluationEventParams, 
  * ```
  */
 export class GA4Hook implements Hook {
-  private options: ResolvedGA4HookOptions;
+  private readonly options: ResolvedGA4HookOptions;
   private previousFlags: Record<string, boolean> = {};
   private initialized = false;
 
@@ -138,14 +145,19 @@ export class GA4Hook implements Hook {
     }
 
     try {
+      const gtag = this.getGtag();
+      if (!gtag) {
+        return;
+      }
+
       const measurementId = this.options.measurementId;
       if (measurementId) {
-        window.gtag!('config', measurementId, {
+        gtag('config', measurementId, {
           user_id: identity,
         });
       } else {
         // Set user_id globally if no specific measurement ID
-        window.gtag!('set', 'user_properties', {
+        gtag('set', 'user_properties', {
           user_id: identity,
         });
       }
@@ -163,55 +175,16 @@ export class GA4Hook implements Hook {
    * Tracks any changes in feature flag states and optionally sends change events.
    */
   afterRefresh(flags: { [key: string]: boolean }): void {
-    if (!this.options.enabled) {
-      return;
-    }
-
-    if (!this.options.trackChanges) {
-      return;
-    }
-
-    if (!this.options.checkConsent()) {
-      return;
-    }
-
-    if (!this.isGtagAvailable()) {
+    if (!this.canProcessRefresh()) {
       return;
     }
 
     try {
       // Only track changes after initial load
       if (this.initialized) {
-        for (const [flagKey, newValue] of Object.entries(flags)) {
-          const oldValue = this.previousFlags[flagKey];
-          if (oldValue !== undefined && oldValue !== newValue) {
-            const eventParams: GA4ChangeEventParams = {
-              feature_key: flagKey,
-              old_value: oldValue,
-              new_value: newValue,
-              event_category: 'toggly',
-              ...this.options.customParameters,
-            };
-
-            this.sendEvent(this.options.changeEventName, eventParams);
-
-            if (this.options.setUserProperties) {
-              this.setUserProperty(flagKey, newValue);
-            }
-
-            if (this.options.debug) {
-              console.log('[Toggly GA4 Hook] Feature changed:', flagKey, oldValue, '->', newValue);
-            }
-          }
-        }
+        this.trackFlagChanges(flags);
       } else {
-        // First refresh - set initial user properties if enabled
-        if (this.options.setUserProperties) {
-          for (const [flagKey, value] of Object.entries(flags)) {
-            this.setUserProperty(flagKey, value);
-          }
-        }
-        this.initialized = true;
+        this.initializeFlags(flags);
       }
 
       // Store current state for next comparison
@@ -224,14 +197,19 @@ export class GA4Hook implements Hook {
   /**
    * Send an event to GA4.
    */
-  private sendEvent(eventName: string, params: Record<string, any>): void {
+  private sendEvent(eventName: string, params: GA4Parameters): void {
+    const gtag = this.getGtag();
+    if (!gtag) {
+      return;
+    }
+
     if (this.options.measurementId) {
-      window.gtag!('event', eventName, {
+      gtag('event', eventName, {
         send_to: this.options.measurementId,
         ...params,
       });
     } else {
-      window.gtag!('event', eventName, params);
+      gtag('event', eventName, params);
     }
   }
 
@@ -239,12 +217,65 @@ export class GA4Hook implements Hook {
    * Set a user property in GA4.
    */
   private setUserProperty(flagKey: string, value: boolean): void {
+    const gtag = this.getGtag();
+    if (!gtag) {
+      return;
+    }
+
     const propertyName = `${this.options.userPropertyPrefix}${this.sanitizePropertyName(flagKey)}`;
     const propertyValue = value ? 'on' : 'off';
 
-    window.gtag!('set', 'user_properties', {
+    gtag('set', 'user_properties', {
       [propertyName]: propertyValue,
     });
+  }
+
+  private canProcessRefresh(): boolean {
+    return this.options.enabled
+      && this.options.trackChanges
+      && this.options.checkConsent()
+      && this.isGtagAvailable();
+  }
+
+  private trackFlagChanges(flags: Record<string, boolean>): void {
+    for (const [flagKey, newValue] of Object.entries(flags)) {
+      const oldValue = this.previousFlags[flagKey];
+      if (oldValue === undefined || oldValue === newValue) {
+        continue;
+      }
+
+      this.trackFlagChange(flagKey, oldValue, newValue);
+    }
+  }
+
+  private trackFlagChange(flagKey: string, oldValue: boolean, newValue: boolean): void {
+    const eventParams: GA4ChangeEventParams = {
+      feature_key: flagKey,
+      old_value: oldValue,
+      new_value: newValue,
+      event_category: 'toggly',
+      ...this.options.customParameters,
+    };
+
+    this.sendEvent(this.options.changeEventName, eventParams);
+
+    if (this.options.setUserProperties) {
+      this.setUserProperty(flagKey, newValue);
+    }
+
+    if (this.options.debug) {
+      console.log('[Toggly GA4 Hook] Feature changed:', flagKey, oldValue, '->', newValue);
+    }
+  }
+
+  private initializeFlags(flags: Record<string, boolean>): void {
+    if (this.options.setUserProperties) {
+      for (const [flagKey, value] of Object.entries(flags)) {
+        this.setUserProperty(flagKey, value);
+      }
+    }
+
+    this.initialized = true;
   }
 
   /**
@@ -253,14 +284,18 @@ export class GA4Hook implements Hook {
    */
   private sanitizePropertyName(name: string): string {
     return name
-      .replace(/[^a-zA-Z0-9_]/g, '_')
+      .replace(/\W/g, '_')
       .substring(0, 24 - this.options.userPropertyPrefix.length);
+  }
+
+  private getGtag(): GtagFunction | undefined {
+    return (globalThis as typeof globalThis & { gtag?: GtagFunction }).gtag;
   }
 
   /**
    * Check if Google Analytics gtag is available on the page.
    */
   private isGtagAvailable(): boolean {
-    return typeof window !== 'undefined' && typeof window.gtag === 'function';
+    return typeof this.getGtag() === 'function';
   }
 }

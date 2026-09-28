@@ -4,7 +4,7 @@ import {
   isFeatureOn,
   onEvaluationsChanged,
 } from '../renderer/index.js'
-import type { EntityContextInput, FeatureRequirement } from '../types.js'
+import type { EntityContextInput } from '../types.js'
 
 export interface UseFeatureFlagOptions {
   defaultValue?: boolean
@@ -20,7 +20,7 @@ export interface UseFeatureFlagResult {
 }
 
 export interface UseFeatureGateOptions extends UseFeatureFlagOptions {
-  requirement?: FeatureRequirement | string
+  requirement?: string
 }
 
 export function useFeatureFlag(
