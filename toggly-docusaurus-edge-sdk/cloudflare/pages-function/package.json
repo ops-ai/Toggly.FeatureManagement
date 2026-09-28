@@ -6,7 +6,7 @@
   "scripts": {
     "prepare:test": "node scripts/compile-middleware-test.mjs",
     "test": "npm run prepare:test && node --test tests/middleware.test.mjs",
-    "test:coverage": "npm run prepare:test && c8 --all --extension .ts --include 'functions/_middleware.ts' --exclude-after-remap --reporter=text --reporter=lcov --report-dir coverage node --test tests/middleware.test.mjs",
+    "test:coverage": "npm run prepare:test && c8 --check-coverage --lines 80 --all --extension .ts --include 'functions/_middleware.ts' --exclude-after-remap --reporter=text --reporter=lcov --report-dir coverage node --test tests/middleware.test.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint functions --ext .ts",
     "clean": "rm -rf .test-runtime .wrangler coverage dist"
