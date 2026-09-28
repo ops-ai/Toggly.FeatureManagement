@@ -643,7 +643,7 @@ function isWhitespace(character: string): boolean {
 
 function trimEdgeQuotes(value: string): string {
   const start = isQuote(value[0]) ? 1 : 0;
-  const end = isQuote(value[value.length - 1]) ? value.length - 1 : value.length;
+  const end = isQuote(value.at(-1)) ? value.length - 1 : value.length;
   return value.slice(start, end);
 }
 
