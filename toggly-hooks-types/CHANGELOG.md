@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.6] - 2026-09-27
+
+### Fixed
+
+- Generate the same evaluation-context cache key when group names use
+  equivalent Unicode characters or arrive in a different order.
 
 ## 1.4.5
 
