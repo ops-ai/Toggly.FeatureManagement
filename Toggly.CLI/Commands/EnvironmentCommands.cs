@@ -65,81 +65,112 @@ public static class EnvironmentCommands
             if (apiClient is null)
                 return;
 
-            var applicationId = context.ParseResult.GetValueForOption(applicationIdOption)!;
-            var environment = context.ParseResult.GetValueForOption(environmentOption)!;
-            var featureKey = context.ParseResult.GetValueForOption(featureKeyOption)!;
-            var enable = context.ParseResult.GetValueForOption(enableOption);
-            var disable = context.ParseResult.GetValueForOption(disableOption);
-            var filters = context.ParseResult.GetValueForOption(filtersOption);
-
-            List<FeatureFilter> filterList;
-
-            if (enable && disable)
-            {
-                Console.Error.WriteLine("Cannot specify both --enable and --disable");
-                context.ExitCode = 2;
-                return;
-            }
-
-            if (enable)
-            {
-                filterList = new List<FeatureFilter>
-                {
-                    new FeatureFilter
-                    {
-                        Name = "AlwaysOn",
-                        Parameters = new Dictionary<string, object>()
-                    }
-                };
-            }
-            else if (disable)
-            {
-                filterList = new List<FeatureFilter>();
-            }
-            else if (!string.IsNullOrEmpty(filters))
-            {
-                try
-                {
-                    filterList = JsonSerializer.Deserialize(filters, TogglyJsonSerializerContext.Default.ListFeatureFilter)
-                        ?? new List<FeatureFilter>();
-                }
-                catch (JsonException ex)
-                {
-                    Console.Error.WriteLine($"Error parsing filters: {ex.Message}");
-                    context.ExitCode = 2;
-                    return;
-                }
-            }
-            else
-            {
-                Console.Error.WriteLine("Must specify one of: --enable, --disable, or --filters");
-                context.ExitCode = 2;
-                return;
-            }
-
-            try
-            {
-                var updatedFilters = await apiClient.UpdateFeatureEnvironmentAsync(
-                    applicationId,
-                    environment,
-                    featureKey,
-                    filterList);
-
-                Console.WriteLine($"Feature '{featureKey}' updated in environment '{environment}'");
-                Console.WriteLine($"Filters: {updatedFilters.Count}");
-                foreach (var filter in updatedFilters)
-                {
-                    Console.WriteLine($"  - {filter.Name}");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"Error updating feature environment: {ex.Message}");
-                context.ExitCode = 1;
-            }
+            await HandleUpdateFeatureEnvironmentAsync(
+                context,
+                apiClient,
+                applicationIdOption,
+                environmentOption,
+                featureKeyOption,
+                enableOption,
+                disableOption,
+                filtersOption);
         });
 
         return command;
     }
-}
 
+    private static async Task HandleUpdateFeatureEnvironmentAsync(
+        InvocationContext context,
+        TogglyApiClient apiClient,
+        Option<string> applicationIdOption,
+        Option<string> environmentOption,
+        Option<string> featureKeyOption,
+        Option<bool> enableOption,
+        Option<bool> disableOption,
+        Option<string?> filtersOption)
+    {
+        var applicationId = context.ParseResult.GetValueForOption(applicationIdOption)!;
+        var environment = context.ParseResult.GetValueForOption(environmentOption)!;
+        var featureKey = context.ParseResult.GetValueForOption(featureKeyOption)!;
+        var enable = context.ParseResult.GetValueForOption(enableOption);
+        var disable = context.ParseResult.GetValueForOption(disableOption);
+        var filters = context.ParseResult.GetValueForOption(filtersOption);
+
+        if (!TryResolveFilterList(enable, disable, filters, out var filterList, out var errorMessage))
+        {
+            Console.Error.WriteLine(errorMessage);
+            context.ExitCode = 2;
+            return;
+        }
+
+        try
+        {
+            var updatedFilters = await apiClient.UpdateFeatureEnvironmentAsync(
+                applicationId,
+                environment,
+                featureKey,
+                filterList);
+
+            Console.WriteLine($"Feature '{featureKey}' updated in environment '{environment}'");
+            Console.WriteLine($"Filters: {updatedFilters.Count}");
+            foreach (var filter in updatedFilters)
+                Console.WriteLine($"  - {filter.Name}");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error updating feature environment: {ex.Message}");
+            context.ExitCode = 1;
+        }
+    }
+
+    private static bool TryResolveFilterList(
+        bool enable,
+        bool disable,
+        string? filters,
+        out List<FeatureFilter> filterList,
+        out string errorMessage)
+    {
+        filterList = [];
+        errorMessage = string.Empty;
+
+        if (enable && disable)
+        {
+            errorMessage = "Cannot specify both --enable and --disable";
+            return false;
+        }
+
+        if (enable)
+        {
+            filterList =
+            [
+                new FeatureFilter
+                {
+                    Name = "AlwaysOn",
+                    Parameters = new Dictionary<string, object>()
+                }
+            ];
+            return true;
+        }
+
+        if (disable)
+            return true;
+
+        if (string.IsNullOrEmpty(filters))
+        {
+            errorMessage = "Must specify one of: --enable, --disable, or --filters";
+            return false;
+        }
+
+        try
+        {
+            filterList = JsonSerializer.Deserialize(filters, TogglyJsonSerializerContext.Default.ListFeatureFilter)
+                ?? [];
+            return true;
+        }
+        catch (JsonException ex)
+        {
+            errorMessage = $"Error parsing filters: {ex.Message}";
+            return false;
+        }
+    }
+}
