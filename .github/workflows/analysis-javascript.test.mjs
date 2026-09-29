@@ -137,6 +137,36 @@ test('requires the packed Docusaurus production host with a locked Node 24 insta
   assert.match(docusaurusFixture, /consoleErrors/);
 });
 
+test('runs Pages Function coverage in the Docusaurus gate and maps it into both Sonar scans', () => {
+  const hostJob = workflow.match(/\n  test-docusaurus-host:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  const sonarJob = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  const pagesPath = 'toggly-docusaurus-edge-sdk/cloudflare/pages-function';
+
+  assert.match(hostJob, /Install locked Pages Function dependencies/);
+  assert.match(hostJob, new RegExp(`working-directory: ${pagesPath}\\s+run: npm ci`));
+  assert.match(hostJob, /run: npm run typecheck && npm run lint && npm run test:coverage/);
+  assert.match(hostJob, /name: coverage-Docusaurus-Pages/);
+  assert.match(hostJob, new RegExp(`${pagesPath}/coverage/lcov\\.info`));
+  assert.match(sonarJob, /needs: \[prepare, build-shared-js-deps, test, test-node-server, test-docusaurus-host, dependency-check\]/);
+  assert.match(workflow, /\["Docusaurus-Pages"\]="toggly-docusaurus-edge-sdk\/cloudflare\/pages-function"/);
+
+  const testInclusions = [...workflow.matchAll(/-Dsonar\.test\.inclusions=([^\n]+)/g)].map((match) => match[1]);
+  const sourceExclusions = [...workflow.matchAll(/-Dsonar\.exclusions=([^\n]+)/g)].map((match) => match[1]);
+  const coverageExclusions = [...workflow.matchAll(/-Dsonar\.coverage\.exclusions=([^\n]+)/g)].map((match) => match[1]);
+  assert.equal(testInclusions.length, 2, 'both Sonar scans must classify Pages tests');
+  assert.equal(sourceExclusions.length, 2, 'both Sonar scans must exclude Pages test tooling from source');
+  assert.equal(coverageExclusions.length, 2, 'both Sonar scans must retain matching coverage exclusions');
+  for (const value of testInclusions) assert.ok(value.includes(`${pagesPath}/tests/**`));
+  for (const value of sourceExclusions) {
+    assert.ok(value.includes(`${pagesPath}/tests/**`));
+    assert.ok(value.includes(`${pagesPath}/scripts/**`));
+  }
+  for (const value of coverageExclusions) {
+    assert.ok(value.includes('toggly-docusaurus-edge-sdk/cloudflare/worker/**'));
+    assert.ok(!value.includes('toggly-docusaurus-edge-sdk/cloudflare/**'));
+  }
+});
+
 test('excludes fixture and packaging lockfiles from the JS OWASP Node Audit scan', () => {
   const owasp = workflow.match(/\n  dependency-check:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0];
   assert.ok(owasp, 'javascript analysis must define an OWASP dependency-check job');

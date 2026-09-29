@@ -1,1 +1,1 @@
-[inputs: ["mix.exs", "config/*.exs", "tools/*.exs"], subdirectories: ["apps/*"]]
+[inputs: ["mix.exs", "config/*.exs", "tools/*.{ex,exs}"], subdirectories: ["apps/*"]]

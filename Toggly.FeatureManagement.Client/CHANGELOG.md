@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.11.2 — 2026-09-28
+
+### Changed
+- Simplify signed-envelope validation while preserving timestamp and signing-key checks and the last accepted flags and snapshot when a refresh is rejected.
+
 ## 3.10.0 — 2026-09-19
 
 ### Added

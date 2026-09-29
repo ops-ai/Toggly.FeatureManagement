@@ -1,5 +1,18 @@
 # Changelog
 
+## All .NET SDK packages 3.12.0 - 2026-09-28
+
+### Added
+- Target `net10.0` on core FeatureManagement packages that previously stopped
+  at `net9.0`, retaining `netstandard2.1` through `net9.0` [OPS-1565].
+- `Microsoft.Extensions.Http.Polly` 10.0 for the `net10.0` TFM.
+
+## All .NET SDK packages 3.11.2 - 2026-09-28
+
+### Changed
+- The internal context-hashing helper can no longer be instantiated. Public
+  APIs and feature-evaluation behavior are unchanged.
+
 ## All .NET SDK packages 3.11.1 - 2026-09-28
 
 ### Fixed

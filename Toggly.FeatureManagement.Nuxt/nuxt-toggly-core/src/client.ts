@@ -532,9 +532,12 @@ export function createTogglyClient(
     })
 
     try {
+      // Bypass HTTP caches: evaluated bodies can change under the same storage
+      // revision (identity / groups / claims).
       const response = await fetch(url, {
         method: 'GET',
         headers,
+        cache: 'no-store',
       })
 
       assertCurrent(expected)

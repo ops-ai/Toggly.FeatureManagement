@@ -11,6 +11,7 @@ on:
       - 'Toggly.FeatureManagement.Blazor/**'
       - 'Toggly.FeatureManagement.Client/**'
       - '.github/workflows/analysis-dotnet.yml'
+      - '.github/workflows/analysis-dotnet.test.mjs'
       - '.github/package-registry/**'
       - '.github/workflows/sdk-dotnet-release.yml'
       - '**/*.cs'
@@ -67,6 +68,9 @@ jobs:
           node .github/package-registry/dotnet-ci.mjs validate
           echo "sources=$(node .github/package-registry/dotnet-ci.mjs source-inclusions)" >> "$GITHUB_OUTPUT"
 
+      - name: Verify .NET analysis workflow contract
+        run: node --test .github/workflows/analysis-dotnet.test.mjs
+
       - name: Install GitVersion
         uses: gittools/actions/gitversion/setup@7417b1089e2c7de93510f1901d656ddf60bb024f # v4
         with:
@@ -103,6 +107,7 @@ jobs:
           dotnet restore Toggly.FeatureManagement.NET/Toggly.Storage.MongoDB.Tests/Toggly.Storage.MongoDB.Tests.csproj
           dotnet restore Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Storage.RavenDB.Tests/Toggly.FeatureManagement.Storage.RavenDB.Tests.csproj
           dotnet restore Toggly.FeatureManagement.NET/Toggly.Metrics.SystemMetrics.Tests/Toggly.Metrics.SystemMetrics.Tests.csproj
+          dotnet restore Toggly.CLI.Tests/Toggly.CLI.Tests.csproj
         continue-on-error: true
 
       # ── SonarCloud ──────────────────────────────────────────────────────────
@@ -120,7 +125,7 @@ jobs:
             /d:sonar.host.url="https://sonarcloud.io" \
             /d:sonar.token="${SONAR_TOKEN}" \
             /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}" \
-            /d:sonar.inclusions="${{ steps.dotnet_inventory.outputs.sources }}" \
+            /d:sonar.inclusions="${{ steps.dotnet_inventory.outputs.sources }},Toggly.CLI/**,Toggly.CLI.Tests/**" \
             /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.Blazor/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard/coverage/lcov.info" \
             /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
             /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
@@ -143,6 +148,7 @@ jobs:
           dotnet build Toggly.FeatureManagement.NET/Toggly.Storage.MongoDB.Tests/Toggly.Storage.MongoDB.Tests.csproj -c Release
           dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Storage.RavenDB.Tests/Toggly.FeatureManagement.Storage.RavenDB.Tests.csproj -c Release
           dotnet build Toggly.FeatureManagement.NET/Toggly.Metrics.SystemMetrics.Tests/Toggly.Metrics.SystemMetrics.Tests.csproj -c Release
+          dotnet build Toggly.CLI.Tests/Toggly.CLI.Tests.csproj -c Release
 
       - name: Run core tests
         run: |
@@ -151,6 +157,15 @@ jobs:
             --collect:"XPlat Code Coverage" \
             --results-directory ./TestResults \
             --logger "trx;LogFileName=core-test-results.trx" \
+            -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+
+      - name: Run CLI tests
+        run: |
+          dotnet test Toggly.CLI.Tests/Toggly.CLI.Tests.csproj \
+            --no-build -c Release \
+            --collect:"XPlat Code Coverage" \
+            --results-directory ./TestResults \
+            --logger "trx;LogFileName=cli-test-results.trx" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
 
       - name: Run Web tests
@@ -315,7 +330,7 @@ jobs:
               /d:sonar.qualitygate.wait=true \
               "${pr_analysis_args[@]}" \
               /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}" \
-              /d:sonar.inclusions="${{ steps.dotnet_inventory.outputs.sources }}" \
+              /d:sonar.inclusions="${{ steps.dotnet_inventory.outputs.sources }},Toggly.CLI/**,Toggly.CLI.Tests/**" \
               /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.Blazor/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard/coverage/lcov.info" \
               /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
               /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
@@ -341,7 +356,9 @@ jobs:
         run: dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln --no-restore -c Release
 
       - name: Build every additional .NET family inside the server scanner
-        run: node .github/package-registry/dotnet-ci.mjs build-families
+        run: |
+          node .github/package-registry/dotnet-ci.mjs build-families
+          dotnet build Toggly.CLI.Tests/Toggly.CLI.Tests.csproj -c Release
 
       - name: End SonarQube Server Scan
         env:

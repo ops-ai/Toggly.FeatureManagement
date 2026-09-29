@@ -2,6 +2,16 @@ Dart package that provides feature flags support for flutter applications allowi
 
 Can be used *WITH* or *WITHOUT* [Toggly.io](https://toggly.io).
 
+## Supported Dart / Flutter floors
+
+| Constraint | Value | Notes |
+| --- | --- | --- |
+| Declared Dart SDK | `>=2.18.2 <4.0.0` | Keep this floor until a deliberate SemVer bump (OPS-1563 / OPS-1566) |
+| CI | Flutter `stable` channel | Proves current Dart 3 toolchains without raising the pub floor |
+| equatable | `^2.x` | equatable 3 requires Dart ≥3.0 — Dependabot majors ignored until the floor moves |
+
+See repo root [`SUPPORT_MATRIX.md`](../../SUPPORT_MATRIX.md).
+
 <p align="center">
   <a href="https://pub.dev/packages/feature_flags_toggly"><img src="https://img.shields.io/pub/v/feature_flags_toggly.svg" alt="pub package"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>

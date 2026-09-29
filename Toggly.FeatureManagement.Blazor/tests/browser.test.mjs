@@ -56,6 +56,53 @@ test("independent canonical Worker double-hash P1363 fixture validates exact byt
     false,
   );
 });
+test("preserves high binary bytes in verifier decoding", async () => {
+  const originalAtob = globalThis.atob;
+  const cryptoDescriptor = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+  const digests = [];
+  const kid = `${"00".repeat(20)}ES256`;
+  globalThis.atob = () => String.fromCharCode(0xff).repeat(32);
+  Object.defineProperty(globalThis, "crypto", {
+    configurable: true,
+    value: {
+      subtle: {
+        digest: async (_, bytes) => {
+          digests.push([...bytes]);
+          return new Uint8Array(20).buffer;
+        },
+        importKey: async () => ({}),
+        verify: async () => true,
+      },
+    },
+  });
+  try {
+    assert.equal(
+      await verify(
+        "definitions",
+        1,
+        "signature",
+        kid,
+        JSON.stringify({
+          keys: [
+            {
+              kid,
+              kty: "EC",
+              crv: "P-256",
+              alg: "ES256",
+              x: "x",
+              y: "y",
+            },
+          ],
+        }),
+      ),
+      true,
+    );
+    assert.deepEqual(digests[0], new Array(64).fill(0xff));
+  } finally {
+    globalThis.atob = originalAtob;
+    Object.defineProperty(globalThis, "crypto", cryptoDescriptor);
+  }
+});
 test("durable storage is scoped and unavailable storage degrades safely", () => {
   const values = new Map();
   globalThis.localStorage = {

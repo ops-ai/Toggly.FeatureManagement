@@ -201,6 +201,88 @@ public class TogglyFeatureProviderTests : IDisposable
         result.EnabledFor.Should().Contain(f => f.Name == "AlwaysOn");
     }
 
+    [Fact]
+    public async Task GetFeatureDefinitionAsync_WhenVariantsAndAllocationLoaded_MapsConfigurationAndTargetingRules()
+    {
+        using var richConfiguration = JsonDocument.Parse("""
+            {
+              "name": "gold",
+              "limit": 3,
+              "enabled": true,
+              "disabled": false,
+              "tiers": ["starter", "pro"]
+            }
+            """);
+        using var scalarConfiguration = JsonDocument.Parse("\"control\"");
+        var definitions = new List<FeatureDefinitionModel>
+        {
+            new()
+            {
+                FeatureKey = "checkout-experiment",
+                Variants = new List<Toggly.FeatureManagement.Data.VariantDefinition>
+                {
+                    new() { Name = "treatment", ConfigurationValue = richConfiguration.RootElement.Clone() },
+                    new() { Name = "control", ConfigurationValue = scalarConfiguration.RootElement.Clone() }
+                },
+                Allocation = new AllocationDefinition
+                {
+                    DefaultWhenEnabled = "treatment",
+                    DefaultWhenDisabled = "control",
+                    Seed = "checkout-v1",
+                    User = new List<UserAllocationDefinition>
+                    {
+                        new() { Variant = "treatment", Users = new List<string> { "user-1" } }
+                    },
+                    Group = new List<GroupAllocationDefinition>
+                    {
+                        new() { Variant = "control", Groups = new List<string> { "beta" } }
+                    },
+                    Percentile = new List<PercentileAllocationDefinition>
+                    {
+                        new() { Variant = "treatment", From = 10, To = 30 }
+                    }
+                }
+            }
+        };
+        SetupHttpClientWithResponse(
+            HttpStatusCode.OK,
+            JsonSerializer.Serialize(definitions),
+            new EntityTagHeaderValue("\"checkout-v1\""));
+
+        _provider = new TogglyFeatureProvider(
+            CreateSettings(),
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await WaitForConditionAsync(() => _provider.GetDebugInfo().Loaded, TimeSpan.FromSeconds(5));
+
+        var result = await _provider.GetFeatureDefinitionAsync("checkout-experiment");
+        var treatment = result.Variants.Single(variant => variant.Name == "treatment");
+        var control = result.Variants.Single(variant => variant.Name == "control");
+
+        treatment.ConfigurationValue["name"].Should().Be("gold");
+        treatment.ConfigurationValue["limit"].Should().Be("3");
+        treatment.ConfigurationValue["enabled"].Should().Be("true");
+        treatment.ConfigurationValue["disabled"].Should().Be("false");
+        treatment.ConfigurationValue["tiers:0"].Should().Be("starter");
+        treatment.ConfigurationValue["tiers:1"].Should().Be("pro");
+        control.ConfigurationValue.Value.Should().Be("control");
+
+        result.Allocation.Should().NotBeNull();
+        result.Allocation!.DefaultWhenEnabled.Should().Be("treatment");
+        result.Allocation.DefaultWhenDisabled.Should().Be("control");
+        result.Allocation.Seed.Should().Be("checkout-v1");
+        result.Allocation.User.Single().Variant.Should().Be("treatment");
+        result.Allocation.User.Single().Users.Should().ContainSingle().Which.Should().Be("user-1");
+        result.Allocation.Group.Single().Variant.Should().Be("control");
+        result.Allocation.Group.Single().Groups.Should().ContainSingle().Which.Should().Be("beta");
+        result.Allocation.Percentile.Single().Variant.Should().Be("treatment");
+        result.Allocation.Percentile.Single().From.Should().Be(10);
+        result.Allocation.Percentile.Single().To.Should().Be(30);
+    }
+
     #endregion
 
     #region GetAllFeatureDefinitionsAsync Tests

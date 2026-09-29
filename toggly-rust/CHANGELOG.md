@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.1
+
+2026-09-28
+
+### Fixed
+- Always apply HTTP 200 definition bodies when the storage revision matches.
+  Same-revision responses still count as cache hits for telemetry after the
+  body is applied [OPS-1568].
+
 ## 0.9.0
 
 ### Added

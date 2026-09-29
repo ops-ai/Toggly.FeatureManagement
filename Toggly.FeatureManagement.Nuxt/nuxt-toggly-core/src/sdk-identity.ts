@@ -1,5 +1,5 @@
 export const SDK_ID = 'nuxt';
-export const SDK_VERSION = '1.15.1';
+export const SDK_VERSION = '1.15.2';
 
 export const SDK_HEADER_ID = 'X-Toggly-Sdk';
 export const SDK_HEADER_VERSION = 'X-Toggly-Sdk-Version';

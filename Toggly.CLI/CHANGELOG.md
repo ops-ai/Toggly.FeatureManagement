@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.1
+
+2026-09-28
+
+### Changed
+- Include CLI source and OpenCover test results in both .NET Sonar scans.
+- Add command, authentication, and API-client coverage for the CLI executable.
+
+### Fixed
+- Keep deprecated credential-store cleanup testable without accessing the active user profile.
+
 ## 0.2.0
 
 2026-07-13

@@ -29,12 +29,22 @@ jobs:
       - run: mix hex.audit
       - run: mix format --check-formatted
       - run: mix compile --warnings-as-errors
-      - run: mix test --cover
+      - name: Test generic coverage exporter
+        run: elixir tools/sonar_coverage_test.exs
+      - name: Export native coverage for every package
+        run: mix test --cover --export-coverage sonar
+      # Export mode skips Mix's threshold check. Enforce each package's
+      # unchanged threshold before exporting or uploading any report.
+      - name: Enforce per-package native coverage gates
+        run: mix cmd mix test.coverage
+      - name: Generate Sonar generic coverage artifacts
+        run: elixir -r tools/sonar_coverage.ex -e 'Toggly.SonarCoverage.run()'
       - name: Build all standalone Hex artifacts
         run: python3 tools/build-packages.py
       - uses: actions/upload-artifact@v7
         with:
           name: elixir-native-coverage-and-packages
+          if-no-files-found: error
           path: |
             toggly-elixir/apps/*/cover/
             toggly-elixir/apps/*/*.tar
