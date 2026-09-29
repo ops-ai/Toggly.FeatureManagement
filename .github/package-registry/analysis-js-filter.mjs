@@ -34,6 +34,12 @@ const FULL_TEST_MATRIX = [
     'has-lint': false,
   },
   {
+    sdk: 'Local-Gates',
+    path: 'toggly-local-gates',
+    'test-cmd': 'npm test',
+    'has-lint': false,
+  },
+  {
     sdk: 'NestJS',
     path: 'Toggly.FeatureManagement.NestJS',
     'test-cmd': 'npm run test:coverage && npm run test:packed',
@@ -238,7 +244,7 @@ export function filterAnalysisJs(sdksInput = 'all') {
     }
   }
   let needSharedDeps = testMatrix.some(
-    (row) => !['SolidJS', 'SvelteKit', 'Gatsby', 'Client-Telemetry', 'Client-Core', 'Evaluator'].includes(row.sdk),
+    (row) => !['SolidJS', 'SvelteKit', 'Gatsby', 'Client-Telemetry', 'Client-Core', 'Evaluator', 'Local-Gates'].includes(row.sdk),
   );
   for (const special of specials) {
     const cfg = SPECIAL_FILTERS[special];

@@ -80,9 +80,8 @@ jobs:
           echo "| Version | ${{ steps.release.outputs.version }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Reason | ${{ steps.release.outputs.reason }} |" >> "$GITHUB_STEP_SUMMARY"
 
-  # toggly-local-gates is not in the analysis-javascript.yml matrix, so its
-  # existing install/typecheck/test/build/verify commands are preserved here
-  # as a standalone gate (no environment) instead of a reusable workflow call.
+  # The aggregate analysis matrix covers pull requests. This standalone gate
+  # keeps the release's install/typecheck/test/build/verify boundary intact.
   gates:
     needs: resolve
     if: needs.resolve.outputs.action == 'publish'
