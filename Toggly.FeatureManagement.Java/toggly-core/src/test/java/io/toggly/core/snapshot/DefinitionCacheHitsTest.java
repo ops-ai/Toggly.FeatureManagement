@@ -347,6 +347,34 @@ class DefinitionCacheHitsTest {
     }
 
     @Test
+    void sameRevisionHttp200AppliesFlippedBody() {
+        List<FeatureStatPayload> sent = new ArrayList<>();
+        TelemetryRuntime runtime = runtime(sent);
+        HttpSnapshotProvider provider = provider(runtime);
+
+        statusCode.set(200);
+        etag.set("\"same\"");
+        body.set("[{\"feature_key\":\"feature-a\",\"filters\":[{\"name\":\"AlwaysOn\",\"parameters\":{}}]}]");
+        provider.refresh();
+        FeatureDefinition on = provider.getSnapshot().getFeature("feature-a");
+        assertThat(on).isNotNull();
+        assertThat(on.getFilters()).isNotEmpty();
+
+        body.set("[{\"feature_key\":\"feature-a\",\"filters\":[]}]");
+        provider.refresh();
+        FeatureDefinition off = provider.getSnapshot().getFeature("feature-a");
+        assertThat(off).isNotNull();
+        assertThat(off.getFilters()).isEmpty();
+
+        runtime.flushUsage();
+        assertThat(sent.get(0).getDefinitionCacheMisses()).isEqualTo(1);
+        assertThat(sent.get(0).getDefinitionCacheHits()).isEqualTo(1);
+
+        provider.close();
+        runtime.close();
+    }
+
+    @Test
     void recordsHitWhenStartupLoadsDurableSnapshotBeforeNetwork() {
         List<FeatureStatPayload> sent = new ArrayList<>();
         TelemetryRuntime runtime = runtime(sent);

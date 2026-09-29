@@ -10,7 +10,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.9.0"
+version = "0.9.1"
 authors = ["Toggly <support@toggly.io>"]
 edition = "2021"
 rust-version = "1.88"
@@ -69,4 +69,4 @@ futures-util = "0.3"
 # pin breaks that resolution as soon as X.Y changes here (see OPS-1247), so
 # widen the range across every published version between them instead.
 toggly = { version = ">=0.6.3, <0.10.0", path = "toggly" }
-toggly-macros = { version = ">=0.6.3, <0.9.0", path = "toggly-macros" }
+toggly-macros = { version = ">=0.6.3, <0.10.0", path = "toggly-macros" }

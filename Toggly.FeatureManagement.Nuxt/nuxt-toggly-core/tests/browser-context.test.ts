@@ -84,6 +84,7 @@ it.each(['local','remote'] as const)('constructs minted %s path and scrubs all r
  expect(url.pathname).toBe(`/base/${evaluationMode==='local'?'definitions-signed':'evaluated-signed'}/context/Production`)
  expect([...url.searchParams]).toEqual([['keep','a'],['keep','b'],['i','minted']])
  expect(new Headers(request?.headers).has('x-toggly-identity')).toBe(false)
+ expect(request?.cache).toBe('no-store')
 })
 it('preserves non-minted targeting and unrelated base query values',async()=>{
  const client=owner({baseUri:'https://defs.invalid/base?keep=yes',instanceId:undefined,groups:['staff'],claims:{role:'admin'}});await client.init()

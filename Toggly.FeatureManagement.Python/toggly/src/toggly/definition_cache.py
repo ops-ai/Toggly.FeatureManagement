@@ -127,7 +127,12 @@ def resolve_conditional_get(
     *,
     resource_label: str,
 ) -> ConditionalGetHit | None:
-    """Map a probe to an early cache hit, raise on HTTP error, or None for new content."""
+    """Map a probe to an early cache hit, raise on HTTP error, or None to apply body.
+
+    HTTP 200 with a matching revision is **not** an early return — callers must
+    still parse/apply the body (storage revision ≠ evaluated payload). Same
+    revision is recorded as a hit after apply via :class:`DefinitionsMissPlan`.
+    """
     if probe.kind is HttpCacheKind.NOT_MODIFIED:
         return ConditionalGetHit(etag_to_store=None)
     if probe.kind is HttpCacheKind.ERROR_STATUS:
@@ -135,8 +140,7 @@ def resolve_conditional_get(
             f"Failed to fetch {resource_label}: HTTP {probe.status_code}",
             status_code=probe.status_code,
         )
-    if probe.kind is HttpCacheKind.SAME_REVISION:
-        return ConditionalGetHit(etag_to_store=probe.response_etag)
+    # SAME_REVISION and NEW_CONTENT both apply the 200 body.
     return None
 
 
@@ -413,6 +417,8 @@ class DefinitionsMissPlan:
     kid: Optional[str] = None
     signed_ts: Optional[int] = None
     signed_defs_json: Optional[str] = None
+    #: True when HTTP 200 reused the storage revision (telemetry hit after apply).
+    same_revision: bool = False
 
 
 class DefinitionRefreshMixin:
@@ -550,17 +556,21 @@ class DefinitionRefreshMixin:
             kid=kid,
             signed_ts=signed_ts,
             signed_defs_json=signed_defs_json,
+            same_revision=probe.kind is HttpCacheKind.SAME_REVISION,
         )
 
     def _commit_definitions_miss_plan(
         self, plan: DefinitionsMissPlan
-    ) -> tuple[TogglyInitResponse, Literal["miss"], DefinitionsSnapshot]:
-        """Apply a definitions miss plan (caller must already hold ``_lock``)."""
+    ) -> tuple[TogglyInitResponse, Literal["hit", "miss"], DefinitionsSnapshot]:
+        """Apply a definitions body plan (caller must already hold ``_lock``)."""
         self._apply_fetched_definitions_unlocked(plan.definitions, plan.response_etag)
-        return self._definitions_miss_result(
+        response, _outcome, snap = self._definitions_miss_result(
             plan.definitions,
             signature=plan.signature,
             kid=plan.kid,
             signed_ts=plan.signed_ts,
             signed_defs_json=plan.signed_defs_json,
         )
+        if plan.same_revision:
+            return response, "hit", snap
+        return response, "miss", snap

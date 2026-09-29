@@ -397,16 +397,32 @@ func TestProvider_Signed_304IsHit(t *testing.T) {
 }
 
 func TestProvider_Signed_MatchingETagIsHit(t *testing.T) {
+	priv, jwk, kid := mustTestKey(t)
+	rawDefs := []byte(`[{"featureKey":"f1","filters":[{"name":"AlwaysOn","parameters":{}}],"metrics":[],"securedFeature":false,"clientSdkEnabled":true,"requirementType":"Any"}]`)
+	const ts int64 = 1_700_000_300
+	sig := mustSignDefs(t, priv, rawDefs, ts)
+	env, err := json.Marshal(map[string]any{
+		"defs":      json.RawMessage(rawDefs),
+		"signature": sig,
+		"timestamp": ts,
+		"kid":       kid,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("ETag", `W/"abc"`)
-		_, _ = w.Write([]byte(`{"defs":[],"signature":"x","timestamp":99,"kid":"k"}`))
+		_, _ = w.Write(env)
 	}))
 	defer srv.Close()
 
 	rec := &countingCacheRecorder{}
 	p := signedProvider(t, srv, rec)
+	seedJWKS(p, &definitions.JWKSet{Keys: []definitions.JWK{jwk}})
 	p.mu.Lock()
 	p.etag = `"abc"`
+	p.lastTS = ts - 10
 	p.mu.Unlock()
 
 	if err := p.refresh(context.Background(), 2*time.Second, false); err != nil {
@@ -415,6 +431,9 @@ func TestProvider_Signed_MatchingETagIsHit(t *testing.T) {
 	hits, misses := rec.snapshot()
 	if hits != 1 || misses != 0 {
 		t.Fatalf("signed etag match: hits=%d misses=%d", hits, misses)
+	}
+	if _, ok := p.get("f1"); !ok {
+		t.Fatal("same-etag HTTP 200 must still apply the signed body")
 	}
 }
 
@@ -648,6 +667,53 @@ func TestProvider_Unsigned_MatchingETagIsHit(t *testing.T) {
 	hits, misses := rec.snapshot()
 	if hits != 1 || misses != 0 {
 		t.Fatalf("unsigned etag match: hits=%d misses=%d", hits, misses)
+	}
+}
+
+func TestProvider_Unsigned_SameETag200AppliesFlippedBody(t *testing.T) {
+	onJSON := `[{"featureKey":"f1","filters":[{"name":"AlwaysOn","parameters":{}}],"metrics":[],"securedFeature":false,"clientSdkEnabled":true,"requirementType":"Any"}]`
+	offJSON := `[{"featureKey":"f1","filters":[],"metrics":[],"securedFeature":false,"clientSdkEnabled":true,"requirementType":"Any"}]`
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&calls, 1)
+		w.Header().Set("ETag", `"same"`)
+		if n == 1 {
+			_, _ = w.Write([]byte(onJSON))
+			return
+		}
+		_, _ = w.Write([]byte(offJSON))
+	}))
+	defer srv.Close()
+
+	rec := &countingCacheRecorder{}
+	p := newDefinitionsProvider(Config{
+		AppKey:          "app",
+		Environment:     "env",
+		DefinitionsURL:  srv.URL + "/",
+		HTTPTimeout:     2 * time.Second,
+		RefreshInterval: time.Hour,
+	}, nil)
+	p.hc = srv.Client()
+	p.setDefinitionCacheRecorder(rec)
+
+	if err := p.refresh(context.Background(), 2*time.Second, false); err != nil {
+		t.Fatal(err)
+	}
+	def, ok := p.get("f1")
+	if !ok || len(def.Filters) != 1 || def.Filters[0].Name != "AlwaysOn" {
+		t.Fatal("expected AlwaysOn after first refresh")
+	}
+
+	if err := p.refresh(context.Background(), 2*time.Second, true); err != nil {
+		t.Fatal(err)
+	}
+	def, ok = p.get("f1")
+	if !ok || len(def.Filters) != 0 {
+		t.Fatal("same-etag HTTP 200 must apply flipped body (filters cleared)")
+	}
+	hits, misses := rec.snapshot()
+	if misses != 1 || hits != 1 {
+		t.Fatalf("flipped same-etag: hits=%d misses=%d, want miss then hit", hits, misses)
 	}
 }
 

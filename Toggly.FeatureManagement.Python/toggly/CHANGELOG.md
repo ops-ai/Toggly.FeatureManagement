@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.1 - 2026-09-28
+
+### Fixed
+- Always apply HTTP 200 definition bodies when the storage revision matches.
+  Same-revision responses still count as cache hits for telemetry after the
+  body is applied, so evaluated payloads that flip under one ETag update
+  in-memory flags [OPS-1568].
+
 ## 1.1.0 - 2026-09-24
 
 ### Added

@@ -95,6 +95,27 @@ RSpec.describe "Definition cache hit telemetry" do
     client.close
   end
 
+  it "applies flipped body on same-revision HTTP 200" do
+    on_features = [{
+      "featureKey" => "feat-a",
+      "filters" => [{ "name" => "AlwaysOn", "parameters" => {} }]
+    }]
+    off_features = [{
+      "featureKey" => "feat-a",
+      "filters" => []
+    }]
+    stub_definitions_api(app_key: app_key, environment: environment, features: on_features, etag: '"same"')
+    client = build_client
+    expect(client.enabled?("feat-a")).to be true
+    flush_and_clear(client)
+
+    stub_definitions_api(app_key: app_key, environment: environment, features: off_features, etag: '"same"')
+    client.refresh(force: true)
+    expect(client.enabled?("feat-a")).to be false
+    expect(cache_counts(client)).to eq([1, 0])
+    client.close
+  end
+
   it "counts equal Last-Modified as a hit" do
     lm = "Mon, 01 Jan 2024 00:00:00 GMT"
     stub_definitions_api(
