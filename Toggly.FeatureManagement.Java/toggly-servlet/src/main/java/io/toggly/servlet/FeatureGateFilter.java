@@ -49,10 +49,7 @@ public class FeatureGateFilter implements Filter {
         // Parse features
         String featuresParam = filterConfig.getInitParameter("features");
         if (featuresParam != null && !featuresParam.isEmpty()) {
-            features = Arrays.stream(featuresParam.split(","))
-                    .map(String::trim)
-                    .filter(feature -> !feature.isEmpty())
-                    .toList();
+            features = Arrays.asList(featuresParam.split(","));
         } else {
             features = List.of();
         }

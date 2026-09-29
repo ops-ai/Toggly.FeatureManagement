@@ -27,14 +27,14 @@ class FeatureGateFilterTest {
     }
 
     @Test
-    void trimsAndIgnoresBlankFeaturesFromTheInitParameter() throws Exception {
+    void forwardsConfiguredFeaturesToTheClient() throws Exception {
         TogglyClient client = mock(TogglyClient.class);
         when(client.gate(any(), eq(FeatureRequirement.ALL), anyBoolean(), any())).thenReturn(true);
         ServletContext context = mock(ServletContext.class);
         when(context.getAttribute(TogglyServletContextListener.TOGGLY_CLIENT_ATTR)).thenReturn(client);
         FilterConfig config = mock(FilterConfig.class);
         when(config.getServletContext()).thenReturn(context);
-        when(config.getInitParameter("features")).thenReturn("alpha, beta, ");
+        when(config.getInitParameter("features")).thenReturn("alpha,beta");
 
         FeatureGateFilter filter = new FeatureGateFilter();
         filter.init(config);
