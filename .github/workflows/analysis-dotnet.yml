@@ -45,6 +45,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
@@ -298,7 +299,27 @@ jobs:
         env:
           SONAR_SERVER_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_SOURCE_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          pr_analysis_args=()
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            for field in PR_NUMBER PR_SOURCE_BRANCH PR_BASE_BRANCH PR_HEAD_SHA; do
+              if [[ -z "${!field}" ]]; then
+                echo "Missing ${field} for SonarQube Server PR analysis" >&2
+                exit 1
+              fi
+            done
+            pr_analysis_args=(
+              "/d:sonar.pullrequest.key=${PR_NUMBER}"
+              "/d:sonar.pullrequest.branch=${PR_SOURCE_BRANCH}"
+              "/d:sonar.pullrequest.base=${PR_BASE_BRANCH}"
+              "/d:sonar.scm.revision=${PR_HEAD_SHA}"
+            )
+          fi
+
           for attempt in 1 2 3; do
             if dotnet sonarscanner begin \
               /k:"toggly-sdks-dotnet" \
@@ -306,6 +327,8 @@ jobs:
               /v:"${{ steps.gitversion.outputs.semVer }}" \
               /d:sonar.host.url="${SONAR_HOST_URL}" \
               /d:sonar.token="${SONAR_SERVER_TOKEN}" \
+              /d:sonar.qualitygate.wait=true \
+              "${pr_analysis_args[@]}" \
               /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}" \
               /d:sonar.inclusions="${{ steps.dotnet_inventory.outputs.sources }},Toggly.CLI/**,Toggly.CLI.Tests/**" \
               /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.Blazor/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard/coverage/lcov.info" \
