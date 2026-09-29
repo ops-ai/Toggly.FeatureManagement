@@ -17,7 +17,7 @@ public sealed class RavenDbCatalogStoreTests
     {
         var session = CreateSession();
         session.Setup(s => s.LoadAsync<CatalogStorageDocument>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.FromResult<CatalogStorageDocument?>(null));
+            .Returns(Task.FromResult<CatalogStorageDocument>(null!));
         var store = CreateStore(session.Object);
 
         var result = await store.ReadAsync("orders");
@@ -31,7 +31,7 @@ public sealed class RavenDbCatalogStoreTests
     {
         var session = CreateSession();
         session.Setup(s => s.LoadAsync<CatalogStorageDocument>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.FromResult<CatalogStorageDocument?>(null));
+            .Returns(Task.FromResult<CatalogStorageDocument>(null!));
         CatalogStorageDocument? stored = null;
         session.Setup(s => s.StoreAsync(It.IsAny<CatalogStorageDocument>(), It.IsAny<CancellationToken>()))
             .Callback<object, CancellationToken>((document, _) => stored = (CatalogStorageDocument)document)
