@@ -80,8 +80,7 @@ public class OpenApiDocumentMiddlewareTests
         // Arrange
         var serviceProvider = CreateServiceProvider();
         var settings = new OpenApiDocumentMiddlewareSettings();
-        bool nextDelegateCalled = false;
-        RequestDelegate nextDelegate = (ctx) => { nextDelegateCalled = true; return Task.CompletedTask; };
+        RequestDelegate nextDelegate = _ => Task.CompletedTask;
 
         // Act
         var middleware = new OpenApiDocumentMiddleware(
@@ -220,7 +219,27 @@ public class OpenApiDocumentMiddlewareTests
         // Assert
         nextDelegateCalled.Should().BeFalse();
         context.Response.StatusCode.Should().Be(200);
-        context.Response.Headers["Content-Type"].ToString().Should().Contain("application/json");
+        context.Response.ContentType.Should().Contain("application/json");
+    }
+
+    [Fact]
+    public async Task Invoke_WhenRequestIsAborted_CancelsResponseWrite()
+    {
+        var serviceProvider = CreateServiceProvider();
+        var middleware = new OpenApiDocumentMiddleware(
+            _ => Task.CompletedTask,
+            serviceProvider,
+            "v1",
+            "/swagger/v1/swagger.json",
+            new OpenApiDocumentMiddlewareSettings());
+        var context = CreateHttpContext(serviceProvider);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        context.RequestAborted = cancellation.Token;
+
+        var act = () => middleware.Invoke(context);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
     }
 
     [Fact]
@@ -245,7 +264,27 @@ public class OpenApiDocumentMiddlewareTests
 
         // Assert
         context.Response.StatusCode.Should().Be(200);
-        context.Response.Headers["Content-Type"].ToString().Should().Contain("application/yaml");
+        context.Response.ContentType.Should().Contain("application/yaml");
+    }
+
+    [Fact]
+    public async Task Invoke_WithForwardedHeaders_UsesFirstExternalOriginAndPrefix()
+    {
+        var serviceProvider = CreateServiceProvider();
+        var document = new OpenApiDocument();
+        _documentGeneratorMock.Setup(x => x.GenerateAsync("v1")).ReturnsAsync(document);
+        var middleware = new OpenApiDocumentMiddleware(
+            _ => Task.CompletedTask, serviceProvider, "v1", "/swagger/v1/swagger.json",
+            new OpenApiDocumentMiddlewareSettings());
+        var context = CreateHttpContext(serviceProvider);
+        context.Request.Headers["X-Forwarded-Proto"] = "https,http";
+        context.Request.Headers["X-Forwarded-Host"] = "api.example.com,internal";
+        context.Request.Headers["X-Forwarded-Prefix"] = "/tenant/,/ignored";
+
+        await middleware.Invoke(context);
+
+        document.Servers.Should().ContainSingle()
+            .Which.Url.Should().Be("https://api.example.com/tenant");
     }
 
     [Fact]
@@ -300,6 +339,44 @@ public class OpenApiDocumentMiddlewareTests
         await middleware.Invoke(context2);
 
         // Assert - document generator should only be called once due to caching
+        _documentGeneratorMock.Verify(x => x.GenerateAsync("v1"), Times.Once);
+    }
+
+    [Fact]
+    public async Task Invoke_AfterDefinitionsChange_RegeneratesDocument()
+    {
+        Action? onDefinitionsChange = null;
+        _featureStateServiceMock.Setup(x => x.WhenDefinitionsChange(It.IsAny<Action>()))
+            .Callback<Action>(callback => onDefinitionsChange = callback)
+            .Returns(Guid.NewGuid());
+        var serviceProvider = CreateServiceProvider();
+        var middleware = new OpenApiDocumentMiddleware(
+            _ => Task.CompletedTask, serviceProvider, "v1", "/swagger/v1/swagger.json",
+            new OpenApiDocumentMiddlewareSettings());
+
+        await middleware.Invoke(CreateHttpContext(serviceProvider));
+        onDefinitionsChange.Should().NotBeNull();
+        onDefinitionsChange!();
+        await middleware.Invoke(CreateHttpContext(serviceProvider));
+
+        _documentGeneratorMock.Verify(x => x.GenerateAsync("v1"), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task Invoke_AfterGenerationFailure_ReusesExceptionWithinCacheWindow()
+    {
+        _documentGeneratorMock.Setup(x => x.GenerateAsync("v1"))
+            .ThrowsAsync(new InvalidOperationException("Generation failed"));
+        var serviceProvider = CreateServiceProvider();
+        var middleware = new OpenApiDocumentMiddleware(
+            _ => Task.CompletedTask, serviceProvider, "v1", "/swagger/v1/swagger.json",
+            new OpenApiDocumentMiddlewareSettings { ExceptionCacheTime = TimeSpan.FromMinutes(1) });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => middleware.Invoke(CreateHttpContext(serviceProvider)));
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => middleware.Invoke(CreateHttpContext(serviceProvider)));
+
         _documentGeneratorMock.Verify(x => x.GenerateAsync("v1"), Times.Once);
     }
 

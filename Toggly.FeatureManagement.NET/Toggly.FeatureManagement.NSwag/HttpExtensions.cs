@@ -79,19 +79,21 @@ namespace NSwag.AspNetCore
             return ("/" + basePath.Trim('/')).TrimEnd('/');
         }
 
-        private static string TryGetFirstHeader(this IHeaderDictionary headers, string name)
+        private static string? TryGetFirstHeader(this IHeaderDictionary headers, string name)
         {
-            name = headers.Keys.FirstOrDefault(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
+            var matchingName = headers.Keys.FirstOrDefault(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
 
-            if (name == null)
+            if (matchingName == null)
             {
                 return null;
             }
 
 #if AspNetOwin
-            return headers[name].Split(',').Select(s => s.Trim()).First();
+            return headers[matchingName].Split(',').Select(s => s.Trim()).FirstOrDefault();
 #else
-            return headers[name].First().Split(',').Select(s => s.Trim()).First();
+            var values = headers[matchingName];
+            var firstValue = values.Count > 0 ? values[0] : null;
+            return firstValue?.Split(',')[0].Trim();
 #endif
         }
     }

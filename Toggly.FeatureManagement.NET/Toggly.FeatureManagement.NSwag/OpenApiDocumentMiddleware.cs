@@ -30,12 +30,10 @@ namespace Toggly.FeatureManagement.NSwag
         private readonly string _path;
         private readonly IApiDescriptionGroupCollectionProvider _apiDescriptionGroupCollectionProvider;
         private readonly OpenApiDocumentMiddlewareSettings _settings;
-        private readonly IFeatureStateService? _featureStateService;
-        private readonly Guid? _definitionsChangedSubscriptionId;
-
         private int _version;
         private readonly object _documentsCacheLock = new object();
-        private readonly Dictionary<string, Tuple<string, ExceptionDispatchInfo, DateTimeOffset>> _documentsCache = new Dictionary<string, Tuple<string, ExceptionDispatchInfo, DateTimeOffset>>();
+        private readonly Dictionary<string, Tuple<string?, ExceptionDispatchInfo?, DateTimeOffset>> _documentsCache =
+            new Dictionary<string, Tuple<string?, ExceptionDispatchInfo?, DateTimeOffset>>();
 
         /// <summary>Initializes a new instance of the <see cref="OpenApiDocumentMiddleware"/> class.</summary>
         /// <param name="nextDelegate">The next delegate.</param>
@@ -54,12 +52,12 @@ namespace Toggly.FeatureManagement.NSwag
                 throw new InvalidOperationException("API Explorer not registered in DI.");
 
             _settings = settings;
-            _featureStateService = serviceProvider.GetService<IFeatureStateService>();
-            if (_featureStateService != null)
+            var featureStateService = serviceProvider.GetService<IFeatureStateService>();
+            if (featureStateService != null)
             {
                 try
                 {
-                    _definitionsChangedSubscriptionId = _featureStateService.WhenDefinitionsChange(ClearDocumentsCache);
+                    featureStateService.WhenDefinitionsChange(ClearDocumentsCache);
                 }
                 catch
                 {
@@ -77,11 +75,11 @@ namespace Toggly.FeatureManagement.NSwag
             {
                 var schemaJson = await GetDocumentAsync(context);
                 context.Response.StatusCode = 200;
-                context.Response.Headers["Content-Type"] = _path.Contains(".yaml", StringComparison.OrdinalIgnoreCase) ?
+                context.Response.ContentType = _path.Contains(".yaml", StringComparison.OrdinalIgnoreCase) ?
                     "application/yaml; charset=utf-8" :
                     "application/json; charset=utf-8";
 
-                await context.Response.WriteAsync(schemaJson);
+                await context.Response.WriteAsync(schemaJson, context.RequestAborted);
             }
             else
             {
@@ -96,7 +94,7 @@ namespace Toggly.FeatureManagement.NSwag
         {
             var documentKey = _settings.CreateDocumentCacheKey?.Invoke(context.Request) ?? string.Empty;
 
-            Tuple<string, ExceptionDispatchInfo, DateTimeOffset> document;
+            Tuple<string?, ExceptionDispatchInfo?, DateTimeOffset>? document;
             lock (_documentsCacheLock)
             {
                 _documentsCache.TryGetValue(documentKey, out document);
@@ -129,7 +127,7 @@ namespace Toggly.FeatureManagement.NSwag
 
                 lock (_documentsCacheLock)
                 {
-                    _documentsCache[documentKey] = new Tuple<string, ExceptionDispatchInfo, DateTimeOffset>(
+                    _documentsCache[documentKey] = new Tuple<string?, ExceptionDispatchInfo?, DateTimeOffset>(
                         data, null, DateTimeOffset.UtcNow);
                 }
 
@@ -139,7 +137,7 @@ namespace Toggly.FeatureManagement.NSwag
             {
                 lock (_documentsCacheLock)
                 {
-                    _documentsCache[documentKey] = new Tuple<string, ExceptionDispatchInfo, DateTimeOffset>(
+                    _documentsCache[documentKey] = new Tuple<string?, ExceptionDispatchInfo?, DateTimeOffset>(
                         null, ExceptionDispatchInfo.Capture(exception), DateTimeOffset.UtcNow);
                 }
 
@@ -154,8 +152,6 @@ namespace Toggly.FeatureManagement.NSwag
         {
             var gen = context.RequestServices.GetRequiredService<IOpenApiDocumentGenerator>();
             var document = await gen.GenerateAsync(_documentName);
-
-            // var document = await _documentProvider.GenerateAsync(_documentName);
 
             document.Servers.Clear();
             document.Servers.Add(new OpenApiServer

@@ -52,42 +52,29 @@ namespace Toggly.FeatureManagement.NSwag
                 ?? (requestServices?.GetService(typeof(IFeatureManager)) as IFeatureManager)
                 ?? (_rootServiceProvider?.GetService(typeof(IFeatureManager)) as IFeatureManager);
 
-            // Check controller-level FeatureGate attribute
-            if (actionDescriptor is ControllerActionDescriptor controllerActionDescriptor)
-            {
-                var controllerType = controllerActionDescriptor.ControllerTypeInfo;
-                if (controllerType != null)
-                {
-                    var controllerFeatureGate = controllerType.GetCustomAttribute<FeatureGateAttribute>();
-                    if (controllerFeatureGate != null)
-                    {
-                        if (!IsFeatureEnabled(controllerFeatureGate, featureManagerSnapshot, featureManager))
-                            return false; // Exclude from Swagger
-                    }
-                }
+            if (actionDescriptor is not ControllerActionDescriptor controllerActionDescriptor)
+                return true;
 
-                // Check action-level FeatureGate attribute
-                var methodInfo = controllerActionDescriptor.MethodInfo;
-                if (methodInfo != null)
-                {
-                    var actionFeatureGate = methodInfo.GetCustomAttribute<FeatureGateAttribute>();
-                    if (actionFeatureGate != null)
-                    {
-                        if (!IsFeatureEnabled(actionFeatureGate, featureManagerSnapshot, featureManager))
-                            return false; // Exclude from Swagger
-                    }
-                }
-            }
+            var controllerFeatureGate = controllerActionDescriptor.ControllerTypeInfo?
+                .GetCustomAttribute<FeatureGateAttribute>();
+            if (controllerFeatureGate != null &&
+                !IsFeatureEnabled(controllerFeatureGate, featureManagerSnapshot, featureManager))
+                return false;
 
-            return true; // Include in Swagger
+            var actionFeatureGate = controllerActionDescriptor.MethodInfo?
+                .GetCustomAttribute<FeatureGateAttribute>();
+            return actionFeatureGate == null ||
+                IsFeatureEnabled(actionFeatureGate, featureManagerSnapshot, featureManager);
         }
 
         /// <summary>
         /// Checks if the feature flags specified in the FeatureGate attribute are enabled.
         /// </summary>
         /// <param name="featureGate">The FeatureGate attribute to evaluate.</param>
+        /// <param name="featureManagerSnapshot">The request-scoped feature manager, if available.</param>
+        /// <param name="featureManager">The feature manager used to evaluate the gate.</param>
         /// <returns>True if the feature gate requirements are met, false otherwise.</returns>
-        private bool IsFeatureEnabled(FeatureGateAttribute featureGate, IFeatureManagerSnapshot? featureManagerSnapshot, IFeatureManager? featureManager)
+        private static bool IsFeatureEnabled(FeatureGateAttribute featureGate, IFeatureManagerSnapshot? featureManagerSnapshot, IFeatureManager? featureManager)
         {
             if (featureManagerSnapshot == null && featureManager == null)
                 return true; // No provider available, include by default

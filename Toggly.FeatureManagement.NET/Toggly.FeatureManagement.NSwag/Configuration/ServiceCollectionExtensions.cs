@@ -1,17 +1,12 @@
+using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
-using NSwag.Generation.AspNetCore;
-using System;
-using Toggly.FeatureManagement.NSwag;
-
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
+using NSwag.Generation.AspNetCore;
 using NSwag.AspNetCore;
 using NSwag.AspNetCore.Middlewares;
-using System.Reflection;
-using Microsoft.AspNetCore.Builder;
+using System;
 using System.Collections.Generic;
+using Toggly.FeatureManagement.NSwag;
 
 namespace Toggly.FeatureManagement.NSwag.Configuration
 {
@@ -45,9 +40,11 @@ namespace Toggly.FeatureManagement.NSwag.Configuration
         /// <remarks>Registers multiple routes/documents if the settings.Path contains a '{documentName}' placeholder.</remarks>
         /// <param name="app">The app.</param>
         /// <param name="configure">Configure additional settings.</param>
-        public static IApplicationBuilder UseFeatureAwareOpenApi(this IApplicationBuilder app, Action<OpenApiDocumentMiddlewareSettings> configure = null)
+        public static IApplicationBuilder UseFeatureAwareOpenApi(this IApplicationBuilder app, Action<OpenApiDocumentMiddlewareSettings>? configure = null)
         {
-            var settings = configure == null ? app.ApplicationServices.GetService<IOptions<OpenApiDocumentMiddlewareSettings>>()?.Value : null ?? new OpenApiDocumentMiddlewareSettings();
+            var settings = (configure == null
+                ? app.ApplicationServices.GetService<IOptions<OpenApiDocumentMiddlewareSettings>>()?.Value
+                : null) ?? new OpenApiDocumentMiddlewareSettings();
             configure?.Invoke(settings);
 
             if (settings.Path.Contains("{documentName}"))
