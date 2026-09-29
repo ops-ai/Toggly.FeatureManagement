@@ -20,10 +20,12 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -52,15 +54,37 @@ class RedisCachingSnapshotProviderReliabilityTest {
         for (String malformed : new String[] {
                 "{\"features\":{\"cached\":{\"featureKey\":\"cached\"},\"timestamp\":\"2026-09-29T00:00:00Z\"}",
                 "{\"features\":null,\"metrics\":{\"wrong\":{\"featureKey\":\"wrong\"}},\"timestamp\":\"2026-09-29T00:00:00Z\"}",
-                "{\"features\":{\"bad\":null},\"metrics\":{},\"timestamp\":\"2026-09-29T00:00:00Z\"}"
+                "{\"features\":{\"bad\":null},\"metrics\":{},\"timestamp\":\"2026-09-29T00:00:00Z\"}",
+                "[]",
+                "{\"metrics\":{}}",
+                "{\"features\" {}}",
+                "{\"features\":[]}",
+                "{\"features\":{\"good\":{}, #}}",
+                "{\"features\":{\"good\" {}}}",
+                "{\"features\":{\"good\":[]}}",
+                "{\"features\":{}} trailing"
         }) {
             when(jedis.get("unit:snapshot")).thenReturn(malformed);
 
             assertThat(provider.getSnapshot()).isSameAs(fresh);
         }
 
-        verify(delegate, org.mockito.Mockito.times(3)).refresh();
-        verify(jedis, org.mockito.Mockito.times(3)).setex(anyString(), anyLong(), anyString());
+        verify(delegate, times(11)).refresh();
+        verify(jedis, times(11)).setex(anyString(), anyLong(), anyString());
+    }
+
+    @Test
+    void cachedFeaturesWithWhitespaceAndEscapedKeysRemainReadable() {
+        RedisCachingSnapshotProvider provider = provider(Duration.ofMinutes(1));
+        when(pool.getResource()).thenReturn(jedis);
+        when(jedis.get("unit:snapshot")).thenReturn(
+                " \n {\"features\" \t : \n { \"quote\\\"key\" \t : \n {}, \"second\":{} },"
+                        + "\"metrics\":{},\"timestamp\":\"2026-09-29T00:00:00Z\"} \t ");
+
+        FeatureSnapshot cached = provider.getSnapshot();
+
+        assertThat(cached.getFeatures().keySet()).containsExactlyInAnyOrder("quote\"key", "second");
+        assertThat(cached.getTimestamp()).isEqualTo(Instant.parse("2026-09-29T00:00:00Z"));
     }
 
     @Test
@@ -76,7 +100,7 @@ class RedisCachingSnapshotProviderReliabilityTest {
 
         doThrow(new IllegalStateException("Redis unavailable")).when(jedis).get("unit:snapshot");
         assertThat(provider.getSnapshot()).isSameAs(fresh);
-        verify(delegate, org.mockito.Mockito.times(2)).refresh();
+        verify(delegate, times(2)).refresh();
     }
 
     @Test
@@ -143,7 +167,7 @@ class RedisCachingSnapshotProviderReliabilityTest {
         provider.clear();
         provider.getSnapshot();
 
-        verify(recorder, org.mockito.Mockito.times(2)).recordDefinitionCacheHit();
+        verify(recorder, times(2)).recordDefinitionCacheHit();
     }
 
     @Test
@@ -154,7 +178,10 @@ class RedisCachingSnapshotProviderReliabilityTest {
                 RedisCacheConfig.builder().ssl().build()
         }) {
             RedisCachingSnapshotProvider provider = new RedisCachingSnapshotProvider(delegate, config);
-            provider.close();
+            assertThatCode(() -> {
+                provider.close();
+                provider.close();
+            }).doesNotThrowAnyException();
         }
     }
 
