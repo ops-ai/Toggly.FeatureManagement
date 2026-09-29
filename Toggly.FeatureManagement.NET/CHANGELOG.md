@@ -5,8 +5,8 @@
 ### Fixed
 - `Toggly.FeatureManagement.NSwag` improves feature-gate processing during
   OpenAPI document generation. Middleware setup safely initializes default
-  options, preserves request cancellation, and tolerates empty forwarded
-  headers.
+  options, preserves request cancellation, and falls back to the request
+  origin when forwarded protocol or host headers are blank.
 
 ## All .NET SDK packages 3.12.1 - 2026-09-29
 

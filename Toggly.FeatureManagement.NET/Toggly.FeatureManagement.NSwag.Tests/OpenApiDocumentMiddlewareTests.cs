@@ -287,6 +287,27 @@ public class OpenApiDocumentMiddlewareTests
             .Which.Url.Should().Be("https://api.example.com/tenant");
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Invoke_WithBlankForwardedProtoAndHost_UsesRequestOrigin(string forwardedHeaderValue)
+    {
+        var serviceProvider = CreateServiceProvider();
+        var document = new OpenApiDocument();
+        _documentGeneratorMock.Setup(x => x.GenerateAsync("v1")).ReturnsAsync(document);
+        var middleware = new OpenApiDocumentMiddleware(
+            _ => Task.CompletedTask, serviceProvider, "v1", "/swagger/v1/swagger.json",
+            new OpenApiDocumentMiddlewareSettings());
+        var context = CreateHttpContext(serviceProvider);
+        context.Request.Headers["X-Forwarded-Proto"] = forwardedHeaderValue;
+        context.Request.Headers["X-Forwarded-Host"] = forwardedHeaderValue;
+
+        await middleware.Invoke(context);
+
+        document.Servers.Should().ContainSingle()
+            .Which.Url.Should().Be("https://localhost:5000");
+    }
+
     [Fact]
     public async Task Invoke_WithCaseInsensitivePath_ReturnsDocument()
     {
