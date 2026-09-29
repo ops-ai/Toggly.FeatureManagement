@@ -48,7 +48,7 @@ public class CaffeineEvaluationCache {
     public boolean getOrCompute(String featureKey, EvaluationContext context, Supplier<Boolean> evaluator) {
         CacheKey key = new CacheKey(featureKey, context);
         Boolean result = cache.get(key, k -> evaluator.get());
-        return result != null && result;
+        return Boolean.TRUE.equals(result);
     }
 
     /**
