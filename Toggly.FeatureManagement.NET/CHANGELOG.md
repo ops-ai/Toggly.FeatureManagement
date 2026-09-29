@@ -1,5 +1,13 @@
 # Changelog
 
+## All .NET SDK packages 3.12.13 - 2026-10-05
+
+### Changed
+- Web feature tag helpers reuse the separator used to parse feature names,
+  reducing repeated allocations when rendering feature-gated content.
+- Expanded Web XML API documentation for HTTP feature contexts, targeting
+  accessors, and feature tag helpers.
+
 ## All .NET SDK packages 3.12.12 - 2026-10-05
 
 ### Changed
@@ -51,6 +59,7 @@
 - The SDK User-Agent version now matches the NuGet package version even when
   CI injects a different assembly informational version. Malformed assembly
   informational versions fall back to a valid file or assembly version.
+
 ## All .NET SDK packages 3.12.6 - 2026-09-30
 
 ### Fixed
