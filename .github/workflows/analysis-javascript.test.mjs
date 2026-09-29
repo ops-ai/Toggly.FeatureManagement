@@ -92,6 +92,34 @@ test('does not count packed Vue and Svelte host harnesses as production source',
   }
 });
 
+test('uploads signed definitions coverage and includes its source in both Sonar scans', () => {
+  const sharedJob = workflow.match(/\n  build-shared-js-deps:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  assert.match(sharedJob, /working-directory: toggly-signed-defs\s+run: \|\s+npm run test:coverage/);
+  assert.match(sharedJob, /name: coverage-Signed-Defs/);
+  assert.match(sharedJob, /path: toggly-signed-defs\/coverage\/lcov\.info/);
+  assert.match(sharedJob, /if-no-files-found: error/);
+
+  const sonarJob = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  assert.match(sonarJob, /pattern: coverage-\*/);
+  assert.match(sonarJob, /\["Signed-Defs"\]="toggly-signed-defs"/);
+  assert.match(sonarJob, /sed "s\|SF:\|SF:\$\{prefix\}\/\|g" "\$file" > "coverage\/\$\{sdk_name\}-lcov\.info"/);
+
+  for (const property of ['sources', 'tests']) {
+    const values = [...sonarJob.matchAll(new RegExp(`-Dsonar\\.${property}=([^\\n]+)`, 'g'))].map((match) => match[1]);
+    assert.equal(values.length, 2, `both Sonar scans need ${property}`);
+    for (const value of values) {
+      assert.ok(value.split(',').includes('toggly-signed-defs/src'), `signed-defs source missing from ${property}`);
+    }
+  }
+  for (const property of ['javascript.lcov.reportPaths', 'typescript.lcov.reportPaths']) {
+    const values = [...sonarJob.matchAll(new RegExp(`-Dsonar\\.${property.replaceAll('.', '\\.')}=([^\\n]+)`, 'g'))].map((match) => match[1]);
+    assert.deepEqual(values, ['coverage/*-lcov.info', 'coverage/*-lcov.info']);
+  }
+  for (const [, exclusions] of sonarJob.matchAll(/-Dsonar\.(?:coverage\.)?exclusions=([^\n]+)/g)) {
+    assert.ok(!exclusions.includes('toggly-signed-defs'), 'signed definitions production code must not be excluded');
+  }
+});
+
 test('maps evaluator source, tests, and LCOV into both Sonar scans', () => {
   const sources = [...workflow.matchAll(/-Dsonar\.sources=([^\n]+)/g)].map((match) => match[1]);
   const tests = [...workflow.matchAll(/-Dsonar\.tests=([^\n]+)/g)].map((match) => match[1]);
