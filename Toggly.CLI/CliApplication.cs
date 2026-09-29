@@ -14,8 +14,11 @@ public static class CliApplication
     /// Creates the root command for the Toggly CLI.
     /// </summary>
     /// <param name="apiClientFactory">Optional API client factory for command execution.</param>
+    /// <param name="authDeps">Optional auth command dependencies for tests.</param>
     /// <returns>The configured root command.</returns>
-    public static RootCommand CreateRootCommand(Func<InvocationContext, TogglyApiClient>? apiClientFactory = null)
+    public static RootCommand CreateRootCommand(
+        Func<InvocationContext, TogglyApiClient>? apiClientFactory = null,
+        AuthCommandDeps? authDeps = null)
     {
         var rootCommand = new RootCommand("Toggly CLI - Command-line interface for Toggly feature flag management");
 
@@ -48,6 +51,7 @@ public static class CliApplication
             authorityOption,
             baseUrlOption);
 
+        rootCommand.AddCommand(AuthCommands.Create(authDeps));
         rootCommand.AddCommand(ReleaseCommands.CreateReleaseCommand(apiClientFactory));
         rootCommand.AddCommand(ReleaseCommands.CreateAssociateBuildCommand(apiClientFactory));
         rootCommand.AddCommand(FeatureCommands.CreateFeatureCommand(apiClientFactory));
@@ -71,9 +75,25 @@ public static class CliApplication
             authority: context.ParseResult.GetValueForOption(authorityOption),
             baseUrl: context.ParseResult.GetValueForOption(baseUrlOption));
 
+        ISecureTokenStore? tokenStore = null;
         try
         {
-            configService.ValidateAuthConfig(config);
+            tokenStore = SecureTokenStore.Create();
+        }
+        catch (Exception ex) when (ex is PlatformNotSupportedException or InvalidOperationException)
+        {
+            // Store may be unavailable on headless Linux; client credentials can still work.
+            tokenStore = null;
+        }
+
+        ResolvedCredentials credentials;
+        try
+        {
+            credentials = CredentialResolver.ResolveAsync(
+                config.ClientId,
+                config.ClientSecret,
+                config.Authority,
+                tokenStore ?? new NullSecureTokenStore()).GetAwaiter().GetResult();
         }
         catch (InvalidOperationException ex)
         {
@@ -89,8 +109,22 @@ public static class CliApplication
             httpClient,
             authService,
             config.BaseUrl,
-            config.ClientId,
-            config.ClientSecret,
-            config.Authority);
+            credentials,
+            tokenStore);
+    }
+
+    /// <summary>
+    /// Empty store used when the OS credential store cannot be opened (CI client-credentials still works).
+    /// </summary>
+    private sealed class NullSecureTokenStore : ISecureTokenStore
+    {
+        public Task SaveAsync(Models.AuthSession session, CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("OS credential store is unavailable.");
+
+        public Task<Models.AuthSession?> LoadAsync(CancellationToken cancellationToken = default)
+            => Task.FromResult<Models.AuthSession?>(null);
+
+        public Task DeleteAsync(CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
     }
 }
