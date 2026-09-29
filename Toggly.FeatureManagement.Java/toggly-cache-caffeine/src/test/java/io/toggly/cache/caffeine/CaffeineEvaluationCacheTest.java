@@ -86,11 +86,8 @@ class CaffeineEvaluationCacheTest {
                 .claim("role", "BB")
                 .build();
 
-        assertThat("Aa").hasSameHashCodeAs("BB");
-        assertThat(traitAa).isNotEqualTo(traitBb);
-        assertThat(traitAa).hasSameHashCodeAs(traitBb);
-        assertThat(claimAa).isNotEqualTo(claimBb);
-        assertThat(claimAa).hasSameHashCodeAs(claimBb);
+        assertThat(traitAa).isNotEqualTo(traitBb).hasSameHashCodeAs(traitBb);
+        assertThat(claimAa).isNotEqualTo(claimBb).hasSameHashCodeAs(claimBb);
 
         assertThat(cache.getOrCompute("targeted", traitAa, () -> counted(computations, true))).isTrue();
         assertThat(cache.getOrCompute("targeted", traitBb, () -> counted(computations, false))).isFalse();
