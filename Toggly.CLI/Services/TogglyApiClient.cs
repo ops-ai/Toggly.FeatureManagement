@@ -1,21 +1,19 @@
 using System.Net.Http.Json;
-using System.Text.Json;
 using Toggly.CLI.Models;
-using Toggly.CLI;
 
 namespace Toggly.CLI.Services;
 
 /// <summary>
-/// HTTP client wrapper for Toggly API
+/// HTTP client wrapper for Toggly API.
 /// </summary>
 public class TogglyApiClient
 {
     private readonly HttpClient _httpClient;
     private readonly AuthService _authService;
     private readonly string _baseUrl;
-    private readonly string? _clientId;
-    private readonly string? _clientSecret;
-    private readonly string? _authority;
+    private readonly ResolvedCredentials _credentials;
+    private readonly ISecureTokenStore? _tokenStore;
+    private AuthSession? _session;
 
     public TogglyApiClient(
         HttpClient httpClient,
@@ -24,26 +22,78 @@ public class TogglyApiClient
         string? clientId = null,
         string? clientSecret = null,
         string? authority = null)
+        : this(
+            httpClient,
+            authService,
+            baseUrl,
+            new ResolvedCredentials
+            {
+                Kind = ResolvedAuthKind.ClientCredentials,
+                ClientId = clientId,
+                ClientSecret = clientSecret,
+                Authority = authority ?? Constants.DefaultAuthority
+            },
+            tokenStore: null)
+    {
+    }
+
+    public TogglyApiClient(
+        HttpClient httpClient,
+        AuthService authService,
+        string baseUrl,
+        ResolvedCredentials credentials,
+        ISecureTokenStore? tokenStore = null)
     {
         _httpClient = httpClient;
         _authService = authService;
         _baseUrl = baseUrl.TrimEnd('/');
-        _clientId = clientId;
-        _clientSecret = clientSecret;
-        _authority = authority;
+        _credentials = credentials;
+        _tokenStore = tokenStore;
+        _session = credentials.Session;
     }
 
     /// <summary>
-    /// Ensure authentication header is set
+    /// Ensure authentication header is set.
     /// </summary>
     private async Task EnsureAuthAsync(CancellationToken cancellationToken = default)
     {
-        if (!string.IsNullOrEmpty(_clientId) && !string.IsNullOrEmpty(_clientSecret) && !string.IsNullOrEmpty(_authority))
+        if (_credentials.Kind == ResolvedAuthKind.ClientCredentials)
         {
-            var token = await _authService.GetAccessTokenAsync(_clientId, _clientSecret, _authority, cancellationToken);
-            _httpClient.DefaultRequestHeaders.Authorization = 
+            // Match prior behavior: skip bearer when credentials were not supplied
+            // (tests inject unauthenticated clients via the factory).
+            if (string.IsNullOrEmpty(_credentials.ClientId) ||
+                string.IsNullOrEmpty(_credentials.ClientSecret) ||
+                string.IsNullOrEmpty(_credentials.Authority))
+            {
+                return;
+            }
+
+            var token = await _authService.GetAccessTokenAsync(
+                _credentials.ClientId,
+                _credentials.ClientSecret,
+                _credentials.Authority,
+                cancellationToken);
+            _httpClient.DefaultRequestHeaders.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            return;
         }
+
+        var session = _session ?? _credentials.Session
+            ?? throw new InvalidOperationException("No device session available. Run 'toggly auth login'.");
+
+        // Refresh when expired or within 5 minutes of expiry.
+        if (session.ExpiresAtUtc <= DateTime.UtcNow.AddMinutes(5))
+        {
+            session = await _authService.RefreshAccessTokenAsync(session, cancellationToken);
+            _session = session;
+            if (_tokenStore is not null)
+                await _tokenStore.SaveAsync(session, cancellationToken);
+        }
+
+        _httpClient.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue(
+                string.IsNullOrEmpty(session.TokenType) ? "Bearer" : session.TokenType,
+                session.AccessToken);
     }
 
     /// <summary>
@@ -54,7 +104,7 @@ public class TogglyApiClient
         await EnsureAuthAsync(cancellationToken);
         var response = await _httpClient.PostAsJsonAsync($"{_baseUrl}/releases", request, TogglyJsonSerializerContext.Default.CreateReleaseRequest, cancellationToken);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync(TogglyJsonSerializerContext.Default.ReleaseModel, cancellationToken) 
+        return await response.Content.ReadFromJsonAsync(TogglyJsonSerializerContext.Default.ReleaseModel, cancellationToken)
             ?? throw new InvalidOperationException("Failed to deserialize release response");
     }
 
@@ -98,16 +148,16 @@ public class TogglyApiClient
     /// Update feature configuration on a specific environment
     /// </summary>
     public async Task<List<FeatureFilter>> UpdateFeatureEnvironmentAsync(
-        string applicationId, 
-        string environment, 
-        string featureKey, 
-        List<FeatureFilter> filters, 
+        string applicationId,
+        string environment,
+        string featureKey,
+        List<FeatureFilter> filters,
         CancellationToken cancellationToken = default)
     {
         await EnsureAuthAsync(cancellationToken);
         var response = await _httpClient.PutAsJsonAsync(
-            $"{_baseUrl}/applications/{applicationId}/environments/{environment}/features/{featureKey}", 
-            filters, 
+            $"{_baseUrl}/applications/{applicationId}/environments/{environment}/features/{featureKey}",
+            filters,
             TogglyJsonSerializerContext.Default.ListFeatureFilter,
             cancellationToken);
         response.EnsureSuccessStatusCode();
@@ -115,4 +165,3 @@ public class TogglyApiClient
             ?? throw new InvalidOperationException("Failed to deserialize feature filters response");
     }
 }
-
