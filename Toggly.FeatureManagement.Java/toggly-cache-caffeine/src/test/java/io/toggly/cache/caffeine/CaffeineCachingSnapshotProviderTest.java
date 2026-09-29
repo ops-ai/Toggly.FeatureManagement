@@ -73,10 +73,14 @@ class CaffeineCachingSnapshotProviderTest {
         CaffeineCachingSnapshotProvider cached = new CaffeineCachingSnapshotProvider(source, config);
         DefinitionCacheRecorder recorder = new DefinitionCacheRecorder() {
             @Override
-            public void recordDefinitionCacheHit() {}
+            public void recordDefinitionCacheHit() {
+                throw new UnsupportedOperationException("Recorder callbacks are not expected in this forwarding test");
+            }
 
             @Override
-            public void recordDefinitionCacheMiss() {}
+            public void recordDefinitionCacheMiss() {
+                throw new UnsupportedOperationException("Recorder callbacks are not expected in this forwarding test");
+            }
         };
 
         cached.getSnapshot();
