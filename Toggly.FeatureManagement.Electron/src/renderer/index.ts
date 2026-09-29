@@ -2,17 +2,13 @@ import { decodeVariantValue } from '../decode-variant-value.js'
 import type {
   EntityContextInput,
   FeatureFlagsSnapshot,
-  FeatureRequirement,
   SetContextInput,
   TogglyBridge,
   VariantResult,
 } from '../types.js'
 
 function tryBridge(): TogglyBridge | null {
-  if (typeof window === 'undefined' || !window.toggly) {
-    return null
-  }
-  return window.toggly
+  return globalThis.window?.toggly ?? null
 }
 
 export function isFeatureOn(
@@ -41,7 +37,7 @@ export function isFeatureOff(
 
 export function evaluateFeatureGate(
   keys: string[],
-  requirement?: FeatureRequirement | string,
+  requirement?: string,
   negate?: boolean,
   entityContext?: EntityContextInput,
   kind?: string,

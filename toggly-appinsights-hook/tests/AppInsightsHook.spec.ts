@@ -467,6 +467,21 @@ describe('AppInsightsHook', () => {
       expect(properties['feature_feature1']).toBe('disabled');
     });
 
+    it('should add feature properties for flags discovered after initialization', () => {
+      Object.defineProperty(global, 'window', {
+        configurable: true,
+        value: { appInsights: mockAppInsights },
+      });
+      const hook = new AppInsightsHook({ setCustomProperties: true });
+      hook.afterRefresh({ existingFeature: true });
+      hook.afterRefresh({ existingFeature: true, addedFeature: false });
+
+      expect(hook.getFeatureProperties()).toEqual({
+        feature_existingFeature: 'enabled',
+        feature_addedFeature: 'disabled',
+      });
+    });
+
     it('should only track changes for flags that existed before', () => {
       const hook = new AppInsightsHook();
       hook.afterRefresh({ feature1: true });

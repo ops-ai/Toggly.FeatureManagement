@@ -198,7 +198,7 @@ function createClient(
   } else if (typeof globalThis !== 'undefined' && typeof globalThis.fetch === 'function') {
     resolvedFetch = globalThis.fetch.bind(globalThis);
   } else {
-    throw new Error(
+    throw new TypeError(
       'fetch is not available. Please provide a fetch implementation via config.fetch'
     );
   }
@@ -242,18 +242,29 @@ function createClient(
     return age < interval;
   };
 
-  const fetchFlags = async (): Promise<Flags> => {
-    if (disposed) return { ...(cache?.flags ?? flagDefaults) };
-    const url = getApiUrl();
+  const copyFlags = (flags: Flags): Flags => ({ ...flags });
 
-    // If no appKey, return flagDefaults
-    if (!url || !appKey) {
-      if (isDebug) {
-        console.log(`Toggly.usedFlagDefaults - ${JSON.stringify(flagDefaults)}`);
-      }
-      return { ...flagDefaults };
+  const fallbackFlags = (reason: 'missing-config' | 'request-failed' | 'disposed'): Flags => {
+    if (reason === 'missing-config') {
+      if (isDebug) console.log(`Toggly.usedFlagDefaults - ${JSON.stringify(flagDefaults)}`);
+      return copyFlags(flagDefaults);
     }
 
+    const cachedFlags = cache?.flags;
+    if (cachedFlags) {
+      if (isDebug && reason === 'request-failed') {
+        console.log(`Toggly.loadedFromCache - ${JSON.stringify(cachedFlags)}`);
+      }
+      return copyFlags(cachedFlags);
+    }
+
+    if (isDebug && reason === 'request-failed') {
+      console.log(`Toggly.loadedFromDefaults - ${JSON.stringify(flagDefaults)}`);
+    }
+    return copyFlags(flagDefaults);
+  };
+
+  const fetchFlagsFromApi = async (url: string): Promise<Flags> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), connectTimeout);
     requests.set(controller, timeoutId);
@@ -267,9 +278,7 @@ function createClient(
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Failed to fetch flags from Toggly API: ${response.status} ${response.statusText}`
-        );
+        throw new Error(`Failed to fetch flags from Toggly API: ${response.status} ${response.statusText}`);
       }
 
       const bodyText = await readResponseBody(response);
@@ -292,23 +301,21 @@ function createClient(
       }
 
       return flags;
-    } catch (error) {
-      // On error, try to use cached flags, otherwise use flagDefaults
-      if (cache) {
-        if (isDebug) {
-          console.log(`Toggly.loadedFromCache - ${JSON.stringify(cache.flags)}`);
-        }
-        return { ...cache.flags };
-      }
-
-      if (isDebug) {
-        console.log(`Toggly.loadedFromDefaults - ${JSON.stringify(flagDefaults)}`);
-      }
-
-      return { ...flagDefaults };
     } finally {
       clearTimeout(timeoutId);
       requests.delete(controller);
+    }
+  };
+
+  const fetchFlags = async (): Promise<Flags> => {
+    if (disposed) return fallbackFlags('disposed');
+    const url = getApiUrl();
+    if (!url || !appKey) return fallbackFlags('missing-config');
+
+    try {
+      return await fetchFlagsFromApi(url);
+    } catch {
+      return fallbackFlags('request-failed');
     }
   };
 

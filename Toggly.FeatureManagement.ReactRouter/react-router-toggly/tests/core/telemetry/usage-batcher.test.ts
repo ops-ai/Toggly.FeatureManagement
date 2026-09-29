@@ -292,6 +292,42 @@ describe('UsageBatcher', () => {
     expect(batcher.buildAndReset()?.payload.definitionCacheHits).toBe(1)
   })
 
+  it('omits inactive variants while retaining populated per-feature identity snapshots', () => {
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
+    batcher.restoreFromBundle({
+      payload: {
+        appKey: 'app',
+        environment: 'Production',
+        time: { seconds: 1, nanos: 0 },
+        stats: [{
+          feature: 'Checkout',
+          uniqueContextIdentifierEnabledCount: 0,
+          uniqueContextIdentifierDisabledCount: 0,
+          uniqueUsersUsedCount: 0,
+          uniqueUserHashes: [],
+          uniqueViewedUserHashes: [],
+          variantStats: {
+            inactive: { checkCount: 0, requestCount: 0, usedCount: 0, viewedCount: 0 },
+            enabled: { checkCount: 1, requestCount: 0, usedCount: 0, viewedCount: 0 },
+          },
+        }],
+        totalUniqueUsers: 0,
+        uniqueUserHashes: [],
+      },
+      uniqueUsersEnabled: { Checkout: [7] },
+      uniqueUsersDisabled: { Checkout: [8] },
+      uniqueUsersUsed: { Checkout: [9] },
+    })
+
+    const bundle = batcher.buildAndReset()!
+    expect(bundle.payload.stats[0].variantStats).toEqual({
+      enabled: { checkCount: 1, requestCount: 0, usedCount: 0, viewedCount: 0 },
+    })
+    expect(bundle.uniqueUsersEnabled).toEqual({ Checkout: [7] })
+    expect(bundle.uniqueUsersDisabled).toEqual({ Checkout: [8] })
+    expect(bundle.uniqueUsersUsed).toEqual({ Checkout: [9] })
+  })
+
   it('restoreFromBundle merges definition cache counters with in-flight records', () => {
     const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
     batcher.recordCheck('FeatureA', true, 'user-1')

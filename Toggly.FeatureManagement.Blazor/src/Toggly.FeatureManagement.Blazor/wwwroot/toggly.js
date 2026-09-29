@@ -1,7 +1,7 @@
 // No Node, filesystem or trusted server dependencies: this module executes in a browser.
 const decode = (value) =>
   Uint8Array.from(atob(value.replaceAll("-", "+").replaceAll("_", "/")), (c) =>
-    c.charCodeAt(0),
+    c.codePointAt(0),
   );
 export async function verify(definitions, timestamp, signature, kid, jwksJson) {
   try {
@@ -14,9 +14,11 @@ export async function verify(definitions, timestamp, signature, kid, jwksJson) {
       y = decode(key.y);
     if (x.length !== 32 || y.length !== 32) return false;
     const point = new Uint8Array([...x, ...y]);
+    // This is the legacy, protocol-defined key identifier—not authenticated data.
+    // It must remain SHA-1-compatible with the Definitions issuer.
     const fingerprint =
       Array.from(
-        new Uint8Array(await crypto.subtle.digest("SHA-1", point)),
+        new Uint8Array(await crypto.subtle.digest("SHA-1", point)), // NOSONAR: protocol-defined key identifier
         (b) => b.toString(16).padStart(2, "0"),
       )
         .join("")

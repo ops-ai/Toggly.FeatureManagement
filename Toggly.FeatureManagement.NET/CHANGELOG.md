@@ -1,8 +1,18 @@
 # Changelog
 
+## All .NET SDK packages 3.12.0 - 2026-09-28
+
+### Added
+- Target `net10.0` on core FeatureManagement packages that previously stopped
+  at `net9.0`, retaining `netstandard2.1` through `net9.0` [OPS-1565].
+- `Microsoft.Extensions.Http.Polly` 10.0 for the `net10.0` TFM.
+
 ## All .NET SDK packages 3.11.1 - 2026-09-28
 
 ### Fixed
+- Apply HTTP 200 definition bodies even when the response revision matches the
+  cached ETag, so a refresh cannot keep a stale in-memory snapshot after a
+  successful definitions fetch.
 - Pin the Azure Web PubSub dependency graph to preserve restore compatibility
   with .NET Standard 2.1 and .NET Core 3.1 applications.
 

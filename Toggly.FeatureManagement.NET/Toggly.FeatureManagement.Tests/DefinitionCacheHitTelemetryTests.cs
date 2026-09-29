@@ -7,6 +7,8 @@ using Moq.Protected;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Toggly.FeatureManagement.Data;
 using Xunit;
@@ -87,13 +89,73 @@ public class DefinitionCacheHitTelemetryTests : IDisposable
         }
     }
 
-    private static IOptions<TogglySettings> CreateSettings() =>
+    private static IOptions<TogglySettings> CreateSettings(bool useSignedDefinitions = false) =>
         Options.Create(new TogglySettings
         {
             AppKey = "test-app-key",
             Environment = "test-env",
-            DefinitionsBaseUrl = "https://definitions.toggly.io/"
+            DefinitionsBaseUrl = "https://definitions.toggly.io/",
+            UseSignedDefinitions = useSignedDefinitions,
         });
+
+    private static string Base64UrlEncode(byte[] data) =>
+        Convert.ToBase64String(data).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    private static (ECDsa Key, string Kid, string JwksJson) CreateSigningKey()
+    {
+        var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var parameters = ecdsa.ExportParameters(false);
+        var x = Base64UrlEncode(parameters.Q.X!);
+        var y = Base64UrlEncode(parameters.Q.Y!);
+        string kid;
+        using (var sha1 = SHA1.Create())
+        {
+            kid = BitConverter.ToString(sha1.ComputeHash(parameters.Q.X!.Concat(parameters.Q.Y!).ToArray()))
+                .Replace("-", "") + "ES256";
+        }
+
+        var jwks = new JsonWebKeySet
+        {
+            Keys =
+            [
+                new JsonWebKey
+                {
+                    Kid = kid,
+                    Kty = "EC",
+                    Crv = "P-256",
+                    X = x,
+                    Y = y,
+                    Alg = "ES256",
+                    Use = "sig",
+                },
+            ],
+        };
+        return (ecdsa, kid, JsonSerializer.Serialize(jwks));
+    }
+
+    private static string CreateSignedEnvelope(
+        ECDsa key,
+        string kid,
+        string defsJson,
+        long timestamp)
+    {
+        var payload = $"{defsJson}|{timestamp}";
+        byte[] hash;
+        using (var sha256 = SHA256.Create())
+        {
+            var first = sha256.ComputeHash(Encoding.UTF8.GetBytes(payload));
+            hash = sha256.ComputeHash(first);
+        }
+
+        var signature = Convert.ToBase64String(key.SignHash(hash));
+        return JsonSerializer.Serialize(new
+        {
+            defs = JsonSerializer.Deserialize<JsonElement>(defsJson),
+            signature,
+            kid,
+            timestamp,
+        });
+    }
 
     private void SetupHttpClient(Func<HttpRequestMessage, HttpResponseMessage> responder)
     {
@@ -332,6 +394,133 @@ public class DefinitionCacheHitTelemetryTests : IDisposable
         _usageStatsMock.Verify(x => x.RecordDefinitionCacheHit(), Times.Once);
         _usageStatsMock.Verify(x => x.RecordDefinitionCacheMiss(), Times.Never);
         callCount.Should().BeGreaterThanOrEqualTo(2);
+    }
+
+    [Fact]
+    public async Task RefreshFeatures_WhenSameETagOn200_AppliesFlippedBody()
+    {
+        var callCount = 0;
+        var onJson = JsonSerializer.Serialize(new List<FeatureDefinitionModel>
+        {
+            new()
+            {
+                FeatureKey = "new-dashboard",
+                Filters = new List<FeatureFilter>
+                {
+                    new() { Name = "AlwaysOn", Parameters = new Dictionary<string, string>() }
+                }
+            }
+        });
+        var offJson = JsonSerializer.Serialize(new List<FeatureDefinitionModel>
+        {
+            new()
+            {
+                FeatureKey = "new-dashboard",
+                Filters = new List<FeatureFilter>()
+            }
+        });
+
+        SetupHttpClient(_ =>
+        {
+            callCount++;
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(callCount == 1 ? onJson : offJson)
+            };
+            response.Headers.ETag = new EntityTagHeaderValue("\"same\"");
+            return response;
+        });
+
+        _provider = new TogglyFeatureProvider(
+            CreateSettings(),
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await WaitUntilLoadedAsync(_provider);
+        var onDef = await _provider.GetFeatureDefinitionAsync("new-dashboard");
+        onDef.Should().NotBeNull();
+        onDef!.EnabledFor.Should().Contain(f => f.Name == "AlwaysOn");
+
+        DrainInFlightRefresh(_provider);
+        _usageStatsMock.Invocations.Clear();
+
+        var refresh = typeof(TogglyFeatureProvider)
+            .GetMethod("RefreshFeatures", BindingFlags.NonPublic | BindingFlags.Instance);
+        var task = (Task)refresh!.Invoke(_provider, new object?[] { null })!;
+        await task;
+
+        var offDef = await _provider.GetFeatureDefinitionAsync("new-dashboard");
+        offDef.Should().NotBeNull();
+        offDef!.EnabledFor.Should().BeEmpty();
+
+        _usageStatsMock.Verify(x => x.RecordDefinitionCacheHit(), Times.Once);
+        _usageStatsMock.Verify(x => x.RecordDefinitionCacheMiss(), Times.Never);
+        callCount.Should().BeGreaterThanOrEqualTo(2);
+    }
+
+    [Fact]
+    public async Task RefreshFeatures_WhenSameETagOn200Signed_AppliesFlippedBody()
+    {
+        var (key, kid, jwksJson) = CreateSigningKey();
+        var onDefs =
+            "[{\"featureKey\":\"new-dashboard\",\"filters\":[{\"name\":\"AlwaysOn\",\"parameters\":{}}],\"securedFeature\":false,\"requirementType\":\"Any\"}]";
+        var offDefs =
+            "[{\"featureKey\":\"new-dashboard\",\"filters\":[],\"securedFeature\":false,\"requirementType\":\"Any\"}]";
+        var ts1 = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var ts2 = ts1 + 1;
+        var onEnvelope = CreateSignedEnvelope(key, kid, onDefs, ts1);
+        var offEnvelope = CreateSignedEnvelope(key, kid, offDefs, ts2);
+        var defsCalls = 0;
+
+        SetupHttpClient(request =>
+        {
+            var path = request.RequestUri?.AbsolutePath ?? "";
+            if (path.Contains(".well-known/jwks", StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(jwksJson, Encoding.UTF8, "application/json"),
+                };
+            }
+
+            defsCalls++;
+            var response = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(defsCalls == 1 ? onEnvelope : offEnvelope),
+            };
+            response.Headers.ETag = new EntityTagHeaderValue("\"same-signed\"");
+            return response;
+        });
+
+        _provider = new TogglyFeatureProvider(
+            CreateSettings(useSignedDefinitions: true),
+            _hostEnvironmentMock.Object,
+            _loggerFactoryMock.Object,
+            _httpClientFactoryMock.Object,
+            _serviceProviderMock.Object);
+
+        await WaitUntilLoadedAsync(_provider);
+        var onDef = await _provider.GetFeatureDefinitionAsync("new-dashboard");
+        onDef.Should().NotBeNull();
+        onDef!.EnabledFor.Should().Contain(f => f.Name == "AlwaysOn");
+
+        DrainInFlightRefresh(_provider);
+        _usageStatsMock.Invocations.Clear();
+
+        var refresh = typeof(TogglyFeatureProvider)
+            .GetMethod("RefreshFeatures", BindingFlags.NonPublic | BindingFlags.Instance);
+        var task = (Task)refresh!.Invoke(_provider, new object?[] { null })!;
+        await task;
+
+        var offDef = await _provider.GetFeatureDefinitionAsync("new-dashboard");
+        offDef.Should().NotBeNull();
+        offDef!.EnabledFor.Should().BeEmpty();
+
+        _usageStatsMock.Verify(x => x.RecordDefinitionCacheHit(), Times.Once);
+        _usageStatsMock.Verify(x => x.RecordDefinitionCacheMiss(), Times.Never);
+        defsCalls.Should().BeGreaterThanOrEqualTo(2);
     }
 
     [Fact]

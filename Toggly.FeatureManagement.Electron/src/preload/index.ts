@@ -4,7 +4,6 @@ import { decodeVariantValue } from '../decode-variant-value.js'
 import type {
   EntityContextInput,
   FeatureFlagsSnapshot,
-  FeatureRequirement,
   SetContextInput,
   TogglyBridge,
   VariantResult,
@@ -64,7 +63,7 @@ export function exposeToggly(): void {
 
     evaluateFeatureGate(
       keys: string[],
-      requirement?: FeatureRequirement | string,
+      requirement?: string,
       negate?: boolean,
       entityContext?: EntityContextInput,
       kind?: string,

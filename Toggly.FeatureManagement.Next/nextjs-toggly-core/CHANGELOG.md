@@ -1,3 +1,15 @@
+## 1.14.2
+
+2026-09-28
+
+### Fixed
+
+- Apply HTTP 200 definition bodies even when `ETag` / `X-Definitions-Revision`
+  matches the cached revision, so a refresh cannot keep a stale in-memory
+  snapshot (parity with React Router).
+- Pass `cache: 'no-store'` on definition fetches so Next.js App Router does not
+  serve a cached definitions GET after live updates or `refresh()`.
+
 ## 1.14.1
 
 2026-09-27

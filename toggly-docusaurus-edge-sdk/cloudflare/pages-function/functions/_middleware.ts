@@ -168,7 +168,7 @@ async function fetchFlagsFromTogglyApi(env: Env): Promise<Flags> {
     }
     const payload = (await response.json()) as TogglyApiPayload | Flags;
     const defs = (payload as TogglyApiPayload).defs;
-    return (defs ?? (payload as Flags)) as Flags;
+    return defs ?? (payload as Flags);
   } catch {
     return {};
   } finally {
@@ -210,7 +210,10 @@ async function loadFlags(env: Env): Promise<Flags> {
  * `@ops-ai/toggly-hooks-types` `serializeJsonForInlineScript`.
  */
 function buildSnapshotScript(flags: Flags): string {
-  const safeJson = JSON.stringify(flags).replace(/<\/script/gi, '<\\/script');
+  const safeJson = JSON.stringify(flags).replaceAll(
+    /<\/script/gi,
+    String.raw`<\/script`,
+  );
   return `<script>window.${SNAPSHOT_GLOBAL}=${safeJson};</script>`;
 }
 

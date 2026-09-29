@@ -265,6 +265,15 @@ describe('GA4Hook', () => {
       });
     });
 
+    it('should replace non-ASCII characters in user property names', () => {
+      const hook = new GA4Hook({ setUserProperties: true });
+      hook.afterEvaluation('feature-é', undefined, true);
+
+      expect(mockGtag).toHaveBeenCalledWith('set', 'user_properties', {
+        ff_feature__: 'on',
+      });
+    });
+
     it('should truncate long property names', () => {
       const hook = new GA4Hook({ setUserProperties: true, userPropertyPrefix: 'ff_' });
       const longName = 'this_is_a_very_long_feature_name_that_exceeds_limit';
@@ -638,6 +647,29 @@ describe('GA4Hook', () => {
       }).not.toThrow();
 
       global.window = originalWindow;
+    });
+
+    it('should send events through globalThis when window is unavailable', () => {
+      const originalWindow = global.window;
+      const globalScope = globalThis as typeof globalThis & { gtag?: jest.Mock };
+
+      // @ts-ignore - simulate a non-window JavaScript host
+      delete global.window;
+      globalScope.gtag = mockGtag;
+
+      try {
+        const hook = new GA4Hook();
+        hook.afterEvaluation('my-feature', undefined, true);
+
+        expect(mockGtag).toHaveBeenCalledWith('event', 'feature_flag_evaluated', {
+          feature_key: 'my-feature',
+          feature_enabled: true,
+          event_category: 'toggly',
+        });
+      } finally {
+        global.window = originalWindow;
+        delete globalScope.gtag;
+      }
     });
 
     it('should handle checkConsent throwing an error', () => {

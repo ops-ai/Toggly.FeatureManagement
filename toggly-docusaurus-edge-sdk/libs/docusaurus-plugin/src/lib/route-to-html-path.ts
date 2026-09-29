@@ -1,4 +1,4 @@
-import * as path from 'path';
+import * as path from 'node:path';
 
 /**
  * Map a Docusaurus route (e.g. `/sdks/java`) to a built HTML file path

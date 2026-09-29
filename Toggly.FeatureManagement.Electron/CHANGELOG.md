@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.1] - 2026-09-27
+
+### Fixed
+
+- Preserve normalized definition revision validators when an upstream response
+  contains unusually long leading or trailing quote wrappers.
+
 ## [1.2.0] - 2026-09-26
 
 ### Added

@@ -26,7 +26,8 @@
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "clean": "rm -rf dist",
     "prepublishOnly": "npm run clean && npm run build",
-    "test": "jest && node scripts/verify-consumer-types.mjs",
+    "test": "jest --coverage && npm run test:consumer",
+    "test:consumer": "npm run build && node scripts/verify-consumer-types.mjs",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [

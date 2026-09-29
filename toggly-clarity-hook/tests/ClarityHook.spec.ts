@@ -201,25 +201,15 @@ describe('ClarityHook', () => {
   });
 
   describe('Edge Cases', () => {
-    it('should handle empty flag key', () => {
+    it.each([
+      ['an empty flag key', '', 'FeatureFlag:'],
+      ['a flag key with special characters', 'my-app/feature.v2:enabled', 'FeatureFlag:my-app/feature.v2:enabled'],
+      ['a flag key with unicode characters', 'feature-é', 'FeatureFlag:feature-é'],
+    ])('should handle %s', (_description, flagKey, expectedEvent) => {
       const hook = new ClarityHook();
-      hook.afterEvaluation('', undefined, true);
+      hook.afterEvaluation(flagKey, undefined, true);
 
-      expect(mockClarity).toHaveBeenCalledWith('event', 'FeatureFlag:');
-    });
-
-    it('should handle flag keys with special characters', () => {
-      const hook = new ClarityHook();
-      hook.afterEvaluation('my-app/feature.v2:enabled', undefined, true);
-
-      expect(mockClarity).toHaveBeenCalledWith('event', 'FeatureFlag:my-app/feature.v2:enabled');
-    });
-
-    it('should handle flag keys with unicode characters', () => {
-      const hook = new ClarityHook();
-      hook.afterEvaluation('feature-\u00e9', undefined, true);
-
-      expect(mockClarity).toHaveBeenCalledWith('event', 'FeatureFlag:feature-\u00e9');
+      expect(mockClarity).toHaveBeenCalledWith('event', expectedEvent);
     });
 
     it('should handle window being undefined (SSR)', () => {

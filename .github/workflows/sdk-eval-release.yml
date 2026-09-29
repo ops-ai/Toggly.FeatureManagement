@@ -99,11 +99,14 @@ jobs:
         with:
           node-version: 'lts/*'
 
-      - name: Install dependencies
-        run: npm install
+      - name: Install locked dependencies
+        run: npm ci
 
       - name: Run type check
         run: npm run typecheck
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
 
       - name: Build package
         run: npm run build
