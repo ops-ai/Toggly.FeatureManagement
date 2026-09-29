@@ -1,7 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
-using System.Text;
 using Toggly.CLI.Models;
 
 namespace Toggly.CLI.Services;
@@ -42,17 +41,15 @@ internal sealed class WindowsCredentialStore : ISecureTokenStore
 
     private static void WriteCredential(byte[] blob)
     {
-        // Persist as Unicode string bytes expected by CREDENTIAL.CredentialBlob for Generic.
-        var password = Encoding.UTF8.GetString(blob);
-        var passwordBytes = Encoding.Unicode.GetBytes(password + "\0");
-
+        // Store AuthSession JSON as raw UTF-8 bytes (CRED_TYPE_GENERIC binary blob).
+        // Do not re-encode as UTF-16 — that roughly doubles size and can exceed CredMan's limit.
         var credential = new CREDENTIAL
         {
             Type = CRED_TYPE_GENERIC,
             TargetName = TargetName,
             UserName = Constants.CredentialAccountName,
-            CredentialBlob = Marshal.AllocHGlobal(passwordBytes.Length),
-            CredentialBlobSize = passwordBytes.Length,
+            CredentialBlob = Marshal.AllocHGlobal(blob.Length),
+            CredentialBlobSize = blob.Length,
             Persist = CRED_PERSIST_LOCAL_MACHINE,
             AttributeCount = 0,
             Attributes = IntPtr.Zero,
@@ -62,7 +59,7 @@ internal sealed class WindowsCredentialStore : ISecureTokenStore
 
         try
         {
-            Marshal.Copy(passwordBytes, 0, credential.CredentialBlob, passwordBytes.Length);
+            Marshal.Copy(blob, 0, credential.CredentialBlob, blob.Length);
             if (!CredWriteW(ref credential, 0))
                 throw new InvalidOperationException($"Failed to write Windows credential (error {Marshal.GetLastWin32Error()}).");
         }
@@ -89,11 +86,9 @@ internal sealed class WindowsCredentialStore : ISecureTokenStore
             if (credential.CredentialBlob == IntPtr.Zero || credential.CredentialBlobSize <= 0)
                 return null;
 
-            var passwordBytes = new byte[credential.CredentialBlobSize];
-            Marshal.Copy(credential.CredentialBlob, passwordBytes, 0, credential.CredentialBlobSize);
-            // Credential Manager stores as Unicode; trim trailing null.
-            var password = Encoding.Unicode.GetString(passwordBytes).TrimEnd('\0');
-            return Encoding.UTF8.GetBytes(password);
+            var blob = new byte[credential.CredentialBlobSize];
+            Marshal.Copy(credential.CredentialBlob, blob, 0, credential.CredentialBlobSize);
+            return WindowsCredentialBlob.NormalizeUtf8Payload(blob);
         }
         finally
         {
@@ -133,4 +128,32 @@ internal sealed class WindowsCredentialStore : ISecureTokenStore
         public IntPtr TargetAlias;
         public string UserName;
     }
+}
+
+/// <summary>
+/// Pure helpers for Windows CredMan UTF-8 session blobs (unit-testable without CredMan).
+/// </summary>
+internal static class WindowsCredentialBlob
+{
+    /// <summary>
+    /// CredMan's documented practical limit for credential blob size (~2560 bytes).
+    /// </summary>
+    public const int CredManBlobSoftLimitBytes = 2560;
+
+    /// <summary>
+    /// Returns the UTF-8 JSON payload for CredWrite, optionally stripping a trailing NUL.
+    /// </summary>
+    public static byte[] NormalizeUtf8Payload(ReadOnlySpan<byte> blob)
+    {
+        if (blob.Length > 0 && blob[^1] == 0)
+            blob = blob[..^1];
+
+        return blob.ToArray();
+    }
+
+    /// <summary>
+    /// True when a UTF-8 AuthSession payload fits CredMan without UTF-16 inflation.
+    /// </summary>
+    public static bool FitsCredManSoftLimit(byte[] utf8Blob)
+        => utf8Blob.Length <= CredManBlobSoftLimitBytes;
 }
