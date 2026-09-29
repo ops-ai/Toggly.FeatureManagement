@@ -71,6 +71,35 @@ public class CliApplicationTests
         Assert.Equal("payments-enabled", requestBody.RootElement.GetProperty("featureKey").GetString());
     }
 
+    [Fact]
+    public async Task CreateRootCommand_MissingCredentials_ReturnsExitCode2()
+    {
+        var previousClientId = Environment.GetEnvironmentVariable("TOGGLY_CLIENT_ID");
+        var previousClientSecret = Environment.GetEnvironmentVariable("TOGGLY_CLIENT_SECRET");
+        try
+        {
+            Environment.SetEnvironmentVariable("TOGGLY_CLIENT_ID", null);
+            Environment.SetEnvironmentVariable("TOGGLY_CLIENT_SECRET", null);
+
+            var command = CliApplication.CreateRootCommand(
+                secureTokenStoreFactory: () => new InMemorySecureTokenStore());
+
+            var exitCode = await command.InvokeAsync([
+                "create-feature",
+                "--application-id", "app-1",
+                "--name", "Payments",
+                "--feature-key", "payments-enabled"
+            ]);
+
+            Assert.Equal(2, exitCode);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("TOGGLY_CLIENT_ID", previousClientId);
+            Environment.SetEnvironmentVariable("TOGGLY_CLIENT_SECRET", previousClientSecret);
+        }
+    }
+
     private static HttpResponseMessage JsonResponse(string json) => new(HttpStatusCode.OK)
     {
         Content = new StringContent(json, Encoding.UTF8, "application/json")

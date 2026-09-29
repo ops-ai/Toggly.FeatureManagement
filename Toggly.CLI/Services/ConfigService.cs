@@ -67,27 +67,34 @@ public class ConfigService
             config.BaseUrl = baseUrl;
 
         if (string.IsNullOrEmpty(config.BaseUrl))
-            config.BaseUrl = "https://app.toggly.io/api";
+            config.BaseUrl = Constants.DefaultBaseUrl;
 
         if (string.IsNullOrEmpty(config.Authority) && !string.IsNullOrEmpty(config.ClientId))
-            config.Authority = "https://auth.toggly.io";
+            config.Authority = Constants.DefaultAuthority;
 
         return config;
     }
 
     /// <summary>
-    /// Validate that OAuth2 credentials are specified via CLI args or environment variables.
+    /// Validate that either client credentials or an OS-stored session can authenticate.
+    /// Prefer <see cref="CredentialResolver"/> as the single gate for API calls.
     /// </summary>
-    public void ValidateAuthConfig(TogglyConfig config)
+    public static void ValidateAuthConfig(TogglyConfig config, ISecureTokenStore? tokenStore = null)
     {
         var hasOAuth2 = !string.IsNullOrEmpty(config.ClientId) && !string.IsNullOrEmpty(config.ClientSecret);
+        if (hasOAuth2)
+            return;
 
-        if (!hasOAuth2)
+        if (tokenStore is not null)
         {
-            throw new InvalidOperationException(
-                "No authentication method specified. Provide --client-id and --client-secret, " +
-                "or set TOGGLY_CLIENT_ID and TOGGLY_CLIENT_SECRET environment variables.");
+            var session = tokenStore.LoadAsync().GetAwaiter().GetResult();
+            if (session is not null && !string.IsNullOrEmpty(session.AccessToken))
+                return;
         }
+
+        throw new InvalidOperationException(
+            "No authentication method available. Run 'toggly auth login' for interactive use, " +
+            "or set TOGGLY_CLIENT_ID and TOGGLY_CLIENT_SECRET (or --client-id / --client-secret) for CI.");
     }
 
     /// <summary>

@@ -12,10 +12,30 @@ namespace Toggly.CLI.Commands;
 /// </summary>
 public static class ReleaseCommands
 {
+    private sealed record CreateReleaseOptionsBag(
+        Option<string> ApplicationId,
+        Option<string> Name,
+        Option<string?> ReleaseNotes,
+        Option<string?> FeatureChanges);
+
+    private sealed record AssociateBuildOptions(
+        Option<string> ProjectKey,
+        Option<string> Environment,
+        Option<string> CiProvider,
+        Option<string> RunId,
+        Option<string?> RunUrl,
+        Option<string> PipelineName,
+        Option<string?> Branch,
+        Option<string?> CommitSha,
+        Option<string?> BuildNumber,
+        Option<string> Mode,
+        Option<string?> ReleaseTemplateKey,
+        Option<string?> NamePattern);
+
     /// <summary>
     /// Create the release command group
     /// </summary>
-    public static Command CreateReleaseCommand(Func<InvocationContext, TogglyApiClient> apiClientFactory)
+    public static Command CreateReleaseCommand(Func<InvocationContext, TogglyApiClient?> apiClientFactory)
     {
         var command = new Command("create-release", "Create a new release");
 
@@ -46,49 +66,19 @@ public static class ReleaseCommands
         command.AddOption(releaseNotesOption);
         command.AddOption(featureChangesOption);
 
+        var options = new CreateReleaseOptionsBag(
+            applicationIdOption,
+            nameOption,
+            releaseNotesOption,
+            featureChangesOption);
+
         command.SetHandler(async (InvocationContext context) =>
         {
             var apiClient = apiClientFactory(context);
-            var applicationId = context.ParseResult.GetValueForOption(applicationIdOption)!;
-            var name = context.ParseResult.GetValueForOption(nameOption)!;
-            var releaseNotes = context.ParseResult.GetValueForOption(releaseNotesOption);
-            var featureChanges = context.ParseResult.GetValueForOption(featureChangesOption);
+            if (apiClient is null)
+                return;
 
-            var request = new CreateReleaseRequest
-            {
-                ApplicationId = applicationId,
-                Name = name,
-                ReleaseNotes = releaseNotes
-            };
-
-            if (!string.IsNullOrEmpty(featureChanges))
-            {
-                try
-                {
-                    request.FeatureChanges = JsonSerializer.Deserialize(featureChanges, TogglyJsonSerializerContext.Default.ListFeatureChangeRequest)
-                        ?? new List<FeatureChangeRequest>();
-                }
-                catch (JsonException ex)
-                {
-                    Console.Error.WriteLine($"Error parsing feature changes: {ex.Message}");
-                    context.ExitCode = 2;
-                    return;
-                }
-            }
-
-            try
-            {
-                var release = await apiClient.CreateReleaseAsync(request);
-                Console.WriteLine($"Release created: {release.Id}");
-                Console.WriteLine($"Name: {release.Name}");
-                if (!string.IsNullOrEmpty(release.ReleaseNotes))
-                    Console.WriteLine($"Notes: {release.ReleaseNotes}");
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"Error creating release: {ex.Message}");
-                context.ExitCode = 1;
-            }
+            await HandleCreateReleaseAsync(context, apiClient, options);
         });
 
         return command;
@@ -97,7 +87,7 @@ public static class ReleaseCommands
     /// <summary>
     /// Create the associate-build command
     /// </summary>
-    public static Command CreateAssociateBuildCommand(Func<InvocationContext, TogglyApiClient> apiClientFactory)
+    public static Command CreateAssociateBuildCommand(Func<InvocationContext, TogglyApiClient?> apiClientFactory)
     {
         var command = new Command("associate-build", "Associate a CI build with a release");
 
@@ -178,63 +168,150 @@ public static class ReleaseCommands
         command.AddOption(releaseTemplateKeyOption);
         command.AddOption(namePatternOption);
 
+        var options = new AssociateBuildOptions(
+            projectKeyOption,
+            environmentOption,
+            ciProviderOption,
+            runIdOption,
+            runUrlOption,
+            pipelineNameOption,
+            branchOption,
+            commitShaOption,
+            buildNumberOption,
+            modeOption,
+            releaseTemplateKeyOption,
+            namePatternOption);
+
         command.SetHandler(async (InvocationContext context) =>
         {
             var apiClient = apiClientFactory(context);
-            var projectKey = context.ParseResult.GetValueForOption(projectKeyOption)!;
-            var environment = context.ParseResult.GetValueForOption(environmentOption)!;
-            var ciProvider = context.ParseResult.GetValueForOption(ciProviderOption)!;
-            var runId = context.ParseResult.GetValueForOption(runIdOption)!;
-            var runUrl = context.ParseResult.GetValueForOption(runUrlOption);
-            var pipelineName = context.ParseResult.GetValueForOption(pipelineNameOption)!;
-            var branch = context.ParseResult.GetValueForOption(branchOption);
-            var commitSha = context.ParseResult.GetValueForOption(commitShaOption);
-            var buildNumber = context.ParseResult.GetValueForOption(buildNumberOption);
-            var mode = context.ParseResult.GetValueForOption(modeOption)!;
-            var releaseTemplateKey = context.ParseResult.GetValueForOption(releaseTemplateKeyOption);
-            var namePattern = context.ParseResult.GetValueForOption(namePatternOption);
+            if (apiClient is null)
+                return;
 
-            var request = new AssociateBuildRequest
-            {
-                ProjectKey = projectKey,
-                Environment = environment,
-                CiProvider = ciProvider,
-                Build = new BuildInfo
-                {
-                    RunId = runId,
-                    RunUrl = runUrl,
-                    PipelineName = pipelineName,
-                    Branch = branch,
-                    CommitSha = commitSha,
-                    BuildNumber = buildNumber
-                },
-                Mode = mode,
-                ReleaseTemplateKey = releaseTemplateKey
-            };
-
-            if (!string.IsNullOrEmpty(namePattern))
-            {
-                request.CreateOptions = new CreateReleaseOptions
-                {
-                    NamePattern = namePattern
-                };
-            }
-
-            try
-            {
-                var response = await apiClient.AssociateBuildAsync(request);
-                Console.WriteLine($"Build associated with release: {response.ReleaseId}");
-                if (!string.IsNullOrEmpty(response.ReleaseUrl))
-                    Console.WriteLine($"Release URL: {response.ReleaseUrl}");
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"Error associating build: {ex.Message}");
-                context.ExitCode = 1;
-            }
+            await HandleAssociateBuildAsync(context, apiClient, options);
         });
 
         return command;
     }
-}
 
+    private static async Task HandleCreateReleaseAsync(
+        InvocationContext context,
+        TogglyApiClient apiClient,
+        CreateReleaseOptionsBag options)
+    {
+        var applicationId = context.ParseResult.GetValueForOption(options.ApplicationId)!;
+        var name = context.ParseResult.GetValueForOption(options.Name)!;
+        var releaseNotes = context.ParseResult.GetValueForOption(options.ReleaseNotes);
+        var featureChanges = context.ParseResult.GetValueForOption(options.FeatureChanges);
+
+        var request = new CreateReleaseRequest
+        {
+            ApplicationId = applicationId,
+            Name = name,
+            ReleaseNotes = releaseNotes
+        };
+
+        if (!TryApplyFeatureChanges(featureChanges, request, out var parseError))
+        {
+            await Console.Error.WriteLineAsync(parseError);
+            context.ExitCode = 2;
+            return;
+        }
+
+        try
+        {
+            var release = await apiClient.CreateReleaseAsync(request);
+            await Console.Out.WriteLineAsync($"Release created: {release.Id}");
+            await Console.Out.WriteLineAsync($"Name: {release.Name}");
+            if (!string.IsNullOrEmpty(release.ReleaseNotes))
+                await Console.Out.WriteLineAsync($"Notes: {release.ReleaseNotes}");
+        }
+        catch (Exception ex)
+        {
+            await Console.Error.WriteLineAsync($"Error creating release: {ex.Message}");
+            context.ExitCode = 1;
+        }
+    }
+
+    private static async Task HandleAssociateBuildAsync(
+        InvocationContext context,
+        TogglyApiClient apiClient,
+        AssociateBuildOptions options)
+    {
+        var projectKey = context.ParseResult.GetValueForOption(options.ProjectKey)!;
+        var environment = context.ParseResult.GetValueForOption(options.Environment)!;
+        var ciProvider = context.ParseResult.GetValueForOption(options.CiProvider)!;
+        var runId = context.ParseResult.GetValueForOption(options.RunId)!;
+        var runUrl = context.ParseResult.GetValueForOption(options.RunUrl);
+        var pipelineName = context.ParseResult.GetValueForOption(options.PipelineName)!;
+        var branch = context.ParseResult.GetValueForOption(options.Branch);
+        var commitSha = context.ParseResult.GetValueForOption(options.CommitSha);
+        var buildNumber = context.ParseResult.GetValueForOption(options.BuildNumber);
+        var mode = context.ParseResult.GetValueForOption(options.Mode)!;
+        var releaseTemplateKey = context.ParseResult.GetValueForOption(options.ReleaseTemplateKey);
+        var namePattern = context.ParseResult.GetValueForOption(options.NamePattern);
+
+        var request = new AssociateBuildRequest
+        {
+            ProjectKey = projectKey,
+            Environment = environment,
+            CiProvider = ciProvider,
+            Build = new BuildInfo
+            {
+                RunId = runId,
+                RunUrl = runUrl,
+                PipelineName = pipelineName,
+                Branch = branch,
+                CommitSha = commitSha,
+                BuildNumber = buildNumber
+            },
+            Mode = mode,
+            ReleaseTemplateKey = releaseTemplateKey
+        };
+
+        if (!string.IsNullOrEmpty(namePattern))
+        {
+            request.CreateOptions = new CreateReleaseOptions
+            {
+                NamePattern = namePattern
+            };
+        }
+
+        try
+        {
+            var response = await apiClient.AssociateBuildAsync(request);
+            await Console.Out.WriteLineAsync($"Build associated with release: {response.ReleaseId}");
+            if (!string.IsNullOrEmpty(response.ReleaseUrl))
+                await Console.Out.WriteLineAsync($"Release URL: {response.ReleaseUrl}");
+        }
+        catch (Exception ex)
+        {
+            await Console.Error.WriteLineAsync($"Error associating build: {ex.Message}");
+            context.ExitCode = 1;
+        }
+    }
+
+    private static bool TryApplyFeatureChanges(
+        string? featureChanges,
+        CreateReleaseRequest request,
+        out string errorMessage)
+    {
+        errorMessage = string.Empty;
+        if (string.IsNullOrEmpty(featureChanges))
+            return true;
+
+        try
+        {
+            request.FeatureChanges = JsonSerializer.Deserialize(
+                featureChanges,
+                TogglyJsonSerializerContext.Default.ListFeatureChangeRequest)
+                ?? [];
+            return true;
+        }
+        catch (JsonException ex)
+        {
+            errorMessage = $"Error parsing feature changes: {ex.Message}";
+            return false;
+        }
+    }
+}
