@@ -360,3 +360,6 @@ impl syn::parse::Parse for FeatureGateInput {
         })
     }
 }
+
+#[cfg(test)]
+mod macros_test;
