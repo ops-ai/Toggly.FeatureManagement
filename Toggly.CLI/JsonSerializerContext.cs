@@ -22,6 +22,8 @@ namespace Toggly.CLI;
 [JsonSerializable(typeof(Dictionary<string, List<FeatureFilter>>), TypeInfoPropertyName = "DictionaryStringListFeatureFilter")]
 [JsonSerializable(typeof(Services.AuthService.TokenResponse))]
 [JsonSerializable(typeof(Services.AuthService.OpenIdConfig))]
+[JsonSerializable(typeof(Services.AuthService.DeviceAuthorizationResponse))]
+[JsonSerializable(typeof(Services.AuthService.OAuthErrorResponse))]
 [JsonSerializable(typeof(AuthSession))]
 public partial class TogglyJsonSerializerContext : JsonSerializerContext
 {
