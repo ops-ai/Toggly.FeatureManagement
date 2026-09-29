@@ -116,7 +116,7 @@ describe('Toggly WebSocket', () => {
       });
 
       expect(latestWs()).toBeDefined();
-      expect(latestWs().url).toBe('wss://definitions.toggly.io/my-app-key/ws?sdk=javascript&sdkVersion=1.10.1');
+      expect(latestWs().url).toBe('wss://definitions.toggly.io/my-app-key/ws?sdk=javascript&sdkVersion=1.10.2');
     });
 
     it('sets wsConnected to true on open', async () => {

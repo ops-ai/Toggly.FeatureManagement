@@ -302,6 +302,44 @@ class TestDefinitionCacheHits:
         finally:
             client.close()
 
+    def test_same_revision_200_applies_flipped_body(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("TOGGLY_DISABLE_TELEMETRY", raising=False)
+        config, usage = _telemetry_config()
+        client = TogglyClient(config)
+
+        on_resp = MagicMock()
+        on_resp.status_code = 200
+        on_resp.headers = {"ETag": '"same"'}
+        on_resp.text.return_value = (
+            '[{"featureKey":"feature-a","filters":[{"name":"AlwaysOn","parameters":{}}]}]'
+        )
+        off_resp = MagicMock()
+        off_resp.status_code = 200
+        off_resp.headers = {"ETag": '"same"'}
+        off_resp.text.return_value = (
+            '[{"featureKey":"feature-a","filters":[]}]'
+        )
+        responses = [on_resp, off_resp]
+
+        def fake_get(*_a: Any, **_k: Any) -> MagicMock:
+            return responses.pop(0)
+
+        try:
+            with pytest.MonkeyPatch.context() as mp:
+                mp.setattr(client._http, "get", fake_get)
+                client.init()
+                assert client.is_enabled("feature-a") is True
+                client.refresh()
+                assert client.is_enabled("feature-a") is False
+            client.flush_telemetry()
+            payload = usage.calls[0]
+            assert payload["definitionCacheMisses"] == 1
+            assert payload["definitionCacheHits"] == 1
+        finally:
+            client.close()
+
     def test_stale_signed_timestamp_is_hit(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

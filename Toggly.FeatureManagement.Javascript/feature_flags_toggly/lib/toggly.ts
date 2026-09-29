@@ -770,12 +770,12 @@ export class Toggly {
 
   private static _enforceMaxCacheKeys(protectKeys: string[]): void {
     const maxKeys = Toggly._config?.maxCacheKeys;
-    if (!Toggly._persistCache || !isCacheLruEnabled(maxKeys)) {
+    if (!Toggly._persistCache || typeof maxKeys !== 'number' || !isCacheLruEnabled(maxKeys)) {
       return;
     }
     try {
       let index = Toggly._loadLruIndex();
-      const toEvict = selectCacheLruKeysToEvict(index, maxKeys as number, { protectKeys }).filter(
+      const toEvict = selectCacheLruKeysToEvict(index, maxKeys, { protectKeys }).filter(
         (key) => Toggly._isTrackedCacheKey(key),
       );
       if (toEvict.length === 0) {
@@ -866,7 +866,7 @@ export class Toggly {
       // failure (e.g. a non-conforming fetch implementation returning undefined)
       // is funneled through the same .catch handler as a real network error.
       Promise.resolve()
-        .then(() => generation === Toggly._generation ? fetch(url, { headers, signal: controller.signal }) : null)
+        .then(() => generation === Toggly._generation ? fetch(url, { headers, signal: controller.signal, cache: 'no-store' }) : null)
         .then((response) => {
           if (generation !== Toggly._generation) { resolve(fallback); return null; }
           if (response.status === 304) {
@@ -920,7 +920,7 @@ export class Toggly {
       let acceptedResponse: Response;
 
       Promise.resolve()
-        .then(() => generation === Toggly._generation ? fetch(url, { headers, signal: controller.signal }) : null)
+        .then(() => generation === Toggly._generation ? fetch(url, { headers, signal: controller.signal, cache: 'no-store' }) : null)
         .then((response) => {
           if (generation !== Toggly._generation) { resolve(fallback); return null; }
           if (response.status === 304) {

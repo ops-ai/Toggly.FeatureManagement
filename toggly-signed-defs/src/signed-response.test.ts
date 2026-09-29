@@ -261,6 +261,8 @@ describe('fetchEvaluatedSignedDefinitions', () => {
       expect(headers.get('X-Toggly-Sdk')).toBe('solidjs')
       expect(headers.get('X-Toggly-Sdk-Version')).toBe('0.2.0')
       expect(headers.get('If-None-Match')).toBe('previous-revision')
+      expect(init?.cache).toBe('no-store')
+      expect(init?.method).toBe('GET')
       return new Response(signedBody, { headers: { 'X-Definitions-Revision': 'next-revision' } })
     })
     const cache = new InMemoryJwksCache()
@@ -318,7 +320,9 @@ describe('fetchEvaluatedSignedDefinitions', () => {
     )
     expect(result).toEqual({ notModified: true, revision: '"rev-1"' })
     expect(fetchImpl).toHaveBeenCalledWith('https://example.test/evaluated-signed/app/Production', {
+      method: 'GET',
       headers: { 'If-None-Match': 'rev-0' },
+      cache: 'no-store',
     })
   })
 

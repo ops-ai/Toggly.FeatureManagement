@@ -189,9 +189,11 @@ module Toggly
         log_debug("Definitions not modified")
         FetchResult.new(definitions: nil, cache_outcome: :hit)
       when :same_revision
-        log_debug("Definitions revision matches existing (ETag or Last-Modified)")
-        store_revision_headers(response_etag, response_lm)
-        FetchResult.new(definitions: nil, cache_outcome: :hit)
+        # Same storage revision is a telemetry hit, but HTTP 200 still carries
+        # an authoritative body — apply it (parity with Go/Rust/Python).
+        log_debug("Definitions revision matches existing; applying HTTP 200 body")
+        result = handle_new_content(response, response_etag, response_lm)
+        FetchResult.new(definitions: result.definitions, cache_outcome: :hit)
       when :new_content
         handle_new_content(response, response_etag, response_lm)
       when :error_status

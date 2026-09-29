@@ -137,6 +137,10 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "com.google.protobuf:protoc"
         update-types: ["version-update:semver-major"]
+      # Lettuce is BOM-only today; Redis adapters use Jedis 5 + Jedis 8.
+      # Lettuce 7 (Netty 4.2) is a product decision (OPS-1563 / OPS-1567).
+      - dependency-name: "io.lettuce:lettuce-core"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: bundler
     directories:
@@ -204,6 +208,11 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # equatable 3 requires Dart >=3.0 and breaks the declared Flutter SDK
+      # floor (>=2.18.2). Defer until Wave 3 raises the Dart floor (OPS-1566).
+      - dependency-name: equatable
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: cargo
     directories:
@@ -240,6 +249,9 @@ updates:
       - dependency-name: ecdsa
         update-types: ["version-update:semver-major"]
       - dependency-name: sha1
+        update-types: ["version-update:semver-major"]
+      # rand 0.9/0.10 remove OsRng and rename Rng traits — migrate intentionally.
+      - dependency-name: rand
         update-types: ["version-update:semver-major"]
       # toggly-axum is 0.7; toggly-axum08 already covers 0.8 (#517).
       - dependency-name: axum

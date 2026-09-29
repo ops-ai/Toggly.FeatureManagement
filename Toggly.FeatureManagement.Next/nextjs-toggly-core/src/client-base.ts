@@ -569,6 +569,8 @@ export function createClient(
     defs: FeatureDefinitions
     outcome: 'hit' | 'miss'
     variants?: Record<string, EvaluatedVariantDef> | null
+    /** False for HTTP 304 (reuse in-memory); true when the 200 body must be applied. */
+    applyBody: boolean
   }
 
   function getPreviousDefinitionRevision(pin: string | null): string | null {
@@ -615,16 +617,20 @@ export function createClient(
         throw new Error('[Toggly] Definitions returned 304 without a matching snapshot')
       }
       cacheResponseRevision(responseRevision)
-      return { defs: { ...state.features }, outcome: 'hit', variants: useVariants ? state.variants : null }
+      return {
+        defs: { ...state.features },
+        outcome: 'hit',
+        variants: useVariants ? state.variants : null,
+        applyBody: false,
+      }
     }
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
-    if (revisionsMatch(previousRevision, responseRevision)) {
-      cacheResponseRevision(responseRevision)
-      return { defs: { ...state.features }, outcome: 'hit', variants: useVariants ? state.variants : null }
-    }
 
+    // Always parse the body on HTTP 200. Equal revision is still a cache hit for
+    // telemetry (CDN replay), but the body must still be applied — otherwise a
+    // stale in-memory snapshot can survive a successful refresh.
     const bodyText = await readResponseBody(response)
     const parsed = await parseEvaluatedResponseBody(bodyText, {
       verifySignatures: config.verifySignatures,
@@ -633,19 +639,28 @@ export function createClient(
       maxSignatureAgeSeconds: config.maxSignatureAgeSeconds,
       headers: buildDefinitionFetchHeaders({ 'Content-Type': 'application/json' }),
     })
+    const outcome: 'hit' | 'miss' = revisionsMatch(previousRevision, responseRevision)
+      ? 'hit'
+      : 'miss'
     if (useVariants) {
       const variantDefs = parseRemoteEvaluatedVariantsPayload(parsed)
       assertCurrent(expected)
       cacheResponseRevision(responseRevision)
-      return { defs: variantDefsToFlags(variantDefs), outcome: 'miss', variants: variantDefs }
+      return {
+        defs: variantDefsToFlags(variantDefs),
+        outcome,
+        variants: variantDefs,
+        applyBody: true,
+      }
     }
     const defs = parseRemoteEvaluatedPayload(parsed, { verifySignatures: config.verifySignatures })
     assertCurrent(expected)
     cacheResponseRevision(responseRevision)
     return {
       defs,
-      outcome: 'miss',
+      outcome,
       variants: null,
+      applyBody: true,
     }
   }
 
@@ -656,7 +671,13 @@ export function createClient(
   async function fetchRemoteEvaluated(): Promise<RemoteEvaluatedResult> {
     if (!config.appKey) {
       console.warn('[Toggly] No appKey provided, using defaults only')
-      return { defs: { ...config.featureDefaults }, outcome: 'hit', variants: null }
+      // No network body — do not wipe already-hydrated features on refresh.
+      return {
+        defs: { ...config.featureDefaults },
+        outcome: 'hit',
+        variants: null,
+        applyBody: false,
+      }
     }
 
     const useVariants = !!config.enableVariants
@@ -677,7 +698,9 @@ export function createClient(
     const headers = buildFetchHeaders(previousRevision)
 
     try {
-      const response = await fetch(url, { method: 'GET', headers })
+      // Next.js App Router caches fetch() by default; definition refresh must
+      // always hit the network after flags-updated / explicit refresh.
+      const response = await fetch(url, { method: 'GET', headers, cache: 'no-store' })
       assertCurrent(expected)
       return await parseRemoteEvaluatedResponse(response, expected, previousRevision, useVariants)
     } catch (error) {
@@ -691,6 +714,8 @@ export function createClient(
   type LocalDefinitionsResult = {
     defs: Map<string, FeatureDefinitionModel>
     outcome: 'hit' | 'miss'
+    /** False for HTTP 304 (reuse in-memory); true when the 200 body must be applied. */
+    applyBody: boolean
   }
 
   function createLocalDefinitionsUrl(): string {
@@ -715,16 +740,13 @@ export function createClient(
         throw new Error('[Toggly] Definitions returned 304 without a matching snapshot')
       }
       cacheResponseRevision(responseRevision)
-      return { defs: state.definitions, outcome: 'hit' }
+      return { defs: state.definitions, outcome: 'hit', applyBody: false }
     }
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`)
     }
-    if (revisionsMatch(previousRevision, responseRevision)) {
-      cacheResponseRevision(responseRevision)
-      return { defs: state.definitions, outcome: 'hit' }
-    }
 
+    // Always parse the body on HTTP 200 (see parseRemoteEvaluatedResponse).
     const bodyText = await readResponseBody(response)
     const parsed = await parseEvaluatedResponseBody(bodyText, {
       verifySignatures: config.verifySignatures,
@@ -736,7 +758,11 @@ export function createClient(
     const defs = parseDefinitionsPayload(parsed)
     assertCurrent(expected)
     cacheResponseRevision(responseRevision)
-    return { defs, outcome: 'miss' }
+    return {
+      defs,
+      outcome: revisionsMatch(previousRevision, responseRevision) ? 'hit' : 'miss',
+      applyBody: true,
+    }
   }
 
   /**
@@ -746,7 +772,8 @@ export function createClient(
   async function fetchLocalDefinitions(): Promise<LocalDefinitionsResult> {
     if (!config.appKey) {
       console.warn('[Toggly] No appKey provided, using defaults only')
-      return { defs: new Map(), outcome: 'hit' }
+      // No network body — do not wipe already-hydrated definitions on refresh.
+      return { defs: new Map(), outcome: 'hit', applyBody: false }
     }
 
     const expected = generation
@@ -758,7 +785,9 @@ export function createClient(
     const headers = buildFetchHeaders(previousRevision)
 
     try {
-      const response = await fetch(url, { method: 'GET', headers })
+      // Next.js App Router caches fetch() by default; definition refresh must
+      // always hit the network after flags-updated / explicit refresh.
+      const response = await fetch(url, { method: 'GET', headers, cache: 'no-store' })
 
       assertCurrent(expected)
       return await parseLocalDefinitionsResponse(response, expected, previousRevision)
@@ -773,17 +802,18 @@ export function createClient(
   async function loadFeaturesFromApi(): Promise<'hit' | 'miss'> {
     const expected = generation
     if (isLocalMode()) {
-      const { defs, outcome } = await fetchLocalDefinitions()
+      const { defs, outcome, applyBody } = await fetchLocalDefinitions()
       assertCurrent(expected)
-      if (outcome === 'miss') {
+      // Apply HTTP 200 bodies (including same-rev). Skip 304 — reuse in-memory.
+      if (applyBody) {
         applyLocalDefinitions(defs)
       }
       return outcome
     }
 
-    const { defs, outcome, variants } = await fetchRemoteEvaluated()
+    const { defs, outcome, variants, applyBody } = await fetchRemoteEvaluated()
     assertCurrent(expected)
-    if (outcome === 'miss') {
+    if (applyBody) {
       state.definitions = new Map()
       state.features = {
         ...config.featureDefaults,

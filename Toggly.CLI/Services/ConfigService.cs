@@ -8,11 +8,24 @@ namespace Toggly.CLI.Services;
 /// </summary>
 public class ConfigService
 {
-    private static readonly string LegacyConfigDirectory = Path.Combine(
+    private readonly string legacyConfigDirectory;
+    private readonly string legacyConfigFilePath;
+
+    /// <summary>
+    /// Initializes the configuration service.
+    /// </summary>
+    /// <param name="legacyConfigDirectory">
+    /// Optional directory containing deprecated configuration. Production uses <c>~/.toggly</c>.
+    /// </param>
+    public ConfigService(string? legacyConfigDirectory = null)
+    {
+        this.legacyConfigDirectory = legacyConfigDirectory ?? GetDefaultLegacyConfigDirectory();
+        legacyConfigFilePath = Path.Combine(this.legacyConfigDirectory, "config.json");
+    }
+
+    private static string GetDefaultLegacyConfigDirectory() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".toggly");
-
-    private static readonly string LegacyConfigFilePath = Path.Combine(LegacyConfigDirectory, "config.json");
 
     /// <summary>
     /// Load configuration from command-line arguments and environment variables.
@@ -25,7 +38,7 @@ public class ConfigService
         string? baseUrl = null)
     {
         // Best-effort cleanup of the deprecated on-disk credential store.
-        RemoveLegacyConfigFile();
+        RemoveLegacyConfigFile(legacyConfigDirectory, legacyConfigFilePath);
 
         var config = new TogglyConfig();
 
@@ -83,15 +96,21 @@ public class ConfigService
     /// </summary>
     public static void RemoveLegacyConfigFile()
     {
+        var defaultLegacyConfigDirectory = GetDefaultLegacyConfigDirectory();
+        RemoveLegacyConfigFile(defaultLegacyConfigDirectory, Path.Combine(defaultLegacyConfigDirectory, "config.json"));
+    }
+
+    private static void RemoveLegacyConfigFile(string legacyConfigDirectory, string legacyConfigFilePath)
+    {
         try
         {
-            if (File.Exists(LegacyConfigFilePath))
-                File.Delete(LegacyConfigFilePath);
+            if (File.Exists(legacyConfigFilePath))
+                File.Delete(legacyConfigFilePath);
 
-            if (Directory.Exists(LegacyConfigDirectory) &&
-                !Directory.EnumerateFileSystemEntries(LegacyConfigDirectory).Any())
+            if (Directory.Exists(legacyConfigDirectory) &&
+                !Directory.EnumerateFileSystemEntries(legacyConfigDirectory).Any())
             {
-                Directory.Delete(LegacyConfigDirectory);
+                Directory.Delete(legacyConfigDirectory);
             }
         }
         catch

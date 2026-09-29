@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: toggly
-Version: 0.6.0
+Version: 1.1.1
 Summary: Feature flag management SDK for Python - zero dependencies core library
 Author-email: Toggly <support@toggly.io>
 Maintainer-email: Toggly <support@toggly.io>
@@ -21,6 +21,7 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Classifier: Typing :: Typed
 Requires-Python: >=3.8
@@ -377,3 +378,74 @@ MIT
 ## Find Out More
 
 Visit [Toggly.io](https://toggly.io) for more information and to create your free account.
+
+## Feature Variants
+
+Requires **toggly 1.1.0**. Feature variants are defined directly on the feature
+in the Toggly catalog (or in your own `FeatureDefinition` objects) and are
+assigned **locally**, from the same cached definitions used for `is_enabled` —
+there is no separate variants request or cache. Assignment matches
+[Microsoft.FeatureManagement](https://github.com/microsoft/FeatureManagement-Dotnet)
+4.7.0 bit-for-bit: disabled features only ever resolve `DefaultWhenDisabled`;
+enabled features are resolved in order — per-user allocation, then per-group
+allocation, then percentile allocation, then `DefaultWhenEnabled`.
+
+```python
+from toggly import TogglyClient, TogglyConfig
+
+client = TogglyClient(TogglyConfig(app_key="your-app-key"))
+client.init()
+
+# Uses the client's configured identity (TogglyConfig.identity) and no groups.
+variant = client.get_variant("checkout-flow")
+if variant is not None and variant.enabled:
+    if variant.name == "B":
+        use_new_checkout(variant.configuration_value)
+
+# Or evaluate for a specific request/user (targeting overload).
+variant = client.get_variant(
+    "checkout-flow", user_id="user-123", groups=["beta"]
+)
+
+# Convenience accessor when you only need the configuration payload.
+config_value = client.get_variant_value(
+    "checkout-flow", user_id="user-123", groups=["beta"]
+)
+
+# Typed soft-bind (optional): pass `type=` to decode the payload as a Python
+# type. Uses pydantic TypeAdapter when pydantic is installed; otherwise a
+# best-effort local decode. Missing assignment or shape mismatch → None
+# (never raises solely for mismatch, never returns a wrong-typed value).
+from dataclasses import dataclass
+
+@dataclass
+class CheckoutConfig:
+    color: str
+
+typed = client.get_variant_value(
+    "checkout-flow", user_id="user-123", type=CheckoutConfig
+)
+```
+
+`get_variant` returns `None` when the feature does not exist or has no
+variants defined; otherwise it returns a `VariantResult` with:
+
+- `name` — the assigned variant's name.
+- `configuration_value` — that variant's configuration payload (any JSON value).
+- `enabled` — the *effective* enabled state after applying the variant's
+  `StatusOverride` (a variant can force a feature on or off independent of the
+  feature's own filter evaluation). `is_enabled()` remains purely filter-based
+  and never applies `StatusOverride`.
+- `assignment_reason` — one of `"User"`, `"Group"`, `"Percentile"`,
+  `"DefaultWhenEnabled"`, `"DefaultWhenDisabled"`, or `"None"`.
+
+`get_variant_value` is a convenience wrapper that returns just
+`configuration_value` (or `None`). Pass optional `type=` for a soft-typed
+bind. Both async equivalents are available on `AsyncTogglyClient` with the
+same signature.
+
+Percentile allocation uses the same SHA-256-based hashing as
+Microsoft.FeatureManagement: `contextId = f"{user_id}\n{hint}"` where `hint`
+is the allocation's `seed` if set, otherwise `f"allocation\n{feature_key}"`.
+This makes bucket assignment deterministic and stable across SDKs/releases for
+the same user, feature, and seed.

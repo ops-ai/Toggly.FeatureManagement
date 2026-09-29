@@ -156,12 +156,15 @@ export class TogglyServer implements TogglyServerClient {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.config.connectTimeout);
 
+      // Bypass HTTP caches: evaluated bodies can change under the same storage
+      // revision (identity / groups / claims).
       const response = await fetch(url, {
         method: 'GET',
         headers: buildDefinitionFetchHeaders({
           Accept: 'application/json',
         }),
         signal: controller.signal,
+        cache: 'no-store',
       });
 
       clearTimeout(timeoutId);
