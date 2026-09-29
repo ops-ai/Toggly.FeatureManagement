@@ -41,6 +41,31 @@ public class AuthServiceDeviceFlowTests
     }
 
     [Fact]
+    public async Task WaitForDeviceTokenAsync_CancelledToken_ThrowsOperationCanceled()
+    {
+        using var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                """{"token_endpoint":"https://auth.example.test/connect/token","device_authorization_endpoint":"https://auth.example.test/connect/deviceauthorization"}""",
+                Encoding.UTF8,
+                "application/json")
+        });
+        using var httpClient = new HttpClient(handler);
+        var service = new AuthService(httpClient);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.WaitForDeviceTokenAsync(
+                Constants.DefaultDeviceClientId,
+                "https://auth.example.test",
+                "dc-1",
+                intervalSeconds: 1,
+                expiresInSeconds: 600,
+                cts.Token));
+    }
+
+    [Fact]
     public async Task WaitForDeviceTokenAsync_PollsUntilSuccess_RespectingPendingAndSlowDown()
     {
         var pollCount = 0;

@@ -55,6 +55,7 @@ public static class AuthCommands
 
         command.SetHandler(async (InvocationContext context) =>
         {
+            var cancellationToken = context.GetCancellationToken();
             try
             {
                 var authority = context.ParseResult.GetValueForOption(authorityOption);
@@ -88,7 +89,8 @@ public static class AuthCommands
                 var device = await authService.StartDeviceAuthorizationAsync(
                     resolvedClientId,
                     resolvedAuthority,
-                    resolvedScopes);
+                    resolvedScopes,
+                    cancellationToken);
 
                 deps.Out.WriteLine($"! First copy your one-time code: {device.UserCode}");
                 var verificationUrl = string.IsNullOrEmpty(device.VerificationUriComplete)
@@ -103,12 +105,13 @@ public static class AuthCommands
                     resolvedAuthority,
                     device.DeviceCode,
                     device.Interval,
-                    device.ExpiresIn);
+                    device.ExpiresIn,
+                    cancellationToken);
 
-                await store.SaveAsync(session);
+                await store.SaveAsync(session, cancellationToken);
                 deps.Out.WriteLine("Logged in.");
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 deps.Error.WriteLine($"Login failed: {ex.Message}");
                 context.ExitCode = 1;
@@ -123,10 +126,11 @@ public static class AuthCommands
         var command = new Command("logout", "Remove the stored device-code session");
         command.SetHandler(async (InvocationContext context) =>
         {
+            var cancellationToken = context.GetCancellationToken();
             try
             {
                 var store = deps.TokenStoreFactory();
-                await store.DeleteAsync();
+                await store.DeleteAsync(cancellationToken);
                 deps.Out.WriteLine("Logged out.");
             }
             catch (Exception ex) when (ex is PlatformNotSupportedException or InvalidOperationException)
@@ -134,7 +138,7 @@ public static class AuthCommands
                 // Idempotent success if there is nothing to delete / store unavailable after empty logout.
                 deps.Out.WriteLine("Logged out.");
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 deps.Error.WriteLine($"Logout failed: {ex.Message}");
                 context.ExitCode = 1;
@@ -148,10 +152,11 @@ public static class AuthCommands
         var command = new Command("status", "Show whether a device-code session is stored");
         command.SetHandler(async (InvocationContext context) =>
         {
+            var cancellationToken = context.GetCancellationToken();
             try
             {
                 var store = deps.TokenStoreFactory();
-                var session = await store.LoadAsync();
+                var session = await store.LoadAsync(cancellationToken);
                 if (session is null || string.IsNullOrEmpty(session.AccessToken))
                 {
                     deps.Out.WriteLine("Not logged in.");
@@ -166,7 +171,7 @@ public static class AuthCommands
             {
                 deps.Out.WriteLine("Not logged in.");
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 deps.Error.WriteLine($"Status failed: {ex.Message}");
                 context.ExitCode = 1;

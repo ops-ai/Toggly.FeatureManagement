@@ -62,6 +62,7 @@ public class AuthCommandsTests
         var session = await store.LoadAsync();
         Assert.NotNull(session);
         Assert.Equal("secret-access", session!.AccessToken);
+        Assert.True(store.LastSaveToken.CanBeCanceled);
     }
 
     [Fact]
@@ -120,6 +121,7 @@ public class AuthCommandsTests
         var root = CliApplication.CreateRootCommand(authDeps: deps);
         Assert.Equal(0, await root.InvokeAsync(["auth", "logout"]));
         Assert.Null(await store.LoadAsync());
+        Assert.True(store.LastDeleteToken.CanBeCanceled);
         Assert.Equal(0, await root.InvokeAsync(["auth", "logout"]));
         Assert.Contains("Logged out.", outWriter.ToString());
     }
@@ -127,10 +129,11 @@ public class AuthCommandsTests
     [Fact]
     public async Task AuthStatus_WhenEmpty_PrintsNotLoggedIn()
     {
+        var store = new InMemorySecureTokenStore();
         var outWriter = new StringWriter();
         var deps = new AuthCommandDeps
         {
-            TokenStoreFactory = () => new InMemorySecureTokenStore(),
+            TokenStoreFactory = () => store,
             Out = outWriter,
             Error = new StringWriter()
         };
@@ -138,6 +141,7 @@ public class AuthCommandsTests
         var root = CliApplication.CreateRootCommand(authDeps: deps);
         Assert.Equal(0, await root.InvokeAsync(["auth", "status"]));
         Assert.Contains("Not logged in.", outWriter.ToString());
+        Assert.True(store.LastLoadToken.CanBeCanceled);
     }
 
     [Fact]
