@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
@@ -9,6 +10,7 @@ namespace Toggly.CLI.Services;
 /// Windows Credential Manager store for CLI auth sessions.
 /// </summary>
 [SupportedOSPlatform("windows")]
+[ExcludeFromCodeCoverage(Justification = "Thin P/Invoke wrapper over Windows Credential Manager; not exercised on non-Windows CI.")]
 internal sealed class WindowsCredentialStore : ISecureTokenStore
 {
     private static readonly string TargetName = $"{Constants.CredentialServiceName}:{Constants.CredentialAccountName}";

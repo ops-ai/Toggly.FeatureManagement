@@ -187,15 +187,23 @@ public static class AuthCommands
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+                // Absolute cmd.exe avoids relative-path process starts (S4036).
+                var cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = cmd,
+                    Arguments = "/c start \"\" \"" + url.Replace("\"", string.Empty, StringComparison.Ordinal) + "\"",
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                });
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                Process.Start("open", url);
+                Process.Start("/usr/bin/open", url);
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
-                Process.Start("xdg-open", url);
+                Process.Start("/usr/bin/xdg-open", url);
             }
         }
         catch

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
@@ -9,6 +10,7 @@ namespace Toggly.CLI.Services;
 /// macOS Keychain store for CLI auth sessions (Security.framework).
 /// </summary>
 [SupportedOSPlatform("macos")]
+[ExcludeFromCodeCoverage(Justification = "Thin P/Invoke wrapper over macOS Keychain; exercised by OS-gated integration tests.")]
 internal sealed class MacOSKeychainStore : ISecureTokenStore
 {
     private static readonly byte[] ServiceNameBytes = Encoding.UTF8.GetBytes(Constants.CredentialServiceName);

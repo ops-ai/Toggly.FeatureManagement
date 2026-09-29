@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Toggly.CLI.Models;
@@ -8,6 +9,7 @@ namespace Toggly.CLI.Services;
 /// Linux libsecret store for CLI auth sessions. Fails clearly if libsecret is unavailable.
 /// </summary>
 [SupportedOSPlatform("linux")]
+[ExcludeFromCodeCoverage(Justification = "Thin P/Invoke wrapper over libsecret; unavailable on headless CI without keyring.")]
 internal sealed class LinuxLibsecretStore : ISecureTokenStore
 {
     private const string SchemaName = "io.toggly.cli.AuthSession";
