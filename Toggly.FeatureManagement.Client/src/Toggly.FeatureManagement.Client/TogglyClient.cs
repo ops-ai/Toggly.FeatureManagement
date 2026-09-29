@@ -188,6 +188,9 @@ public sealed partial class TogglyClient : IAsyncDisposable, IFrontendTelemetry,
     /// <summary>Clears the previous context and supersedes its in-flight work before restoring or fetching the new context.</summary>
     public Task SetContextAsync(EvaluationContext value, CancellationToken cancellationToken = default) => SetIdentityAsync(value, null, cancellationToken);
 
+    Task IFrontendIdentitySession.SetIdentityAsync(EvaluationContext context, string? instanceId, CancellationToken cancellationToken)
+        => SetIdentityAsync(context, instanceId, cancellationToken);
+
     /// <summary>Atomically replace context and minted token; null clears the previous token.</summary>
     public async Task SetIdentityAsync(EvaluationContext value, string? instanceId, CancellationToken cancellationToken = default)
     {
