@@ -77,9 +77,12 @@ class RedisCachingSnapshotProviderReliabilityTest {
     void cachedFeaturesWithWhitespaceAndEscapedKeysRemainReadable() {
         RedisCachingSnapshotProvider provider = provider(Duration.ofMinutes(1));
         when(pool.getResource()).thenReturn(jedis);
-        when(jedis.get("unit:snapshot")).thenReturn(
-                " \n {\"features\" \t : \n { \"quote\\\"key\" \t : \n {}, \"second\":{} },"
-                        + "\"metrics\":{},\"timestamp\":\"2026-09-29T00:00:00Z\"} \t ");
+        when(jedis.get("unit:snapshot")).thenReturn("""
+                 {"features" \t :
+                 { "quote\\\"key" \t :
+                 {}, "second":{} },
+                 "metrics":{},"timestamp":"2026-09-29T00:00:00Z"} \t
+                """);
 
         FeatureSnapshot cached = provider.getSnapshot();
 
