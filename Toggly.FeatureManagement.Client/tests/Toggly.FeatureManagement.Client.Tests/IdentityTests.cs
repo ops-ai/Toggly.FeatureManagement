@@ -7,6 +7,36 @@ namespace ClientTests;
 public class IdentityTests
 {
     [Fact]
+    public async Task NamedIdentityCallsPreservePublicAndInterfaceSourceContracts()
+    {
+        var capture = new TelemetryCapture();
+        using var http = new HttpClient(new Offline());
+        await using var client = new TogglyClient(new()
+        {
+            AppKey = "local",
+            TelemetryTransport = capture,
+            TrustedJwks = "{}"
+        }, http, new Verifier());
+
+        var interfaceMethod = typeof(TogglyClient).GetInterfaceMap(typeof(IFrontendIdentitySession)).TargetMethods.Single();
+        Assert.Equal("context", interfaceMethod.GetParameters()[0].Name);
+
+        await client.SetIdentityAsync(value: new("alice"), instanceId: "alice-token");
+        client.RecordUsage("before");
+        IFrontendIdentitySession session = client;
+        await session.SetIdentityAsync(context: new("bob"), instanceId: "bob-token");
+        client.RecordUsage("after");
+        await client.FlushTelemetryAsync();
+
+        var packets = capture.Bodies.Select(body => JsonDocument.Parse(body).RootElement).ToArray();
+        Assert.Equal(2, packets.Length);
+        Assert.Equal("alice-token", packets[0].GetProperty("i").GetString());
+        Assert.Equal("bob-token", packets[1].GetProperty("i").GetString());
+        Assert.True(packets[0].GetProperty("f").TryGetProperty("before", out _));
+        Assert.True(packets[1].GetProperty("f").TryGetProperty("after", out _));
+    }
+
+    [Fact]
     public async Task SharedContextTransitionScenariosExercisePublicClient()
     {
         var contract = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "telemetry-contract.json"))).RootElement;
@@ -237,7 +267,7 @@ public class IdentityTests
         await Task.WhenAll(old, replacement);
         Assert.False(client.IsEnabled("old"));
         Assert.True(client.IsEnabled("new"));
-        Assert.Equal(new[] { "?i=a", "?i=b" }, handler.Queries);
+        Assert.Collection(handler.Queries, query => Assert.Equal("?i=a", query), query => Assert.Equal("?i=b", query));
     }
 
     [Fact]
