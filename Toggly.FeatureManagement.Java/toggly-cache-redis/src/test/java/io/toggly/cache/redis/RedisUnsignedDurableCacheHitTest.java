@@ -101,6 +101,7 @@ class RedisUnsignedDurableCacheHitTest {
 
                     @Override
                     public void close() {
+                        // The in-memory payload capture owns no resources to release.
                     }
                 })
                 .build();
@@ -130,8 +131,7 @@ class RedisUnsignedDurableCacheHitTest {
         ArgumentCaptor<String> valueCaptor = ArgumentCaptor.forClass(String.class);
         verify(jedis, atLeastOnce()).setex(keyCaptor.capture(), anyLong(), valueCaptor.capture());
         String durableJson = valueCaptor.getValue();
-        assertThat(durableJson).contains("feature-a");
-        assertThat(durableJson).doesNotContain("signature");
+        assertThat(durableJson).contains("feature-a").doesNotContain("signature");
 
         // Drop in-memory defs so the next getSnapshot is a true durable-cache startup.
         http.clear();
@@ -143,8 +143,8 @@ class RedisUnsignedDurableCacheHitTest {
         var loaded = redis.getSnapshot();
         assertThat(loaded.getFeature("feature-a")).isNotNull();
         // Nested filter "parameters":{} must not become a phantom feature key.
-        assertThat(loaded.getFeatures().keySet()).containsExactly("feature-a");
-        assertThat(loaded.getFeatures().keySet()).doesNotContain("parameters", "filters", "name");
+        assertThat(loaded.getFeatures().keySet()).containsExactly("feature-a")
+                .doesNotContain("parameters", "filters", "name");
 
         runtime.flushUsage();
         assertThat(sent).hasSize(1);

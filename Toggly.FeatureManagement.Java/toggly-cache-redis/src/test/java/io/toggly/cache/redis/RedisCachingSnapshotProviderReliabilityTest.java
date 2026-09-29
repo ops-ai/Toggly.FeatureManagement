@@ -51,15 +51,16 @@ class RedisCachingSnapshotProviderReliabilityTest {
 
         for (String malformed : new String[] {
                 "{\"features\":{\"cached\":{\"featureKey\":\"cached\"},\"timestamp\":\"2026-09-29T00:00:00Z\"}",
-                "{\"features\":null,\"metrics\":{\"wrong\":{\"featureKey\":\"wrong\"}},\"timestamp\":\"2026-09-29T00:00:00Z\"}"
+                "{\"features\":null,\"metrics\":{\"wrong\":{\"featureKey\":\"wrong\"}},\"timestamp\":\"2026-09-29T00:00:00Z\"}",
+                "{\"features\":{\"bad\":null},\"metrics\":{},\"timestamp\":\"2026-09-29T00:00:00Z\"}"
         }) {
             when(jedis.get("unit:snapshot")).thenReturn(malformed);
 
             assertThat(provider.getSnapshot()).isSameAs(fresh);
         }
 
-        verify(delegate, org.mockito.Mockito.times(2)).refresh();
-        verify(jedis, org.mockito.Mockito.times(2)).setex(anyString(), anyLong(), anyString());
+        verify(delegate, org.mockito.Mockito.times(3)).refresh();
+        verify(jedis, org.mockito.Mockito.times(3)).setex(anyString(), anyLong(), anyString());
     }
 
     @Test
