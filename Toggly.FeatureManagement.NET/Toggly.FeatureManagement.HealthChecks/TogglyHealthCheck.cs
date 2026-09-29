@@ -46,21 +46,7 @@ namespace Toggly.FeatureManagement.HealthChecks
             // Add diagnostic data if enabled
             if (_options.IncludeDiagnosticData)
             {
-                data["appKey"] = MaskAppKey(debugInfo.AppKey);
-                data["environment"] = debugInfo.Environment ?? "unknown";
-                data["definitionCount"] = debugInfo.Definitions?.Count ?? 0;
-                data["websocketConnected"] = debugInfo.WebsocketClientRunning;
-                data["loaded"] = debugInfo.Loaded;
-
-                if (debugInfo.LastDefinitionsCheck.HasValue)
-                    data["lastDefinitionsCheck"] = debugInfo.LastDefinitionsCheck.Value.ToString("O");
-
-                if (!string.IsNullOrEmpty(debugInfo.LastError))
-                {
-                    data["lastError"] = debugInfo.LastError;
-                    if (debugInfo.LastErrorTime.HasValue)
-                        data["lastErrorTime"] = debugInfo.LastErrorTime.Value.ToString("O");
-                }
+                AddDiagnosticData(debugInfo, data);
             }
 
             // Check 1: SDK not loaded
@@ -95,7 +81,7 @@ namespace Toggly.FeatureManagement.HealthChecks
 
             // Check 3: Required features
             var disabledRequiredFeatures = GetDisabledRequiredFeatures(debugInfo);
-            if (disabledRequiredFeatures.Any())
+            if (disabledRequiredFeatures.Count > 0)
             {
                 data["disabledRequiredFeatures"] = string.Join(", ", disabledRequiredFeatures);
 
@@ -120,6 +106,25 @@ namespace Toggly.FeatureManagement.HealthChecks
             return Task.FromResult(HealthCheckResult.Healthy(
                 "Toggly SDK is healthy",
                 data: data));
+        }
+
+        private static void AddDiagnosticData(FeatureProviderDebugInfo debugInfo, Dictionary<string, object> data)
+        {
+            data["appKey"] = MaskAppKey(debugInfo.AppKey);
+            data["environment"] = debugInfo.Environment ?? "unknown";
+            data["definitionCount"] = debugInfo.Definitions?.Count ?? 0;
+            data["websocketConnected"] = debugInfo.WebsocketClientRunning;
+            data["loaded"] = debugInfo.Loaded;
+
+            if (debugInfo.LastDefinitionsCheck.HasValue)
+                data["lastDefinitionsCheck"] = debugInfo.LastDefinitionsCheck.Value.ToString("O");
+
+            if (!string.IsNullOrEmpty(debugInfo.LastError))
+            {
+                data["lastError"] = debugInfo.LastError;
+                if (debugInfo.LastErrorTime.HasValue)
+                    data["lastErrorTime"] = debugInfo.LastErrorTime.Value.ToString("O");
+            }
         }
 
         /// <summary>
