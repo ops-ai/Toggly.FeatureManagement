@@ -119,21 +119,17 @@ internal sealed class LinuxLibsecretStore : ISecureTokenStore
 
     private static void EnsureLibsecretAvailable()
     {
-        try
-        {
-            // Touch a symbol so DllNotFoundException surfaces early.
-            _ = SECRET_COLLECTION_DEFAULT;
-            NativeLibrary.Load("libsecret-1.so.0");
-        }
-        catch (DllNotFoundException ex)
+        // Probe then Free so NativeLibrary.Load is paired (Sentry); DllImport loads again on use.
+        if (!NativeLibrary.TryLoad("libsecret-1.so.0", out var handle))
         {
             throw new InvalidOperationException(
                 "libsecret is required to store Toggly CLI credentials on Linux. " +
                 "Install libsecret (and a desktop keyring such as gnome-keyring) or use " +
                 "TOGGLY_CLIENT_ID and TOGGLY_CLIENT_SECRET for CI. " +
-                "Plaintext credential files are not supported.",
-                ex);
+                "Plaintext credential files are not supported.");
         }
+
+        NativeLibrary.Free(handle);
     }
 
     private static T WithSchema<T>(Func<IntPtr, T> action)

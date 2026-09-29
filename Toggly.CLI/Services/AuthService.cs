@@ -172,9 +172,17 @@ public class AuthService
 
             if (response.IsSuccessStatusCode)
             {
-                var tokenResponse = System.Text.Json.JsonSerializer.Deserialize(
-                    body,
-                    TogglyJsonSerializerContext.Default.TokenResponse);
+                AuthService.TokenResponse? tokenResponse;
+                try
+                {
+                    tokenResponse = System.Text.Json.JsonSerializer.Deserialize(
+                        body,
+                        TogglyJsonSerializerContext.Default.TokenResponse);
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    throw new InvalidOperationException("Device token response was incomplete or invalid.");
+                }
 
                 if (tokenResponse?.AccessToken == null)
                     throw new InvalidOperationException("Device token response did not contain access_token.");
