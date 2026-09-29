@@ -57,7 +57,7 @@ public class CaffeineEvaluationCache {
      * @param featureKey the feature key
      */
     public void invalidateFeature(String featureKey) {
-        cache.asMap().keySet().removeIf(key -> key.featureKey.equals(featureKey));
+        cache.asMap().keySet().removeIf(key -> Objects.equals(key.featureKey, featureKey));
     }
 
     /**

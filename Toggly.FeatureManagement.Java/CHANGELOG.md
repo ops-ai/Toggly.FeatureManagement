@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.1.3
+
+2026-09-29
+
+### Fixed
+
+- `toggly-cache-caffeine` can now invalidate evaluations stored under a null
+  feature key without throwing or removing other features' evaluations.
+
+### Changed
+
+- User-Agent and live-update `sdkVersion` report `toggly-java/2.1.3`.
+
 ## 2.1.2
 
 2026-09-28
