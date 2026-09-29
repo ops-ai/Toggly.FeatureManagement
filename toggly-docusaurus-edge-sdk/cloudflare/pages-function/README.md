@@ -36,7 +36,7 @@ project as `functions/_middleware.ts`:
 ```bash
 mkdir -p functions
 curl -o functions/_middleware.ts \
-  https://raw.githubusercontent.com/ops-ai/Toggly.FeatureManagement/main/toggly-docusaurus-edge-sdk/cloudflare/pages-function/functions/_middleware.ts
+  https://raw.githubusercontent.com/ops-ai/Toggly.FeatureManagement/develop/toggly-docusaurus-edge-sdk/cloudflare/pages-function/functions/_middleware.ts
 ```
 
 (Or copy the file by hand from this repo.) The middleware is intentionally

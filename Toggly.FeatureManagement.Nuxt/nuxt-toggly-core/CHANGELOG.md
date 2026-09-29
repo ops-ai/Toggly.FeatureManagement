@@ -1,3 +1,9 @@
+## 1.15.2 — 2026-09-28
+
+### Fixed
+- Definition fetches use `cache: 'no-store'` so browser / undici caches cannot
+  replay a stale evaluated GET under the same storage revision [OPS-1568].
+
 ## 1.15.1 — 2026-09-27
 
 ### Fixed

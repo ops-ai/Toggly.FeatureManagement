@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.10
+
+### Fixed
+- `fetchEvaluatedSignedDefinitions` uses `cache: 'no-store'` so App Router /
+  undici cannot replay a stale evaluated GET under the same storage revision
+  [OPS-1568].
+
 ## 1.2.9
 
 - Route CommonJS consumers that select the browser condition to the browser-mapped CommonJS artifact while preserving browser ESM imports and signed-definition verification behavior.

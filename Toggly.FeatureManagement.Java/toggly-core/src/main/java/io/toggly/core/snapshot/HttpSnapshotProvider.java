@@ -390,20 +390,19 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
 
         String previousEtag = lastEtag.get();
         String newEtag = connection.getHeaderField("ETag");
-        // HTTP 200 whose revision/etag matches existing (CDN replay) — cache hit.
-        if (etagsMatch(previousEtag, newEtag)) {
-            lastEtag.set(newEtag);
-            return FetchResult.hit(currentSnapshot.get(), false);
-        }
+        // Always apply the body on HTTP 200. Equal revision is still a cache hit
+        // for telemetry (CDN replay), but defs must update.
+        boolean sameRevision = etagsMatch(previousEtag, newEtag);
         if (newEtag != null) {
             lastEtag.set(newEtag);
         }
 
         FeatureSnapshot parsed = parseDefinitions(readResponse(connection.getInputStream()), newEtag);
         // Older signed timestamp keeps last-known-good — treat as hit.
-        return parsed == currentSnapshot.get()
-                ? FetchResult.hit(parsed, false)
-                : FetchResult.miss(parsed);
+        if (parsed == currentSnapshot.get() || sameRevision) {
+            return FetchResult.hit(parsed, parsed != currentSnapshot.get());
+        }
+        return FetchResult.miss(parsed);
     }
 
     private static boolean etagsMatch(String left, String right) {

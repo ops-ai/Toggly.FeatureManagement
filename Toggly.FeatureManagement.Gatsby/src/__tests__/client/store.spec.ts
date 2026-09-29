@@ -629,6 +629,7 @@ describe('Client Store', () => {
       const secondCall = fetchSpy.mock.calls[1];
       const headers = secondCall[1]?.headers as Record<string, string>;
       expect(headers['If-None-Match']).toBe('rev-123');
+      expect(secondCall[1]?.cache).toBe('no-store');
     });
 
     it('uses cached flags on 304 Not Modified', async () => {

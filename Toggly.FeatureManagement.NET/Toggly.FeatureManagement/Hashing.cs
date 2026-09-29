@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 
 namespace Toggly.FeatureManagement
 {
-    internal class Hashing
+    internal static class Hashing
     {
         public static string GetStringSha256Hash(string text)
         {

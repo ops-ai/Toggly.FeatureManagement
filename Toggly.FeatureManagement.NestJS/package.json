@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-nestjs",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "NestJS HTTP module, request-scoped service and feature guards for Toggly",
   "keywords": [
     "feature-flags",
@@ -76,8 +76,8 @@
     "ws": "^8.0.0"
   },
   "peerDependencies": {
-    "@nestjs/common": "^10.0.0 || ^11.0.0",
-    "@nestjs/core": "^10.0.0 || ^11.0.0",
+    "@nestjs/common": "^10.0.0 || ^11.0.0 || ^12.0.0",
+    "@nestjs/core": "^10.0.0 || ^11.0.0 || ^12.0.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0"
   },

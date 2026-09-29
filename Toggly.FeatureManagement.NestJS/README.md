@@ -1,6 +1,16 @@
 # Toggly for NestJS
 
-HTTP integration for NestJS 10/11 on Node 20+. `@ops-ai/toggly-nestjs` wraps `@ops-ai/toggly-node-core` 0.9.1+, sharing its evaluator, signed definitions, snapshots, streaming and telemetry.
+HTTP integration for NestJS 10, 11, and 12 on Node 20+. `@ops-ai/toggly-nestjs` wraps `@ops-ai/toggly-node-core` 0.9.1+, sharing its evaluator, signed definitions, snapshots, streaming and telemetry.
+
+## Supported host majors
+
+| NestJS | Status                         |
+| ------ | ------------------------------ |
+| 10.x   | Proven (release compat matrix) |
+| 11.x   | Proven (release compat matrix) |
+| 12.x   | Proven (release compat matrix) |
+
+See repo root [`SUPPORT_MATRIX.md`](../SUPPORT_MATRIX.md) for the programme-wide host matrix (OPS-1563).
 
 ```sh
 npm install @ops-ai/toggly-nestjs reflect-metadata rxjs

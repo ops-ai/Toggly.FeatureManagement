@@ -131,7 +131,7 @@ the middleware is a single self-contained file.
 # In your Docusaurus project
 mkdir -p functions
 curl -o functions/_middleware.ts \
-  https://raw.githubusercontent.com/ops-ai/Toggly.FeatureManagement/main/toggly-docusaurus-edge-sdk/cloudflare/pages-function/functions/_middleware.ts
+  https://raw.githubusercontent.com/ops-ai/Toggly.FeatureManagement/develop/toggly-docusaurus-edge-sdk/cloudflare/pages-function/functions/_middleware.ts
 git add functions
 git commit -m "Add Toggly edge middleware"
 git push
