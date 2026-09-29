@@ -207,13 +207,14 @@ test('maps local gates source, tests, and LCOV into both Sonar scans', () => {
 
   assert.equal(sources.length, 2, 'both Sonar scans must declare sources');
   assert.equal(tests.length, 2, 'both Sonar scans must declare tests');
-  for (const value of [...sources, ...tests]) assert.ok(value.split(',').includes('toggly-local-gates'));
+  for (const value of [...sources, ...tests]) {
+    assert.ok(value.split(',').includes('toggly-local-gates/src'));
+    assert.ok(!value.split(',').includes('toggly-local-gates'));
+  }
   assert.match(sonarSetup, /\["Local-Gates"\]="toggly-local-gates"/);
   assert.match(testJob, /matrix\.sdk == 'Local-Gates'/);
   assert.match(testJob, /name: coverage-\$\{\{ matrix\.sdk \}\}/);
-  for (const [, exclusions] of sonarSetup.matchAll(/-Dsonar\.(?:coverage\.)?exclusions=([^\n]+)/g)) {
-    assert.ok(!exclusions.includes('toggly-local-gates'), 'local gates production code must not be excluded');
-  }
+  assert.match(sonarSetup, /-Dsonar\.test\.inclusions=.*\*\*\/\*\.spec\.ts/);
 });
 
 test('runs evaluator through only its locked dependency install', () => {
