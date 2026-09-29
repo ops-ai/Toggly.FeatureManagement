@@ -2,25 +2,25 @@ using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.Text.Json;
 using Toggly.CLI.Models;
+using Toggly.CLI.Output;
 using Toggly.CLI.Services;
-using Toggly.CLI;
 
 namespace Toggly.CLI.Commands;
 
 /// <summary>
-/// Release-related commands
+/// Release noun commands and flat write aliases.
 /// </summary>
 public static class ReleaseCommands
 {
     private sealed record CreateReleaseOptionsBag(
-        Option<string> ApplicationId,
+        Option<string?> ApplicationId,
         Option<string> Name,
         Option<string?> ReleaseNotes,
         Option<string?> FeatureChanges);
 
     private sealed record AssociateBuildOptions(
         Option<string> ProjectKey,
-        Option<string> Environment,
+        Option<string?> Environment,
         Option<string> CiProvider,
         Option<string> RunId,
         Option<string?> RunUrl,
@@ -33,33 +33,142 @@ public static class ReleaseCommands
         Option<string?> NamePattern);
 
     /// <summary>
-    /// Create the release command group
+    /// Create the <c>release</c> noun group.
     /// </summary>
-    public static Command CreateReleaseCommand(Func<InvocationContext, TogglyApiClient?> apiClientFactory)
+    public static Command CreateNoun(
+        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
+        CliCommandContext cli)
     {
-        var command = new Command("create-release", "Create a new release");
+        var release = new Command("release", "List, inspect, and manage releases");
+        release.AddCommand(CreateListCommand(apiClientFactory, cli));
+        release.AddCommand(CreateGetCommand(apiClientFactory, cli));
+        release.AddCommand(CreateCreateCommand("create", "Create a new release", apiClientFactory, cli));
+        release.AddCommand(CreateAssociateBuildCommand(
+            "associate-build",
+            "Associate a CI build with a release",
+            apiClientFactory,
+            cli));
+        return release;
+    }
 
-        var applicationIdOption = new Option<string>(
-            "--application-id",
-            description: "Application ID")
+    /// <summary>Flat alias: <c>create-release</c>.</summary>
+    public static Command CreateReleaseAlias(
+        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
+        CliCommandContext cli) =>
+        CreateCreateCommand("create-release", "Create a new release", apiClientFactory, cli);
+
+    /// <summary>Flat alias: <c>associate-build</c>.</summary>
+    public static Command CreateAssociateBuildAlias(
+        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
+        CliCommandContext cli) =>
+        CreateAssociateBuildCommand(
+            "associate-build",
+            "Associate a CI build with a release",
+            apiClientFactory,
+            cli);
+
+    private static Command CreateListCommand(
+        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
+        CliCommandContext cli)
+    {
+        var command = new Command("list", "List releases");
+        var appOption = CreateAppOption();
+        var environmentOption = new Option<string?>(["--environment", "--env"], "Filter by environment");
+        var statusOption = new Option<string?>("--status", "Filter by status");
+        var searchOption = new Option<string?>("--search", "Search by release name");
+        command.AddOption(appOption);
+        command.AddOption(environmentOption);
+        command.AddOption(statusOption);
+        command.AddOption(searchOption);
+
+        command.SetHandler(async (InvocationContext context) =>
         {
-            IsRequired = true
-        };
+            var apiClient = apiClientFactory(context);
+            if (apiClient is null)
+                return;
 
-        var nameOption = new Option<string>(
-            "--name",
-            description: "Release name")
+            var prefs = cli.ContextStoreFactory().Load();
+            var appFlag = context.ParseResult.GetValueForOption(appOption);
+            string? applicationId = null;
+            if (!string.IsNullOrWhiteSpace(appFlag))
+                applicationId = appFlag.Trim();
+            else if (!string.IsNullOrWhiteSpace(prefs.DefaultApplicationId))
+                applicationId = prefs.DefaultApplicationId.Trim();
+
+            var environment = context.ParseResult.GetValueForOption(environmentOption);
+            var status = context.ParseResult.GetValueForOption(statusOption);
+            var search = context.ParseResult.GetValueForOption(searchOption);
+
+            try
+            {
+                var releases = await apiClient.ListReleasesAsync(
+                    applicationId,
+                    environment,
+                    status,
+                    search,
+                    context.GetCancellationToken());
+                await cli.Output.WriteAsync(
+                    context,
+                    releases,
+                    TogglyJsonSerializerContext.Default.ListReleaseSummary,
+                    FormatReleaseList);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                await cli.Output.WriteErrorAsync($"Error listing releases: {ex.Message}");
+                context.ExitCode = 1;
+            }
+        });
+        return command;
+    }
+
+    private static Command CreateGetCommand(
+        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
+        CliCommandContext cli)
+    {
+        var command = new Command("get", "Get a release by id");
+        var idArgument = new Argument<string>("id", "Release id");
+        command.AddArgument(idArgument);
+
+        command.SetHandler(async (InvocationContext context) =>
         {
-            IsRequired = true
-        };
+            var apiClient = apiClientFactory(context);
+            if (apiClient is null)
+                return;
 
-        var releaseNotesOption = new Option<string?>(
-            "--release-notes",
-            description: "Release notes");
+            var id = context.ParseResult.GetValueForArgument(idArgument);
+            try
+            {
+                var release = await apiClient.GetReleaseAsync(id, context.GetCancellationToken());
+                await cli.Output.WriteAsync(
+                    context,
+                    release,
+                    TogglyJsonSerializerContext.Default.ReleaseModel,
+                    r => FormatRelease(r));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                await cli.Output.WriteErrorAsync($"Error getting release: {ex.Message}");
+                context.ExitCode = 1;
+            }
+        });
+        return command;
+    }
 
+    private static Command CreateCreateCommand(
+        string name,
+        string description,
+        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
+        CliCommandContext cli)
+    {
+        var command = new Command(name, description);
+
+        var applicationIdOption = CreateAppOption();
+        var nameOption = new Option<string>("--name", "Release name") { IsRequired = true };
+        var releaseNotesOption = new Option<string?>("--release-notes", "Release notes");
         var featureChangesOption = new Option<string?>(
             "--feature-changes",
-            description: "JSON array of feature changes. Format: [{\"flagKey\":\"key\",\"toState\":[{\"name\":\"AlwaysOn\",\"parameters\":{}}]}]");
+            "JSON array of feature changes. Format: [{\"flagKey\":\"key\",\"toState\":[{\"name\":\"AlwaysOn\",\"parameters\":{}}]}]");
 
         command.AddOption(applicationIdOption);
         command.AddOption(nameOption);
@@ -78,82 +187,49 @@ public static class ReleaseCommands
             if (apiClient is null)
                 return;
 
-            await HandleCreateReleaseAsync(context, apiClient, options);
+            await HandleCreateReleaseAsync(context, apiClient, cli, options);
         });
 
         return command;
     }
 
-    /// <summary>
-    /// Create the associate-build command
-    /// </summary>
-    public static Command CreateAssociateBuildCommand(Func<InvocationContext, TogglyApiClient?> apiClientFactory)
+    private static Command CreateAssociateBuildCommand(
+        string name,
+        string description,
+        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
+        CliCommandContext cli)
     {
-        var command = new Command("associate-build", "Associate a CI build with a release");
+        var command = new Command(name, description);
 
-        var projectKeyOption = new Option<string>(
-            "--project-key",
-            description: "Application ID or name")
-        {
-            IsRequired = true
-        };
-
-        var environmentOption = new Option<string>(
-            "--environment",
-            description: "Environment name (e.g., Production, Staging)")
-        {
-            IsRequired = true
-        };
-
+        var projectKeyOption = new Option<string>("--project-key", "Application ID or name") { IsRequired = true };
+        var environmentOption = new Option<string?>(
+            ["--environment", "--env"],
+            "Environment name (e.g., Production, Staging)");
         var ciProviderOption = new Option<string>(
             "--ci-provider",
-            description: "CI provider (e.g., azure-devops, github, gitlab, jenkins, circleci)")
+            "CI provider (e.g., azure-devops, github, gitlab, jenkins, circleci)")
         {
             IsRequired = true
         };
-
-        var runIdOption = new Option<string>(
-            "--run-id",
-            description: "CI run/build ID")
+        var runIdOption = new Option<string>("--run-id", "CI run/build ID") { IsRequired = true };
+        var runUrlOption = new Option<string?>("--run-url", "URL to view the build in CI system");
+        var pipelineNameOption = new Option<string>("--pipeline-name", "Name of the pipeline/workflow")
         {
             IsRequired = true
         };
-
-        var runUrlOption = new Option<string?>(
-            "--run-url",
-            description: "URL to view the build in CI system");
-
-        var pipelineNameOption = new Option<string>(
-            "--pipeline-name",
-            description: "Name of the pipeline/workflow")
-        {
-            IsRequired = true
-        };
-
-        var branchOption = new Option<string?>(
-            "--branch",
-            description: "Git branch name");
-
-        var commitShaOption = new Option<string?>(
-            "--commit-sha",
-            description: "Git commit SHA");
-
-        var buildNumberOption = new Option<string?>(
-            "--build-number",
-            description: "Build number/version");
-
+        var branchOption = new Option<string?>("--branch", "Git branch name");
+        var commitShaOption = new Option<string?>("--commit-sha", "Git commit SHA");
+        var buildNumberOption = new Option<string?>("--build-number", "Build number/version");
         var modeOption = new Option<string>(
             "--mode",
             getDefaultValue: () => "use-latest-draft-or-create",
             description: "Mode for finding/creating release");
-
         var releaseTemplateKeyOption = new Option<string?>(
             "--release-template-key",
-            description: "Release template key to use when creating new release");
-
+            "Release template key to use when creating new release");
         var namePatternOption = new Option<string?>(
             "--name-pattern",
-            description: "Name pattern for release (Handlebars-style: ${branch}, ${buildNumber}, ${commitSha})");
+            "Name pattern for release (Handlebars-style: ${branch}, ${buildNumber}, ${commitSha})");
 
         command.AddOption(projectKeyOption);
         command.AddOption(environmentOption);
@@ -188,7 +264,7 @@ public static class ReleaseCommands
             if (apiClient is null)
                 return;
 
-            await HandleAssociateBuildAsync(context, apiClient, options);
+            await HandleAssociateBuildAsync(context, apiClient, cli, options);
         });
 
         return command;
@@ -197,9 +273,12 @@ public static class ReleaseCommands
     private static async Task HandleCreateReleaseAsync(
         InvocationContext context,
         TogglyApiClient apiClient,
+        CliCommandContext cli,
         CreateReleaseOptionsBag options)
     {
-        var applicationId = context.ParseResult.GetValueForOption(options.ApplicationId)!;
+        if (!TryResolveApp(context, cli, options.ApplicationId, out var applicationId))
+            return;
+
         var name = context.ParseResult.GetValueForOption(options.Name)!;
         var releaseNotes = context.ParseResult.GetValueForOption(options.ReleaseNotes);
         var featureChanges = context.ParseResult.GetValueForOption(options.FeatureChanges);
@@ -213,7 +292,7 @@ public static class ReleaseCommands
 
         if (!TryApplyFeatureChanges(featureChanges, request, out var parseError))
         {
-            await Console.Error.WriteLineAsync(parseError);
+            await cli.Output.WriteErrorAsync(parseError);
             context.ExitCode = 2;
             return;
         }
@@ -221,14 +300,15 @@ public static class ReleaseCommands
         try
         {
             var release = await apiClient.CreateReleaseAsync(request);
-            await Console.Out.WriteLineAsync($"Release created: {release.Id}");
-            await Console.Out.WriteLineAsync($"Name: {release.Name}");
-            if (!string.IsNullOrEmpty(release.ReleaseNotes))
-                await Console.Out.WriteLineAsync($"Notes: {release.ReleaseNotes}");
+            await cli.Output.WriteAsync(
+                context,
+                release,
+                TogglyJsonSerializerContext.Default.ReleaseModel,
+                r => FormatRelease(r, "Release created"));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            await Console.Error.WriteLineAsync($"Error creating release: {ex.Message}");
+            await cli.Output.WriteErrorAsync($"Error creating release: {ex.Message}");
             context.ExitCode = 1;
         }
     }
@@ -236,10 +316,19 @@ public static class ReleaseCommands
     private static async Task HandleAssociateBuildAsync(
         InvocationContext context,
         TogglyApiClient apiClient,
+        CliCommandContext cli,
         AssociateBuildOptions options)
     {
         var projectKey = context.ParseResult.GetValueForOption(options.ProjectKey)!;
-        var environment = context.ParseResult.GetValueForOption(options.Environment)!;
+        var prefs = cli.ContextStoreFactory().Load();
+        var environmentFlag = context.ParseResult.GetValueForOption(options.Environment);
+        if (!ContextStore.TryResolveEnvironment(environmentFlag, prefs, out var environment, out var envError))
+        {
+            await cli.Output.WriteErrorAsync(envError);
+            context.ExitCode = 2;
+            return;
+        }
+
         var ciProvider = context.ParseResult.GetValueForOption(options.CiProvider)!;
         var runId = context.ParseResult.GetValueForOption(options.RunId)!;
         var runUrl = context.ParseResult.GetValueForOption(options.RunUrl);
@@ -280,15 +369,42 @@ public static class ReleaseCommands
         try
         {
             var response = await apiClient.AssociateBuildAsync(request);
-            await Console.Out.WriteLineAsync($"Build associated with release: {response.ReleaseId}");
-            if (!string.IsNullOrEmpty(response.ReleaseUrl))
-                await Console.Out.WriteLineAsync($"Release URL: {response.ReleaseUrl}");
+            await cli.Output.WriteAsync(
+                context,
+                response,
+                TogglyJsonSerializerContext.Default.AssociateBuildResponse,
+                r =>
+                {
+                    var lines = new List<string> { $"Build associated with release: {r.ReleaseId}" };
+                    if (!string.IsNullOrEmpty(r.ReleaseUrl))
+                        lines.Add($"Release URL: {r.ReleaseUrl}");
+                    return lines;
+                });
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            await Console.Error.WriteLineAsync($"Error associating build: {ex.Message}");
+            await cli.Output.WriteErrorAsync($"Error associating build: {ex.Message}");
             context.ExitCode = 1;
         }
+    }
+
+    private static Option<string?> CreateAppOption() =>
+        new(["--app", "--application-id"], "Application id (or set via 'toggly context set --app')");
+
+    private static bool TryResolveApp(
+        InvocationContext context,
+        CliCommandContext cli,
+        Option<string?> appOption,
+        out string applicationId)
+    {
+        var prefs = cli.ContextStoreFactory().Load();
+        var flag = context.ParseResult.GetValueForOption(appOption);
+        if (ContextStore.TryResolveApplicationId(flag, prefs, out applicationId, out var error))
+            return true;
+
+        cli.Output.WriteErrorAsync(error).GetAwaiter().GetResult();
+        context.ExitCode = 2;
+        return false;
     }
 
     private static bool TryApplyFeatureChanges(
@@ -313,5 +429,34 @@ public static class ReleaseCommands
             errorMessage = $"Error parsing feature changes: {ex.Message}";
             return false;
         }
+    }
+
+    private static IEnumerable<string> FormatReleaseList(List<ReleaseSummary> releases)
+    {
+        if (releases.Count == 0)
+        {
+            yield return "No releases found.";
+            yield break;
+        }
+
+        foreach (var release in releases)
+        {
+            yield return $"{release.Id}\t{release.Name}\t{release.OverallStatus ?? "-"}\tapp={release.ApplicationId}";
+        }
+    }
+
+    private static IEnumerable<string> FormatRelease(ReleaseModel release, string? verb = null)
+    {
+        if (!string.IsNullOrEmpty(verb))
+            yield return $"{verb}: {release.Id}";
+        else
+            yield return release.Id;
+
+        yield return $"  Name: {release.Name}";
+        yield return $"  Application: {release.ApplicationId}";
+        if (!string.IsNullOrEmpty(release.OverallStatus))
+            yield return $"  Status: {release.OverallStatus}";
+        if (!string.IsNullOrEmpty(release.ReleaseNotes))
+            yield return $"  Notes: {release.ReleaseNotes}";
     }
 }

@@ -292,7 +292,7 @@ public class FeatureDefinitionCreateModel : FeatureDefinition
 }
 
 /// <summary>
-/// Release model
+/// Release model (create response / get details — slim CLI fields)
 /// </summary>
 public class ReleaseModel
 {
@@ -319,5 +319,95 @@ public class ReleaseModel
     /// </summary>
     [JsonPropertyName("releaseNotes")]
     public string? ReleaseNotes { get; set; }
+
+    /// <summary>
+    /// Overall release status
+    /// </summary>
+    [JsonPropertyName("overallStatus")]
+    public string? OverallStatus { get; set; }
+
+    /// <summary>
+    /// Created at timestamp
+    /// </summary>
+    [JsonPropertyName("createdAt")]
+    public DateTime? CreatedAt { get; set; }
+}
+
+/// <summary>
+/// Slim application summary for list/get
+/// </summary>
+public class ApplicationSummary
+{
+    [JsonPropertyName("id")]
+    public required string Id { get; set; }
+
+    [JsonPropertyName("name")]
+    public required string Name { get; set; }
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    [JsonPropertyName("domain")]
+    public string? Domain { get; set; }
+
+    [JsonPropertyName("environments")]
+    public List<string>? Environments { get; set; }
+
+    [JsonPropertyName("defaultEnvironment")]
+    public string? DefaultEnvironment { get; set; }
+
+    [JsonPropertyName("definitionsCount")]
+    public int DefinitionsCount { get; set; }
+}
+
+/// <summary>
+/// Slim environment summary for list/get
+/// </summary>
+public class EnvironmentSummary
+{
+    [JsonPropertyName("name")]
+    public required string Name { get; set; }
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    [JsonPropertyName("activeFeatures")]
+    public int ActiveFeatures { get; set; }
+
+    [JsonPropertyName("type")]
+    public string? Type { get; set; }
+
+    [JsonPropertyName("isActive")]
+    public bool IsActive { get; set; } = true;
+
+    [JsonPropertyName("promoteTo")]
+    public List<string>? PromoteTo { get; set; }
+}
+
+/// <summary>
+/// Slim release summary for list
+/// </summary>
+public class ReleaseSummary
+{
+    [JsonPropertyName("id")]
+    public required string Id { get; set; }
+
+    [JsonPropertyName("applicationId")]
+    public required string ApplicationId { get; set; }
+
+    [JsonPropertyName("name")]
+    public required string Name { get; set; }
+
+    [JsonPropertyName("overallStatus")]
+    public string? OverallStatus { get; set; }
+
+    [JsonPropertyName("featureChangesCount")]
+    public int FeatureChangesCount { get; set; }
+
+    [JsonPropertyName("ciLinksCount")]
+    public int CiLinksCount { get; set; }
+
+    [JsonPropertyName("createdAt")]
+    public DateTime? CreatedAt { get; set; }
 }
 

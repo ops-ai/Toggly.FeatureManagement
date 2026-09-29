@@ -1,6 +1,7 @@
 using System.CommandLine;
 using System.CommandLine.Invocation;
 using Toggly.CLI.Commands;
+using Toggly.CLI.Output;
 using Toggly.CLI.Services;
 
 namespace Toggly.CLI;
@@ -16,11 +17,17 @@ public static class CliApplication
     /// <param name="apiClientFactory">Optional API client factory for command execution.</param>
     /// <param name="authDeps">Optional auth command dependencies for tests.</param>
     /// <param name="secureTokenStoreFactory">Optional OS credential store factory (tests).</param>
+    /// <param name="contextStoreFactory">Optional context prefs store factory (tests).</param>
+    /// <param name="outputWriter">Optional stdout writer (tests).</param>
+    /// <param name="errorWriter">Optional stderr writer (tests).</param>
     /// <returns>The configured root command.</returns>
     public static RootCommand CreateRootCommand(
         Func<InvocationContext, TogglyApiClient?>? apiClientFactory = null,
         AuthCommandDeps? authDeps = null,
-        Func<ISecureTokenStore>? secureTokenStoreFactory = null)
+        Func<ISecureTokenStore>? secureTokenStoreFactory = null,
+        Func<ContextStore>? contextStoreFactory = null,
+        TextWriter? outputWriter = null,
+        TextWriter? errorWriter = null)
     {
         var rootCommand = new RootCommand("Toggly CLI - Command-line interface for Toggly feature flag management");
 
@@ -39,12 +46,22 @@ public static class CliApplication
         var verboseOption = new Option<bool>(
             "--verbose",
             description: "Enable verbose output");
+        var jsonOption = new Option<bool>(
+            "--json",
+            description: "Emit machine-readable JSON instead of human text");
 
         rootCommand.AddGlobalOption(clientIdOption);
         rootCommand.AddGlobalOption(clientSecretOption);
         rootCommand.AddGlobalOption(authorityOption);
         rootCommand.AddGlobalOption(baseUrlOption);
         rootCommand.AddGlobalOption(verboseOption);
+        rootCommand.AddGlobalOption(jsonOption);
+
+        var cli = new CliCommandContext
+        {
+            Output = new CommandOutput(jsonOption, outputWriter, errorWriter),
+            ContextStoreFactory = contextStoreFactory ?? (() => new ContextStore())
+        };
 
         apiClientFactory ??= context => CreateApiClient(
             context,
@@ -55,11 +72,18 @@ public static class CliApplication
             secureTokenStoreFactory);
 
         rootCommand.AddCommand(AuthCommands.Create(authDeps));
-        rootCommand.AddCommand(ReleaseCommands.CreateReleaseCommand(apiClientFactory));
-        rootCommand.AddCommand(ReleaseCommands.CreateAssociateBuildCommand(apiClientFactory));
-        rootCommand.AddCommand(FeatureCommands.CreateFeatureCommand(apiClientFactory));
-        rootCommand.AddCommand(FeatureCommands.CreateUpdateFeatureCommand(apiClientFactory));
-        rootCommand.AddCommand(EnvironmentCommands.CreateUpdateFeatureEnvironmentCommand(apiClientFactory));
+        rootCommand.AddCommand(AppCommands.Create(apiClientFactory, cli));
+        rootCommand.AddCommand(EnvCommands.Create(apiClientFactory, cli));
+        rootCommand.AddCommand(FeatureCommands.CreateNoun(apiClientFactory, cli));
+        rootCommand.AddCommand(ReleaseCommands.CreateNoun(apiClientFactory, cli));
+        rootCommand.AddCommand(ContextCommands.Create(cli));
+
+        // Flat write aliases (deprecation window)
+        rootCommand.AddCommand(FeatureCommands.CreateFeatureAlias(apiClientFactory, cli));
+        rootCommand.AddCommand(FeatureCommands.CreateUpdateFeatureAlias(apiClientFactory, cli));
+        rootCommand.AddCommand(FeatureCommands.CreateUpdateFeatureEnvironmentAlias(apiClientFactory, cli));
+        rootCommand.AddCommand(ReleaseCommands.CreateReleaseAlias(apiClientFactory, cli));
+        rootCommand.AddCommand(ReleaseCommands.CreateAssociateBuildAlias(apiClientFactory, cli));
 
         return rootCommand;
     }

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0
+
+2026-09-29
+
+### Added
+- Noun-first commands: `app`, `env`, `feature`, `release`, and `context` (alongside `auth`).
+- List/get reads for applications, environments, features, and releases.
+- Global `--json` for machine-readable camelCase output (human text remains the default).
+- Non-secret context prefs via `context set|get|clear` under XDG / `~/.config/toggly/` (Windows: `%AppData%\toggly`).
+- Default `--app` / `--env` resolution from context prefs when flags are omitted.
+
+### Changed
+- Existing write commands remain available as flat aliases (`create-feature`, `update-feature`, `update-feature-environment`, `create-release`, `associate-build`) and also nest under their nouns.
+
 ## 0.2.2
 
 2026-09-29
