@@ -770,12 +770,12 @@ export class Toggly {
 
   private static _enforceMaxCacheKeys(protectKeys: string[]): void {
     const maxKeys = Toggly._config?.maxCacheKeys;
-    if (!Toggly._persistCache || !isCacheLruEnabled(maxKeys)) {
+    if (!Toggly._persistCache || typeof maxKeys !== 'number' || !isCacheLruEnabled(maxKeys)) {
       return;
     }
     try {
       let index = Toggly._loadLruIndex();
-      const toEvict = selectCacheLruKeysToEvict(index, maxKeys as number, { protectKeys }).filter(
+      const toEvict = selectCacheLruKeysToEvict(index, maxKeys, { protectKeys }).filter(
         (key) => Toggly._isTrackedCacheKey(key),
       );
       if (toEvict.length === 0) {
