@@ -267,7 +267,7 @@ public class IdentityTests
         await Task.WhenAll(old, replacement);
         Assert.False(client.IsEnabled("old"));
         Assert.True(client.IsEnabled("new"));
-        Assert.Equal(new[] { "?i=a", "?i=b" }, handler.Queries);
+        Assert.Collection(handler.Queries, query => Assert.Equal("?i=a", query), query => Assert.Equal("?i=b", query));
     }
 
     [Fact]
