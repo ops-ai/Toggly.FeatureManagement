@@ -2,6 +2,8 @@ package io.toggly.hosts.caffeine;
 
 import io.toggly.cache.caffeine.CaffeineCacheConfig;
 import io.toggly.cache.caffeine.CaffeineCachingSnapshotProvider;
+import io.toggly.cache.caffeine.CaffeineEvaluationCache;
+import io.toggly.core.context.EvaluationContext;
 import io.toggly.core.snapshot.FeatureSnapshot;
 import io.toggly.core.snapshot.SnapshotProvider;
 import org.junit.jupiter.api.Test;
@@ -45,5 +47,22 @@ class CaffeineHostTest {
         cache.refresh();
         assertEquals(2, refreshes.get());
         cache.close();
+    }
+
+    @Test
+    void packagedCaffeineAdapterSeparatesCollidingTargetingContexts() {
+        CaffeineEvaluationCache cache = CaffeineEvaluationCache.builder().build();
+        EvaluationContext first = EvaluationContext.builder()
+                .identity("host-user")
+                .trait("segment", "Aa")
+                .build();
+        EvaluationContext second = EvaluationContext.builder()
+                .identity("host-user")
+                .trait("segment", "BB")
+                .build();
+
+        assertEquals("Aa".hashCode(), "BB".hashCode());
+        assertEquals(true, cache.getOrCompute("targeted", first, () -> true));
+        assertEquals(false, cache.getOrCompute("targeted", second, () -> false));
     }
 }
