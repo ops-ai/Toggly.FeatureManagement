@@ -11,6 +11,9 @@ namespace Toggly.FeatureManagement.Tests;
 
 public class TogglyHealthCheckTests
 {
+    private static readonly string[] CheckoutAndPayments = { "checkout", "payments" };
+    private static readonly string[] CheckoutOnly = { "checkout" };
+
     private readonly Mock<IFeatureDefinitionProvider> _featureProviderMock;
     private readonly Mock<IFeatureProviderDebug> _featureProviderDebugMock;
 
@@ -318,7 +321,7 @@ public class TogglyHealthCheckTests
 
         var healthCheck = CreateHealthCheck(new TogglyHealthCheckOptions
         {
-            RequiredFeatures = new[] { "checkout", "payments" }
+            RequiredFeatures = CheckoutAndPayments
         });
 
         var result = await healthCheck.CheckHealthAsync(CreateContext());
@@ -349,7 +352,7 @@ public class TogglyHealthCheckTests
 
         var healthCheck = CreateHealthCheck(new TogglyHealthCheckOptions
         {
-            RequiredFeatures = new[] { "checkout" }
+            RequiredFeatures = CheckoutOnly
         });
 
         var result = await healthCheck.CheckHealthAsync(CreateContext());
