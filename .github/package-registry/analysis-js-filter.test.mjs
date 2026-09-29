@@ -79,8 +79,14 @@ test('Evaluator runs its own coverage in the analysis matrix', () => {
     'test-cmd': 'npm run test:coverage',
     'has-lint': false,
   }]);
-  assert.equal(result.needSharedDeps, true);
+  assert.equal(result.needSharedDeps, false);
   assert.ok(result.requiredJobs.split(',').includes('test'));
+});
+
+test('Evaluator with a shared-dependency SDK still builds shared artifacts', () => {
+  const result = filterAnalysisJs('Evaluator,Vue');
+  assert.equal(result.needSharedDeps, true);
+  assert.deepEqual(result.testMatrix.map(({ sdk }) => sdk), ['Evaluator', 'Vue']);
 });
 
 test('JavaScript requires coverage and the packed browser telemetry host', () => {
