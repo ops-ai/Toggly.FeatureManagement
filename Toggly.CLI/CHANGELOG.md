@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.2
+
+2026-09-29
+
+### Added
+- OAuth2 device-code login via `toggly auth login|logout|status`.
+- OS credential-store session persistence (macOS Keychain, Windows Credential Manager, Linux libsecret).
+- Credential resolution priority: explicit client credentials → stored device session → fail with guidance.
+
+### Changed
+- Authentication error messages point to `toggly auth login` or CI env vars.
+- Device login requests scopes `openid toggly offline_access` so refresh tokens work when the IdP client allows offline access.
+
 ## 0.2.1
 
 2026-09-28

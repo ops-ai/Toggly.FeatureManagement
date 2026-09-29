@@ -50,8 +50,8 @@ public class ServiceCoverageTests
             Assert.Equal("https://auth.example.test", config.Authority);
             Assert.Equal("https://api.example.test/", config.BaseUrl);
             Assert.False(Directory.Exists(legacyConfigDirectory));
-            service.ValidateAuthConfig(config);
-            Assert.Throws<InvalidOperationException>(() => service.ValidateAuthConfig(new()));
+            ConfigService.ValidateAuthConfig(config);
+            Assert.Throws<InvalidOperationException>(() => ConfigService.ValidateAuthConfig(new()));
         }
         finally
         {

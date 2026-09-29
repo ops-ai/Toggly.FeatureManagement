@@ -38,23 +38,41 @@ Where `<RID>` is one of:
 
 ### Authentication
 
-The CLI uses OAuth2 client credentials for authentication. Prefer command-line
-arguments for interactive use and environment variables for CI/CD. Secrets are
-**never written to disk**. A legacy `~/.toggly/config.json` (if present) is
-deleted automatically on use — switch to CLI args or env vars.
+The CLI supports two authentication modes. Priority order (highest first):
 
-Priority order:
+1. **Explicit client credentials** — `--client-id` + `--client-secret`, or `TOGGLY_CLIENT_ID` + `TOGGLY_CLIENT_SECRET` (CI / machines)
+2. **Device-code session** — stored only in the OS credential store after `toggly auth login`
+3. Otherwise the command fails with guidance to log in or set CI env vars
 
-1. **Command-line arguments** (highest priority)
-2. **Environment variables**
+**Never** write tokens or client secrets to plaintext files. A legacy `~/.toggly/config.json` (if present) is deleted automatically on use.
 
-#### Command-line arguments
+If both an OS session and `TOGGLY_CLIENT_SECRET` are present, **env/flags win** so CI shells stay deterministic.
+
+#### Interactive login (humans)
+
+```bash
+toggly-cli auth login
+toggly-cli auth status
+toggly-cli auth logout
+```
+
+`auth login` starts the OAuth2 device-code flow against `https://auth.toggly.io` (overridable with `--authority`). Tokens are stored in:
+
+| OS | Store |
+|----|--------|
+| macOS | Keychain (`toggly-cli` / `auth-session`) |
+| Windows | Credential Manager |
+| Linux | libsecret (desktop keyring required) |
+
+`auth status` shows client id, expiry, and authority — **never** access or refresh tokens (including with `--verbose`).
+
+#### Machine / CI credentials
 
 ```bash
 toggly-cli --client-id <id> --client-secret <secret> <command>
 ```
 
-#### Environment variables
+Or:
 
 ```bash
 export TOGGLY_CLIENT_ID=<id>
@@ -64,9 +82,17 @@ export TOGGLY_BASE_URL=https://app.toggly.io/api  # Optional
 toggly-cli <command>
 ```
 
-You must provide both client ID and client secret (via args and/or env vars).
-
 ## Commands
+
+### Auth Commands
+
+```bash
+toggly-cli auth login [--authority <url>] [--client-id <id>] [--scopes <scopes>]
+toggly-cli auth logout
+toggly-cli auth status
+```
+
+Default device client id is `toggly-cli`. Default device scopes are `openid toggly offline_access`.
 
 ### Release Commands
 
@@ -184,7 +210,15 @@ All commands support these global options:
 
 ## Examples
 
-### Using OAuth2
+### Interactive session
+
+```bash
+toggly-cli auth login
+toggly-cli create-release --application-id abc123 --name "v1.0.0"
+toggly-cli auth logout
+```
+
+### Using OAuth2 client credentials
 
 ```bash
 toggly-cli --client-id <id> --client-secret <secret> create-release \
@@ -216,9 +250,9 @@ In a GitHub Actions workflow:
 
 ### Authentication Errors
 
-If you see "No authentication method specified", ensure you've provided both
-`--client-id` and `--client-secret`, or set `TOGGLY_CLIENT_ID` and
-`TOGGLY_CLIENT_SECRET`.
+- Interactive: run `toggly-cli auth login`, then `toggly-cli auth status`.
+- CI: provide both `--client-id` and `--client-secret`, or set `TOGGLY_CLIENT_ID` and `TOGGLY_CLIENT_SECRET`.
+- Linux: install libsecret and a desktop keyring; plaintext credential files are not supported.
 
 ### Network Errors
 
@@ -241,4 +275,3 @@ See the main repository LICENSE file.
 ## Support
 
 For issues and questions, please open an issue on [GitHub](https://github.com/ops-ai/Toggly.FeatureManagement/issues).
-

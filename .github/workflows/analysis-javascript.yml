@@ -584,7 +584,8 @@ jobs:
     needs: [prepare, build-shared-js-deps, test, test-node-server, test-docusaurus-host, dependency-check]
     if: |
       always() &&
-      (github.event_name != 'workflow_call' || inputs.run_reporting)
+      (github.event_name != 'workflow_call' || inputs.run_reporting) &&
+      (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork)
 
     steps:
       - name: Checkout code
@@ -689,6 +690,11 @@ jobs:
           grep "^SF:" coverage/*.info 2>/dev/null | head -20 || true
         continue-on-error: true
 
+      - name: Validate SonarCloud credentials
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: test -n "${SONAR_TOKEN}" || { echo "SonarCloud token is required"; exit 1; }
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.1
         env:
@@ -708,16 +714,26 @@ jobs:
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.SvelteKit,Toggly.FeatureManagement.Solid,Toggly.FeatureManagement.Astro,Toggly.FeatureManagement.Gatsby,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,Toggly.FeatureManagement.NestJS,toggly-eval,toggly-hooks-types,toggly-signed-defs/src,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook,toggly-client-telemetry,tests
             -Dsonar.test.inclusions=Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs,toggly-client-telemetry/tests/**,toggly-docusaurus-edge-sdk/cloudflare/pages-function/tests/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/tests/**/*.cjs,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-express/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-hono/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-fastify/tests/packed-hosts.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-check.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-cleanup.test.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/host-resources.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-browser-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Astro/tests/**,Toggly.FeatureManagement.Gatsby/tests/**,tests/react-consumer-fixtures/**
-        continue-on-error: true
+            -Dsonar.qualitygate.wait=true
 
       - name: Download Dependency Check report (for SonarQube Server)
+        if: ${{ success() || failure() }}
         uses: actions/download-artifact@v8
         with:
           name: dependency-check-report-javascript
           path: dependency-check-reports/
         continue-on-error: true
 
+      - name: Validate SonarQube Server credentials
+        id: validate-sonarqube-server-credentials
+        if: ${{ success() || failure() }}
+        env:
+          SONAR_SERVER_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: test -n "${SONAR_SERVER_TOKEN}" && test -n "${SONAR_HOST_URL}" || { echo "SonarQube Server credentials are required"; exit 1; }
+
       - name: SonarQube Server Scan
+        if: ${{ (success() || failure()) && steps.validate-sonarqube-server-credentials.outcome == 'success' }}
         uses: SonarSource/sonarqube-scan-action@v8.2.1
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
@@ -735,12 +751,12 @@ jobs:
             -Dsonar.tests=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.SvelteKit,Toggly.FeatureManagement.Solid,Toggly.FeatureManagement.Astro,Toggly.FeatureManagement.Gatsby,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,Toggly.FeatureManagement.NestJS,toggly-eval,toggly-hooks-types,toggly-signed-defs/src,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook,toggly-client-telemetry,tests
             -Dsonar.test.inclusions=Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs,toggly-client-telemetry/tests/**,toggly-docusaurus-edge-sdk/cloudflare/pages-function/tests/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/tests/**/*.cjs,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-express/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-hono/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-fastify/tests/packed-hosts.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-check.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-cleanup.test.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/host-resources.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-browser-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Astro/tests/**,Toggly.FeatureManagement.Gatsby/tests/**,tests/react-consumer-fixtures/**
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
-        continue-on-error: true
+            -Dsonar.qualitygate.wait=true
 
   dependency-check:
     name: OWASP Dependency Check
     needs: [prepare]
-    if: ${{ github.event_name != 'workflow_call' || inputs.run_reporting }}
+    if: ${{ (github.event_name != 'workflow_call' || inputs.run_reporting) && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
     runs-on: ubuntu-latest
 
     steps:
@@ -821,6 +837,7 @@ jobs:
         with:
           needs-json: ${{ toJSON(needs) }}
           required-jobs: ${{ needs.prepare.outputs.required_jobs }}
+          allow-skipped: ${{ github.event_name == 'workflow_call' && !inputs.run_reporting && 'dependency-check,sonar' || 'none' }}
 
       - name: Check test results
         run: |
