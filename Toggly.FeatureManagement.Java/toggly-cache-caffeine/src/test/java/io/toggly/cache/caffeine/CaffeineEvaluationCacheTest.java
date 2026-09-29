@@ -86,11 +86,11 @@ class CaffeineEvaluationCacheTest {
                 .claim("role", "BB")
                 .build();
 
-        assertThat("Aa".hashCode()).isEqualTo("BB".hashCode());
+        assertThat("Aa").hasSameHashCodeAs("BB");
         assertThat(traitAa).isNotEqualTo(traitBb);
-        assertThat(traitAa.hashCode()).isEqualTo(traitBb.hashCode());
+        assertThat(traitAa).hasSameHashCodeAs(traitBb);
         assertThat(claimAa).isNotEqualTo(claimBb);
-        assertThat(claimAa.hashCode()).isEqualTo(claimBb.hashCode());
+        assertThat(claimAa).hasSameHashCodeAs(claimBb);
 
         assertThat(cache.getOrCompute("targeted", traitAa, () -> counted(computations, true))).isTrue();
         assertThat(cache.getOrCompute("targeted", traitBb, () -> counted(computations, false))).isFalse();
@@ -134,6 +134,8 @@ class CaffeineEvaluationCacheTest {
         AtomicInteger computations = new AtomicInteger();
         CountDownLatch workersReady = new CountDownLatch(8);
         CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch computationStarted = new CountDownLatch(1);
+        CountDownLatch releaseComputation = new CountDownLatch(1);
         ExecutorService workers = Executors.newFixedThreadPool(8);
 
         try {
@@ -144,7 +146,8 @@ class CaffeineEvaluationCacheTest {
                     start.await();
                     return cache.getOrCompute("concurrent", EvaluationContext.forIdentity("user"), () -> {
                         computations.incrementAndGet();
-                        sleepBriefly();
+                        computationStarted.countDown();
+                        awaitLatch(releaseComputation);
                         return true;
                     });
                 }));
@@ -152,6 +155,8 @@ class CaffeineEvaluationCacheTest {
 
             assertThat(workersReady.await(5, TimeUnit.SECONDS)).isTrue();
             start.countDown();
+            assertThat(computationStarted.await(5, TimeUnit.SECONDS)).isTrue();
+            releaseComputation.countDown();
             for (Future<Boolean> result : results) {
                 assertThat(result.get(5, TimeUnit.SECONDS)).isTrue();
             }
@@ -167,12 +172,14 @@ class CaffeineEvaluationCacheTest {
         return value;
     }
 
-    private static void sleepBriefly() {
+    private static void awaitLatch(CountDownLatch latch) {
         try {
-            TimeUnit.MILLISECONDS.sleep(25);
+            if (!latch.await(5, TimeUnit.SECONDS)) {
+                throw new AssertionError("Timed out waiting for concurrent evaluation");
+            }
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            throw new AssertionError("Interrupted while simulating concurrent evaluation", exception);
+            throw new AssertionError("Interrupted while waiting for concurrent evaluation", exception);
         }
     }
 }
