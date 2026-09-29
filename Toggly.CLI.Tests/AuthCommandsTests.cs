@@ -141,7 +141,7 @@ public class AuthCommandsTests
     }
 
     [Fact]
-    public async Task AuthLogin_StoreUnavailable_PrintsSingleFailureLine()
+    public async Task AuthLogin_StoreUnavailable_ReturnsNonZeroExitCode()
     {
         var errWriter = new StringWriter();
         var deps = new AuthCommandDeps
@@ -152,11 +152,52 @@ public class AuthCommandsTests
         };
 
         var root = CliApplication.CreateRootCommand(authDeps: deps);
-        await root.InvokeAsync(["auth", "login", "--authority", "https://auth.example.test"]);
+        var exitCode = await root.InvokeAsync(["auth", "login", "--authority", "https://auth.example.test"]);
 
+        Assert.Equal(1, exitCode);
         var error = errWriter.ToString();
         Assert.Contains("Login failed: Cannot store credentials: libsecret is required", error);
         Assert.Single(error.Split("Login failed:", StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public async Task AuthLogin_DeviceAuthorizationFailure_ReturnsNonZeroExitCode()
+    {
+        using var handler = new RecordingHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/.well-known/openid-configuration" => JsonResponse("""
+                {"token_endpoint":"https://auth.example.test/connect/token","device_authorization_endpoint":"https://auth.example.test/connect/deviceauthorization"}
+                """),
+            "/connect/deviceauthorization" => new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = new StringContent(
+                    """{"error":"unauthorized_client","error_description":"Client is not allowed"}""",
+                    Encoding.UTF8,
+                    "application/json")
+            },
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        });
+
+        var errWriter = new StringWriter();
+        var deps = new AuthCommandDeps
+        {
+            HttpClientFactory = () => new HttpClient(handler, disposeHandler: false),
+            TokenStoreFactory = () => new InMemorySecureTokenStore(),
+            Out = new StringWriter(),
+            Error = errWriter
+        };
+
+        var root = CliApplication.CreateRootCommand(authDeps: deps);
+        var exitCode = await root.InvokeAsync([
+            "auth", "login",
+            "--authority", "https://auth.example.test",
+            "--client-id", "toggly-cli"
+        ]);
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Login failed:", errWriter.ToString());
+        Assert.Contains("unauthorized_client", errWriter.ToString());
+        Assert.DoesNotContain("{\"error\"", errWriter.ToString());
     }
 
     private static HttpResponseMessage JsonResponse(string json) => new(HttpStatusCode.OK)

@@ -1,7 +1,7 @@
 using System.CommandLine;
+using System.CommandLine.Invocation;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using Toggly.CLI.Models;
 using Toggly.CLI.Services;
 
 namespace Toggly.CLI.Commands;
@@ -53,10 +53,14 @@ public static class AuthCommands
         command.AddOption(clientIdOption);
         command.AddOption(scopesOption);
 
-        command.SetHandler(async (string? authority, string? clientId, string? scopes) =>
+        command.SetHandler(async (InvocationContext context) =>
         {
             try
             {
+                var authority = context.ParseResult.GetValueForOption(authorityOption);
+                var clientId = context.ParseResult.GetValueForOption(clientIdOption);
+                var scopes = context.ParseResult.GetValueForOption(scopesOption);
+
                 var resolvedAuthority = FirstNonEmpty(
                     authority,
                     Environment.GetEnvironmentVariable("TOGGLY_AUTHORITY"),
@@ -107,9 +111,9 @@ public static class AuthCommands
             catch (Exception ex)
             {
                 deps.Error.WriteLine($"Login failed: {ex.Message}");
-                Environment.ExitCode = 1;
+                context.ExitCode = 1;
             }
-        }, authorityOption, clientIdOption, scopesOption);
+        });
 
         return command;
     }
@@ -117,7 +121,7 @@ public static class AuthCommands
     private static Command CreateLogoutCommand(AuthCommandDeps deps)
     {
         var command = new Command("logout", "Remove the stored device-code session");
-        command.SetHandler(async () =>
+        command.SetHandler(async (InvocationContext context) =>
         {
             try
             {
@@ -130,6 +134,11 @@ public static class AuthCommands
                 // Idempotent success if there is nothing to delete / store unavailable after empty logout.
                 deps.Out.WriteLine("Logged out.");
             }
+            catch (Exception ex)
+            {
+                deps.Error.WriteLine($"Logout failed: {ex.Message}");
+                context.ExitCode = 1;
+            }
         });
         return command;
     }
@@ -137,7 +146,7 @@ public static class AuthCommands
     private static Command CreateStatusCommand(AuthCommandDeps deps)
     {
         var command = new Command("status", "Show whether a device-code session is stored");
-        command.SetHandler(async () =>
+        command.SetHandler(async (InvocationContext context) =>
         {
             try
             {
@@ -156,6 +165,11 @@ public static class AuthCommands
             catch (Exception ex) when (ex is PlatformNotSupportedException or InvalidOperationException)
             {
                 deps.Out.WriteLine("Not logged in.");
+            }
+            catch (Exception ex)
+            {
+                deps.Error.WriteLine($"Status failed: {ex.Message}");
+                context.ExitCode = 1;
             }
         });
         return command;
