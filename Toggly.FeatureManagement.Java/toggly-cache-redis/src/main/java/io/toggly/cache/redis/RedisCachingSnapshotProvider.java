@@ -343,13 +343,17 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
 
     private FeatureSnapshot deserialize(String json) {
         try {
+            if (!isCompleteJsonObject(json)) {
+                return null;
+            }
             Map<String, FeatureDefinition> features = new HashMap<>();
             Map<String, MetricDefinition> metrics = new HashMap<>();
 
             String featuresJson = extractObjectByKey(json, "features");
-            if (featuresJson != null) {
-                parseFeatures(featuresJson, features);
+            if (featuresJson == null) {
+                return null;
             }
+            parseFeatures(featuresJson, features);
 
             // Parse timestamp
             String timestampStr = extractStringValue(json, "timestamp");
@@ -387,6 +391,33 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     }
 
     /**
+     * Rejects truncated cache values before their nested feature object can be
+     * mistaken for a complete root object.
+     */
+    private boolean isCompleteJsonObject(String json) {
+        if (json == null) {
+            return false;
+        }
+        int start = 0;
+        while (start < json.length() && Character.isWhitespace(json.charAt(start))) {
+            start++;
+        }
+        if (start >= json.length() || json.charAt(start) != '{') {
+            return false;
+        }
+        int end = findMatchingBrace(json, start);
+        if (end < 0) {
+            return false;
+        }
+        for (int index = end + 1; index < json.length(); index++) {
+            if (!Character.isWhitespace(json.charAt(index))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Extracts the raw object body (without surrounding braces) for a top-level JSON key.
      */
     private String extractObjectByKey(String json, String key) {
@@ -395,8 +426,18 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
         if (idx < 0) {
             return null;
         }
-        idx = json.indexOf('{', idx + search.length());
-        if (idx < 0) {
+        idx += search.length();
+        while (idx < json.length() && Character.isWhitespace(json.charAt(idx))) {
+            idx++;
+        }
+        if (idx >= json.length() || json.charAt(idx) != ':') {
+            return null;
+        }
+        idx++;
+        while (idx < json.length() && Character.isWhitespace(json.charAt(idx))) {
+            idx++;
+        }
+        if (idx >= json.length() || json.charAt(idx) != '{') {
             return null;
         }
         int end = findMatchingBrace(json, idx);
