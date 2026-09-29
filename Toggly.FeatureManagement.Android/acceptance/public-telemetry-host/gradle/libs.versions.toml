@@ -7,7 +7,7 @@ appcompat = "1.7.0"
 androidx-test-junit = "1.3.0"
 androidx-test-runner = "1.7.0"
 espresso = "3.7.0"
-mockwebserver = "4.12.0"
+mockwebserver = "5.5.0"
 
 [libraries]
 toggly-core = { module = "io.toggly:toggly-android-core", version.ref = "toggly" }
