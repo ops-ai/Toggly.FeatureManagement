@@ -118,6 +118,18 @@ public sealed class DistributedCacheCatalogStoreTests
     }
 
     [Fact]
+    public async Task ReadAsync_rejects_a_null_envelope_instead_of_reporting_absence()
+    {
+        var cache = new RecordingCache();
+        cache.Put(DistributedCacheCatalogStore.GetCatalogKey("orders"), Encoding.UTF8.GetBytes("null"));
+        var store = CreateStore(cache, CatalogCacheAccessMode.Reader);
+
+        var action = () => store.ReadAsync("orders");
+
+        await action.Should().ThrowAsync<InvalidOperationException>().WithMessage("*payload is incomplete*");
+    }
+
+    [Fact]
     public async Task ReadAsync_rejects_an_envelope_with_a_missing_update_timestamp()
     {
         var cache = new RecordingCache();
