@@ -19,8 +19,8 @@ if (artifact) console.log('LOCAL INTEGRATION ARTIFACT: telemetry; registry accep
 const hosts = [
   {next: '14.2.35', react: '18.3.1', reactTypes: '18.3.18', domTypes: '18.3.5', nodeTypes: '22.20.2', lib: 'es2022', typescript: '5.9.3'},
   {next: '15.5.25', react: '19.3.0', reactTypes: '19.3.0', domTypes: '19.3.0', nodeTypes: '22.20.2', lib: 'es2022', typescript: '5.9.3'},
-  {next: '16.3.5', react: '19.3.0', reactTypes: '19.3.0', domTypes: '19.3.0', nodeTypes: '24.13.6', lib: 'esnext', typescript: '6.0.3', bundler: '--webpack'},
-  {next: '16.3.5', react: '19.3.0', reactTypes: '19.3.0', domTypes: '19.3.0', nodeTypes: '24.13.6', lib: 'esnext', typescript: '6.0.3', bundler: '--turbopack'},
+  {next: '16.3.6', react: '19.3.0', reactTypes: '19.3.0', domTypes: '19.3.0', nodeTypes: '24.13.6', lib: 'esnext', typescript: '6.0.3', bundler: '--webpack'},
+  {next: '16.3.6', react: '19.3.0', reactTypes: '19.3.0', domTypes: '19.3.0', nodeTypes: '24.13.6', lib: 'esnext', typescript: '6.0.3', bundler: '--turbopack'},
 ]
 function assertCaretRangeContains(version, range, packageName) {
   const requested = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(range)
