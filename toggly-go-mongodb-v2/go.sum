@@ -30,8 +30,8 @@ github.com/mileusna/useragent v1.3.5 h1:SJM5NzBmh/hO+4LGeATKpaEX9+b4vcGg2qXGLiNG
 github.com/mileusna/useragent v1.3.5/go.mod h1:3d8TOmwL/5I8pJjyVDteHtgDGcefrFUX4ccGOMKNYYc=
 github.com/montanaflynn/stats v0.7.1 h1:etflOAAHORrCC44V+aR6Ftzort912ZU+YLiSTuV8eaE=
 github.com/montanaflynn/stats v0.7.1/go.mod h1:etXPPgVO6n31NxCd9KQUMvCM+ve0ruNzt6R8Bnaayow=
-github.com/ops-ai/Toggly.FeatureManagement/toggly-go v0.8.1 h1:SftEHXcfVitSA3k0NRMYCeKxXVRGqIFqG55QU2tRwZY=
-github.com/ops-ai/Toggly.FeatureManagement/toggly-go v0.8.1/go.mod h1:IVOwsk6PeCzaZmrtdW8ECcS4nsNYisBliMx1YU0kzLs=
+github.com/ops-ai/Toggly.FeatureManagement/toggly-go v0.10.0 h1:lIOwACfXB0d1WNowqR3IqiV13+JGRVEft8Aj5aTNL5E=
+github.com/ops-ai/Toggly.FeatureManagement/toggly-go v0.10.0/go.mod h1:IVOwsk6PeCzaZmrtdW8ECcS4nsNYisBliMx1YU0kzLs=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/redis/go-redis/v9 v9.22.0 h1:laDvpYXTJtZLloinw1fA5Kqd6HAEH2XKxOkG/PDq2F0=

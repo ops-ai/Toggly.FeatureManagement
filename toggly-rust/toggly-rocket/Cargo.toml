@@ -24,3 +24,4 @@ time = { workspace = true }
 
 [dev-dependencies]
 tokio-test = { workspace = true }
+wiremock = { workspace = true }
