@@ -1,3 +1,7 @@
+// SYSLIB1054: libsecret schema/password APIs are variadic C functions that LibraryImport
+// cannot express; DllImport remains the supported AOT interop path for these wrappers.
+#pragma warning disable SYSLIB1054
+
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;

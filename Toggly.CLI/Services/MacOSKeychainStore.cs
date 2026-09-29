@@ -1,3 +1,7 @@
+// SYSLIB1054: Security.framework P/Invoke signatures (byte[] password blobs / CF types) are
+// kept as DllImport for AOT-safe Keychain interop; LibraryImport marshalling is not a fit here.
+#pragma warning disable SYSLIB1054
+
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;

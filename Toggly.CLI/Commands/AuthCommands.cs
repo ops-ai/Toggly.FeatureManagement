@@ -175,6 +175,10 @@ public static class AuthCommands
         return command;
     }
 
+    // Absolute helper paths satisfy S4036 (no relative process names).
+    private const string MacOsOpenPath = "/usr/bin/open";
+    private const string LinuxXdgOpenPath = "/usr/bin/xdg-open";
+
     private static void TryOpenBrowser(AuthCommandDeps deps, string url)
     {
         try
@@ -187,7 +191,6 @@ public static class AuthCommands
 
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                // Absolute cmd.exe avoids relative-path process starts (S4036).
                 var cmd = Path.Combine(Environment.SystemDirectory, "cmd.exe");
                 Process.Start(new ProcessStartInfo
                 {
@@ -199,14 +202,14 @@ public static class AuthCommands
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             {
-                Process.Start("/usr/bin/open", url);
+                Process.Start(MacOsOpenPath, url);
             }
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             {
-                Process.Start("/usr/bin/xdg-open", url);
+                Process.Start(LinuxXdgOpenPath, url);
             }
         }
-        catch
+        catch (Exception)
         {
             // Optional convenience — ignore failures.
         }

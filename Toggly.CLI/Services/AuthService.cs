@@ -12,7 +12,7 @@ namespace Toggly.CLI.Services;
 public sealed class AuthSessionExpiredException : InvalidOperationException
 {
     public AuthSessionExpiredException()
-        : base("Session expired or was revoked. Run 'toggly auth login' to sign in again.")
+        : base(AuthMessages.SessionExpired)
     {
     }
 
@@ -25,6 +25,19 @@ public sealed class AuthSessionExpiredException : InvalidOperationException
         : base(message, innerException)
     {
     }
+}
+
+internal static class AuthMessages
+{
+    public const string SessionExpired =
+        "Session expired or was revoked. Run 'toggly auth login' to sign in again.";
+
+    public const string MissingRefreshToken =
+        "Session has no refresh token. Run 'toggly auth login' again.";
+
+    public const string OfflineAccessRequired =
+        "Login did not return a refresh token. Ensure the IdP client allows offline_access " +
+        "(AllowOfflineAccess) and includes the offline_access scope, then run 'toggly auth login' again.";
 }
 
 /// <summary>
@@ -66,8 +79,10 @@ public class AuthService
             ["scope"] = Constants.DefaultScope
         };
 
-        var requestContent = new FormUrlEncodedContent(tokenRequest);
-        var response = await _httpClient.PostAsync(config.TokenEndpoint, requestContent, cancellationToken);
+        var response = await _httpClient.PostAsync(
+            config.TokenEndpoint,
+            new FormUrlEncodedContent(tokenRequest),
+            cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -76,15 +91,13 @@ public class AuthService
         }
 
         var tokenResponse = await response.Content.ReadFromJsonAsync(TogglyJsonSerializerContext.Default.TokenResponse, cancellationToken);
-
         if (tokenResponse?.AccessToken == null)
             throw new InvalidOperationException("Failed to obtain access token: response did not contain access_token");
 
-        var expiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn - 300);
         _tokenCache[cacheKey] = new CachedToken
         {
             Token = tokenResponse.AccessToken,
-            ExpiresAt = expiresAt
+            ExpiresAt = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn - 300)
         };
 
         return tokenResponse.AccessToken;
@@ -107,15 +120,13 @@ public class AuthService
                 "Device-code login is not available for this authority.");
         }
 
-        var request = new Dictionary<string, string>
-        {
-            ["client_id"] = clientId,
-            ["scope"] = scope
-        };
-
         var response = await _httpClient.PostAsync(
             config.DeviceAuthorizationEndpoint,
-            new FormUrlEncodedContent(request),
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["client_id"] = clientId,
+                ["scope"] = scope
+            }),
             cancellationToken);
 
         if (!response.IsSuccessStatusCode)
@@ -156,74 +167,16 @@ public class AuthService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var request = new Dictionary<string, string>
-            {
-                ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code",
-                ["device_code"] = deviceCode,
-                ["client_id"] = clientId
-            };
-
-            var response = await _httpClient.PostAsync(
+            var (statusCode, body) = await PostDeviceTokenPollAsync(
                 config.TokenEndpoint,
-                new FormUrlEncodedContent(request),
+                clientId,
+                deviceCode,
                 cancellationToken);
 
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (IsSuccessStatusCode(statusCode))
+                return ParseSuccessfulDeviceToken(body, clientId, authority);
 
-            if (response.IsSuccessStatusCode)
-            {
-                AuthService.TokenResponse? tokenResponse;
-                try
-                {
-                    tokenResponse = System.Text.Json.JsonSerializer.Deserialize(
-                        body,
-                        TogglyJsonSerializerContext.Default.TokenResponse);
-                }
-                catch (System.Text.Json.JsonException)
-                {
-                    throw new InvalidOperationException("Device token response was incomplete or invalid.");
-                }
-
-                if (tokenResponse?.AccessToken == null)
-                    throw new InvalidOperationException("Device token response did not contain access_token.");
-
-                if (string.IsNullOrEmpty(tokenResponse.RefreshToken))
-                {
-                    throw new InvalidOperationException(
-                        "Login did not return a refresh token. Ensure the IdP client allows offline_access " +
-                        "(AllowOfflineAccess) and includes the offline_access scope, then run 'toggly auth login' again.");
-                }
-
-                return new AuthSession
-                {
-                    AccessToken = tokenResponse.AccessToken,
-                    RefreshToken = tokenResponse.RefreshToken,
-                    ExpiresAtUtc = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn),
-                    Authority = authority.TrimEnd('/'),
-                    ClientId = clientId,
-                    TokenType = string.IsNullOrEmpty(tokenResponse.TokenType) ? "Bearer" : tokenResponse.TokenType
-                };
-            }
-
-            var oauthError = TryParseOAuthErrorResponse(body);
-            var error = oauthError?.Error;
-            if (error == "authorization_pending")
-            {
-                await DelayAsync(interval, cancellationToken);
-                continue;
-            }
-
-            if (error == "slow_down")
-            {
-                interval += TimeSpan.FromSeconds(5);
-                await DelayAsync(interval, cancellationToken);
-                continue;
-            }
-
-            if (error == "expired_token" || error == "access_denied")
-                throw new InvalidOperationException(FormatOAuthFailure("Device authorization", response.StatusCode, body));
-
-            throw new InvalidOperationException(FormatOAuthFailure("Device token poll", response.StatusCode, body));
+            interval = await HandleDevicePollErrorAsync(statusCode, body, interval, cancellationToken);
         }
 
         throw new TimeoutException("Device authorization timed out before the user completed login.");
@@ -236,21 +189,19 @@ public class AuthService
     public async Task<AuthSession> RefreshAccessTokenAsync(AuthSession session, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(session.RefreshToken))
-            throw new AuthSessionExpiredException("Session has no refresh token. Run 'toggly auth login' again.");
+            throw new AuthSessionExpiredException(AuthMessages.MissingRefreshToken);
 
         var authority = string.IsNullOrEmpty(session.Authority) ? Constants.DefaultAuthority : session.Authority;
         var config = await GetOpenIdConfigAsync(authority, cancellationToken);
 
-        var request = new Dictionary<string, string>
-        {
-            ["grant_type"] = "refresh_token",
-            ["refresh_token"] = session.RefreshToken,
-            ["client_id"] = session.ClientId
-        };
-
         var response = await _httpClient.PostAsync(
             config.TokenEndpoint,
-            new FormUrlEncodedContent(request),
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["grant_type"] = "refresh_token",
+                ["refresh_token"] = session.RefreshToken,
+                ["client_id"] = session.ClientId
+            }),
             cancellationToken);
 
         if (!response.IsSuccessStatusCode)
@@ -258,10 +209,7 @@ public class AuthService
             var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
             var oauthError = TryParseOAuthErrorResponse(errorContent)?.Error;
             if (IsPermanentRefreshFailure(oauthError))
-            {
-                throw new AuthSessionExpiredException(
-                    "Session expired or was revoked. Run 'toggly auth login' to sign in again.");
-            }
+                throw new AuthSessionExpiredException(AuthMessages.SessionExpired);
 
             throw new InvalidOperationException(FormatOAuthFailure("Token refresh", response.StatusCode, errorContent));
         }
@@ -270,16 +218,99 @@ public class AuthService
         if (tokenResponse?.AccessToken == null)
             throw new InvalidOperationException("Refresh response did not contain access_token.");
 
+        return CreateSessionFromTokenResponse(tokenResponse, session.ClientId, authority, session.RefreshToken);
+    }
+
+    private async Task<(HttpStatusCode StatusCode, string Body)> PostDeviceTokenPollAsync(
+        string tokenEndpoint,
+        string clientId,
+        string deviceCode,
+        CancellationToken cancellationToken)
+    {
+        var response = await _httpClient.PostAsync(
+            tokenEndpoint,
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code",
+                ["device_code"] = deviceCode,
+                ["client_id"] = clientId
+            }),
+            cancellationToken);
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        return (response.StatusCode, body);
+    }
+
+    private static AuthSession ParseSuccessfulDeviceToken(string body, string clientId, string authority)
+    {
+        TokenResponse? tokenResponse;
+        try
+        {
+            tokenResponse = System.Text.Json.JsonSerializer.Deserialize(
+                body,
+                TogglyJsonSerializerContext.Default.TokenResponse);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            throw new InvalidOperationException("Device token response was incomplete or invalid.");
+        }
+
+        if (tokenResponse?.AccessToken == null)
+            throw new InvalidOperationException("Device token response did not contain access_token.");
+
+        if (string.IsNullOrEmpty(tokenResponse.RefreshToken))
+            throw new InvalidOperationException(AuthMessages.OfflineAccessRequired);
+
+        return CreateSessionFromTokenResponse(tokenResponse, clientId, authority, fallbackRefreshToken: null);
+    }
+
+    private async Task<TimeSpan> HandleDevicePollErrorAsync(
+        HttpStatusCode statusCode,
+        string body,
+        TimeSpan interval,
+        CancellationToken cancellationToken)
+    {
+        var error = TryParseOAuthErrorResponse(body)?.Error;
+        if (error == "authorization_pending")
+        {
+            await DelayAsync(interval, cancellationToken);
+            return interval;
+        }
+
+        if (error == "slow_down")
+        {
+            var slowed = interval + TimeSpan.FromSeconds(5);
+            await DelayAsync(slowed, cancellationToken);
+            return slowed;
+        }
+
+        if (error is "expired_token" or "access_denied")
+            throw new InvalidOperationException(FormatOAuthFailure("Device authorization", statusCode, body));
+
+        throw new InvalidOperationException(FormatOAuthFailure("Device token poll", statusCode, body));
+    }
+
+    private static AuthSession CreateSessionFromTokenResponse(
+        TokenResponse tokenResponse,
+        string clientId,
+        string authority,
+        string? fallbackRefreshToken)
+    {
         return new AuthSession
         {
             AccessToken = tokenResponse.AccessToken,
-            RefreshToken = string.IsNullOrEmpty(tokenResponse.RefreshToken) ? session.RefreshToken : tokenResponse.RefreshToken,
+            RefreshToken = string.IsNullOrEmpty(tokenResponse.RefreshToken)
+                ? fallbackRefreshToken
+                : tokenResponse.RefreshToken,
             ExpiresAtUtc = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn),
             Authority = authority.TrimEnd('/'),
-            ClientId = session.ClientId,
+            ClientId = clientId,
             TokenType = string.IsNullOrEmpty(tokenResponse.TokenType) ? "Bearer" : tokenResponse.TokenType
         };
     }
+
+    private static bool IsSuccessStatusCode(HttpStatusCode statusCode)
+        => (int)statusCode >= 200 && (int)statusCode <= 299;
 
     private async Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken)
     {
@@ -315,7 +346,6 @@ public class AuthService
             return null;
 
         var trimmed = description.Trim();
-        // Avoid echoing anything that looks like a JWT / opaque secret.
         if (trimmed.Contains("eyJ", StringComparison.Ordinal) ||
             trimmed.Contains("Bearer ", StringComparison.OrdinalIgnoreCase) ||
             trimmed.Length > 200)
@@ -332,7 +362,7 @@ public class AuthService
         {
             return System.Text.Json.JsonSerializer.Deserialize(body, TogglyJsonSerializerContext.Default.OAuthErrorResponse);
         }
-        catch
+        catch (System.Text.Json.JsonException)
         {
             return null;
         }
@@ -350,7 +380,6 @@ public class AuthService
             throw new HttpRequestException($"Failed to fetch OpenID configuration: {response.StatusCode}");
 
         var config = await response.Content.ReadFromJsonAsync(TogglyJsonSerializerContext.Default.OpenIdConfig, cancellationToken);
-
         if (config?.TokenEndpoint == null)
             throw new InvalidOperationException("OpenID configuration did not contain token_endpoint");
 
@@ -358,7 +387,7 @@ public class AuthService
         return config;
     }
 
-    private class CachedToken
+    private sealed class CachedToken
     {
         public string Token { get; set; } = string.Empty;
         public DateTime ExpiresAt { get; set; }

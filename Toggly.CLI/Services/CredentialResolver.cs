@@ -46,7 +46,7 @@ public static class CredentialResolver
                 Kind = ResolvedAuthKind.ClientCredentials,
                 ClientId = clientId,
                 ClientSecret = clientSecret,
-                Authority = string.IsNullOrEmpty(authority) ? Constants.DefaultAuthority : authority
+                Authority = ResolveAuthority(authority, sessionAuthority: null)
             };
         }
 
@@ -57,9 +57,7 @@ public static class CredentialResolver
             {
                 Kind = ResolvedAuthKind.DeviceSession,
                 ClientId = session.ClientId,
-                Authority = string.IsNullOrEmpty(authority)
-                    ? (string.IsNullOrEmpty(session.Authority) ? Constants.DefaultAuthority : session.Authority)
-                    : authority,
+                Authority = ResolveAuthority(authority, session.Authority),
                 Session = session
             };
         }
@@ -67,5 +65,16 @@ public static class CredentialResolver
         throw new InvalidOperationException(
             "No authentication method available. Run 'toggly auth login' for interactive use, " +
             "or set TOGGLY_CLIENT_ID and TOGGLY_CLIENT_SECRET (or --client-id / --client-secret) for CI.");
+    }
+
+    private static string ResolveAuthority(string? explicitAuthority, string? sessionAuthority)
+    {
+        if (!string.IsNullOrEmpty(explicitAuthority))
+            return explicitAuthority;
+
+        if (!string.IsNullOrEmpty(sessionAuthority))
+            return sessionAuthority;
+
+        return Constants.DefaultAuthority;
     }
 }

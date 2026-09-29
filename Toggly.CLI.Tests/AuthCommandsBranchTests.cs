@@ -46,7 +46,8 @@ public class AuthCommandsBranchTests
         Assert.Equal(0, exitCode);
         Assert.Contains("Open https://auth.example.test/device", outWriter.ToString());
         Assert.DoesNotContain("user_code=", outWriter.ToString());
-        Assert.Equal(["https://auth.example.test/device"], opened);
+        Assert.Single(opened);
+        Assert.Equal("https://auth.example.test/device", opened[0]);
     }
 
     [Fact]

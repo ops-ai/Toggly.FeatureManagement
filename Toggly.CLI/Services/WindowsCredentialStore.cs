@@ -1,3 +1,7 @@
+// SYSLIB1054: LibraryImport cannot cleanly express CredWriteW string marshalling for CREDENTIAL
+// under the AOT constraints used here; keep DllImport for the CredMan wrappers.
+#pragma warning disable SYSLIB1054
+
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -12,7 +16,8 @@ namespace Toggly.CLI.Services;
 [ExcludeFromCodeCoverage(Justification = "Thin P/Invoke wrapper over Windows Credential Manager; not exercised on non-Windows CI.")]
 internal sealed class WindowsCredentialStore : ISecureTokenStore
 {
-    private static readonly string TargetName = $"{Constants.CredentialServiceName}:{Constants.CredentialAccountName}";
+    private static readonly string CredentialTargetName =
+        $"{Constants.CredentialServiceName}:{Constants.CredentialAccountName}";
 
     public Task SaveAsync(AuthSession session, CancellationToken cancellationToken = default)
     {
@@ -35,7 +40,7 @@ internal sealed class WindowsCredentialStore : ISecureTokenStore
     public Task DeleteAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        CredDeleteW(TargetName, CRED_TYPE_GENERIC, 0);
+        _ = CredDeleteW(CredentialTargetName, CRED_TYPE_GENERIC, 0);
         return Task.CompletedTask;
     }
 
@@ -43,10 +48,10 @@ internal sealed class WindowsCredentialStore : ISecureTokenStore
     {
         // Store AuthSession JSON as raw UTF-8 bytes (CRED_TYPE_GENERIC binary blob).
         // Do not re-encode as UTF-16 — that roughly doubles size and can exceed CredMan's limit.
-        var credential = new CREDENTIAL
+        var native = new NativeCredential
         {
             Type = CRED_TYPE_GENERIC,
-            TargetName = TargetName,
+            TargetName = CredentialTargetName,
             UserName = Constants.CredentialAccountName,
             CredentialBlob = Marshal.AllocHGlobal(blob.Length),
             CredentialBlobSize = blob.Length,
@@ -59,20 +64,20 @@ internal sealed class WindowsCredentialStore : ISecureTokenStore
 
         try
         {
-            Marshal.Copy(blob, 0, credential.CredentialBlob, blob.Length);
-            if (!CredWriteW(ref credential, 0))
+            Marshal.Copy(blob, 0, native.CredentialBlob, blob.Length);
+            if (!CredWriteW(ref native, 0))
                 throw new InvalidOperationException($"Failed to write Windows credential (error {Marshal.GetLastWin32Error()}).");
         }
         finally
         {
-            if (credential.CredentialBlob != IntPtr.Zero)
-                Marshal.FreeHGlobal(credential.CredentialBlob);
+            if (native.CredentialBlob != IntPtr.Zero)
+                Marshal.FreeHGlobal(native.CredentialBlob);
         }
     }
 
     private static byte[]? ReadCredential()
     {
-        if (!CredReadW(TargetName, CRED_TYPE_GENERIC, 0, out var credPtr))
+        if (!CredReadW(CredentialTargetName, CRED_TYPE_GENERIC, 0, out var credPtr))
         {
             var error = Marshal.GetLastWin32Error();
             if (error == ERROR_NOT_FOUND)
@@ -82,12 +87,12 @@ internal sealed class WindowsCredentialStore : ISecureTokenStore
 
         try
         {
-            var credential = Marshal.PtrToStructure<CREDENTIAL>(credPtr);
-            if (credential.CredentialBlob == IntPtr.Zero || credential.CredentialBlobSize <= 0)
+            var native = Marshal.PtrToStructure<NativeCredential>(credPtr);
+            if (native.CredentialBlob == IntPtr.Zero || native.CredentialBlobSize <= 0)
                 return null;
 
-            var blob = new byte[credential.CredentialBlobSize];
-            Marshal.Copy(credential.CredentialBlob, blob, 0, credential.CredentialBlobSize);
+            var blob = new byte[native.CredentialBlobSize];
+            Marshal.Copy(native.CredentialBlob, blob, 0, native.CredentialBlobSize);
             return WindowsCredentialBlob.NormalizeUtf8Payload(blob);
         }
         finally
@@ -101,7 +106,7 @@ internal sealed class WindowsCredentialStore : ISecureTokenStore
     private const int ERROR_NOT_FOUND = 1168;
 
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool CredWriteW(ref CREDENTIAL credential, uint flags);
+    private static extern bool CredWriteW(ref NativeCredential credential, uint flags);
 
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern bool CredReadW(string targetName, int type, int reservedFlag, out IntPtr credentialPtr);
@@ -113,7 +118,7 @@ internal sealed class WindowsCredentialStore : ISecureTokenStore
     private static extern void CredFree(IntPtr credential);
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct CREDENTIAL
+    private struct NativeCredential
     {
         public int Flags;
         public int Type;

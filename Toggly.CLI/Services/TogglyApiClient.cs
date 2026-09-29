@@ -59,61 +59,77 @@ public class TogglyApiClient
     {
         if (_credentials.Kind == ResolvedAuthKind.ClientCredentials)
         {
-            // Match prior behavior: skip bearer when credentials were not supplied
-            // (tests inject unauthenticated clients via the factory).
-            if (string.IsNullOrEmpty(_credentials.ClientId) ||
-                string.IsNullOrEmpty(_credentials.ClientSecret) ||
-                string.IsNullOrEmpty(_credentials.Authority))
-            {
-                return;
-            }
-
-            var token = await _authService.GetAccessTokenAsync(
-                _credentials.ClientId,
-                _credentials.ClientSecret,
-                _credentials.Authority,
-                cancellationToken);
-            _httpClient.DefaultRequestHeaders.Authorization =
-                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+            await EnsureClientCredentialsAuthAsync(cancellationToken);
             return;
         }
 
+        await EnsureDeviceSessionAuthAsync(cancellationToken);
+    }
+
+    private async Task EnsureClientCredentialsAuthAsync(CancellationToken cancellationToken)
+    {
+        // Match prior behavior: skip bearer when credentials were not supplied
+        // (tests inject unauthenticated clients via the factory).
+        if (string.IsNullOrEmpty(_credentials.ClientId) ||
+            string.IsNullOrEmpty(_credentials.ClientSecret) ||
+            string.IsNullOrEmpty(_credentials.Authority))
+        {
+            return;
+        }
+
+        var token = await _authService.GetAccessTokenAsync(
+            _credentials.ClientId,
+            _credentials.ClientSecret,
+            _credentials.Authority,
+            cancellationToken);
+        _httpClient.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+    }
+
+    private async Task EnsureDeviceSessionAuthAsync(CancellationToken cancellationToken)
+    {
         var session = _session ?? _credentials.Session
             ?? throw new InvalidOperationException("No device session available. Run 'toggly auth login'.");
 
-        // Refresh when expired or within 5 minutes of expiry.
         if (session.ExpiresAtUtc <= DateTime.UtcNow.AddMinutes(5))
-        {
-            try
-            {
-                session = await _authService.RefreshAccessTokenAsync(session, cancellationToken);
-                _session = session;
-                if (_tokenStore is not null)
-                    await _tokenStore.SaveAsync(session, cancellationToken);
-            }
-            catch (AuthSessionExpiredException)
-            {
-                _session = null;
-                if (_tokenStore is not null)
-                {
-                    try
-                    {
-                        await _tokenStore.DeleteAsync(cancellationToken);
-                    }
-                    catch
-                    {
-                        // Best effort — still surface the expired-session guidance.
-                    }
-                }
+            session = await RefreshDeviceSessionAsync(session, cancellationToken);
 
-                throw;
-            }
-        }
-
+        var scheme = string.IsNullOrEmpty(session.TokenType) ? "Bearer" : session.TokenType;
         _httpClient.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue(
-                string.IsNullOrEmpty(session.TokenType) ? "Bearer" : session.TokenType,
-                session.AccessToken);
+            new System.Net.Http.Headers.AuthenticationHeaderValue(scheme, session.AccessToken);
+    }
+
+    private async Task<AuthSession> RefreshDeviceSessionAsync(AuthSession session, CancellationToken cancellationToken)
+    {
+        try
+        {
+            session = await _authService.RefreshAccessTokenAsync(session, cancellationToken);
+            _session = session;
+            if (_tokenStore is not null)
+                await _tokenStore.SaveAsync(session, cancellationToken);
+            return session;
+        }
+        catch (AuthSessionExpiredException)
+        {
+            await ClearExpiredDeviceSessionAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    private async Task ClearExpiredDeviceSessionAsync(CancellationToken cancellationToken)
+    {
+        _session = null;
+        if (_tokenStore is null)
+            return;
+
+        try
+        {
+            await _tokenStore.DeleteAsync(cancellationToken);
+        }
+        catch (Exception)
+        {
+            // Best effort — still surface the expired-session guidance.
+        }
     }
 
     /// <summary>
