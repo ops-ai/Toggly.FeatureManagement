@@ -192,8 +192,17 @@ mod tests {
 
     #[test]
     fn test_feature_rejection_into_response() {
-        let rejection = FeatureRejection::FeatureDisabled;
-        let response = rejection.into_response();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            FeatureRejection::ClientNotFound.into_response().status(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+        assert_eq!(
+            FeatureRejection::FeatureDisabled.into_response().status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            FeatureRejection::EvaluationError.into_response().status(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 }

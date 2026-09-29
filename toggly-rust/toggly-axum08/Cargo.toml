@@ -31,3 +31,5 @@ futures-util = "0.3"
 
 [dev-dependencies]
 tokio-test = { workspace = true }
+tower05 = { package = "tower", version = "0.5", features = ["util"] }
+wiremock = { workspace = true }
