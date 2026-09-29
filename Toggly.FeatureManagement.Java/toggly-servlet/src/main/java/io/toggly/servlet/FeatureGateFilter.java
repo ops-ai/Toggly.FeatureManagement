@@ -49,7 +49,10 @@ public class FeatureGateFilter implements Filter {
         // Parse features
         String featuresParam = filterConfig.getInitParameter("features");
         if (featuresParam != null && !featuresParam.isEmpty()) {
-            features = Arrays.asList(featuresParam.split(","));
+            features = Arrays.stream(featuresParam.split(","))
+                    .map(String::trim)
+                    .filter(feature -> !feature.isEmpty())
+                    .toList();
         } else {
             features = List.of();
         }
@@ -72,6 +75,7 @@ public class FeatureGateFilter implements Filter {
             try {
                 blockedStatus = Integer.parseInt(statusParam);
             } catch (NumberFormatException ignored) {
+                // Keep the safe not-found default when web.xml contains an invalid status.
             }
         }
 
@@ -109,8 +113,8 @@ public class FeatureGateFilter implements Filter {
         if (allowed) {
             chain.doFilter(request, response);
         } else {
-            if (response instanceof HttpServletResponse) {
-                ((HttpServletResponse) response).sendError(blockedStatus);
+            if (response instanceof HttpServletResponse httpServletResponse) {
+                httpServletResponse.sendError(blockedStatus);
             }
         }
     }

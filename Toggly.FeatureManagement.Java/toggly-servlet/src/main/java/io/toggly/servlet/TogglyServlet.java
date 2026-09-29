@@ -41,6 +41,8 @@ import java.util.Map;
 public class TogglyServlet extends HttpServlet {
 
     @Override
+    // The Servlet API makes I/O failure propagation to the container part of this contract.
+    @SuppressWarnings("java:S1989")
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
@@ -63,6 +65,8 @@ public class TogglyServlet extends HttpServlet {
     }
 
     @Override
+    // The Servlet API makes I/O failure propagation to the container part of this contract.
+    @SuppressWarnings("java:S1989")
     protected void doPost(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 

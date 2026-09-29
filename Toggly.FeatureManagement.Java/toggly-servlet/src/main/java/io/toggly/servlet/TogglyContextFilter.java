@@ -94,10 +94,9 @@ public class TogglyContextFilter implements Filter {
         String identity = httpRequest.getHeader(identityHeader);
 
         // Fall back to security principal
-        if ((identity == null || identity.isEmpty()) && useSecurityPrincipal) {
-            if (httpRequest.getUserPrincipal() != null) {
-                identity = httpRequest.getUserPrincipal().getName();
-            }
+        if ((identity == null || identity.isEmpty())
+                && useSecurityPrincipal && httpRequest.getUserPrincipal() != null) {
+            identity = httpRequest.getUserPrincipal().getName();
         }
 
         if (identity != null && !identity.isEmpty()) {

@@ -99,6 +99,7 @@ public class TogglyServletContextListener implements ServletContextListener {
             try {
                 builder.refreshIntervalSeconds(Long.parseLong(refreshInterval));
             } catch (NumberFormatException ignored) {
+                // Keep the SDK default when the context parameter is malformed.
             }
         }
 
