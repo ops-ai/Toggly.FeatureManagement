@@ -18,29 +18,32 @@ internal sealed class LinuxLibsecretStore : ISecureTokenStore
         EnsureLibsecretAvailable();
 
         var payload = AuthSessionCodec.Encode(session);
-        var error = IntPtr.Zero;
-        var ok = secret_password_store_sync(
-            GetSchema(),
-            SECRET_COLLECTION_DEFAULT,
-            $"{Constants.CredentialServiceName} auth session",
-            payload,
-            IntPtr.Zero,
-            ref error,
-            "service", Constants.CredentialServiceName,
-            "account", Constants.CredentialAccountName,
-            IntPtr.Zero);
-
-        if (error != IntPtr.Zero)
+        return Task.FromResult(WithSchema(schema =>
         {
-            var message = GErrorMessage(error);
-            g_error_free(error);
-            throw new InvalidOperationException($"Failed to save auth session to libsecret: {message}");
-        }
+            var error = IntPtr.Zero;
+            var ok = secret_password_store_sync(
+                schema,
+                SECRET_COLLECTION_DEFAULT,
+                $"{Constants.CredentialServiceName} auth session",
+                payload,
+                IntPtr.Zero,
+                ref error,
+                "service", Constants.CredentialServiceName,
+                "account", Constants.CredentialAccountName,
+                IntPtr.Zero);
 
-        if (!ok)
-            throw new InvalidOperationException("Failed to save auth session to libsecret.");
+            if (error != IntPtr.Zero)
+            {
+                var message = GErrorMessage(error);
+                g_error_free(error);
+                throw new InvalidOperationException($"Failed to save auth session to libsecret: {message}");
+            }
 
-        return Task.CompletedTask;
+            if (!ok)
+                throw new InvalidOperationException("Failed to save auth session to libsecret.");
+
+            return true;
+        }));
     }
 
     public Task<AuthSession?> LoadAsync(CancellationToken cancellationToken = default)
@@ -48,34 +51,37 @@ internal sealed class LinuxLibsecretStore : ISecureTokenStore
         cancellationToken.ThrowIfCancellationRequested();
         EnsureLibsecretAvailable();
 
-        var error = IntPtr.Zero;
-        var passwordPtr = secret_password_lookup_sync(
-            GetSchema(),
-            IntPtr.Zero,
-            ref error,
-            "service", Constants.CredentialServiceName,
-            "account", Constants.CredentialAccountName,
-            IntPtr.Zero);
-
-        if (error != IntPtr.Zero)
+        return Task.FromResult(WithSchema(schema =>
         {
-            var message = GErrorMessage(error);
-            g_error_free(error);
-            throw new InvalidOperationException($"Failed to load auth session from libsecret: {message}");
-        }
+            var error = IntPtr.Zero;
+            var passwordPtr = secret_password_lookup_sync(
+                schema,
+                IntPtr.Zero,
+                ref error,
+                "service", Constants.CredentialServiceName,
+                "account", Constants.CredentialAccountName,
+                IntPtr.Zero);
 
-        if (passwordPtr == IntPtr.Zero)
-            return Task.FromResult<AuthSession?>(null);
+            if (error != IntPtr.Zero)
+            {
+                var message = GErrorMessage(error);
+                g_error_free(error);
+                throw new InvalidOperationException($"Failed to load auth session from libsecret: {message}");
+            }
 
-        try
-        {
-            var json = Marshal.PtrToStringUTF8(passwordPtr);
-            return Task.FromResult(string.IsNullOrEmpty(json) ? null : AuthSessionCodec.Decode(json));
-        }
-        finally
-        {
-            secret_password_free(passwordPtr);
-        }
+            if (passwordPtr == IntPtr.Zero)
+                return null;
+
+            try
+            {
+                var json = Marshal.PtrToStringUTF8(passwordPtr);
+                return string.IsNullOrEmpty(json) ? null : AuthSessionCodec.Decode(json);
+            }
+            finally
+            {
+                secret_password_free(passwordPtr);
+            }
+        }));
     }
 
     public Task DeleteAsync(CancellationToken cancellationToken = default)
@@ -83,23 +89,28 @@ internal sealed class LinuxLibsecretStore : ISecureTokenStore
         cancellationToken.ThrowIfCancellationRequested();
         EnsureLibsecretAvailable();
 
-        var error = IntPtr.Zero;
-        secret_password_clear_sync(
-            GetSchema(),
-            IntPtr.Zero,
-            ref error,
-            "service", Constants.CredentialServiceName,
-            "account", Constants.CredentialAccountName,
-            IntPtr.Zero);
-
-        if (error != IntPtr.Zero)
+        WithSchema(schema =>
         {
-            var message = GErrorMessage(error);
-            g_error_free(error);
-            // Not found is fine for idempotent logout.
-            if (!message.Contains("not found", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException($"Failed to delete auth session from libsecret: {message}");
-        }
+            var error = IntPtr.Zero;
+            secret_password_clear_sync(
+                schema,
+                IntPtr.Zero,
+                ref error,
+                "service", Constants.CredentialServiceName,
+                "account", Constants.CredentialAccountName,
+                IntPtr.Zero);
+
+            if (error != IntPtr.Zero)
+            {
+                var message = GErrorMessage(error);
+                g_error_free(error);
+                // Not found is fine for idempotent logout.
+                if (!message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Failed to delete auth session from libsecret: {message}");
+            }
+
+            return true;
+        });
 
         return Task.CompletedTask;
     }
@@ -123,23 +134,31 @@ internal sealed class LinuxLibsecretStore : ISecureTokenStore
         }
     }
 
-    private static IntPtr GetSchema()
+    private static T WithSchema<T>(Func<IntPtr, T> action)
     {
         // Build a transient schema each call — AOT-safe and avoids static native lifetime issues.
-        return secret_schema_new(
+        var schema = secret_schema_new(
             SchemaName,
             SECRET_SCHEMA_NONE,
             "service", SECRET_SCHEMA_ATTRIBUTE_STRING,
             "account", SECRET_SCHEMA_ATTRIBUTE_STRING,
             IntPtr.Zero);
+
+        try
+        {
+            return action(schema);
+        }
+        finally
+        {
+            if (schema != IntPtr.Zero)
+                secret_schema_unref(schema);
+        }
     }
 
     private static string GErrorMessage(IntPtr error)
     {
         if (error == IntPtr.Zero)
             return "unknown error";
-        var messagePtr = Marshal.ReadIntPtr(error, IntPtr.Size); // GError.message is the second pointer field after domain/code packing varies;
-        // Prefer g_error message accessor via struct layout:
         var gerror = Marshal.PtrToStructure<GError>(error);
         return Marshal.PtrToStringUTF8(gerror.Message) ?? "unknown error";
     }
@@ -165,6 +184,9 @@ internal sealed class LinuxLibsecretStore : ISecureTokenStore
         string attribute2Name,
         int attribute2Type,
         IntPtr end);
+
+    [DllImport("libsecret-1.so.0", CallingConvention = CallingConvention.Cdecl)]
+    private static extern void secret_schema_unref(IntPtr schema);
 
     [DllImport("libsecret-1.so.0", CallingConvention = CallingConvention.Cdecl)]
     private static extern bool secret_password_store_sync(

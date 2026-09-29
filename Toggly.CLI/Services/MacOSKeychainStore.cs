@@ -30,10 +30,18 @@ internal sealed class MacOSKeychainStore : ISecureTokenStore
             AccountNameBytes,
             (uint)payload.Length,
             payload,
-            out _);
+            out var itemRef);
 
-        if (status != errSecSuccess)
-            throw new InvalidOperationException($"Failed to save auth session to macOS Keychain (status {status}).");
+        try
+        {
+            if (status != errSecSuccess)
+                throw new InvalidOperationException($"Failed to save auth session to macOS Keychain (status {status}).");
+        }
+        finally
+        {
+            if (itemRef != IntPtr.Zero)
+                CFRelease(itemRef);
+        }
 
         return Task.CompletedTask;
     }
