@@ -1,5 +1,12 @@
 # Changelog
 
+## All .NET SDK packages 3.12.1 - 2026-09-29
+
+### Changed
+- Simplified HealthChecks evaluation while retaining existing health status
+  and diagnostic values for unavailable definitions, required features without
+  `AlwaysOn`, and definition refresh errors.
+
 ## All .NET SDK packages 3.12.0 - 2026-09-28
 
 ### Added

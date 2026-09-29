@@ -303,9 +303,21 @@ updates:
       - dependency-name: "org.jetbrains.kotlinx:kotlinx-serialization-*"
         versions: [">=1.8.0"]
       # mockk 1.14 / Hilt 2.60 / Room 2.8 pull Kotlin 2.2 metadata while the
-      # SDK compiles with Kotlin 2.0 (#519).
+      # SDK compiles with Kotlin 2.0 (#519). AGP 9 dual line only (OPS-1563).
       - dependency-name: "io.mockk:mockk"
         versions: [">=1.14.0"]
+      - dependency-name: "io.mockk:mockk-android"
+        versions: [">=1.14.0"]
+      # Gradle 9 pairs with AGP 9; keep wrapper on 8.x with AGP 8.7 (TOOLCHAIN.md).
+      - dependency-name: "gradle"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "gradle-wrapper"
+        update-types: ["version-update:semver-major"]
+      # OkHttp 5 / mockwebserver 5: migrate acceptance hosts intentionally.
+      - dependency-name: "com.squareup.okhttp3:okhttp"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "com.squareup.okhttp3:mockwebserver"
+        update-types: ["version-update:semver-major"]
       - dependency-name: "com.google.dagger:hilt-android"
         versions: [">=2.54.0"]
       - dependency-name: "com.google.dagger.hilt.android"

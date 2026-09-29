@@ -243,6 +243,7 @@ try {
       response.setHeader('Access-Control-Allow-Origin', '*')
       response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
       response.setHeader('Access-Control-Allow-Headers', request.headers['access-control-request-headers'] ?? 'content-type,content-encoding')
+      response.setHeader('Access-Control-Expose-Headers', 'ETag')
       if (request.method === 'OPTIONS') {
         if (request.url?.includes('/api/frontend/telemetry')) optionsCount++
         response.writeHead(204).end()

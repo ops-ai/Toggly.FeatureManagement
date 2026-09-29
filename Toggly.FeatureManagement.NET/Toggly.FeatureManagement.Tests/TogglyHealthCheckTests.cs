@@ -11,6 +11,9 @@ namespace Toggly.FeatureManagement.Tests;
 
 public class TogglyHealthCheckTests
 {
+    private static readonly string[] CheckoutAndPayments = { "checkout", "payments" };
+    private static readonly string[] CheckoutOnly = { "checkout" };
+
     private readonly Mock<IFeatureDefinitionProvider> _featureProviderMock;
     private readonly Mock<IFeatureProviderDebug> _featureProviderDebugMock;
 
@@ -306,6 +309,58 @@ public class TogglyHealthCheckTests
         result.Status.Should().Be(HealthStatus.Healthy);
     }
 
+    [Fact]
+    public async Task CheckHealthAsync_ReturnsDegraded_WhenRequiredDefinitionsAreUnavailable()
+    {
+        _featureProviderDebugMock.Setup(x => x.GetDebugInfo()).Returns(new FeatureProviderDebugInfo
+        {
+            Loaded = true,
+            WebsocketClientRunning = true,
+            Definitions = null
+        });
+
+        var healthCheck = CreateHealthCheck(new TogglyHealthCheckOptions
+        {
+            RequiredFeatures = CheckoutAndPayments
+        });
+
+        var result = await healthCheck.CheckHealthAsync(CreateContext());
+
+        result.Status.Should().Be(HealthStatus.Degraded);
+        result.Data["disabledRequiredFeatures"].Should().Be("checkout, payments");
+    }
+
+    [Fact]
+    public async Task CheckHealthAsync_ReturnsDegraded_WhenRequiredDefinitionHasNoAlwaysOnFilter()
+    {
+        _featureProviderDebugMock.Setup(x => x.GetDebugInfo()).Returns(new FeatureProviderDebugInfo
+        {
+            Loaded = true,
+            WebsocketClientRunning = true,
+            Definitions = new ConcurrentDictionary<string, FeatureDefinition>(new[]
+            {
+                new KeyValuePair<string, FeatureDefinition>("checkout", new FeatureDefinition
+                {
+                    Name = "checkout",
+                    EnabledFor = new List<FeatureFilterConfiguration>
+                    {
+                        new() { Name = "Percentage" }
+                    }
+                })
+            })
+        });
+
+        var healthCheck = CreateHealthCheck(new TogglyHealthCheckOptions
+        {
+            RequiredFeatures = CheckoutOnly
+        });
+
+        var result = await healthCheck.CheckHealthAsync(CreateContext());
+
+        result.Status.Should().Be(HealthStatus.Degraded);
+        result.Data["disabledRequiredFeatures"].Should().Be("checkout");
+    }
+
     #endregion
 
     #region Diagnostic Data Tests
@@ -369,6 +424,25 @@ public class TogglyHealthCheckTests
         // Assert
         result.Data.Should().NotContainKey("appKey");
         result.Data.Should().NotContainKey("environment");
+    }
+
+    [Fact]
+    public async Task CheckHealthAsync_IncludesLastErrorAndTimestamp_WhenDiagnosticsEnabled()
+    {
+        var errorTime = new DateTime(2026, 9, 28, 12, 0, 0, DateTimeKind.Utc);
+        _featureProviderDebugMock.Setup(x => x.GetDebugInfo()).Returns(new FeatureProviderDebugInfo
+        {
+            Loaded = true,
+            WebsocketClientRunning = true,
+            LastError = "definition refresh failed",
+            LastErrorTime = errorTime
+        });
+
+        var result = await CreateHealthCheck().CheckHealthAsync(CreateContext());
+
+        result.Status.Should().Be(HealthStatus.Healthy);
+        result.Data["lastError"].Should().Be("definition refresh failed");
+        result.Data["lastErrorTime"].Should().Be("2026-09-28T12:00:00.0000000Z");
     }
 
     #endregion

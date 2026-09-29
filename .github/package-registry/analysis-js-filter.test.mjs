@@ -71,6 +71,24 @@ test('Client-Core runs coverage and its packed browser host from the standalone 
   assert.ok(result.requiredJobs.split(',').includes('test'));
 });
 
+test('Evaluator runs its own coverage in the analysis matrix', () => {
+  const result = filterAnalysisJs('Evaluator');
+  assert.deepEqual(result.testMatrix, [{
+    sdk: 'Evaluator',
+    path: 'toggly-eval',
+    'test-cmd': 'npm run test:coverage',
+    'has-lint': false,
+  }]);
+  assert.equal(result.needSharedDeps, false);
+  assert.ok(result.requiredJobs.split(',').includes('test'));
+});
+
+test('Evaluator with a shared-dependency SDK still builds shared artifacts', () => {
+  const result = filterAnalysisJs('Evaluator,Vue');
+  assert.equal(result.needSharedDeps, true);
+  assert.deepEqual(result.testMatrix.map(({ sdk }) => sdk), ['Evaluator', 'Vue']);
+});
+
 test('JavaScript requires coverage and the packed browser telemetry host', () => {
   const result = filterAnalysisJs('JavaScript');
   assert.deepEqual(result.testMatrix, [{
