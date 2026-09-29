@@ -15,10 +15,12 @@ public static class CliApplication
     /// </summary>
     /// <param name="apiClientFactory">Optional API client factory for command execution.</param>
     /// <param name="authDeps">Optional auth command dependencies for tests.</param>
+    /// <param name="secureTokenStoreFactory">Optional OS credential store factory (tests).</param>
     /// <returns>The configured root command.</returns>
     public static RootCommand CreateRootCommand(
-        Func<InvocationContext, TogglyApiClient>? apiClientFactory = null,
-        AuthCommandDeps? authDeps = null)
+        Func<InvocationContext, TogglyApiClient?>? apiClientFactory = null,
+        AuthCommandDeps? authDeps = null,
+        Func<ISecureTokenStore>? secureTokenStoreFactory = null)
     {
         var rootCommand = new RootCommand("Toggly CLI - Command-line interface for Toggly feature flag management");
 
@@ -49,7 +51,8 @@ public static class CliApplication
             clientIdOption,
             clientSecretOption,
             authorityOption,
-            baseUrlOption);
+            baseUrlOption,
+            secureTokenStoreFactory);
 
         rootCommand.AddCommand(AuthCommands.Create(authDeps));
         rootCommand.AddCommand(ReleaseCommands.CreateReleaseCommand(apiClientFactory));
@@ -61,12 +64,13 @@ public static class CliApplication
         return rootCommand;
     }
 
-    private static TogglyApiClient CreateApiClient(
+    private static TogglyApiClient? CreateApiClient(
         InvocationContext context,
         Option<string?> clientIdOption,
         Option<string?> clientSecretOption,
         Option<string?> authorityOption,
-        Option<string?> baseUrlOption)
+        Option<string?> baseUrlOption,
+        Func<ISecureTokenStore>? secureTokenStoreFactory)
     {
         var configService = new ConfigService();
         var config = configService.LoadConfig(
@@ -78,7 +82,7 @@ public static class CliApplication
         ISecureTokenStore? tokenStore = null;
         try
         {
-            tokenStore = SecureTokenStore.Create();
+            tokenStore = secureTokenStoreFactory?.Invoke() ?? SecureTokenStore.Create();
         }
         catch (Exception ex) when (ex is PlatformNotSupportedException or InvalidOperationException)
         {
@@ -97,10 +101,11 @@ public static class CliApplication
         }
         catch (InvalidOperationException ex)
         {
+            // Do not rethrow — System.CommandLine would override ExitCode 2 with 1.
             Console.Error.WriteLine($"Authentication error: {ex.Message}");
             Console.Error.WriteLine("Use --help for more information.");
             context.ExitCode = 2;
-            throw;
+            return null;
         }
 
         var httpClient = new HttpClient();

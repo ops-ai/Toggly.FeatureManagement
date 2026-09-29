@@ -15,7 +15,7 @@ public static class FeatureCommands
     /// <summary>
     /// Create the feature command group
     /// </summary>
-    public static Command CreateFeatureCommand(Func<InvocationContext, TogglyApiClient> apiClientFactory)
+    public static Command CreateFeatureCommand(Func<InvocationContext, TogglyApiClient?> apiClientFactory)
     {
         var command = new Command("create-feature", "Create a new feature");
 
@@ -67,6 +67,9 @@ public static class FeatureCommands
         command.SetHandler(async (InvocationContext context) =>
         {
             var apiClient = apiClientFactory(context);
+            if (apiClient is null)
+                return;
+
             var applicationId = context.ParseResult.GetValueForOption(applicationIdOption)!;
             var name = context.ParseResult.GetValueForOption(nameOption)!;
             var featureKey = context.ParseResult.GetValueForOption(featureKeyOption)!;
@@ -123,7 +126,7 @@ public static class FeatureCommands
     /// <summary>
     /// Create the update-feature command
     /// </summary>
-    public static Command CreateUpdateFeatureCommand(Func<InvocationContext, TogglyApiClient> apiClientFactory)
+    public static Command CreateUpdateFeatureCommand(Func<InvocationContext, TogglyApiClient?> apiClientFactory)
     {
         var command = new Command("update-feature", "Update an existing feature");
 
@@ -167,6 +170,9 @@ public static class FeatureCommands
         command.SetHandler(async (InvocationContext context) =>
         {
             var apiClient = apiClientFactory(context);
+            if (apiClient is null)
+                return;
+
             var applicationId = context.ParseResult.GetValueForOption(applicationIdOption)!;
             var featureKey = context.ParseResult.GetValueForOption(featureKeyOption)!;
             var name = context.ParseResult.GetValueForOption(nameOption);

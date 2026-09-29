@@ -15,7 +15,7 @@ public static class ReleaseCommands
     /// <summary>
     /// Create the release command group
     /// </summary>
-    public static Command CreateReleaseCommand(Func<InvocationContext, TogglyApiClient> apiClientFactory)
+    public static Command CreateReleaseCommand(Func<InvocationContext, TogglyApiClient?> apiClientFactory)
     {
         var command = new Command("create-release", "Create a new release");
 
@@ -49,6 +49,9 @@ public static class ReleaseCommands
         command.SetHandler(async (InvocationContext context) =>
         {
             var apiClient = apiClientFactory(context);
+            if (apiClient is null)
+                return;
+
             var applicationId = context.ParseResult.GetValueForOption(applicationIdOption)!;
             var name = context.ParseResult.GetValueForOption(nameOption)!;
             var releaseNotes = context.ParseResult.GetValueForOption(releaseNotesOption);
@@ -97,7 +100,7 @@ public static class ReleaseCommands
     /// <summary>
     /// Create the associate-build command
     /// </summary>
-    public static Command CreateAssociateBuildCommand(Func<InvocationContext, TogglyApiClient> apiClientFactory)
+    public static Command CreateAssociateBuildCommand(Func<InvocationContext, TogglyApiClient?> apiClientFactory)
     {
         var command = new Command("associate-build", "Associate a CI build with a release");
 
@@ -181,6 +184,9 @@ public static class ReleaseCommands
         command.SetHandler(async (InvocationContext context) =>
         {
             var apiClient = apiClientFactory(context);
+            if (apiClient is null)
+                return;
+
             var projectKey = context.ParseResult.GetValueForOption(projectKeyOption)!;
             var environment = context.ParseResult.GetValueForOption(environmentOption)!;
             var ciProvider = context.ParseResult.GetValueForOption(ciProviderOption)!;

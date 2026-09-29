@@ -15,7 +15,7 @@ public static class EnvironmentCommands
     /// <summary>
     /// Create the update-feature-environment command
     /// </summary>
-    public static Command CreateUpdateFeatureEnvironmentCommand(Func<InvocationContext, TogglyApiClient> apiClientFactory)
+    public static Command CreateUpdateFeatureEnvironmentCommand(Func<InvocationContext, TogglyApiClient?> apiClientFactory)
     {
         var command = new Command("update-feature-environment", "Update feature configuration on a specific environment");
 
@@ -62,6 +62,9 @@ public static class EnvironmentCommands
         command.SetHandler(async (InvocationContext context) =>
         {
             var apiClient = apiClientFactory(context);
+            if (apiClient is null)
+                return;
+
             var applicationId = context.ParseResult.GetValueForOption(applicationIdOption)!;
             var environment = context.ParseResult.GetValueForOption(environmentOption)!;
             var featureKey = context.ParseResult.GetValueForOption(featureKeyOption)!;
