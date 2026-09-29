@@ -78,10 +78,10 @@ public class FeatureGateOperationProcessorTests
         var serviceProvider = new Mock<IServiceProvider>();
         serviceProvider
             .Setup(x => x.GetService(typeof(IHttpContextAccessor)))
-            .Returns(null);
+            .Returns((object?)null);
         serviceProvider
             .Setup(x => x.GetService(typeof(IFeatureManager)))
-            .Returns(null);
+            .Returns((object?)null);
 
         var processor = new FeatureGateOperationProcessor(serviceProvider.Object);
 
@@ -315,7 +315,7 @@ public class FeatureGateOperationProcessorTests
         // Use reflection to invoke private method
         var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
             "IsFeatureEnabled",
-            BindingFlags.NonPublic | BindingFlags.Instance);
+            BindingFlags.NonPublic | BindingFlags.Static);
 
         // Act
         var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, null })!;
@@ -334,7 +334,7 @@ public class FeatureGateOperationProcessorTests
 
         var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
             "IsFeatureEnabled",
-            BindingFlags.NonPublic | BindingFlags.Instance);
+            BindingFlags.NonPublic | BindingFlags.Static);
 
         // Act
         var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, _featureManagerMock.Object })!;
@@ -353,7 +353,7 @@ public class FeatureGateOperationProcessorTests
 
         var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
             "IsFeatureEnabled",
-            BindingFlags.NonPublic | BindingFlags.Instance);
+            BindingFlags.NonPublic | BindingFlags.Static);
 
         // Act
         var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, _featureManagerMock.Object })!;
@@ -373,7 +373,7 @@ public class FeatureGateOperationProcessorTests
 
         var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
             "IsFeatureEnabled",
-            BindingFlags.NonPublic | BindingFlags.Instance);
+            BindingFlags.NonPublic | BindingFlags.Static);
 
         // Act
         var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, _featureManagerMock.Object })!;
@@ -393,7 +393,7 @@ public class FeatureGateOperationProcessorTests
 
         var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
             "IsFeatureEnabled",
-            BindingFlags.NonPublic | BindingFlags.Instance);
+            BindingFlags.NonPublic | BindingFlags.Static);
 
         // Act
         var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, _featureManagerMock.Object })!;
@@ -413,7 +413,7 @@ public class FeatureGateOperationProcessorTests
 
         var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
             "IsFeatureEnabled",
-            BindingFlags.NonPublic | BindingFlags.Instance);
+            BindingFlags.NonPublic | BindingFlags.Static);
 
         // Act
         var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, _featureManagerMock.Object })!;
@@ -433,7 +433,7 @@ public class FeatureGateOperationProcessorTests
 
         var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
             "IsFeatureEnabled",
-            BindingFlags.NonPublic | BindingFlags.Instance);
+            BindingFlags.NonPublic | BindingFlags.Static);
 
         // Act
         var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, _featureManagerMock.Object })!;
@@ -453,7 +453,7 @@ public class FeatureGateOperationProcessorTests
 
         var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
             "IsFeatureEnabled",
-            BindingFlags.NonPublic | BindingFlags.Instance);
+            BindingFlags.NonPublic | BindingFlags.Static);
 
         // Act
         var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, _featureManagerMock.Object })!;
@@ -471,7 +471,7 @@ public class FeatureGateOperationProcessorTests
 
         var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
             "IsFeatureEnabled",
-            BindingFlags.NonPublic | BindingFlags.Instance);
+            BindingFlags.NonPublic | BindingFlags.Static);
 
         // Act - both managers are null
         var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, null })!;
@@ -490,7 +490,7 @@ public class FeatureGateOperationProcessorTests
 
         var methodInfo = typeof(FeatureGateOperationProcessor).GetMethod(
             "IsFeatureEnabled",
-            BindingFlags.NonPublic | BindingFlags.Instance);
+            BindingFlags.NonPublic | BindingFlags.Static);
 
         // Act
         var result = (bool)methodInfo!.Invoke(processor, new object?[] { featureGate, null, _featureManagerMock.Object })!;
@@ -508,26 +508,26 @@ public class FeatureGateOperationProcessorTests
     private class TestFeatureGatedController : ControllerBase
     {
         [FeatureGate("ActionFeature")]
-        public IActionResult FeatureGatedAction() => Ok();
+        public OkResult FeatureGatedAction() => Ok();
 
-        public IActionResult NonGatedAction() => Ok();
+        public OkResult NonGatedAction() => Ok();
     }
 
     [FeatureGate("Feature1", "Feature2")]
     private class TestMultiFeatureController : ControllerBase
     {
-        public IActionResult Index() => Ok();
+        public OkResult Index() => Ok();
     }
 
     [FeatureGate(RequirementType.Any, "FeatureA", "FeatureB")]
     private class TestAnyFeatureController : ControllerBase
     {
-        public IActionResult Index() => Ok();
+        public OkResult Index() => Ok();
     }
 
     private class TestNoFeatureController : ControllerBase
     {
-        public IActionResult Index() => Ok();
+        public OkResult Index() => Ok();
     }
 
     #endregion

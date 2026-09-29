@@ -84,6 +84,24 @@ public class ServiceCollectionExtensionsTests
     #region UseFeatureAwareOpenApi Tests
 
     [Fact]
+    public void UseFeatureAwareOpenApi_WithoutOptionsOrConfigure_RegistersDefaultMiddleware()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<IEnumerable<OpenApiDocumentRegistration>>(
+            new[] { new OpenApiDocumentRegistration("v1", null!) });
+        using var serviceProvider = services.BuildServiceProvider();
+        var appBuilder = new Mock<IApplicationBuilder>();
+        appBuilder.Setup(x => x.ApplicationServices).Returns(serviceProvider);
+        appBuilder.Setup(x => x.Use(It.IsAny<Func<RequestDelegate, RequestDelegate>>()))
+            .Returns(appBuilder.Object);
+
+        var result = appBuilder.Object.UseFeatureAwareOpenApi();
+
+        result.Should().BeSameAs(appBuilder.Object);
+        appBuilder.Verify(x => x.Use(It.IsAny<Func<RequestDelegate, RequestDelegate>>()), Times.Once);
+    }
+
+    [Fact]
     public void UseFeatureAwareOpenApi_WithNullConfigure_AndSettingsFromDI_UsesProvidedSettings()
     {
         // Arrange
