@@ -83,13 +83,22 @@ public class CredentialResolverTests
     }
 
     [Fact]
-    public async Task ResolveAsync_ThrowsWhenClientIdWithoutSecretAndNoSession()
+    public async Task ResolveAsync_ThrowsWhenClientIdWithoutSecret()
     {
         var store = new InMemorySecureTokenStore();
+        await store.SaveAsync(new AuthSession
+        {
+            AccessToken = "session-token",
+            RefreshToken = "refresh",
+            ExpiresAtUtc = DateTime.UtcNow.AddHours(1),
+            ClientId = "toggly-cli",
+            Authority = Constants.DefaultAuthority
+        });
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             CredentialResolver.ResolveAsync("id-only", null, null, store));
 
-        Assert.Contains("toggly auth login", ex.Message);
+        Assert.Contains("client secret", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("No authentication method available", ex.Message, StringComparison.Ordinal);
     }
 }

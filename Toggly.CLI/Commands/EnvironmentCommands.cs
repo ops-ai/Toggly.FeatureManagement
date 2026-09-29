@@ -12,6 +12,14 @@ namespace Toggly.CLI.Commands;
 /// </summary>
 public static class EnvironmentCommands
 {
+    private sealed record UpdateFeatureEnvironmentOptions(
+        Option<string> ApplicationId,
+        Option<string> Environment,
+        Option<string> FeatureKey,
+        Option<bool> Enable,
+        Option<bool> Disable,
+        Option<string?> Filters);
+
     /// <summary>
     /// Create the update-feature-environment command
     /// </summary>
@@ -59,21 +67,21 @@ public static class EnvironmentCommands
         command.AddOption(disableOption);
         command.AddOption(filtersOption);
 
+        var options = new UpdateFeatureEnvironmentOptions(
+            applicationIdOption,
+            environmentOption,
+            featureKeyOption,
+            enableOption,
+            disableOption,
+            filtersOption);
+
         command.SetHandler(async (InvocationContext context) =>
         {
             var apiClient = apiClientFactory(context);
             if (apiClient is null)
                 return;
 
-            await HandleUpdateFeatureEnvironmentAsync(
-                context,
-                apiClient,
-                applicationIdOption,
-                environmentOption,
-                featureKeyOption,
-                enableOption,
-                disableOption,
-                filtersOption);
+            await HandleUpdateFeatureEnvironmentAsync(context, apiClient, options);
         });
 
         return command;
@@ -82,23 +90,18 @@ public static class EnvironmentCommands
     private static async Task HandleUpdateFeatureEnvironmentAsync(
         InvocationContext context,
         TogglyApiClient apiClient,
-        Option<string> applicationIdOption,
-        Option<string> environmentOption,
-        Option<string> featureKeyOption,
-        Option<bool> enableOption,
-        Option<bool> disableOption,
-        Option<string?> filtersOption)
+        UpdateFeatureEnvironmentOptions options)
     {
-        var applicationId = context.ParseResult.GetValueForOption(applicationIdOption)!;
-        var environment = context.ParseResult.GetValueForOption(environmentOption)!;
-        var featureKey = context.ParseResult.GetValueForOption(featureKeyOption)!;
-        var enable = context.ParseResult.GetValueForOption(enableOption);
-        var disable = context.ParseResult.GetValueForOption(disableOption);
-        var filters = context.ParseResult.GetValueForOption(filtersOption);
+        var applicationId = context.ParseResult.GetValueForOption(options.ApplicationId)!;
+        var environment = context.ParseResult.GetValueForOption(options.Environment)!;
+        var featureKey = context.ParseResult.GetValueForOption(options.FeatureKey)!;
+        var enable = context.ParseResult.GetValueForOption(options.Enable);
+        var disable = context.ParseResult.GetValueForOption(options.Disable);
+        var filters = context.ParseResult.GetValueForOption(options.Filters);
 
         if (!TryResolveFilterList(enable, disable, filters, out var filterList, out var errorMessage))
         {
-            Console.Error.WriteLine(errorMessage);
+            await Console.Error.WriteLineAsync(errorMessage);
             context.ExitCode = 2;
             return;
         }
@@ -111,14 +114,14 @@ public static class EnvironmentCommands
                 featureKey,
                 filterList);
 
-            Console.WriteLine($"Feature '{featureKey}' updated in environment '{environment}'");
-            Console.WriteLine($"Filters: {updatedFilters.Count}");
+            await Console.Out.WriteLineAsync($"Feature '{featureKey}' updated in environment '{environment}'");
+            await Console.Out.WriteLineAsync($"Filters: {updatedFilters.Count}");
             foreach (var filter in updatedFilters)
-                Console.WriteLine($"  - {filter.Name}");
+                await Console.Out.WriteLineAsync($"  - {filter.Name}");
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error updating feature environment: {ex.Message}");
+            await Console.Error.WriteLineAsync($"Error updating feature environment: {ex.Message}");
             context.ExitCode = 1;
         }
     }

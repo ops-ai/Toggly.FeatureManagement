@@ -12,6 +12,23 @@ namespace Toggly.CLI.Commands;
 /// </summary>
 public static class FeatureCommands
 {
+    private sealed record CreateFeatureOptions(
+        Option<string> ApplicationId,
+        Option<string> Name,
+        Option<string> FeatureKey,
+        Option<string?> Description,
+        Option<string?> Category,
+        Option<string?> Tags,
+        Option<string?> EnvironmentFilters);
+
+    private sealed record UpdateFeatureOptions(
+        Option<string> ApplicationId,
+        Option<string> FeatureKey,
+        Option<string?> Name,
+        Option<string?> Description,
+        Option<string?> Category,
+        Option<string?> Tags);
+
     /// <summary>
     /// Create the feature command group
     /// </summary>
@@ -64,22 +81,22 @@ public static class FeatureCommands
         command.AddOption(tagsOption);
         command.AddOption(environmentFiltersOption);
 
+        var options = new CreateFeatureOptions(
+            applicationIdOption,
+            nameOption,
+            featureKeyOption,
+            descriptionOption,
+            categoryOption,
+            tagsOption,
+            environmentFiltersOption);
+
         command.SetHandler(async (InvocationContext context) =>
         {
             var apiClient = apiClientFactory(context);
             if (apiClient is null)
                 return;
 
-            await HandleCreateFeatureAsync(
-                context,
-                apiClient,
-                applicationIdOption,
-                nameOption,
-                featureKeyOption,
-                descriptionOption,
-                categoryOption,
-                tagsOption,
-                environmentFiltersOption);
+            await HandleCreateFeatureAsync(context, apiClient, options);
         });
 
         return command;
@@ -129,21 +146,21 @@ public static class FeatureCommands
         command.AddOption(categoryOption);
         command.AddOption(tagsOption);
 
+        var options = new UpdateFeatureOptions(
+            applicationIdOption,
+            featureKeyOption,
+            nameOption,
+            descriptionOption,
+            categoryOption,
+            tagsOption);
+
         command.SetHandler(async (InvocationContext context) =>
         {
             var apiClient = apiClientFactory(context);
             if (apiClient is null)
                 return;
 
-            await HandleUpdateFeatureAsync(
-                context,
-                apiClient,
-                applicationIdOption,
-                featureKeyOption,
-                nameOption,
-                descriptionOption,
-                categoryOption,
-                tagsOption);
+            await HandleUpdateFeatureAsync(context, apiClient, options);
         });
 
         return command;
@@ -152,21 +169,15 @@ public static class FeatureCommands
     private static async Task HandleCreateFeatureAsync(
         InvocationContext context,
         TogglyApiClient apiClient,
-        Option<string> applicationIdOption,
-        Option<string> nameOption,
-        Option<string> featureKeyOption,
-        Option<string?> descriptionOption,
-        Option<string?> categoryOption,
-        Option<string?> tagsOption,
-        Option<string?> environmentFiltersOption)
+        CreateFeatureOptions options)
     {
-        var applicationId = context.ParseResult.GetValueForOption(applicationIdOption)!;
-        var name = context.ParseResult.GetValueForOption(nameOption)!;
-        var featureKey = context.ParseResult.GetValueForOption(featureKeyOption)!;
-        var description = context.ParseResult.GetValueForOption(descriptionOption);
-        var category = context.ParseResult.GetValueForOption(categoryOption);
-        var tags = context.ParseResult.GetValueForOption(tagsOption);
-        var environmentFilters = context.ParseResult.GetValueForOption(environmentFiltersOption);
+        var applicationId = context.ParseResult.GetValueForOption(options.ApplicationId)!;
+        var name = context.ParseResult.GetValueForOption(options.Name)!;
+        var featureKey = context.ParseResult.GetValueForOption(options.FeatureKey)!;
+        var description = context.ParseResult.GetValueForOption(options.Description);
+        var category = context.ParseResult.GetValueForOption(options.Category);
+        var tags = context.ParseResult.GetValueForOption(options.Tags);
+        var environmentFilters = context.ParseResult.GetValueForOption(options.EnvironmentFilters);
 
         var model = new FeatureDefinitionCreateModel
         {
@@ -181,7 +192,7 @@ public static class FeatureCommands
 
         if (!TryApplyEnvironmentFilters(environmentFilters, model, out var parseError))
         {
-            Console.Error.WriteLine(parseError);
+            await Console.Error.WriteLineAsync(parseError);
             context.ExitCode = 2;
             return;
         }
@@ -189,11 +200,11 @@ public static class FeatureCommands
         try
         {
             var feature = await apiClient.CreateFeatureAsync(applicationId, model);
-            WriteFeatureSummary("Feature created", feature);
+            await WriteFeatureSummaryAsync("Feature created", feature);
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error creating feature: {ex.Message}");
+            await Console.Error.WriteLineAsync($"Error creating feature: {ex.Message}");
             context.ExitCode = 1;
         }
     }
@@ -201,19 +212,14 @@ public static class FeatureCommands
     private static async Task HandleUpdateFeatureAsync(
         InvocationContext context,
         TogglyApiClient apiClient,
-        Option<string> applicationIdOption,
-        Option<string> featureKeyOption,
-        Option<string?> nameOption,
-        Option<string?> descriptionOption,
-        Option<string?> categoryOption,
-        Option<string?> tagsOption)
+        UpdateFeatureOptions options)
     {
-        var applicationId = context.ParseResult.GetValueForOption(applicationIdOption)!;
-        var featureKey = context.ParseResult.GetValueForOption(featureKeyOption)!;
-        var name = context.ParseResult.GetValueForOption(nameOption);
-        var description = context.ParseResult.GetValueForOption(descriptionOption);
-        var category = context.ParseResult.GetValueForOption(categoryOption);
-        var tags = context.ParseResult.GetValueForOption(tagsOption);
+        var applicationId = context.ParseResult.GetValueForOption(options.ApplicationId)!;
+        var featureKey = context.ParseResult.GetValueForOption(options.FeatureKey)!;
+        var name = context.ParseResult.GetValueForOption(options.Name);
+        var description = context.ParseResult.GetValueForOption(options.Description);
+        var category = context.ParseResult.GetValueForOption(options.Category);
+        var tags = context.ParseResult.GetValueForOption(options.Tags);
 
         // Note: In a real implementation, you'd first fetch the existing feature
         // For now, we'll create a minimal update model
@@ -231,11 +237,11 @@ public static class FeatureCommands
         try
         {
             var feature = await apiClient.UpdateFeatureAsync(applicationId, featureKey, model);
-            WriteFeatureSummary("Feature updated", feature);
+            await WriteFeatureSummaryAsync("Feature updated", feature);
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Error updating feature: {ex.Message}");
+            await Console.Error.WriteLineAsync($"Error updating feature: {ex.Message}");
             context.ExitCode = 1;
         }
     }
@@ -263,11 +269,11 @@ public static class FeatureCommands
         }
     }
 
-    private static void WriteFeatureSummary(string verb, FeatureDefinition feature)
+    private static async Task WriteFeatureSummaryAsync(string verb, FeatureDefinition feature)
     {
-        Console.WriteLine($"{verb}: {feature.FeatureKey}");
-        Console.WriteLine($"Name: {feature.Name}");
+        await Console.Out.WriteLineAsync($"{verb}: {feature.FeatureKey}");
+        await Console.Out.WriteLineAsync($"Name: {feature.Name}");
         if (!string.IsNullOrEmpty(feature.Description))
-            Console.WriteLine($"Description: {feature.Description}");
+            await Console.Out.WriteLineAsync($"Description: {feature.Description}");
     }
 }

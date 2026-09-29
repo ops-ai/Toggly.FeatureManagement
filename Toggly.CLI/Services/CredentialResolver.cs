@@ -39,6 +39,13 @@ public static class CredentialResolver
                 "together with --client-secret / TOGGLY_CLIENT_SECRET.");
         }
 
+        if (hasId && !hasSecret)
+        {
+            throw new InvalidOperationException(
+                "A client id was provided without a client secret. Provide --client-secret (or TOGGLY_CLIENT_SECRET) " +
+                "together with --client-id / TOGGLY_CLIENT_ID, or omit both and run 'toggly auth login'.");
+        }
+
         if (hasId && hasSecret)
         {
             return new ResolvedCredentials
