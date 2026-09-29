@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.6
+
+2026-10-03
+
+### Changed
+
+- The Jedis 8 Redis adapter's published Maven metadata now includes the
+  JUnit and Mockito dependencies used to verify its snapshot cache behavior.
+  These dependencies are test scoped and do not affect application runtime
+  dependencies.
+- User-Agent and live-update `sdkVersion` report `toggly-java/2.1.6`.
+
 ## 2.1.5
 
 2026-10-02
