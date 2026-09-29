@@ -79,7 +79,7 @@ public class ConfigService
     /// Validate that either client credentials or an OS-stored session can authenticate.
     /// Prefer <see cref="CredentialResolver"/> as the single gate for API calls.
     /// </summary>
-    public void ValidateAuthConfig(TogglyConfig config, ISecureTokenStore? tokenStore = null)
+    public static void ValidateAuthConfig(TogglyConfig config, ISecureTokenStore? tokenStore = null)
     {
         var hasOAuth2 = !string.IsNullOrEmpty(config.ClientId) && !string.IsNullOrEmpty(config.ClientSecret);
         if (hasOAuth2)

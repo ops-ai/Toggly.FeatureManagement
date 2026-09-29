@@ -28,11 +28,11 @@ public static class SecureTokenStore
     }
 
     [SupportedOSPlatform("windows")]
-    private static ISecureTokenStore CreateWindows() => new WindowsCredentialStore();
+    private static WindowsCredentialStore CreateWindows() => new();
 
     [SupportedOSPlatform("macos")]
-    private static ISecureTokenStore CreateMacOS() => new MacOSKeychainStore();
+    private static MacOSKeychainStore CreateMacOS() => new();
 
     [SupportedOSPlatform("linux")]
-    private static ISecureTokenStore CreateLinux() => new LinuxLibsecretStore();
+    private static LinuxLibsecretStore CreateLinux() => new();
 }

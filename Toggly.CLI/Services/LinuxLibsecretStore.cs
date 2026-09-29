@@ -17,6 +17,8 @@ namespace Toggly.CLI.Services;
 internal sealed class LinuxLibsecretStore : ISecureTokenStore
 {
     private const string SchemaName = "io.toggly.cli.AuthSession";
+    private const string SchemaAttributeService = "service";
+    private const string SchemaAttributeAccount = "account";
 
     public Task SaveAsync(AuthSession session, CancellationToken cancellationToken = default)
     {
@@ -34,8 +36,8 @@ internal sealed class LinuxLibsecretStore : ISecureTokenStore
                 payload,
                 IntPtr.Zero,
                 ref error,
-                "service", Constants.CredentialServiceName,
-                "account", Constants.CredentialAccountName,
+                SchemaAttributeService, Constants.CredentialServiceName,
+                SchemaAttributeAccount, Constants.CredentialAccountName,
                 IntPtr.Zero);
 
             if (error != IntPtr.Zero)
@@ -64,8 +66,8 @@ internal sealed class LinuxLibsecretStore : ISecureTokenStore
                 schema,
                 IntPtr.Zero,
                 ref error,
-                "service", Constants.CredentialServiceName,
-                "account", Constants.CredentialAccountName,
+                SchemaAttributeService, Constants.CredentialServiceName,
+                SchemaAttributeAccount, Constants.CredentialAccountName,
                 IntPtr.Zero);
 
             if (error != IntPtr.Zero)
@@ -102,8 +104,8 @@ internal sealed class LinuxLibsecretStore : ISecureTokenStore
                 schema,
                 IntPtr.Zero,
                 ref error,
-                "service", Constants.CredentialServiceName,
-                "account", Constants.CredentialAccountName,
+                SchemaAttributeService, Constants.CredentialServiceName,
+                SchemaAttributeAccount, Constants.CredentialAccountName,
                 IntPtr.Zero);
 
             if (error != IntPtr.Zero)
@@ -142,8 +144,8 @@ internal sealed class LinuxLibsecretStore : ISecureTokenStore
         var schema = secret_schema_new(
             SchemaName,
             SECRET_SCHEMA_NONE,
-            "service", SECRET_SCHEMA_ATTRIBUTE_STRING,
-            "account", SECRET_SCHEMA_ATTRIBUTE_STRING,
+            SchemaAttributeService, SECRET_SCHEMA_ATTRIBUTE_STRING,
+            SchemaAttributeAccount, SECRET_SCHEMA_ATTRIBUTE_STRING,
             IntPtr.Zero);
 
         try

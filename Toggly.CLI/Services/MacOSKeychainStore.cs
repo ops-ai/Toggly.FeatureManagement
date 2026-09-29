@@ -84,7 +84,7 @@ internal sealed class MacOSKeychainStore : ISecureTokenStore
         finally
         {
             if (passwordData != IntPtr.Zero)
-                SecKeychainItemFreeContent(IntPtr.Zero, passwordData);
+                _ = SecKeychainItemFreeContent(IntPtr.Zero, passwordData);
             if (itemRef != IntPtr.Zero)
                 CFRelease(itemRef);
         }
@@ -118,7 +118,7 @@ internal sealed class MacOSKeychainStore : ISecureTokenStore
         try
         {
             if (passwordData != IntPtr.Zero)
-                SecKeychainItemFreeContent(IntPtr.Zero, passwordData);
+                _ = SecKeychainItemFreeContent(IntPtr.Zero, passwordData);
 
             if (itemRef != IntPtr.Zero)
             {

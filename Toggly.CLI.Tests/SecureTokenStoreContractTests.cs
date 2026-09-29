@@ -9,7 +9,7 @@ public class SecureTokenStoreContractTests
     [Fact]
     public async Task SaveThenLoad_ReturnsEquivalentSession()
     {
-        ISecureTokenStore store = new InMemorySecureTokenStore();
+        InMemorySecureTokenStore store = new();
         var session = CreateSampleSession();
 
         await store.SaveAsync(session);
@@ -27,7 +27,7 @@ public class SecureTokenStoreContractTests
     [Fact]
     public async Task Delete_ClearsStoredSession()
     {
-        ISecureTokenStore store = new InMemorySecureTokenStore();
+        InMemorySecureTokenStore store = new();
         await store.SaveAsync(CreateSampleSession());
 
         await store.DeleteAsync();
@@ -38,7 +38,7 @@ public class SecureTokenStoreContractTests
     [Fact]
     public async Task Save_OverwritesPreviousSession()
     {
-        ISecureTokenStore store = new InMemorySecureTokenStore();
+        InMemorySecureTokenStore store = new();
         await store.SaveAsync(CreateSampleSession());
 
         var replacement = CreateSampleSession();

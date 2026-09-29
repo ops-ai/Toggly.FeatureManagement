@@ -10,7 +10,6 @@ public class SecureTokenStoreFactoryTests
     {
         var store = SecureTokenStore.Create();
         Assert.NotNull(store);
-        Assert.IsAssignableFrom<ISecureTokenStore>(store);
     }
 
     [Fact]

@@ -216,13 +216,5 @@ public static class AuthCommands
     }
 
     private static string? FirstNonEmpty(params string?[] values)
-    {
-        foreach (var value in values)
-        {
-            if (!string.IsNullOrEmpty(value))
-                return value;
-        }
-
-        return null;
-    }
+        => Array.Find(values, static value => !string.IsNullOrEmpty(value));
 }

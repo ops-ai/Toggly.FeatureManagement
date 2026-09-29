@@ -40,6 +40,16 @@ internal static class AuthMessages
         "(AllowOfflineAccess) and includes the offline_access scope, then run 'toggly auth login' again.";
 }
 
+internal static class OAuthFormKeys
+{
+    public const string ClientId = "client_id";
+    public const string ClientSecret = "client_secret";
+    public const string GrantType = "grant_type";
+    public const string Scope = "scope";
+    public const string RefreshToken = "refresh_token";
+    public const string DeviceCode = "device_code";
+}
+
 /// <summary>
 /// OAuth2 authentication: client credentials, device code, and refresh.
 /// </summary>
@@ -73,10 +83,10 @@ public class AuthService
 
         var tokenRequest = new Dictionary<string, string>
         {
-            ["grant_type"] = "client_credentials",
-            ["client_id"] = clientId,
-            ["client_secret"] = clientSecret,
-            ["scope"] = Constants.DefaultScope
+            [OAuthFormKeys.GrantType] = "client_credentials",
+            [OAuthFormKeys.ClientId] = clientId,
+            [OAuthFormKeys.ClientSecret] = clientSecret,
+            [OAuthFormKeys.Scope] = Constants.DefaultScope
         };
 
         var response = await _httpClient.PostAsync(
@@ -124,8 +134,8 @@ public class AuthService
             config.DeviceAuthorizationEndpoint,
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                ["client_id"] = clientId,
-                ["scope"] = scope
+                [OAuthFormKeys.ClientId] = clientId,
+                [OAuthFormKeys.Scope] = scope
             }),
             cancellationToken);
 
@@ -198,9 +208,9 @@ public class AuthService
             config.TokenEndpoint,
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                ["grant_type"] = "refresh_token",
-                ["refresh_token"] = session.RefreshToken,
-                ["client_id"] = session.ClientId
+                [OAuthFormKeys.GrantType] = "refresh_token",
+                [OAuthFormKeys.RefreshToken] = session.RefreshToken,
+                [OAuthFormKeys.ClientId] = session.ClientId
             }),
             cancellationToken);
 
@@ -231,9 +241,9 @@ public class AuthService
             tokenEndpoint,
             new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code",
-                ["device_code"] = deviceCode,
-                ["client_id"] = clientId
+                [OAuthFormKeys.GrantType] = "urn:ietf:params:oauth:grant-type:device_code",
+                [OAuthFormKeys.DeviceCode] = deviceCode,
+                [OAuthFormKeys.ClientId] = clientId
             }),
             cancellationToken);
 

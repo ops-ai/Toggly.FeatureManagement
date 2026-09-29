@@ -5,8 +5,12 @@ namespace Toggly.CLI;
 /// </summary>
 public static class Constants
 {
+    // S1075: product defaults for auth.toggly.io / app.toggly.io; overridable via CLI flags / TOGGLY_* env.
+#pragma warning disable S1075
     public const string DefaultAuthority = "https://auth.toggly.io";
     public const string DefaultBaseUrl = "https://app.toggly.io/api";
+#pragma warning restore S1075
+
     public const string DefaultDeviceClientId = "toggly-cli";
     public const string DefaultScope = "openid toggly";
     /// <summary>
