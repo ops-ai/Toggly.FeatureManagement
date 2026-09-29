@@ -41,7 +41,22 @@ public static class ReleaseCommands
     {
         var release = new Command("release", "List, inspect, and manage releases");
         release.AddCommand(CreateListCommand(apiClientFactory, cli));
-        release.AddCommand(CreateGetCommand(apiClientFactory, cli));
+        release.AddCommand(CommandOptions.CreateGetByIdCommand(
+            "Get a release by id",
+            "Release id",
+            apiClientFactory,
+            cli,
+            "Error getting release",
+            async (apiClient, id, context, commandContext) =>
+            {
+                var result = await apiClient.GetReleaseAsync(id, context.GetCancellationToken());
+                await CommandOptions.WriteResultAsync(
+                    context,
+                    commandContext,
+                    result,
+                    TogglyJsonSerializerContext.Default.ReleaseModel,
+                    r => FormatRelease(r));
+            }));
         release.AddCommand(CreateCreateCommand("create", "Create a new release", apiClientFactory, cli));
         release.AddCommand(CreateAssociateBuildCommand(
             "associate-build",
@@ -121,34 +136,6 @@ public static class ReleaseCommands
                     releases,
                     TogglyJsonSerializerContext.Default.ListReleaseSummary,
                     FormatReleaseList);
-            });
-        });
-        return command;
-    }
-
-    private static Command CreateGetCommand(
-        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
-        CliCommandContext cli)
-    {
-        var command = new Command("get", "Get a release by id");
-        var idArgument = new Argument<string>("id", "Release id");
-        command.AddArgument(idArgument);
-
-        command.SetHandler(async (InvocationContext context) =>
-        {
-            var apiClient = apiClientFactory(context);
-            if (apiClient is null)
-                return;
-
-            var id = context.ParseResult.GetValueForArgument(idArgument);
-            await CommandOptions.RunApiAsync(context, cli, "Error getting release", async () =>
-            {
-                var release = await apiClient.GetReleaseAsync(id, context.GetCancellationToken());
-                await cli.Output.WriteAsync(
-                    context,
-                    release,
-                    TogglyJsonSerializerContext.Default.ReleaseModel,
-                    r => FormatRelease(r));
             });
         });
         return command;

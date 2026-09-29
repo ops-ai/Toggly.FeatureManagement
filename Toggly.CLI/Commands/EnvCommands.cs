@@ -16,77 +16,44 @@ public static class EnvCommands
         CliCommandContext cli)
     {
         var env = new Command("env", "List and inspect application environments");
-        env.AddCommand(CreateListCommand(apiClientFactory, cli));
-        env.AddCommand(CreateGetCommand(apiClientFactory, cli));
-        return env;
-    }
-
-    private static Command CreateListCommand(
-        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
-        CliCommandContext cli)
-    {
-        var command = new Command("list", "List environments for an application");
-        var appOption = CommandOptions.CreateAppOption();
-        command.AddOption(appOption);
-
-        command.SetHandler(async (InvocationContext context) =>
-        {
-            var apiClient = apiClientFactory(context);
-            if (apiClient is null)
-                return;
-
-            if (!CommandOptions.TryResolveApp(context, cli, appOption, out var applicationId))
-                return;
-
-            await CommandOptions.RunApiAsync(context, cli, "Error listing environments", async () =>
+        env.AddCommand(CommandOptions.CreateAppScopedListCommand(
+            "List environments for an application",
+            apiClientFactory,
+            cli,
+            "Error listing environments",
+            async (apiClient, applicationId, context, commandContext) =>
             {
                 var environments = await apiClient.ListEnvironmentsAsync(
                     applicationId,
                     context.GetCancellationToken());
-                await cli.Output.WriteAsync(
+                await CommandOptions.WriteResultAsync(
                     context,
+                    commandContext,
                     environments,
                     TogglyJsonSerializerContext.Default.ListEnvironmentSummary,
                     FormatEnvironmentList);
-            });
-        });
-        return command;
-    }
-
-    private static Command CreateGetCommand(
-        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
-        CliCommandContext cli)
-    {
-        var command = new Command("get", "Get an environment by name");
-        var appOption = CommandOptions.CreateAppOption();
-        var nameArgument = new Argument<string>("name", "Environment name");
-        command.AddOption(appOption);
-        command.AddArgument(nameArgument);
-
-        command.SetHandler(async (InvocationContext context) =>
-        {
-            var apiClient = apiClientFactory(context);
-            if (apiClient is null)
-                return;
-
-            if (!CommandOptions.TryResolveApp(context, cli, appOption, out var applicationId))
-                return;
-
-            var name = context.ParseResult.GetValueForArgument(nameArgument);
-            await CommandOptions.RunApiAsync(context, cli, "Error getting environment", async () =>
+            }));
+        env.AddCommand(CommandOptions.CreateAppScopedGetCommand(
+            "Get an environment by name",
+            "name",
+            "Environment name",
+            apiClientFactory,
+            cli,
+            "Error getting environment",
+            async (apiClient, applicationId, name, context, commandContext) =>
             {
                 var environment = await apiClient.GetEnvironmentAsync(
                     applicationId,
                     name,
                     context.GetCancellationToken());
-                await cli.Output.WriteAsync(
+                await CommandOptions.WriteResultAsync(
                     context,
+                    commandContext,
                     environment,
                     TogglyJsonSerializerContext.Default.EnvironmentSummary,
                     FormatEnvironment);
-            });
-        });
-        return command;
+            }));
+        return env;
     }
 
     private static IEnumerable<string> FormatEnvironmentList(List<EnvironmentSummary> environments) =>

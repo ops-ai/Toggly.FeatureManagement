@@ -81,69 +81,46 @@ public static class FeatureCommands
 
     private static Command CreateListCommand(
         Func<InvocationContext, TogglyApiClient?> apiClientFactory,
-        CliCommandContext cli)
-    {
-        var command = new Command("list", "List features for an application");
-        var appOption = CommandOptions.CreateAppOption();
-        command.AddOption(appOption);
-
-        command.SetHandler(async (InvocationContext context) =>
-        {
-            var apiClient = apiClientFactory(context);
-            if (apiClient is null)
-                return;
-
-            if (!CommandOptions.TryResolveApp(context, cli, appOption, out var applicationId))
-                return;
-
-            await CommandOptions.RunApiAsync(context, cli, "Error listing features", async () =>
+        CliCommandContext cli) =>
+        CommandOptions.CreateAppScopedListCommand(
+            "List features for an application",
+            apiClientFactory,
+            cli,
+            "Error listing features",
+            async (apiClient, applicationId, context, commandContext) =>
             {
                 var features = await apiClient.ListFeaturesAsync(applicationId, context.GetCancellationToken());
-                await cli.Output.WriteAsync(
+                await CommandOptions.WriteResultAsync(
                     context,
+                    commandContext,
                     features,
                     TogglyJsonSerializerContext.Default.ListFeatureDefinition,
                     FormatFeatureList);
             });
-        });
-        return command;
-    }
 
     private static Command CreateGetCommand(
         Func<InvocationContext, TogglyApiClient?> apiClientFactory,
-        CliCommandContext cli)
-    {
-        var command = new Command("get", "Get a feature by key");
-        var appOption = CommandOptions.CreateAppOption();
-        var keyArgument = new Argument<string>("key", "Feature key");
-        command.AddOption(appOption);
-        command.AddArgument(keyArgument);
-
-        command.SetHandler(async (InvocationContext context) =>
-        {
-            var apiClient = apiClientFactory(context);
-            if (apiClient is null)
-                return;
-
-            if (!CommandOptions.TryResolveApp(context, cli, appOption, out var applicationId))
-                return;
-
-            var key = context.ParseResult.GetValueForArgument(keyArgument);
-            await CommandOptions.RunApiAsync(context, cli, "Error getting feature", async () =>
+        CliCommandContext cli) =>
+        CommandOptions.CreateAppScopedGetCommand(
+            "Get a feature by key",
+            "key",
+            "Feature key",
+            apiClientFactory,
+            cli,
+            "Error getting feature",
+            async (apiClient, applicationId, key, context, commandContext) =>
             {
                 var feature = await apiClient.GetFeatureAsync(
                     applicationId,
                     key,
                     context.GetCancellationToken());
-                await cli.Output.WriteAsync(
+                await CommandOptions.WriteResultAsync(
                     context,
+                    commandContext,
                     feature,
                     TogglyJsonSerializerContext.Default.FeatureDefinition,
                     f => FormatFeature(f));
             });
-        });
-        return command;
-    }
 
     private static Command CreateCreateCommand(
         string name,

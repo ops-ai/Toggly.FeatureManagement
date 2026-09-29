@@ -17,7 +17,22 @@ public static class AppCommands
     {
         var app = new Command("app", "List and inspect applications");
         app.AddCommand(CreateListCommand(apiClientFactory, cli));
-        app.AddCommand(CreateGetCommand(apiClientFactory, cli));
+        app.AddCommand(CommandOptions.CreateGetByIdCommand(
+            "Get an application by id",
+            "Application id",
+            apiClientFactory,
+            cli,
+            "Error getting application",
+            async (apiClient, id, context, commandContext) =>
+            {
+                var result = await apiClient.GetApplicationAsync(id, context.GetCancellationToken());
+                await CommandOptions.WriteResultAsync(
+                    context,
+                    commandContext,
+                    result,
+                    TogglyJsonSerializerContext.Default.ApplicationSummary,
+                    FormatApplication);
+            }));
         return app;
     }
 
@@ -35,39 +50,12 @@ public static class AppCommands
             await CommandOptions.RunApiAsync(context, cli, "Error listing applications", async () =>
             {
                 var apps = await apiClient.ListApplicationsAsync(context.GetCancellationToken());
-                await cli.Output.WriteAsync(
+                await CommandOptions.WriteResultAsync(
                     context,
+                    cli,
                     apps,
                     TogglyJsonSerializerContext.Default.ListApplicationSummary,
                     FormatApplicationList);
-            });
-        });
-        return command;
-    }
-
-    private static Command CreateGetCommand(
-        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
-        CliCommandContext cli)
-    {
-        var command = new Command("get", "Get an application by id");
-        var idArgument = new Argument<string>("id", "Application id");
-        command.AddArgument(idArgument);
-
-        command.SetHandler(async (InvocationContext context) =>
-        {
-            var apiClient = apiClientFactory(context);
-            if (apiClient is null)
-                return;
-
-            var id = context.ParseResult.GetValueForArgument(idArgument);
-            await CommandOptions.RunApiAsync(context, cli, "Error getting application", async () =>
-            {
-                var app = await apiClient.GetApplicationAsync(id, context.GetCancellationToken());
-                await cli.Output.WriteAsync(
-                    context,
-                    app,
-                    TogglyJsonSerializerContext.Default.ApplicationSummary,
-                    FormatApplication);
             });
         });
         return command;
