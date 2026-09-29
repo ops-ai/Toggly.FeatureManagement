@@ -82,6 +82,7 @@ public class CaffeineEvaluationCache {
      * @return the size
      */
     public long size() {
+        cache.cleanUp();
         return cache.estimatedSize();
     }
 
@@ -155,17 +156,24 @@ public class CaffeineEvaluationCache {
     }
 
     /**
-     * Cache key combining feature key and context identity.
+     * Cache key combining a feature key with the complete evaluation context.
+     *
+     * <p>The key deliberately retains the immutable {@link EvaluationContext} for
+     * the configured entry lifetime instead of using only its hash. Hashes can
+     * collide (for example, {@code "Aa"} and {@code "BB"}), while targeting can
+     * depend on groups, traits, claims, request data, and entity properties as
+     * well as identity. This keeps those contexts isolated. It uses more
+     * process memory and retains the context's sensitive values until Caffeine
+     * evicts the entry, so applications should set an appropriate bounded size
+     * and expiry and must not expose cache keys in logs.</p>
      */
     private static final class CacheKey {
         private final String featureKey;
-        private final String identity;
-        private final int contextHash;
+        private final EvaluationContext context;
 
         CacheKey(String featureKey, EvaluationContext context) {
             this.featureKey = featureKey;
-            this.identity = context != null ? context.getIdentity() : null;
-            this.contextHash = context != null ? context.hashCode() : 0;
+            this.context = context;
         }
 
         @Override
@@ -173,14 +181,13 @@ public class CaffeineEvaluationCache {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
             CacheKey cacheKey = (CacheKey) o;
-            return contextHash == cacheKey.contextHash &&
-                    Objects.equals(featureKey, cacheKey.featureKey) &&
-                    Objects.equals(identity, cacheKey.identity);
+            return Objects.equals(featureKey, cacheKey.featureKey) &&
+                    Objects.equals(context, cacheKey.context);
         }
 
         @Override
         public int hashCode() {
-            return Objects.hash(featureKey, identity, contextHash);
+            return Objects.hash(featureKey, context);
         }
     }
 }

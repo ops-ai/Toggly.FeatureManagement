@@ -6,6 +6,8 @@
 
 ### Fixed
 
+- `toggly-cache-caffeine` now keeps distinct targeting contexts in separate
+  evaluation-cache entries even when their Java hash codes collide.
 - `toggly-cache-caffeine` can now invalidate evaluations stored under a null
   feature key without throwing or removing other features' evaluations.
 
