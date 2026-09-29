@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
+using System.Text.Json.Serialization.Metadata;
 using Toggly.CLI.Models;
 
 namespace Toggly.CLI.Services;
@@ -137,120 +138,93 @@ public class TogglyApiClient
     /// <summary>
     /// List applications.
     /// </summary>
-    public async Task<List<ApplicationSummary>> ListApplicationsAsync(CancellationToken cancellationToken = default)
-    {
-        await EnsureAuthAsync(cancellationToken);
-        using var response = await _httpClient.GetAsync($"{_baseUrl}/applications", cancellationToken);
-        await EnsureSuccessOrThrowAsync(response, "Applications");
-        return await response.Content.ReadFromJsonAsync(TogglyJsonSerializerContext.Default.ListApplicationSummary, cancellationToken)
-            ?? throw new InvalidOperationException("Failed to deserialize applications response");
-    }
+    public Task<List<ApplicationSummary>> ListApplicationsAsync(CancellationToken cancellationToken = default) =>
+        GetJsonAsync(
+            "/applications",
+            TogglyJsonSerializerContext.Default.ListApplicationSummary,
+            "Applications",
+            cancellationToken);
 
     /// <summary>
     /// Get an application by id.
     /// </summary>
-    public async Task<ApplicationSummary> GetApplicationAsync(string applicationId, CancellationToken cancellationToken = default)
-    {
-        await EnsureAuthAsync(cancellationToken);
-        using var response = await _httpClient.GetAsync($"{_baseUrl}/applications/{Uri.EscapeDataString(applicationId)}", cancellationToken);
-        await EnsureSuccessOrThrowAsync(response, $"Application '{applicationId}'");
-        return await response.Content.ReadFromJsonAsync(TogglyJsonSerializerContext.Default.ApplicationSummary, cancellationToken)
-            ?? throw new InvalidOperationException("Failed to deserialize application response");
-    }
+    public Task<ApplicationSummary> GetApplicationAsync(string applicationId, CancellationToken cancellationToken = default) =>
+        GetJsonAsync(
+            $"/applications/{Uri.EscapeDataString(applicationId)}",
+            TogglyJsonSerializerContext.Default.ApplicationSummary,
+            $"Application '{applicationId}'",
+            cancellationToken);
 
     /// <summary>
     /// List environments for an application.
     /// </summary>
-    public async Task<List<EnvironmentSummary>> ListEnvironmentsAsync(string applicationId, CancellationToken cancellationToken = default)
-    {
-        await EnsureAuthAsync(cancellationToken);
-        using var response = await _httpClient.GetAsync(
-            $"{_baseUrl}/applications/{Uri.EscapeDataString(applicationId)}/environments",
+    public Task<List<EnvironmentSummary>> ListEnvironmentsAsync(string applicationId, CancellationToken cancellationToken = default) =>
+        GetJsonAsync(
+            $"/applications/{Uri.EscapeDataString(applicationId)}/environments",
+            TogglyJsonSerializerContext.Default.ListEnvironmentSummary,
+            $"Environments for application '{applicationId}'",
             cancellationToken);
-        await EnsureSuccessOrThrowAsync(response, $"Environments for application '{applicationId}'");
-        return await response.Content.ReadFromJsonAsync(TogglyJsonSerializerContext.Default.ListEnvironmentSummary, cancellationToken)
-            ?? throw new InvalidOperationException("Failed to deserialize environments response");
-    }
 
     /// <summary>
     /// Get an environment by name.
     /// </summary>
-    public async Task<EnvironmentSummary> GetEnvironmentAsync(
+    public Task<EnvironmentSummary> GetEnvironmentAsync(
         string applicationId,
         string environmentName,
-        CancellationToken cancellationToken = default)
-    {
-        await EnsureAuthAsync(cancellationToken);
-        using var response = await _httpClient.GetAsync(
-            $"{_baseUrl}/applications/{Uri.EscapeDataString(applicationId)}/environments/{Uri.EscapeDataString(environmentName)}",
+        CancellationToken cancellationToken = default) =>
+        GetJsonAsync(
+            $"/applications/{Uri.EscapeDataString(applicationId)}/environments/{Uri.EscapeDataString(environmentName)}",
+            TogglyJsonSerializerContext.Default.EnvironmentSummary,
+            $"Environment '{environmentName}'",
             cancellationToken);
-        await EnsureSuccessOrThrowAsync(response, $"Environment '{environmentName}'");
-        return await response.Content.ReadFromJsonAsync(TogglyJsonSerializerContext.Default.EnvironmentSummary, cancellationToken)
-            ?? throw new InvalidOperationException("Failed to deserialize environment response");
-    }
 
     /// <summary>
     /// List features for an application.
     /// </summary>
-    public async Task<List<FeatureDefinition>> ListFeaturesAsync(string applicationId, CancellationToken cancellationToken = default)
-    {
-        await EnsureAuthAsync(cancellationToken);
-        using var response = await _httpClient.GetAsync(
-            $"{_baseUrl}/applications/{Uri.EscapeDataString(applicationId)}/features",
+    public Task<List<FeatureDefinition>> ListFeaturesAsync(string applicationId, CancellationToken cancellationToken = default) =>
+        GetJsonAsync(
+            $"/applications/{Uri.EscapeDataString(applicationId)}/features",
+            TogglyJsonSerializerContext.Default.ListFeatureDefinition,
+            $"Features for application '{applicationId}'",
             cancellationToken);
-        await EnsureSuccessOrThrowAsync(response, $"Features for application '{applicationId}'");
-        return await response.Content.ReadFromJsonAsync(TogglyJsonSerializerContext.Default.ListFeatureDefinition, cancellationToken)
-            ?? throw new InvalidOperationException("Failed to deserialize features response");
-    }
 
     /// <summary>
     /// Get a feature by key.
     /// </summary>
-    public async Task<FeatureDefinition> GetFeatureAsync(
+    public Task<FeatureDefinition> GetFeatureAsync(
         string applicationId,
         string featureKey,
-        CancellationToken cancellationToken = default)
-    {
-        await EnsureAuthAsync(cancellationToken);
-        using var response = await _httpClient.GetAsync(
-            $"{_baseUrl}/applications/{Uri.EscapeDataString(applicationId)}/features/{Uri.EscapeDataString(featureKey)}",
+        CancellationToken cancellationToken = default) =>
+        GetJsonAsync(
+            $"/applications/{Uri.EscapeDataString(applicationId)}/features/{Uri.EscapeDataString(featureKey)}",
+            TogglyJsonSerializerContext.Default.FeatureDefinition,
+            $"Feature '{featureKey}'",
             cancellationToken);
-        await EnsureSuccessOrThrowAsync(response, $"Feature '{featureKey}'");
-        return await response.Content.ReadFromJsonAsync(TogglyJsonSerializerContext.Default.FeatureDefinition, cancellationToken)
-            ?? throw new InvalidOperationException("Failed to deserialize feature response");
-    }
 
     /// <summary>
     /// List releases with optional filters.
     /// </summary>
-    public async Task<List<ReleaseSummary>> ListReleasesAsync(
+    public Task<List<ReleaseSummary>> ListReleasesAsync(
         string? applicationId = null,
         string? environment = null,
         string? status = null,
         string? search = null,
-        CancellationToken cancellationToken = default)
-    {
-        await EnsureAuthAsync(cancellationToken);
-        var url = BuildReleasesListUrl(applicationId, environment, status, search);
-        using var response = await _httpClient.GetAsync(url, cancellationToken);
-        await EnsureSuccessOrThrowAsync(response, "Releases");
-        return await response.Content.ReadFromJsonAsync(TogglyJsonSerializerContext.Default.ListReleaseSummary, cancellationToken)
-            ?? throw new InvalidOperationException("Failed to deserialize releases response");
-    }
+        CancellationToken cancellationToken = default) =>
+        GetJsonAsync(
+            BuildReleasesListPath(applicationId, environment, status, search),
+            TogglyJsonSerializerContext.Default.ListReleaseSummary,
+            "Releases",
+            cancellationToken);
 
     /// <summary>
     /// Get a release by id.
     /// </summary>
-    public async Task<ReleaseModel> GetReleaseAsync(string releaseId, CancellationToken cancellationToken = default)
-    {
-        await EnsureAuthAsync(cancellationToken);
-        using var response = await _httpClient.GetAsync(
-            $"{_baseUrl}/releases/{Uri.EscapeDataString(releaseId)}",
+    public Task<ReleaseModel> GetReleaseAsync(string releaseId, CancellationToken cancellationToken = default) =>
+        GetJsonAsync(
+            $"/releases/{Uri.EscapeDataString(releaseId)}",
+            TogglyJsonSerializerContext.Default.ReleaseModel,
+            $"Release '{releaseId}'",
             cancellationToken);
-        await EnsureSuccessOrThrowAsync(response, $"Release '{releaseId}'");
-        return await response.Content.ReadFromJsonAsync(TogglyJsonSerializerContext.Default.ReleaseModel, cancellationToken)
-            ?? throw new InvalidOperationException("Failed to deserialize release response");
-    }
 
     /// <summary>
     /// Create a new release
@@ -321,7 +295,20 @@ public class TogglyApiClient
             ?? throw new InvalidOperationException("Failed to deserialize feature filters response");
     }
 
-    private string BuildReleasesListUrl(
+    private async Task<T> GetJsonAsync<T>(
+        string relativePath,
+        JsonTypeInfo<T> typeInfo,
+        string resource,
+        CancellationToken cancellationToken)
+    {
+        await EnsureAuthAsync(cancellationToken);
+        using var response = await _httpClient.GetAsync($"{_baseUrl}{relativePath}", cancellationToken);
+        await EnsureSuccessOrThrowAsync(response, resource);
+        return await response.Content.ReadFromJsonAsync(typeInfo, cancellationToken)
+            ?? throw new InvalidOperationException($"Failed to deserialize {resource.ToLowerInvariant()} response");
+    }
+
+    private static string BuildReleasesListPath(
         string? applicationId,
         string? environment,
         string? status,
@@ -342,7 +329,7 @@ public class TogglyApiClient
         Append("environment", environment);
         Append("status", status);
         Append("search", search);
-        return $"{_baseUrl}/releases{query}";
+        return $"/releases{query}";
     }
 
     private static async Task EnsureSuccessOrThrowAsync(HttpResponseMessage response, string resource)

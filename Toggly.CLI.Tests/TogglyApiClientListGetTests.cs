@@ -128,6 +128,33 @@ public class TogglyApiClientListGetTests
         Assert.Contains("not found", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task GetFeatureAsync_ApiError_IncludesStatusCode()
+    {
+        using var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.Forbidden)
+        {
+            Content = new StringContent("denied", Encoding.UTF8, "text/plain")
+        });
+        using var http = CreateHttp(handler);
+        var client = CreateClient(http);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => client.GetFeatureAsync("app-1", "pay"));
+        Assert.Contains("403", ex.Message);
+        Assert.Contains("denied", ex.Message);
+    }
+
+    [Fact]
+    public async Task GetEnvironmentAsync_NotFound_ThrowsClearError()
+    {
+        using var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
+        using var http = CreateHttp(handler);
+        var client = CreateClient(http);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            client.GetEnvironmentAsync("app-1", "Missing"));
+        Assert.Contains("not found", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static HttpClient CreateHttp(RecordingHandler handler) => new(handler)
     {
         BaseAddress = new Uri("https://api.example.test")

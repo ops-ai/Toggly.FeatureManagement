@@ -26,7 +26,7 @@ public static class EnvCommands
         CliCommandContext cli)
     {
         var command = new Command("list", "List environments for an application");
-        var appOption = CreateAppOption();
+        var appOption = CommandOptions.CreateAppOption();
         command.AddOption(appOption);
 
         command.SetHandler(async (InvocationContext context) =>
@@ -35,10 +35,10 @@ public static class EnvCommands
             if (apiClient is null)
                 return;
 
-            if (!TryResolveApp(context, cli, appOption, out var applicationId))
+            if (!CommandOptions.TryResolveApp(context, cli, appOption, out var applicationId))
                 return;
 
-            try
+            await CommandOptions.RunApiAsync(context, cli, "Error listing environments", async () =>
             {
                 var environments = await apiClient.ListEnvironmentsAsync(
                     applicationId,
@@ -48,12 +48,7 @@ public static class EnvCommands
                     environments,
                     TogglyJsonSerializerContext.Default.ListEnvironmentSummary,
                     FormatEnvironmentList);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                await cli.Output.WriteErrorAsync($"Error listing environments: {ex.Message}");
-                context.ExitCode = 1;
-            }
+            });
         });
         return command;
     }
@@ -63,7 +58,7 @@ public static class EnvCommands
         CliCommandContext cli)
     {
         var command = new Command("get", "Get an environment by name");
-        var appOption = CreateAppOption();
+        var appOption = CommandOptions.CreateAppOption();
         var nameArgument = new Argument<string>("name", "Environment name");
         command.AddOption(appOption);
         command.AddArgument(nameArgument);
@@ -74,11 +69,11 @@ public static class EnvCommands
             if (apiClient is null)
                 return;
 
-            if (!TryResolveApp(context, cli, appOption, out var applicationId))
+            if (!CommandOptions.TryResolveApp(context, cli, appOption, out var applicationId))
                 return;
 
             var name = context.ParseResult.GetValueForArgument(nameArgument);
-            try
+            await CommandOptions.RunApiAsync(context, cli, "Error getting environment", async () =>
             {
                 var environment = await apiClient.GetEnvironmentAsync(
                     applicationId,
@@ -88,51 +83,14 @@ public static class EnvCommands
                     context,
                     environment,
                     TogglyJsonSerializerContext.Default.EnvironmentSummary,
-                    e => FormatEnvironment(e));
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                await cli.Output.WriteErrorAsync($"Error getting environment: {ex.Message}");
-                context.ExitCode = 1;
-            }
+                    FormatEnvironment);
+            });
         });
         return command;
     }
 
-    private static Option<string?> CreateAppOption() =>
-        new(["--app", "--application-id"], "Application id (or set via 'toggly context set --app')");
-
-    private static bool TryResolveApp(
-        InvocationContext context,
-        CliCommandContext cli,
-        Option<string?> appOption,
-        out string applicationId)
-    {
-        var prefs = cli.ContextStoreFactory().Load();
-        var flag = context.ParseResult.GetValueForOption(appOption);
-        if (ContextStore.TryResolveApplicationId(flag, prefs, out applicationId, out var error))
-            return true;
-
-        cli.Output.WriteErrorAsync(error).GetAwaiter().GetResult();
-        context.ExitCode = 2;
-        return false;
-    }
-
-    private static IEnumerable<string> FormatEnvironmentList(List<EnvironmentSummary> environments)
-    {
-        if (environments.Count == 0)
-        {
-            yield return "No environments found.";
-            yield break;
-        }
-
-        foreach (var environment in environments)
-        {
-            foreach (var line in FormatEnvironment(environment))
-                yield return line;
-            yield return string.Empty;
-        }
-    }
+    private static IEnumerable<string> FormatEnvironmentList(List<EnvironmentSummary> environments) =>
+        CommandOptions.FormatListOrEmpty(environments, "No environments found.", FormatEnvironment);
 
     private static IEnumerable<string> FormatEnvironment(EnvironmentSummary environment)
     {

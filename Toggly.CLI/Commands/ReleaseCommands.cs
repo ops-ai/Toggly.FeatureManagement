@@ -72,8 +72,8 @@ public static class ReleaseCommands
         CliCommandContext cli)
     {
         var command = new Command("list", "List releases");
-        var appOption = CreateAppOption();
-        var environmentOption = new Option<string?>(["--environment", "--env"], "Filter by environment");
+        var appOption = CommandOptions.CreateAppOption();
+        var environmentOption = CommandOptions.CreateEnvOption("Filter by environment");
         var statusOption = new Option<string?>("--status", "Filter by status");
         var searchOption = new Option<string?>("--search", "Search by release name");
         command.AddOption(appOption);
@@ -87,19 +87,28 @@ public static class ReleaseCommands
             if (apiClient is null)
                 return;
 
-            var prefs = cli.ContextStoreFactory().Load();
-            var appFlag = context.ParseResult.GetValueForOption(appOption);
             string? applicationId = null;
-            if (!string.IsNullOrWhiteSpace(appFlag))
-                applicationId = appFlag.Trim();
-            else if (!string.IsNullOrWhiteSpace(prefs.DefaultApplicationId))
-                applicationId = prefs.DefaultApplicationId.Trim();
+            try
+            {
+                var prefs = cli.ContextStoreFactory().Load();
+                var appFlag = context.ParseResult.GetValueForOption(appOption);
+                if (!string.IsNullOrWhiteSpace(appFlag))
+                    applicationId = appFlag.Trim();
+                else if (!string.IsNullOrWhiteSpace(prefs.DefaultApplicationId))
+                    applicationId = prefs.DefaultApplicationId.Trim();
+            }
+            catch (InvalidOperationException ex)
+            {
+                await cli.Output.WriteErrorAsync(ex.Message);
+                context.ExitCode = 1;
+                return;
+            }
 
             var environment = context.ParseResult.GetValueForOption(environmentOption);
             var status = context.ParseResult.GetValueForOption(statusOption);
             var search = context.ParseResult.GetValueForOption(searchOption);
 
-            try
+            await CommandOptions.RunApiAsync(context, cli, "Error listing releases", async () =>
             {
                 var releases = await apiClient.ListReleasesAsync(
                     applicationId,
@@ -112,12 +121,7 @@ public static class ReleaseCommands
                     releases,
                     TogglyJsonSerializerContext.Default.ListReleaseSummary,
                     FormatReleaseList);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                await cli.Output.WriteErrorAsync($"Error listing releases: {ex.Message}");
-                context.ExitCode = 1;
-            }
+            });
         });
         return command;
     }
@@ -137,7 +141,7 @@ public static class ReleaseCommands
                 return;
 
             var id = context.ParseResult.GetValueForArgument(idArgument);
-            try
+            await CommandOptions.RunApiAsync(context, cli, "Error getting release", async () =>
             {
                 var release = await apiClient.GetReleaseAsync(id, context.GetCancellationToken());
                 await cli.Output.WriteAsync(
@@ -145,12 +149,7 @@ public static class ReleaseCommands
                     release,
                     TogglyJsonSerializerContext.Default.ReleaseModel,
                     r => FormatRelease(r));
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                await cli.Output.WriteErrorAsync($"Error getting release: {ex.Message}");
-                context.ExitCode = 1;
-            }
+            });
         });
         return command;
     }
@@ -163,7 +162,7 @@ public static class ReleaseCommands
     {
         var command = new Command(name, description);
 
-        var applicationIdOption = CreateAppOption();
+        var applicationIdOption = CommandOptions.CreateAppOption();
         var nameOption = new Option<string>("--name", "Release name") { IsRequired = true };
         var releaseNotesOption = new Option<string?>("--release-notes", "Release notes");
         var featureChangesOption = new Option<string?>(
@@ -202,8 +201,7 @@ public static class ReleaseCommands
         var command = new Command(name, description);
 
         var projectKeyOption = new Option<string>("--project-key", "Application ID or name") { IsRequired = true };
-        var environmentOption = new Option<string?>(
-            ["--environment", "--env"],
+        var environmentOption = CommandOptions.CreateEnvOption(
             "Environment name (e.g., Production, Staging)");
         var ciProviderOption = new Option<string>(
             "--ci-provider",
@@ -276,7 +274,7 @@ public static class ReleaseCommands
         CliCommandContext cli,
         CreateReleaseOptionsBag options)
     {
-        if (!TryResolveApp(context, cli, options.ApplicationId, out var applicationId))
+        if (!CommandOptions.TryResolveApp(context, cli, options.ApplicationId, out var applicationId))
             return;
 
         var name = context.ParseResult.GetValueForOption(options.Name)!;
@@ -297,7 +295,7 @@ public static class ReleaseCommands
             return;
         }
 
-        try
+        await CommandOptions.RunApiAsync(context, cli, "Error creating release", async () =>
         {
             var release = await apiClient.CreateReleaseAsync(request);
             await cli.Output.WriteAsync(
@@ -305,12 +303,7 @@ public static class ReleaseCommands
                 release,
                 TogglyJsonSerializerContext.Default.ReleaseModel,
                 r => FormatRelease(r, "Release created"));
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            await cli.Output.WriteErrorAsync($"Error creating release: {ex.Message}");
-            context.ExitCode = 1;
-        }
+        });
     }
 
     private static async Task HandleAssociateBuildAsync(
@@ -320,14 +313,8 @@ public static class ReleaseCommands
         AssociateBuildOptions options)
     {
         var projectKey = context.ParseResult.GetValueForOption(options.ProjectKey)!;
-        var prefs = cli.ContextStoreFactory().Load();
-        var environmentFlag = context.ParseResult.GetValueForOption(options.Environment);
-        if (!ContextStore.TryResolveEnvironment(environmentFlag, prefs, out var environment, out var envError))
-        {
-            await cli.Output.WriteErrorAsync(envError);
-            context.ExitCode = 2;
+        if (!CommandOptions.TryResolveEnv(context, cli, options.Environment, out var environment))
             return;
-        }
 
         var ciProvider = context.ParseResult.GetValueForOption(options.CiProvider)!;
         var runId = context.ParseResult.GetValueForOption(options.RunId)!;
@@ -366,7 +353,7 @@ public static class ReleaseCommands
             };
         }
 
-        try
+        await CommandOptions.RunApiAsync(context, cli, "Error associating build", async () =>
         {
             var response = await apiClient.AssociateBuildAsync(request);
             await cli.Output.WriteAsync(
@@ -380,31 +367,7 @@ public static class ReleaseCommands
                         lines.Add($"Release URL: {r.ReleaseUrl}");
                     return lines;
                 });
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            await cli.Output.WriteErrorAsync($"Error associating build: {ex.Message}");
-            context.ExitCode = 1;
-        }
-    }
-
-    private static Option<string?> CreateAppOption() =>
-        new(["--app", "--application-id"], "Application id (or set via 'toggly context set --app')");
-
-    private static bool TryResolveApp(
-        InvocationContext context,
-        CliCommandContext cli,
-        Option<string?> appOption,
-        out string applicationId)
-    {
-        var prefs = cli.ContextStoreFactory().Load();
-        var flag = context.ParseResult.GetValueForOption(appOption);
-        if (ContextStore.TryResolveApplicationId(flag, prefs, out applicationId, out var error))
-            return true;
-
-        cli.Output.WriteErrorAsync(error).GetAwaiter().GetResult();
-        context.ExitCode = 2;
-        return false;
+        });
     }
 
     private static bool TryApplyFeatureChanges(
@@ -440,9 +403,7 @@ public static class ReleaseCommands
         }
 
         foreach (var release in releases)
-        {
             yield return $"{release.Id}\t{release.Name}\t{release.OverallStatus ?? "-"}\tapp={release.ApplicationId}";
-        }
     }
 
     private static IEnumerable<string> FormatRelease(ReleaseModel release, string? verb = null)

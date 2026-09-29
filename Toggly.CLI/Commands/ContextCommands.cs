@@ -39,19 +39,22 @@ public static class ContextCommands
                 return;
             }
 
-            var store = cli.ContextStoreFactory();
-            var prefs = store.Load();
-            if (!string.IsNullOrWhiteSpace(app))
-                prefs.DefaultApplicationId = app.Trim();
-            if (!string.IsNullOrWhiteSpace(env))
-                prefs.DefaultEnvironment = env.Trim();
-            store.Save(prefs);
+            await CommandOptions.RunApiAsync(invocation, cli, "Error updating context", async () =>
+            {
+                var store = cli.ContextStoreFactory();
+                var prefs = store.Load();
+                if (!string.IsNullOrWhiteSpace(app))
+                    prefs.DefaultApplicationId = app.Trim();
+                if (!string.IsNullOrWhiteSpace(env))
+                    prefs.DefaultEnvironment = env.Trim();
+                store.Save(prefs);
 
-            await cli.Output.WriteAsync(
-                invocation,
-                prefs,
-                TogglyJsonSerializerContext.Default.ContextPrefs,
-                FormatPrefs);
+                await cli.Output.WriteAsync(
+                    invocation,
+                    prefs,
+                    TogglyJsonSerializerContext.Default.ContextPrefs,
+                    FormatPrefs);
+            });
         });
         return command;
     }
@@ -61,12 +64,15 @@ public static class ContextCommands
         var command = new Command("get", "Show current context preferences");
         command.SetHandler(async (InvocationContext invocation) =>
         {
-            var prefs = cli.ContextStoreFactory().Load();
-            await cli.Output.WriteAsync(
-                invocation,
-                prefs,
-                TogglyJsonSerializerContext.Default.ContextPrefs,
-                FormatPrefs);
+            await CommandOptions.RunApiAsync(invocation, cli, "Error reading context", async () =>
+            {
+                var prefs = cli.ContextStoreFactory().Load();
+                await cli.Output.WriteAsync(
+                    invocation,
+                    prefs,
+                    TogglyJsonSerializerContext.Default.ContextPrefs,
+                    FormatPrefs);
+            });
         });
         return command;
     }
@@ -76,19 +82,22 @@ public static class ContextCommands
         var command = new Command("clear", "Clear context preferences");
         command.SetHandler(async (InvocationContext invocation) =>
         {
-            cli.ContextStoreFactory().Clear();
-            if (cli.Output.IsJson(invocation))
+            await CommandOptions.RunApiAsync(invocation, cli, "Error clearing context", async () =>
             {
-                await cli.Output.WriteAsync(
-                    invocation,
-                    new ContextPrefs(),
-                    TogglyJsonSerializerContext.Default.ContextPrefs,
-                    _ => ["Context cleared."]);
-            }
-            else
-            {
-                await cli.Output.WriteLinesAsync(["Context cleared."]);
-            }
+                cli.ContextStoreFactory().Clear();
+                if (cli.Output.IsJson(invocation))
+                {
+                    await cli.Output.WriteAsync(
+                        invocation,
+                        new ContextPrefs(),
+                        TogglyJsonSerializerContext.Default.ContextPrefs,
+                        _ => ["Context cleared."]);
+                }
+                else
+                {
+                    await cli.Output.WriteLinesAsync(["Context cleared."]);
+                }
+            });
         });
         return command;
     }

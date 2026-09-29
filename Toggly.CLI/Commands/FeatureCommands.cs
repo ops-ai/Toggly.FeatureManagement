@@ -84,7 +84,7 @@ public static class FeatureCommands
         CliCommandContext cli)
     {
         var command = new Command("list", "List features for an application");
-        var appOption = CreateAppOption();
+        var appOption = CommandOptions.CreateAppOption();
         command.AddOption(appOption);
 
         command.SetHandler(async (InvocationContext context) =>
@@ -93,10 +93,10 @@ public static class FeatureCommands
             if (apiClient is null)
                 return;
 
-            if (!TryResolveApp(context, cli, appOption, out var applicationId))
+            if (!CommandOptions.TryResolveApp(context, cli, appOption, out var applicationId))
                 return;
 
-            try
+            await CommandOptions.RunApiAsync(context, cli, "Error listing features", async () =>
             {
                 var features = await apiClient.ListFeaturesAsync(applicationId, context.GetCancellationToken());
                 await cli.Output.WriteAsync(
@@ -104,12 +104,7 @@ public static class FeatureCommands
                     features,
                     TogglyJsonSerializerContext.Default.ListFeatureDefinition,
                     FormatFeatureList);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                await cli.Output.WriteErrorAsync($"Error listing features: {ex.Message}");
-                context.ExitCode = 1;
-            }
+            });
         });
         return command;
     }
@@ -119,7 +114,7 @@ public static class FeatureCommands
         CliCommandContext cli)
     {
         var command = new Command("get", "Get a feature by key");
-        var appOption = CreateAppOption();
+        var appOption = CommandOptions.CreateAppOption();
         var keyArgument = new Argument<string>("key", "Feature key");
         command.AddOption(appOption);
         command.AddArgument(keyArgument);
@@ -130,11 +125,11 @@ public static class FeatureCommands
             if (apiClient is null)
                 return;
 
-            if (!TryResolveApp(context, cli, appOption, out var applicationId))
+            if (!CommandOptions.TryResolveApp(context, cli, appOption, out var applicationId))
                 return;
 
             var key = context.ParseResult.GetValueForArgument(keyArgument);
-            try
+            await CommandOptions.RunApiAsync(context, cli, "Error getting feature", async () =>
             {
                 var feature = await apiClient.GetFeatureAsync(
                     applicationId,
@@ -145,12 +140,7 @@ public static class FeatureCommands
                     feature,
                     TogglyJsonSerializerContext.Default.FeatureDefinition,
                     f => FormatFeature(f));
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                await cli.Output.WriteErrorAsync($"Error getting feature: {ex.Message}");
-                context.ExitCode = 1;
-            }
+            });
         });
         return command;
     }
@@ -163,7 +153,7 @@ public static class FeatureCommands
     {
         var command = new Command(name, description);
 
-        var applicationIdOption = CreateAppOption();
+        var applicationIdOption = CommandOptions.CreateAppOption();
         var nameOption = new Option<string>("--name", "Feature display name") { IsRequired = true };
         var featureKeyOption = new Option<string>("--feature-key", "Feature key (used as reference in application)")
         {
@@ -213,7 +203,7 @@ public static class FeatureCommands
     {
         var command = new Command(name, description);
 
-        var applicationIdOption = CreateAppOption();
+        var applicationIdOption = CommandOptions.CreateAppOption();
         var featureKeyOption = new Option<string>("--feature-key", "Feature key to update") { IsRequired = true };
         var nameOption = new Option<string?>("--name", "Feature display name");
         var descriptionOption = new Option<string?>("--description", "Feature description");
@@ -255,9 +245,8 @@ public static class FeatureCommands
     {
         var command = new Command(name, description);
 
-        var applicationIdOption = CreateAppOption();
-        var environmentOption = new Option<string?>(
-            ["--environment", "--env"],
+        var applicationIdOption = CommandOptions.CreateAppOption();
+        var environmentOption = CommandOptions.CreateEnvOption(
             "Environment name (e.g., Production, Staging)");
         var featureKeyOption = new Option<string>("--feature-key", "Feature key") { IsRequired = true };
         var enableOption = new Option<bool>("--enable", "Enable the feature (sets AlwaysOn filter)");
@@ -299,7 +288,7 @@ public static class FeatureCommands
         CliCommandContext cli,
         CreateFeatureOptions options)
     {
-        if (!TryResolveApp(context, cli, options.ApplicationId, out var applicationId))
+        if (!CommandOptions.TryResolveApp(context, cli, options.ApplicationId, out var applicationId))
             return;
 
         var name = context.ParseResult.GetValueForOption(options.Name)!;
@@ -327,7 +316,7 @@ public static class FeatureCommands
             return;
         }
 
-        try
+        await CommandOptions.RunApiAsync(context, cli, "Error creating feature", async () =>
         {
             var feature = await apiClient.CreateFeatureAsync(applicationId, model);
             await cli.Output.WriteAsync(
@@ -335,12 +324,7 @@ public static class FeatureCommands
                 feature,
                 TogglyJsonSerializerContext.Default.FeatureDefinition,
                 f => FormatFeature(f, "Feature created"));
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            await cli.Output.WriteErrorAsync($"Error creating feature: {ex.Message}");
-            context.ExitCode = 1;
-        }
+        });
     }
 
     private static async Task HandleUpdateFeatureAsync(
@@ -349,7 +333,7 @@ public static class FeatureCommands
         CliCommandContext cli,
         UpdateFeatureOptions options)
     {
-        if (!TryResolveApp(context, cli, options.ApplicationId, out var applicationId))
+        if (!CommandOptions.TryResolveApp(context, cli, options.ApplicationId, out var applicationId))
             return;
 
         var featureKey = context.ParseResult.GetValueForOption(options.FeatureKey)!;
@@ -369,7 +353,7 @@ public static class FeatureCommands
         if (!string.IsNullOrEmpty(tags))
             model.Tags = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
-        try
+        await CommandOptions.RunApiAsync(context, cli, "Error updating feature", async () =>
         {
             var feature = await apiClient.UpdateFeatureAsync(applicationId, featureKey, model);
             await cli.Output.WriteAsync(
@@ -377,12 +361,7 @@ public static class FeatureCommands
                 feature,
                 TogglyJsonSerializerContext.Default.FeatureDefinition,
                 f => FormatFeature(f, "Feature updated"));
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            await cli.Output.WriteErrorAsync($"Error updating feature: {ex.Message}");
-            context.ExitCode = 1;
-        }
+        });
     }
 
     private static async Task HandleUpdateFeatureEnvironmentAsync(
@@ -391,17 +370,11 @@ public static class FeatureCommands
         CliCommandContext cli,
         UpdateFeatureEnvironmentOptions options)
     {
-        if (!TryResolveApp(context, cli, options.ApplicationId, out var applicationId))
+        if (!CommandOptions.TryResolveApp(context, cli, options.ApplicationId, out var applicationId))
             return;
 
-        var prefs = cli.ContextStoreFactory().Load();
-        var environmentFlag = context.ParseResult.GetValueForOption(options.Environment);
-        if (!ContextStore.TryResolveEnvironment(environmentFlag, prefs, out var environment, out var envError))
-        {
-            await cli.Output.WriteErrorAsync(envError);
-            context.ExitCode = 2;
+        if (!CommandOptions.TryResolveEnv(context, cli, options.Environment, out var environment))
             return;
-        }
 
         var featureKey = context.ParseResult.GetValueForOption(options.FeatureKey)!;
         var enable = context.ParseResult.GetValueForOption(options.Enable);
@@ -415,7 +388,7 @@ public static class FeatureCommands
             return;
         }
 
-        try
+        await CommandOptions.RunApiAsync(context, cli, "Error updating feature environment", async () =>
         {
             var updatedFilters = await apiClient.UpdateFeatureEnvironmentAsync(
                 applicationId,
@@ -439,31 +412,7 @@ public static class FeatureCommands
                     .. updatedFilters.Select(filter => $"  - {filter.Name}")
                 ]);
             }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            await cli.Output.WriteErrorAsync($"Error updating feature environment: {ex.Message}");
-            context.ExitCode = 1;
-        }
-    }
-
-    private static Option<string?> CreateAppOption() =>
-        new(["--app", "--application-id"], "Application id (or set via 'toggly context set --app')");
-
-    private static bool TryResolveApp(
-        InvocationContext context,
-        CliCommandContext cli,
-        Option<string?> appOption,
-        out string applicationId)
-    {
-        var prefs = cli.ContextStoreFactory().Load();
-        var flag = context.ParseResult.GetValueForOption(appOption);
-        if (ContextStore.TryResolveApplicationId(flag, prefs, out applicationId, out var error))
-            return true;
-
-        cli.Output.WriteErrorAsync(error).GetAwaiter().GetResult();
-        context.ExitCode = 2;
-        return false;
+        });
     }
 
     private static bool TryApplyEnvironmentFilters(
@@ -540,21 +489,8 @@ public static class FeatureCommands
         }
     }
 
-    private static IEnumerable<string> FormatFeatureList(List<FeatureDefinition> features)
-    {
-        if (features.Count == 0)
-        {
-            yield return "No features found.";
-            yield break;
-        }
-
-        foreach (var feature in features)
-        {
-            foreach (var line in FormatFeature(feature))
-                yield return line;
-            yield return string.Empty;
-        }
-    }
+    private static IEnumerable<string> FormatFeatureList(List<FeatureDefinition> features) =>
+        CommandOptions.FormatListOrEmpty(features, "No features found.", f => FormatFeature(f));
 
     private static IEnumerable<string> FormatFeature(FeatureDefinition feature, string? verb = null)
     {

@@ -32,7 +32,7 @@ public static class AppCommands
             if (apiClient is null)
                 return;
 
-            try
+            await CommandOptions.RunApiAsync(context, cli, "Error listing applications", async () =>
             {
                 var apps = await apiClient.ListApplicationsAsync(context.GetCancellationToken());
                 await cli.Output.WriteAsync(
@@ -40,12 +40,7 @@ public static class AppCommands
                     apps,
                     TogglyJsonSerializerContext.Default.ListApplicationSummary,
                     FormatApplicationList);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                await cli.Output.WriteErrorAsync($"Error listing applications: {ex.Message}");
-                context.ExitCode = 1;
-            }
+            });
         });
         return command;
     }
@@ -65,39 +60,21 @@ public static class AppCommands
                 return;
 
             var id = context.ParseResult.GetValueForArgument(idArgument);
-            try
+            await CommandOptions.RunApiAsync(context, cli, "Error getting application", async () =>
             {
                 var app = await apiClient.GetApplicationAsync(id, context.GetCancellationToken());
                 await cli.Output.WriteAsync(
                     context,
                     app,
                     TogglyJsonSerializerContext.Default.ApplicationSummary,
-                    a => FormatApplication(a));
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                await cli.Output.WriteErrorAsync($"Error getting application: {ex.Message}");
-                context.ExitCode = 1;
-            }
+                    FormatApplication);
+            });
         });
         return command;
     }
 
-    private static IEnumerable<string> FormatApplicationList(List<ApplicationSummary> apps)
-    {
-        if (apps.Count == 0)
-        {
-            yield return "No applications found.";
-            yield break;
-        }
-
-        foreach (var app in apps)
-        {
-            foreach (var line in FormatApplication(app))
-                yield return line;
-            yield return string.Empty;
-        }
-    }
+    private static IEnumerable<string> FormatApplicationList(List<ApplicationSummary> apps) =>
+        CommandOptions.FormatListOrEmpty(apps, "No applications found.", FormatApplication);
 
     private static IEnumerable<string> FormatApplication(ApplicationSummary app)
     {
