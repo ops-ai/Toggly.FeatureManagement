@@ -7,6 +7,7 @@ import com.github.benmanes.caffeine.cache.stats.CacheStats;
 import io.toggly.core.snapshot.FeatureSnapshot;
 import io.toggly.core.snapshot.SnapshotProvider;
 
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -89,8 +90,7 @@ public class CaffeineCachingSnapshotProvider implements SnapshotProvider {
     @Override
     public FeatureSnapshot getSnapshot() {
         try {
-            FeatureSnapshot snapshot = cache.get(CACHE_KEY);
-            return snapshot != null ? snapshot : FeatureSnapshot.empty();
+            return Objects.requireNonNullElseGet(cache.get(CACHE_KEY), FeatureSnapshot::empty);
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Error getting cached snapshot", e);
             return delegate.getSnapshot();
