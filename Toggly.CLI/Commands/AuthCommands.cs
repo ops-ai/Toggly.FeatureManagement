@@ -74,8 +74,8 @@ public static class AuthCommands
                 }
                 catch (Exception ex) when (ex is PlatformNotSupportedException or InvalidOperationException)
                 {
-                    deps.Error.WriteLine($"Cannot store credentials: {ex.Message}");
-                    throw;
+                    // Re-wrap so the outer catch prints a single user-facing line.
+                    throw new InvalidOperationException($"Cannot store credentials: {ex.Message}", ex);
                 }
 
                 using var httpClient = deps.HttpClientFactory();

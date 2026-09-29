@@ -110,6 +110,60 @@ public class TogglyApiClientAuthTests
         Assert.Equal("refresh-2", persisted.RefreshToken);
     }
 
+    [Fact]
+    public async Task CreateFeatureAsync_OnInvalidGrant_DeletesStoredSession()
+    {
+        using var handler = new RecordingHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/.well-known/openid-configuration" => JsonResponse(
+                "{\"token_endpoint\":\"https://auth.example.test/connect/token\",\"device_authorization_endpoint\":\"https://auth.example.test/connect/deviceauthorization\"}"),
+            "/connect/token" => new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = new StringContent(
+                    "{\"error\":\"invalid_grant\",\"error_description\":\"token revoked\",\"refresh_token\":\"do-not-leak\"}",
+                    Encoding.UTF8,
+                    "application/json")
+            },
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        });
+        using var httpClient = new HttpClient(handler);
+        var store = new InMemorySecureTokenStore();
+        var session = new AuthSession
+        {
+            AccessToken = "stale-token",
+            RefreshToken = "refresh-1",
+            ExpiresAtUtc = DateTime.UtcNow.AddMinutes(1),
+            Authority = "https://auth.example.test",
+            ClientId = Constants.DefaultDeviceClientId,
+            TokenType = "Bearer"
+        };
+        await store.SaveAsync(session);
+
+        var apiClient = new TogglyApiClient(
+            httpClient,
+            new AuthService(httpClient),
+            "https://api.example.test/",
+            new ResolvedCredentials
+            {
+                Kind = ResolvedAuthKind.DeviceSession,
+                ClientId = session.ClientId,
+                Authority = session.Authority,
+                Session = session
+            },
+            store);
+
+        var ex = await Assert.ThrowsAsync<AuthSessionExpiredException>(() =>
+            apiClient.CreateFeatureAsync("app-1", new()
+            {
+                Name = "Payments",
+                FeatureKey = "payments-enabled"
+            }));
+
+        Assert.Contains("toggly auth login", ex.Message);
+        Assert.DoesNotContain("do-not-leak", ex.Message);
+        Assert.Null(await store.LoadAsync());
+    }
+
     private static HttpResponseMessage JsonResponse(string json) => new(HttpStatusCode.OK)
     {
         Content = new StringContent(json, Encoding.UTF8, "application/json")

@@ -84,10 +84,30 @@ public class TogglyApiClient
         // Refresh when expired or within 5 minutes of expiry.
         if (session.ExpiresAtUtc <= DateTime.UtcNow.AddMinutes(5))
         {
-            session = await _authService.RefreshAccessTokenAsync(session, cancellationToken);
-            _session = session;
-            if (_tokenStore is not null)
-                await _tokenStore.SaveAsync(session, cancellationToken);
+            try
+            {
+                session = await _authService.RefreshAccessTokenAsync(session, cancellationToken);
+                _session = session;
+                if (_tokenStore is not null)
+                    await _tokenStore.SaveAsync(session, cancellationToken);
+            }
+            catch (AuthSessionExpiredException)
+            {
+                _session = null;
+                if (_tokenStore is not null)
+                {
+                    try
+                    {
+                        await _tokenStore.DeleteAsync(cancellationToken);
+                    }
+                    catch
+                    {
+                        // Best effort — still surface the expired-session guidance.
+                    }
+                }
+
+                throw;
+            }
         }
 
         _httpClient.DefaultRequestHeaders.Authorization =

@@ -1,9 +1,31 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using Toggly.CLI.Models;
 
 namespace Toggly.CLI.Services;
+
+/// <summary>
+/// Raised when a stored device session can no longer be refreshed and must be cleared.
+/// </summary>
+public sealed class AuthSessionExpiredException : InvalidOperationException
+{
+    public AuthSessionExpiredException()
+        : base("Session expired or was revoked. Run 'toggly auth login' to sign in again.")
+    {
+    }
+
+    public AuthSessionExpiredException(string message)
+        : base(message)
+    {
+    }
+
+    public AuthSessionExpiredException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}
 
 /// <summary>
 /// OAuth2 authentication: client credentials, device code, and refresh.
@@ -50,7 +72,7 @@ public class AuthService
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw new HttpRequestException($"Failed to obtain access token: {response.StatusCode} - {errorContent}");
+            throw new InvalidOperationException(FormatOAuthFailure("Client credentials token request", response.StatusCode, errorContent));
         }
 
         var tokenResponse = await response.Content.ReadFromJsonAsync(TogglyJsonSerializerContext.Default.TokenResponse, cancellationToken);
@@ -99,7 +121,7 @@ public class AuthService
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw new HttpRequestException($"Device authorization failed: {response.StatusCode} - {errorContent}");
+            throw new InvalidOperationException(FormatOAuthFailure("Device authorization", response.StatusCode, errorContent));
         }
 
         var deviceResponse = await response.Content.ReadFromJsonAsync(
@@ -157,6 +179,13 @@ public class AuthService
                 if (tokenResponse?.AccessToken == null)
                     throw new InvalidOperationException("Device token response did not contain access_token.");
 
+                if (string.IsNullOrEmpty(tokenResponse.RefreshToken))
+                {
+                    throw new InvalidOperationException(
+                        "Login did not return a refresh token. Ensure the IdP client allows offline_access " +
+                        "(AllowOfflineAccess) and includes the offline_access scope, then run 'toggly auth login' again.");
+                }
+
                 return new AuthSession
                 {
                     AccessToken = tokenResponse.AccessToken,
@@ -168,7 +197,8 @@ public class AuthService
                 };
             }
 
-            var error = TryParseOAuthError(body);
+            var oauthError = TryParseOAuthErrorResponse(body);
+            var error = oauthError?.Error;
             if (error == "authorization_pending")
             {
                 await DelayAsync(interval, cancellationToken);
@@ -183,9 +213,9 @@ public class AuthService
             }
 
             if (error == "expired_token" || error == "access_denied")
-                throw new InvalidOperationException($"Device authorization ended: {error}.");
+                throw new InvalidOperationException(FormatOAuthFailure("Device authorization", response.StatusCode, body));
 
-            throw new HttpRequestException($"Device token poll failed: {response.StatusCode} - {body}");
+            throw new InvalidOperationException(FormatOAuthFailure("Device token poll", response.StatusCode, body));
         }
 
         throw new TimeoutException("Device authorization timed out before the user completed login.");
@@ -194,10 +224,11 @@ public class AuthService
     /// <summary>
     /// Refreshes an access token using a stored refresh token (public client: no secret).
     /// </summary>
+    /// <exception cref="AuthSessionExpiredException">When the refresh token is invalid or revoked.</exception>
     public async Task<AuthSession> RefreshAccessTokenAsync(AuthSession session, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(session.RefreshToken))
-            throw new InvalidOperationException("Cannot refresh: session has no refresh token. Run 'toggly auth login' again.");
+            throw new AuthSessionExpiredException("Session has no refresh token. Run 'toggly auth login' again.");
 
         var authority = string.IsNullOrEmpty(session.Authority) ? Constants.DefaultAuthority : session.Authority;
         var config = await GetOpenIdConfigAsync(authority, cancellationToken);
@@ -217,7 +248,14 @@ public class AuthService
         if (!response.IsSuccessStatusCode)
         {
             var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
-            throw new HttpRequestException($"Failed to refresh access token: {response.StatusCode} - {errorContent}");
+            var oauthError = TryParseOAuthErrorResponse(errorContent)?.Error;
+            if (IsPermanentRefreshFailure(oauthError))
+            {
+                throw new AuthSessionExpiredException(
+                    "Session expired or was revoked. Run 'toggly auth login' to sign in again.");
+            }
+
+            throw new InvalidOperationException(FormatOAuthFailure("Token refresh", response.StatusCode, errorContent));
         }
 
         var tokenResponse = await response.Content.ReadFromJsonAsync(TogglyJsonSerializerContext.Default.TokenResponse, cancellationToken);
@@ -242,12 +280,49 @@ public class AuthService
             await Task.Delay(effective, cancellationToken);
     }
 
-    private static string? TryParseOAuthError(string body)
+    private static bool IsPermanentRefreshFailure(string? error) =>
+        error is "invalid_grant" or "invalid_token" or "expired_token" or "access_denied";
+
+    /// <summary>
+    /// Builds a short user-facing OAuth error without dumping raw response bodies or tokens.
+    /// </summary>
+    internal static string FormatOAuthFailure(string operation, HttpStatusCode statusCode, string body)
+    {
+        var parsed = TryParseOAuthErrorResponse(body);
+        if (!string.IsNullOrEmpty(parsed?.Error))
+        {
+            var description = SanitizeErrorDescription(parsed.ErrorDescription);
+            if (!string.IsNullOrEmpty(description))
+                return $"{operation} failed ({parsed.Error}): {description}";
+
+            return $"{operation} failed ({parsed.Error}).";
+        }
+
+        return $"{operation} failed (HTTP {(int)statusCode}).";
+    }
+
+    private static string? SanitizeErrorDescription(string? description)
+    {
+        if (string.IsNullOrWhiteSpace(description))
+            return null;
+
+        var trimmed = description.Trim();
+        // Avoid echoing anything that looks like a JWT / opaque secret.
+        if (trimmed.Contains("eyJ", StringComparison.Ordinal) ||
+            trimmed.Contains("Bearer ", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Length > 200)
+        {
+            return null;
+        }
+
+        return trimmed;
+    }
+
+    private static OAuthErrorResponse? TryParseOAuthErrorResponse(string body)
     {
         try
         {
-            var error = System.Text.Json.JsonSerializer.Deserialize(body, TogglyJsonSerializerContext.Default.OAuthErrorResponse);
-            return error?.Error;
+            return System.Text.Json.JsonSerializer.Deserialize(body, TogglyJsonSerializerContext.Default.OAuthErrorResponse);
         }
         catch
         {

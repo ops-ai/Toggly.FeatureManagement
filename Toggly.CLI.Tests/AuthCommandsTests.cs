@@ -140,6 +140,25 @@ public class AuthCommandsTests
         Assert.Contains("Not logged in.", outWriter.ToString());
     }
 
+    [Fact]
+    public async Task AuthLogin_StoreUnavailable_PrintsSingleFailureLine()
+    {
+        var errWriter = new StringWriter();
+        var deps = new AuthCommandDeps
+        {
+            TokenStoreFactory = () => throw new InvalidOperationException("libsecret is required"),
+            Out = new StringWriter(),
+            Error = errWriter
+        };
+
+        var root = CliApplication.CreateRootCommand(authDeps: deps);
+        await root.InvokeAsync(["auth", "login", "--authority", "https://auth.example.test"]);
+
+        var error = errWriter.ToString();
+        Assert.Contains("Login failed: Cannot store credentials: libsecret is required", error);
+        Assert.Single(error.Split("Login failed:", StringSplitOptions.RemoveEmptyEntries));
+    }
+
     private static HttpResponseMessage JsonResponse(string json) => new(HttpStatusCode.OK)
     {
         Content = new StringContent(json, Encoding.UTF8, "application/json")
