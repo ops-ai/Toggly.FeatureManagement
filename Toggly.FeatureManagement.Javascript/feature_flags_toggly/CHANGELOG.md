@@ -1,3 +1,11 @@
+## 1.10.2
+
+2026-09-28
+
+### Fixed
+- Pass `cache: 'no-store'` on definition fetches so browsers cannot serve a
+  cached evaluated-signed response after a live update or reload.
+
 ## 1.10.1
 
 2026-09-27

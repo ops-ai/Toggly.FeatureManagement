@@ -62,6 +62,12 @@ describe('toggly-local-gates', () => {
     it('returns true for ungated keys', () => {
       expect(isLocalPrerequisiteMet('Other', [apiRedesignGate], index)).toBe(true);
     });
+
+    it('returns true when a stale index references a gate that is no longer configured', () => {
+      const staleIndex = new Map([['ApiV2Checkout', 'removedGate']]);
+
+      expect(isLocalPrerequisiteMet('ApiV2Checkout', [], staleIndex)).toBe(true);
+    });
   });
 
   describe('applyLocalGatesToMap', () => {
@@ -76,6 +82,14 @@ describe('toggly-local-gates', () => {
           index,
         ),
       ).toEqual({ ApiV2Checkout: false, Other: true });
+    });
+
+    it('builds an index when one is not supplied', () => {
+      const gateOff: LocalGate = { ...apiRedesignGate, isEnabled: () => false };
+
+      expect(applyLocalGatesToMap({ ApiV2Checkout: true }, [gateOff])).toEqual({
+        ApiV2Checkout: false,
+      });
     });
   });
 });

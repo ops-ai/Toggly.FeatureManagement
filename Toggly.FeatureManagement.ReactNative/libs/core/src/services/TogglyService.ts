@@ -649,10 +649,13 @@ export class TogglyService {
         this.config.requestTimeout
       );
 
+      // Bypass HTTP caches: evaluated bodies can change under the same storage
+      // revision (identity / groups / claims).
       const response = await fetch(url, {
         method: 'GET',
         headers,
         signal: controller.signal,
+        cache: 'no-store',
       });
 
       if (!current()) return this.retiredResponse();

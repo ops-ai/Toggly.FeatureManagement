@@ -1,3 +1,11 @@
+## 1.11.1
+
+2026-09-28
+
+### Fixed
+- Client and server definition fetches use `cache: 'no-store'` so HTTP caches
+  cannot replay a stale evaluated GET under the same storage revision [OPS-1568].
+
 ## 1.11.0
 
 2026-09-26

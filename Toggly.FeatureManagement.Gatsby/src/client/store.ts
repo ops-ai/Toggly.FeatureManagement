@@ -410,6 +410,8 @@ class TogglyClientInstance {
       const fetchUrl = appendDefinitionsRevisionParam(url, pin);
       const revision = pin ? null : this.definitionsRevision;
 
+      // Bypass HTTP caches: evaluated bodies can change under the same storage
+      // revision (identity / groups / claims).
       const response = await fetch(fetchUrl, {
         method: 'GET',
         headers: buildDefinitionFetchHeaders({
@@ -417,6 +419,7 @@ class TogglyClientInstance {
           ...(revision ? { 'If-None-Match': revision } : {}),
         }),
         signal: controller.signal,
+        cache: 'no-store',
       });
 
       if (generation !== this.generation || requestVersion !== this.requestVersion || this.destroyed)

@@ -132,6 +132,64 @@ public class ProtocolTests
         Assert.True(client.IsEnabled("on"));
         Assert.Equal(2, errors);
     }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RejectedRefreshPreservesAcceptedFlagsRevisionAndSnapshot(bool invalidSignature)
+    {
+        using var acceptedKey = new SignedFixture();
+        using var untrustedKey = new SignedFixture();
+        var acceptedTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        var body = acceptedKey.Envelope("{\"on\":true}", acceptedTime);
+        var revision = "accepted";
+        var status = HttpStatusCode.OK;
+        var keyRequests = 0;
+        var conditionalRevisions = new List<string?>();
+        var store = new Store();
+        using var http = new HttpClient(new Handler((request, ct) =>
+        {
+            if (request.RequestUri!.AbsolutePath.Contains("jwks"))
+            {
+                keyRequests++;
+                return Task.FromResult(Response(acceptedKey.Jwks));
+            }
+            conditionalRevisions.Add(request.Headers.TryGetValues("If-None-Match", out var values) ? values.Single() : null);
+            var response = new HttpResponseMessage(status) { Content = new StringContent(body) };
+            response.Headers.TryAddWithoutValidation("X-Definitions-Revision", revision);
+            return Task.FromResult(response);
+        }));
+        await using var client = new TogglyClient(new()
+        {
+            EnableTelemetry = false, AppKey = "public", EnableLiveUpdates = false,
+            RefreshInterval = TimeSpan.FromHours(1)
+        }, http, new Es256SignatureVerifier(), store);
+        var changes = 0;
+        var errors = new List<Exception>();
+        client.Changed += (_, _) => changes++;
+        client.Error += (_, error) => errors.Add(error);
+        await client.InitializeAsync();
+        var acceptedSnapshot = Assert.Single(store.Values).Value;
+        Assert.True(client.IsEnabled("on"));
+        Assert.Equal(1, changes);
+
+        body = invalidSignature
+            ? untrustedKey.Envelope("{\"on\":false}", acceptedTime)
+            : acceptedKey.Envelope("{\"on\":false}", acceptedTime - 1);
+        revision = "rejected";
+        await client.RefreshAsync();
+
+        Assert.True(client.IsEnabled("on"));
+        Assert.Equal(acceptedSnapshot, Assert.Single(store.Values).Value);
+        Assert.Equal(1, changes);
+        Assert.IsType<CryptographicException>(Assert.Single(errors));
+        Assert.Equal(invalidSignature ? 2 : 1, keyRequests);
+
+        status = HttpStatusCode.NotModified;
+        await client.RefreshAsync();
+        Assert.Equal(new string?[] { null, "accepted", "accepted" }, conditionalRevisions);
+        Assert.True(client.IsEnabled("on"));
+        Assert.Equal(acceptedSnapshot, Assert.Single(store.Values).Value);
+    }
     [Fact]
     public async Task OldInflightResponseCannotRestorePreviousIdentity()
     {

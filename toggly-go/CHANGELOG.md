@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.11.2
+
+2026-09-28
+
+### Fixed
+- Always apply HTTP 200 definition bodies when the storage ETag matches.
+  Same-revision responses still count as cache hits for telemetry after the
+  body is applied [OPS-1568].
+
+### Changed
+- User-Agent and live-update `sdkVersion` report `toggly-go/0.11.2`.
+
 ## 0.11.1
 
 2026-09-27

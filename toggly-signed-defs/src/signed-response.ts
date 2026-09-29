@@ -227,7 +227,10 @@ export async function fetchEvaluatedSignedDefinitions(
   if (request.revision) {
     headers['If-None-Match'] = request.revision
   }
-  const response = await fetchImpl(url, { headers })
+  // Always bypass HTTP caches: evaluated bodies can change under the same
+  // storage revision (identity / groups / claims), and App Router / undici
+  // may otherwise replay a stale GET.
+  const response = await fetchImpl(url, { method: 'GET', headers, cache: 'no-store' })
   const revision = revisionFromResponse(response)
   if (response.status === 304) {
     return { notModified: true, revision }
@@ -237,6 +240,7 @@ export async function fetchEvaluatedSignedDefinitions(
   }
   // Definition request headers belong to that endpoint. Forwarding SDK identity
   // headers to public JWKS would require an otherwise unnecessary CORS preflight.
+  // Always apply HTTP 200 bodies — same revision is telemetry only (CDN replay).
   const defs = await readAndParseEvaluatedResponseCached(response, jwks, config)
   return { notModified: false, defs, revision }
 }
