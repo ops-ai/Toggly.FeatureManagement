@@ -5,7 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { splitJobList, verifyRequiredJobs } from '../actions/verify-required-jobs/verify-required-jobs.mjs';
+import {
+  failedRequiredJobs,
+  splitJobList,
+  verifyRequiredJobs,
+} from '../actions/verify-required-jobs/verify-required-jobs.mjs';
 
 const workflow = readFileSync(new URL('./analysis-javascript.yml', import.meta.url), 'utf8');
 const docusaurusFixture = readFileSync(
@@ -55,6 +59,13 @@ function assertRequiredHost(sdks, job) {
     );
   }
 }
+
+function stepBlock(scope, stepName) {
+  const escaped = stepName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = scope.match(new RegExp(`- name: ${escaped}\\n([\\s\\S]*?)(?=\\n\\s*- name:|\\n {0,2}\\S[^\\n]*:\\n|$)`));
+  assert.ok(match, `expected to find a "${stepName}" step`);
+  return match[0];
+}
 const packedHostHarnesses = [
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs',
   'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-check.mjs',
@@ -90,6 +101,56 @@ test('does not count packed Vue and Svelte host harnesses as production source',
   for (const exclusions of scanExclusions) {
     for (const harness of packedHostHarnesses) assert.ok(exclusions.includes(harness));
   }
+});
+
+test('requires authenticated SonarCloud and Server quality gates', () => {
+  const sonar = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  const cloudCredentials = stepBlock(sonar, 'Validate SonarCloud credentials');
+  const serverCredentials = stepBlock(sonar, 'Validate SonarQube Server credentials');
+  const cloud = stepBlock(sonar, 'SonarCloud Scan');
+  const server = stepBlock(sonar, 'SonarQube Server Scan');
+
+  assert.match(cloudCredentials, /test -n "\$\{SONAR_TOKEN\}"/);
+  assert.match(serverCredentials, /test -n "\$\{SONAR_SERVER_TOKEN\}" && test -n "\$\{SONAR_HOST_URL\}"/);
+  assert.match(cloud, /SONAR_HOST_URL: https:\/\/sonarcloud\.io/);
+  assert.match(cloud, /-Dsonar\.organization=ops-ai/);
+  assert.match(cloud, /-Dsonar\.qualitygate\.wait=true/);
+  assert.doesNotMatch(cloud, /continue-on-error/);
+  assert.match(server, /SONAR_HOST_URL: \$\{\{ secrets\.SONAR_HOST_URL \}\}/);
+  assert.doesNotMatch(server, /-Dsonar\.organization=ops-ai/);
+  assert.match(server, /-Dsonar\.qualitygate\.wait=true/);
+  assert.doesNotMatch(server, /continue-on-error/);
+  assert.match(server, /if:.*success\(\) \|\| failure\(\)/);
+  assert.match(server, /if:.*steps\.validate-sonarqube-server-credentials\.outcome == 'success'/);
+});
+
+test('requires Sonar and rejects fork skips while allowing reporting-disabled reusable calls', () => {
+  const sonar = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  const dependencyCheck = workflow.match(/\n  dependency-check:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+
+  assert.match(sonar, /github\.event_name != 'workflow_call' \|\| inputs\.run_reporting/);
+  assert.match(sonar, /github\.event_name != 'pull_request' \|\| !github\.event\.pull_request\.head\.repo\.fork/);
+  assert.match(dependencyCheck, /github\.event_name != 'pull_request' \|\| !github\.event\.pull_request\.head\.repo\.fork/);
+  assert.match(summary, /allow-skipped:.*github\.event_name == 'workflow_call'.*!inputs\.run_reporting/);
+  assert.doesNotMatch(summary, /allow-skipped:.*github\.event_name == 'pull_request'.*github\.event\.pull_request\.head\.repo\.fork/);
+  assert.match(summary, /allow-skipped:.*dependency-check,sonar/);
+  assert.match(summary, /allow-skipped:.*\|\| 'none'/);
+
+  for (const sdks of ['all', 'GA4-Hook', 'node-server']) {
+    assert.ok(selectAnalysis(sdks).requiredJobs.includes('sonar'), `${sdks} must require Sonar`);
+  }
+
+  assert.deepEqual(
+    failedRequiredJobs({ 'dependency-check': { result: 'success' } }, ['sonar', 'dependency-check']),
+    ['sonar'],
+  );
+  const needs = { sonar: { result: 'failure' }, 'dependency-check': { result: 'success' } };
+  assert.deepEqual(failedRequiredJobs(needs, ['sonar', 'dependency-check']), ['sonar']);
+  needs.sonar.result = 'skipped';
+  // Fork PRs skip secret-bearing reporting jobs but cannot pass this aggregate gate.
+  assert.deepEqual(failedRequiredJobs(needs, ['sonar', 'dependency-check']), ['sonar']);
+  // Only a reporting-disabled reusable call supplies the explicit allow list.
+  assert.deepEqual(failedRequiredJobs(needs, ['sonar', 'dependency-check'], ['sonar']), []);
 });
 
 test('uploads signed definitions coverage and includes its source in both Sonar scans', () => {

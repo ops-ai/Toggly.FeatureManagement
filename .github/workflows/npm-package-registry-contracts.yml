@@ -10,6 +10,7 @@ on:
       - '.github/workflows/sdk-*-release.yml'
       - '.github/workflows/npm-package-registry-contracts.yml'
       - '.github/workflows/analysis-*.yml'
+      - '.github/workflows/analysis-javascript.test.mjs'
       - '.github/workflows/analysis-rust.test.mjs'
       - '.github/workflows/analysis-security-events.test.mjs'
       - '**/package.json'
@@ -28,6 +29,7 @@ on:
       - '.github/workflows/sdk-*-release.yml'
       - '.github/workflows/npm-package-registry-contracts.yml'
       - '.github/workflows/analysis-*.yml'
+      - '.github/workflows/analysis-javascript.test.mjs'
       - '.github/workflows/analysis-rust.test.mjs'
       - '.github/workflows/analysis-security-events.test.mjs'
       - '**/package.json'
@@ -90,6 +92,9 @@ jobs:
 
       - name: Verify fail-closed Rust and Java analysis quality gates
         run: node --test .github/workflows/analysis-rust.test.mjs
+
+      - name: Verify fail-closed JavaScript analysis quality gates
+        run: node --test .github/workflows/analysis-javascript.test.mjs
 
       - name: Verify analysis/release workflows grant security-events write
         run: node --test .github/workflows/analysis-security-events.test.mjs
