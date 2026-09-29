@@ -1,10 +1,12 @@
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using EphemeralMongo;
 using MongoDB.Driver;
 using Toggly.FeatureManagement;
 using Toggly.FeatureManagement.Data;
 using Toggly.FeatureManagement.Storage.MongoDB;
+using Toggly.FeatureManagement.Storage.MongoDB.Configuration;
 using Xunit;
 
 namespace Toggly.Storage.MongoDB.Tests;
@@ -12,11 +14,12 @@ namespace Toggly.Storage.MongoDB.Tests;
 public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
 {
     private IMongoRunner _runner = null!;
-    private IMongoClient _client = null!;
+    private MongoClient _client = null!;
     private MongoDBFeatureSnapshotProvider _provider = null!;
     private IOptions<TogglySnapshotSettings> _settings = null!;
     private const string TestDatabaseName = "toggly_tests";
     private const string TestCollectionName = "snapshots";
+    private static readonly string[] ExpectedMetrics = ["metric1", "metric2"];
 
     public Task InitializeAsync()
     {
@@ -231,7 +234,7 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
         loaded![0].FeatureKey.Should().Be("complex-feature");
         loaded[0].SecuredFeature.Should().BeTrue();
         loaded[0].RequirementType.Should().Be(Microsoft.FeatureManagement.RequirementType.All);
-        loaded[0].Metrics.Should().BeEquivalentTo(new[] { "metric1", "metric2" });
+        loaded[0].Metrics.Should().BeEquivalentTo(ExpectedMetrics);
         loaded[0].Filters.Should().HaveCount(1);
         loaded[0].Filters[0].Name.Should().Be("Percentage");
     }
@@ -254,7 +257,7 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
         var (loaded, ts) = await _provider.GetJwkSnapshotAsync();
         loaded.Should().NotBeNull();
         loaded!.Keys.Should().HaveCount(1);
-        loaded.Keys[0].Kid.Should().Be("test-key-id");
+        loaded!.Keys![0].Kid.Should().Be("test-key-id");
         ts.Should().Be(timestamp);
     }
 
@@ -283,7 +286,7 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
 
         var (loaded, ts) = await _provider.GetJwkSnapshotAsync();
         loaded.Should().NotBeNull();
-        loaded!.Keys[0].Kid.Should().Be("updated-key-id");
+        loaded!.Keys![0].Kid.Should().Be("updated-key-id");
         ts.Should().Be(1700000002);
     }
 
@@ -315,7 +318,7 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
         // Assert
         loaded.Should().NotBeNull();
         loaded!.Keys.Should().HaveCount(1);
-        loaded.Keys[0].Kid.Should().Be("test-key-id");
+        loaded!.Keys![0].Kid.Should().Be("test-key-id");
         timestamp.Should().Be(1700000004);
     }
 
@@ -393,6 +396,149 @@ public class MongoDBFeatureSnapshotProviderTests : IAsyncLifetime
         // Act & Assert
         var act = () => new MongoDBFeatureSnapshotProvider(null!, _settings);
         act.Should().Throw<ArgumentNullException>();
+    }
+
+    #endregion
+
+    #region Service registration tests
+
+    [Fact]
+    public void AddTogglyMongoDBSnapshotProvider_WithConnectionString_RegistersConfiguredProvider()
+    {
+        var services = new ServiceCollection();
+
+        var returnedServices = services.AddTogglyMongoDBSnapshotProvider(
+            "mongodb://localhost:27017",
+            options => options.DatabaseName = "configured_database");
+
+        using var serviceProvider = services.BuildServiceProvider();
+        returnedServices.Should().BeSameAs(services);
+        serviceProvider.GetRequiredService<IMongoClient>().Should().NotBeNull();
+        serviceProvider.GetRequiredService<IOptions<TogglySnapshotSettings>>().Value.DatabaseName
+            .Should().Be("configured_database");
+        serviceProvider.GetRequiredService<IFeatureSnapshotProvider>()
+            .Should().BeOfType<MongoDBFeatureSnapshotProvider>();
+    }
+
+    [Fact]
+    public void AddTogglyMongoDBSnapshotProvider_WithConnectionString_RegistersDefaultSettings()
+    {
+        var services = new ServiceCollection();
+
+        services.AddTogglyMongoDBSnapshotProvider("mongodb://localhost:27017");
+
+        using var serviceProvider = services.BuildServiceProvider();
+        serviceProvider.GetRequiredService<IOptions<TogglySnapshotSettings>>().Value.DocumentName
+            .Should().Be("toggly_features");
+        serviceProvider.GetRequiredService<IFeatureSnapshotProvider>()
+            .Should().BeOfType<MongoDBFeatureSnapshotProvider>();
+    }
+
+    [Fact]
+    public void AddTogglyMongoDBSnapshotProvider_WithClientSettings_RegistersDefaultSettings()
+    {
+        var services = new ServiceCollection();
+        var clientSettings = new MongoClientSettings
+        {
+            Server = new MongoServerAddress("localhost", 27017)
+        };
+
+        services.AddTogglyMongoDBSnapshotProvider(clientSettings);
+
+        using var serviceProvider = services.BuildServiceProvider();
+        serviceProvider.GetRequiredService<IMongoClient>().Should().NotBeNull();
+        serviceProvider.GetRequiredService<IOptions<TogglySnapshotSettings>>().Value.DatabaseName
+            .Should().Be("toggly");
+        serviceProvider.GetRequiredService<IFeatureSnapshotProvider>()
+            .Should().BeOfType<MongoDBFeatureSnapshotProvider>();
+    }
+
+    [Fact]
+    public void AddTogglyMongoDBSnapshotProvider_WithClientSettings_RegistersConfiguredProvider()
+    {
+        var services = new ServiceCollection();
+        var clientSettings = new MongoClientSettings
+        {
+            Server = new MongoServerAddress("localhost", 27017)
+        };
+
+        services.AddTogglyMongoDBSnapshotProvider(
+            clientSettings,
+            options => options.DocumentName = "configured_features");
+
+        using var serviceProvider = services.BuildServiceProvider();
+        serviceProvider.GetRequiredService<IOptions<TogglySnapshotSettings>>().Value.DocumentName
+            .Should().Be("configured_features");
+        serviceProvider.GetRequiredService<IFeatureSnapshotProvider>()
+            .Should().BeOfType<MongoDBFeatureSnapshotProvider>();
+    }
+
+    [Fact]
+    public void AddTogglyMongoDBSnapshotProvider_WithExistingClient_RegistersConfiguredProvider()
+    {
+        var services = new ServiceCollection();
+        var client = new MongoClient("mongodb://localhost:27017");
+
+        services.AddTogglyMongoDBSnapshotProvider(
+            client,
+            options => options.CollectionName = "configured_collection");
+
+        using var serviceProvider = services.BuildServiceProvider();
+        serviceProvider.GetRequiredService<IMongoClient>().Should().BeSameAs(client);
+        serviceProvider.GetRequiredService<IOptions<TogglySnapshotSettings>>().Value.CollectionName
+            .Should().Be("configured_collection");
+        serviceProvider.GetRequiredService<IFeatureSnapshotProvider>()
+            .Should().BeOfType<MongoDBFeatureSnapshotProvider>();
+    }
+
+    [Fact]
+    public void AddTogglyMongoDBSnapshotProvider_WithExistingClient_RegistersDefaultSettings()
+    {
+        var services = new ServiceCollection();
+        var client = new MongoClient("mongodb://localhost:27017");
+
+        services.AddTogglyMongoDBSnapshotProvider(client);
+
+        using var serviceProvider = services.BuildServiceProvider();
+        serviceProvider.GetRequiredService<IMongoClient>().Should().BeSameAs(client);
+        serviceProvider.GetRequiredService<IOptions<TogglySnapshotSettings>>().Value.JwkDocumentName
+            .Should().Be("toggly_jwks");
+        serviceProvider.GetRequiredService<IFeatureSnapshotProvider>()
+            .Should().BeOfType<MongoDBFeatureSnapshotProvider>();
+    }
+
+    [Fact]
+    public void AddTogglyMongoDBSnapshotProvider_WithExistingClientRegistration_UsesDefaultSettings()
+    {
+        var services = new ServiceCollection();
+        var client = new MongoClient("mongodb://localhost:27017");
+        services.AddSingleton<IMongoClient>(client);
+
+        services.AddTogglyMongoDBSnapshotProvider();
+
+        using var serviceProvider = services.BuildServiceProvider();
+        serviceProvider.GetRequiredService<IMongoClient>().Should().BeSameAs(client);
+        serviceProvider.GetRequiredService<IOptions<TogglySnapshotSettings>>().Value.CollectionName
+            .Should().Be("snapshots");
+        serviceProvider.GetRequiredService<IFeatureSnapshotProvider>()
+            .Should().BeOfType<MongoDBFeatureSnapshotProvider>();
+    }
+
+    [Fact]
+    public void AddTogglyMongoDBSnapshotProvider_WithExistingClientRegistration_RegistersConfiguredProvider()
+    {
+        var services = new ServiceCollection();
+        var client = new MongoClient("mongodb://localhost:27017");
+        services.AddSingleton<IMongoClient>(client);
+
+        services.AddTogglyMongoDBSnapshotProvider(options => options.DatabaseName = "configured_database");
+
+        using var serviceProvider = services.BuildServiceProvider();
+        serviceProvider.GetRequiredService<IMongoClient>().Should().BeSameAs(client);
+        serviceProvider.GetRequiredService<IOptions<TogglySnapshotSettings>>().Value.DatabaseName
+            .Should().Be("configured_database");
+        serviceProvider.GetRequiredService<IFeatureSnapshotProvider>()
+            .Should().BeOfType<MongoDBFeatureSnapshotProvider>();
     }
 
     #endregion
