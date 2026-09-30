@@ -1,0 +1,162 @@
+.\" Generated from Docs/command-catalog.json — do not edit by hand.
+.\" Regenerate: ./Toggly.CLI/scripts/generate-manpages.py
+.TH TOGGLY-FEATURE 1 "2026-09-29" "Toggly CLI" "User Commands"
+.SH NAME
+toggly-feature \- List, inspect, and manage features
+.SH SYNOPSIS
+toggly\-cli feature <command>
+.SH DESCRIPTION
+List, inspect, and manage features
+.SS create
+Create a new feature definition\&.
+.PP
+.B toggly\-cli feature create \-\-name <name> \-\-feature\-key <key> [\-\-app <id>] [options]
+.PP
+Aliases: create\-feature.
+.SS get
+Get a feature by key\&. Requires \-\-app or a context default\&.
+.PP
+.B toggly\-cli feature get [\-\-app <id>] <key> [options]
+.TP
+.I key
+Feature key
+.SS list
+List features for an application\&. Requires \-\-app or a context default\&.
+.PP
+.B toggly\-cli feature list [\-\-app <id>] [options]
+.SS update
+Update an existing feature definition metadata\&.
+.PP
+.B toggly\-cli feature update \-\-feature\-key <key> [\-\-app <id>] [options]
+.PP
+Aliases: update\-feature.
+.SS update\-environment
+Update feature configuration on a specific environment\&. Specify exactly one
+of \-\-enable, \-\-disable, or \-\-filters\&.
+.PP
+.B toggly\-cli feature update\-environment \-\-feature\-key <key> [\-\-app <id>] [\-\-env <name>] (\-\-enable | \-\-disable | \-\-filters <json>) [options]
+.PP
+Aliases: update\-feature\-environment.
+.SH OPTIONS
+Options for feature create:
+.TP
+.B \-\-app, \-\-application\-id
+Application id (or set via 'toggly context set \-\-app')
+.TP
+.B \-\-name
+Feature display name (required)
+.TP
+.B \-\-feature\-key
+Feature key used as the application reference (required)
+.TP
+.B \-\-description
+Feature description
+.TP
+.B \-\-category
+Feature category
+.TP
+.B \-\-tags
+Comma\-separated list of tags
+.TP
+.B \-\-environment\-filters
+JSON object mapping environment names to filter arrays
+.PP
+Options for feature get:
+.TP
+.B \-\-app, \-\-application\-id
+Application id (or set via 'toggly context set \-\-app')
+.PP
+Options for feature list:
+.TP
+.B \-\-app, \-\-application\-id
+Application id (or set via 'toggly context set \-\-app')
+.PP
+Options for feature update:
+.TP
+.B \-\-app, \-\-application\-id
+Application id (or set via 'toggly context set \-\-app')
+.TP
+.B \-\-feature\-key
+Feature key to update (required)
+.TP
+.B \-\-name
+Feature display name
+.TP
+.B \-\-description
+Feature description
+.TP
+.B \-\-category
+Feature category
+.TP
+.B \-\-tags
+Comma\-separated list of tags
+.PP
+Options for feature update\-environment:
+.TP
+.B \-\-app, \-\-application\-id
+Application id (or set via 'toggly context set \-\-app')
+.TP
+.B \-\-environment, \-\-env
+Environment name (e\&.g\&., Production, Staging)
+.TP
+.B \-\-feature\-key
+Feature key (required)
+.TP
+.B \-\-enable
+Enable the feature (sets AlwaysOn filter)
+.TP
+.B \-\-disable
+Disable the feature (removes all filters)
+.TP
+.B \-\-filters
+JSON array of filter objects
+.PP
+Global options (all commands):
+.TP
+.B \-\-client\-id
+OAuth2 client ID (or set TOGGLY_CLIENT_ID)
+.TP
+.B \-\-client\-secret
+OAuth2 client secret (or set TOGGLY_CLIENT_SECRET)
+.TP
+.B \-\-authority
+OAuth2 authority URL (defaults to https://auth\&.toggly\&.io)
+.TP
+.B \-\-base\-url
+Base URL for Toggly API (defaults to https://app\&.toggly\&.io/api)
+.TP
+.B \-\-verbose
+Enable verbose output
+.TP
+.B \-\-json
+Emit machine\-readable camelCase JSON instead of human text
+.SH EXAMPLES
+.B toggly\-cli feature create \-\-app <app\-id> \-\-name "New Feature"
+.B \-\-feature\-key new\-feature
+.PP
+.B toggly\-cli feature get \-\-app <app\-id> payments\-enabled
+.PP
+.B toggly\-cli feature list \-\-app <app\-id>
+.PP
+.B toggly\-cli \-\-json feature list \-\-app <app\-id>
+.PP
+.B toggly\-cli feature update \-\-app <app\-id> \-\-feature\-key new\-feature
+.B \-\-description "Updated"
+.PP
+.B toggly\-cli feature update\-environment \-\-app <app\-id> \-\-env
+.B Production \-\-feature\-key new\-feature \-\-enable
+.SH EXIT STATUS
+.TP
+.B 0
+Success
+.TP
+.B 1
+Runtime or API error (including HTTP 404)
+.TP
+.B 2
+Usage, validation, missing auth, or missing \-\-app/\-\-env when no context
+default is set
+.SH SEE ALSO
+toggly\-app(1), toggly\-env(1), toggly\-release(1), toggly(1).
+.SH ONLINE DOCS
+https://docs\&.toggly\&.io/sdks/cli

@@ -1,0 +1,80 @@
+.\" Generated from Docs/command-catalog.json — do not edit by hand.
+.\" Regenerate: ./Toggly.CLI/scripts/generate-manpages.py
+.TH TOGGLY 1 "2026-09-29" "Toggly CLI" "User Commands"
+.SH NAME
+toggly \- Command\-line interface for Toggly feature flag management
+.SH SYNOPSIS
+.B toggly\-cli
+[\fIoptions\fR]
+\fIcommand\fR
+\&...
+.SH DESCRIPTION
+Command\-line interface for Toggly feature flag management\&. Supports
+interactive device\-code login and CI client credentials\&.
+Full documentation: https://docs\&.toggly\&.io/sdks/cli
+.SH COMMANDS
+Noun groups:
+.TP
+.B auth
+Manage interactive authentication
+.TP
+.B app
+List and inspect applications
+.TP
+.B env
+List and inspect application environments
+.TP
+.B feature
+List, inspect, and manage features
+.TP
+.B release
+List, inspect, and manage releases
+.TP
+.B context
+Manage non\-secret default application and environment prefs
+.PP
+Flat write aliases (deprecation window): create\-feature, update\-feature,
+update\-feature\-environment, create\-release, associate\-build.
+.SH OPTIONS
+.TP
+.B \-\-client\-id
+OAuth2 client ID (or set TOGGLY_CLIENT_ID)
+.TP
+.B \-\-client\-secret
+OAuth2 client secret (or set TOGGLY_CLIENT_SECRET)
+.TP
+.B \-\-authority
+OAuth2 authority URL (defaults to https://auth\&.toggly\&.io)
+.TP
+.B \-\-base\-url
+Base URL for Toggly API (defaults to https://app\&.toggly\&.io/api)
+.TP
+.B \-\-verbose
+Enable verbose output
+.TP
+.B \-\-json
+Emit machine\-readable camelCase JSON instead of human text
+.SH EXAMPLES
+.B toggly\-cli auth login
+.PP
+.B toggly\-cli context set \-\-app <app\-id> \-\-env Production
+.PP
+.B toggly\-cli app list
+.PP
+.B toggly\-cli \-\-json feature list
+.SH EXIT STATUS
+.TP
+.B 0
+Success
+.TP
+.B 1
+Runtime or API error (including HTTP 404)
+.TP
+.B 2
+Usage, validation, missing auth, or missing \-\-app/\-\-env when no context
+default is set
+.SH SEE ALSO
+toggly\-auth(1), toggly\-app(1), toggly\-env(1), toggly\-feature(1),
+toggly\-release(1), toggly\-context(1).
+.SH ONLINE DOCS
+https://docs\&.toggly\&.io/sdks/cli

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.2
+
+2026-09-29
+
+### Added
+- Checked-in command catalog (`Docs/command-catalog.json`) covering auth, app, env, feature, release, context, flat aliases, and globals.
+- Generated Linux man pages under `man/` (`toggly.1`, `toggly-auth.1`, …) via `scripts/generate-manpages.py`.
+- Catalog coverage tests so new RootCommand leaves cannot ship undocumented.
+- Linux release archives (`linux-x64` / `linux-arm64`) include the `man/` directory.
+
+### Changed
+- README slimmed to install + quickstart; full docs live at https://docs.toggly.io/sdks/cli.
+
 ## 0.3.1
 
 2026-09-29
