@@ -1,7 +1,10 @@
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Options;
+using System.Collections;
 using System.Data;
+using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using Toggly.FeatureManagement;
 using Toggly.FeatureManagement.Data;
 using Toggly.FeatureManagement.Storage.Dapper;
@@ -98,6 +101,45 @@ public class DapperFeatureSnapshotProviderTests : IAsyncLifetime
     }
 
     #endregion
+
+    [Theory]
+    [InlineData(DatabaseProvider.SqlServer, "CREATE TABLE [TogglySnapshots]", "MERGE [TogglySnapshots]")]
+    [InlineData(DatabaseProvider.PostgreSql, "CREATE TABLE IF NOT EXISTS \"TogglySnapshots\"", "ON CONFLICT (\"Id\") DO UPDATE")]
+    [InlineData(DatabaseProvider.MySql, "CREATE TABLE IF NOT EXISTS `TogglySnapshots`", "ON DUPLICATE KEY UPDATE")]
+    [InlineData(DatabaseProvider.Sqlite, "CREATE TABLE IF NOT EXISTS \"TogglySnapshots\"", "INSERT OR REPLACE INTO \"TogglySnapshots\"")]
+    public async Task SaveSnapshotAsync_CreatesAndUpsertsUsingTheConfiguredSqlDialect(
+        DatabaseProvider databaseProvider,
+        string expectedCreateStatement,
+        string expectedUpsertStatement)
+    {
+        var connection = new RecordingDbConnection();
+        var settings = Options.Create(new TogglySnapshotSettings
+        {
+            DocumentName = "feature_snapshot",
+            JwkDocumentName = "jwk_snapshot",
+            TableName = "TogglySnapshots",
+            AutoCreateTable = true,
+            Provider = databaseProvider
+        });
+        var provider = new DapperFeatureSnapshotProvider(() => connection, settings);
+
+        await provider.SaveSnapshotAsync(new FeatureDefinitionsSnapshot
+        {
+            Features = CreateTestFeatureDefinitions(),
+            Signature = "signature",
+            KeyId = "key",
+            Timestamp = 42
+        });
+
+        connection.Executions.Should().Contain(command => command.Sql.Contains(expectedCreateStatement, StringComparison.Ordinal));
+
+        var upsert = connection.Executions.Single(command => command.Sql.Contains(expectedUpsertStatement, StringComparison.Ordinal));
+        upsert.Parameters.Should().ContainKey("Id").WhoseValue.Should().Be("feature_snapshot");
+        upsert.Parameters.Should().ContainKey("Signature").WhoseValue.Should().Be("signature");
+        upsert.Parameters.Should().ContainKey("KeyId").WhoseValue.Should().Be("key");
+        upsert.Parameters.Should().ContainKey("Timestamp").WhoseValue.Should().Be(42L);
+        upsert.Parameters.Should().ContainKey("Data").WhoseValue.Should().BeOfType<string>().Which.Should().Contain("feature1");
+    }
 
     #region SaveSnapshotAsync Tests
 
@@ -517,6 +559,129 @@ public class DapperFeatureSnapshotProviderTests : IAsyncLifetime
     }
 
     #endregion
+
+    private sealed class RecordingDbConnection : DbConnection
+    {
+        public List<RecordedCommand> Executions { get; } = new();
+
+        [AllowNull]
+        public override string ConnectionString { get; set; } = string.Empty;
+        public override string Database => "recording";
+        public override string DataSource => "recording";
+        public override string ServerVersion => "1.0";
+        public override ConnectionState State => ConnectionState.Open;
+
+        public override void ChangeDatabase(string databaseName)
+        {
+        }
+
+        public override void Close()
+        {
+        }
+
+        public override void Open()
+        {
+        }
+
+        protected override DbTransaction BeginDbTransaction(IsolationLevel isolationLevel) => throw new NotSupportedException();
+
+        protected override DbCommand CreateDbCommand() => new RecordingDbCommand(this);
+
+        private sealed class RecordingDbCommand(RecordingDbConnection connection) : DbCommand
+        {
+            private readonly DbParameterCollection _parameters = new RecordingDbParameterCollection();
+
+            [AllowNull]
+            public override string CommandText { get; set; } = string.Empty;
+            public override int CommandTimeout { get; set; }
+            public override CommandType CommandType { get; set; }
+            public override bool DesignTimeVisible { get; set; }
+            public override UpdateRowSource UpdatedRowSource { get; set; }
+            [AllowNull]
+            protected override DbConnection DbConnection { get; set; } = connection;
+            protected override DbParameterCollection DbParameterCollection => _parameters;
+            protected override DbTransaction? DbTransaction { get; set; }
+
+            public override void Cancel()
+            {
+            }
+
+            public override int ExecuteNonQuery()
+            {
+                connection.Executions.Add(new RecordedCommand(
+                    CommandText,
+                    _parameters.Cast<DbParameter>().ToDictionary(parameter => parameter.ParameterName, parameter => parameter.Value)));
+                return 1;
+            }
+
+            public override object? ExecuteScalar() => null;
+
+            public override void Prepare()
+            {
+            }
+
+            protected override DbParameter CreateDbParameter() => new RecordingDbParameter();
+
+            protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior) => throw new NotSupportedException();
+        }
+
+        public sealed record RecordedCommand(string Sql, IReadOnlyDictionary<string, object?> Parameters);
+
+        private sealed class RecordingDbParameter : DbParameter
+        {
+            public override DbType DbType { get; set; }
+            public override ParameterDirection Direction { get; set; }
+            public override bool IsNullable { get; set; }
+            [AllowNull]
+            public override string ParameterName { get; set; } = string.Empty;
+            [AllowNull]
+            public override string SourceColumn { get; set; } = string.Empty;
+            public override object? Value { get; set; }
+            public override bool SourceColumnNullMapping { get; set; }
+            public override int Size { get; set; }
+
+            public override void ResetDbType()
+            {
+            }
+        }
+
+        private sealed class RecordingDbParameterCollection : DbParameterCollection
+        {
+            private readonly List<DbParameter> _parameters = [];
+
+            public override int Count => _parameters.Count;
+            public override object SyncRoot => ((ICollection)_parameters).SyncRoot;
+            public override int Add(object value)
+            {
+                _parameters.Add((DbParameter)value);
+                return _parameters.Count - 1;
+            }
+
+            public override void AddRange(Array values)
+            {
+                foreach (var value in values)
+                {
+                    Add(value!);
+                }
+            }
+
+            public override void Clear() => _parameters.Clear();
+            public override bool Contains(object value) => _parameters.Contains((DbParameter)value);
+            public override bool Contains(string value) => _parameters.Any(parameter => parameter.ParameterName == value);
+            public override void CopyTo(Array array, int index) => ((ICollection)_parameters).CopyTo(array, index);
+            public override IEnumerator GetEnumerator() => _parameters.GetEnumerator();
+            protected override DbParameter GetParameter(int index) => _parameters[index];
+            protected override DbParameter GetParameter(string parameterName) => _parameters.Single(parameter => parameter.ParameterName == parameterName);
+            public override int IndexOf(object value) => _parameters.IndexOf((DbParameter)value);
+            public override int IndexOf(string parameterName) => _parameters.FindIndex(parameter => parameter.ParameterName == parameterName);
+            public override void Insert(int index, object value) => _parameters.Insert(index, (DbParameter)value);
+            public override void Remove(object value) => _parameters.Remove((DbParameter)value);
+            public override void RemoveAt(int index) => _parameters.RemoveAt(index);
+            public override void RemoveAt(string parameterName) => _parameters.RemoveAt(IndexOf(parameterName));
+            protected override void SetParameter(int index, DbParameter value) => _parameters[index] = value;
+            protected override void SetParameter(string parameterName, DbParameter value) => _parameters[IndexOf(parameterName)] = value;
+        }
+    }
 
     #region Helper Methods
 
