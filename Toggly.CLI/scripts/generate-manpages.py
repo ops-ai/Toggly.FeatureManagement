@@ -158,6 +158,15 @@ def assert_no_bare_ellipsis(content: str, name: str) -> list[str]:
     return problems
 
 
+def assert_no_empty_bold(content: str, name: str) -> list[str]:
+    """A lone '.B' only bolds the next input line — reject empty bold macros."""
+    problems: list[str] = []
+    for idx, line in enumerate(content.splitlines(), start=1):
+        if line.strip() == ".B":
+            problems.append(f"{name}:{idx}: empty .B macro (provide bold text on the same line)")
+    return problems
+
+
 def assert_required_sections(content: str, name: str) -> list[str]:
     problems: list[str] = []
     for section in ("NAME", "SYNOPSIS", "DESCRIPTION", "OPTIONS", "EXAMPLES", "EXIT STATUS", "SEE ALSO"):
@@ -170,6 +179,7 @@ def structural_lint(pages: dict[str, str]) -> list[str]:
     problems: list[str] = []
     for name, content in sorted(pages.items()):
         problems.extend(assert_no_bare_ellipsis(content, name))
+        problems.extend(assert_no_empty_bold(content, name))
         problems.extend(assert_required_sections(content, name))
     return problems
 
@@ -281,7 +291,14 @@ def render_root_page(catalog: dict[str, Any]) -> str:
 def render_group_page(catalog: dict[str, Any], group_name: str, leaves: list[dict[str, Any]]) -> str:
     man = catalog["manName"]
     binary = catalog["binary"]
-    group = next(c for c in catalog["commands"] if c.get("path") == [group_name])
+    group = next(
+        (c for c in catalog["commands"] if c.get("path") == [group_name]),
+        None,
+    )
+    if group is None:
+        raise ValueError(
+            f"command-catalog.json missing noun group entry for path [{group_name}]"
+        )
     page = f"{man}-{group_name}"
     date = man_date(catalog)
     sorted_leaves = sorted(leaves, key=lambda e: path_key(e["path"]))
@@ -302,8 +319,11 @@ def render_group_page(catalog: dict[str, Any], group_name: str, leaves: list[dic
         sub = path_key(leaf["path"][1:])
         lines.append(f".SS {roff_escape(sub)}")
         lines.extend(wrap_text(roff_escape(leaf["description"])))
-        lines.append(".PP")
-        lines.append(f".B {roff_escape(leaf.get('synopsis') or '')}")
+        synopsis = (leaf.get("synopsis") or "").strip()
+        if synopsis:
+            # Skip empty synopsis: a lone ".B" bolds the following block incorrectly.
+            lines.append(".PP")
+            lines.append(f".B {roff_escape(synopsis)}")
         arg_block = format_argument_block(leaf.get("arguments"))
         if arg_block:
             lines.extend(arg_block)
