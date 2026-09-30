@@ -12,6 +12,8 @@ namespace Toggly.FeatureManagement.Web.Tests;
 
 public class BrowserFamilyFilterTests
 {
+    private static readonly string[] FirefoxAndWhitespace = { "Firefox", " " };
+
     private readonly Mock<IHttpContextAccessor> _httpContextAccessorMock;
     private readonly BrowserFamilyFilter _filter;
 
@@ -95,7 +97,7 @@ public class BrowserFamilyFilterTests
     {
         // Arrange
         SetupUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1");
-        var context = CreateContext(new[] { "Firefox", " " }, 100);
+        var context = CreateContext(FirefoxAndWhitespace, 100);
 
         // Act
         var result = await _filter.EvaluateAsync(context);
@@ -123,6 +125,7 @@ public class BrowserLanguageFilterTests
 {
     private static readonly string[] EnglishLanguage = { "en" };
     private static readonly string[] FrenchLanguage = { "fr" };
+    private static readonly string[] FrenchLanguageAndWhitespace = { "fr", " " };
 
     private readonly Mock<IHttpContextAccessor> _httpContextAccessorMock;
     private readonly BrowserLanguageFilter _filter;
@@ -207,7 +210,7 @@ public class BrowserLanguageFilterTests
     {
         // Arrange
         SetupAcceptLanguage("en-US, en;q=0.9");
-        var context = CreateContext(new[] { "fr", " " }, 100);
+        var context = CreateContext(FrenchLanguageAndWhitespace, 100);
 
         // Act
         var result = await _filter.EvaluateAsync(context);
@@ -243,6 +246,8 @@ public class BrowserLanguageFilterTests
 
 public class CountryFilterTests
 {
+    private static readonly string[] CanadaAndWhitespace = { "CA", " " };
+
     private readonly Mock<IHttpContextAccessor> _httpContextAccessorMock;
     private readonly CountryFilter _filter;
 
@@ -326,7 +331,7 @@ public class CountryFilterTests
     {
         // Arrange
         SetupCountryHeader(" ");
-        var context = CreateContext(new[] { "CA", " " }, 100);
+        var context = CreateContext(CanadaAndWhitespace, 100);
 
         // Act
         var result = await _filter.EvaluateAsync(context);
@@ -353,6 +358,7 @@ public class CountryFilterTests
 public class DeviceTypeFilterTests
 {
     private static readonly string[] IPhoneDevice = { "iPhone" };
+    private static readonly string[] IPhoneAndWhitespace = { "iPhone", " " };
 
     private readonly Mock<IHttpContextAccessor> _httpContextAccessorMock;
     private readonly DeviceTypeFilter _filter;
@@ -437,7 +443,7 @@ public class DeviceTypeFilterTests
     {
         // Arrange
         SetupUserAgent("Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Mobile Safari/537.36");
-        var context = CreateContext(new[] { "iPhone", " " }, 100);
+        var context = CreateContext(IPhoneAndWhitespace, 100);
 
         // Act
         var result = await _filter.EvaluateAsync(context);
@@ -459,6 +465,7 @@ public class OSFilterTests
 {
     private static readonly string[] WindowsOs = { "Windows" };
     private static readonly string[] MacOs = { "Mac OS" };
+    private static readonly string[] WindowsOsAndWhitespace = { "Windows", " " };
 
     private readonly Mock<IHttpContextAccessor> _httpContextAccessorMock;
     private readonly OSFilter _filter;
@@ -543,7 +550,7 @@ public class OSFilterTests
     {
         // Arrange
         SetupUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
-        var context = CreateContext(new[] { "Windows", " " }, 100);
+        var context = CreateContext(WindowsOsAndWhitespace, 100);
 
         // Act
         var result = await _filter.EvaluateAsync(context);
