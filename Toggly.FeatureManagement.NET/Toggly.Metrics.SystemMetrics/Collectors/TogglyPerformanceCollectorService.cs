@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.Tracing;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Toggly.FeatureManagement;
@@ -16,14 +15,19 @@ namespace Toggly.Metrics.SystemMetrics.Collectors
     public class TogglyPerformanceCollectorService : EventListener, IHostedService
     {
         private readonly IMetricsRegistryService _metricsRegistryService;
-        private readonly Dictionary<string, Dictionary<string, string>> _eventSources = new Dictionary<string, Dictionary<string, string>>();
+        private readonly Dictionary<string, Dictionary<string, string>> _eventSources;
         private Guid? taskId;
-        private List<EventSource> preConstructorEvents = new List<EventSource>();
-        private bool constructed = false;
-        private object _lock = new object();
+        private readonly List<EventSource> preConstructorEvents = new List<EventSource>();
+        private readonly bool constructed;
+        private readonly object _lock = new object();
 
-        private Dictionary<string, double> currentValues = new Dictionary<string, double>();
+        private readonly Dictionary<string, double> currentValues = new Dictionary<string, double>();
 
+        /// <summary>
+        /// Initializes a collector for the configured runtime event sources.
+        /// </summary>
+        /// <param name="eventSources">Event sources and their counter-to-metric mappings.</param>
+        /// <param name="metricsRegistryService">Registry used to publish collected observations.</param>
         public TogglyPerformanceCollectorService(Dictionary<string, Dictionary<string, string>> eventSources, IMetricsRegistryService metricsRegistryService) : base()
         {
             _eventSources = eventSources;
@@ -33,6 +37,7 @@ namespace Toggly.Metrics.SystemMetrics.Collectors
             preConstructorEvents.ForEach(OnEventSourceCreated);
         }
 
+        /// <inheritdoc />
         public Task StartAsync(CancellationToken cancellationToken)
         {
             taskId = _metricsRegistryService.RegisterObservations(GetObservations);
@@ -40,6 +45,7 @@ namespace Toggly.Metrics.SystemMetrics.Collectors
             return Task.CompletedTask;
         }
         
+        /// <inheritdoc />
         public Task StopAsync(CancellationToken cancellationToken)
         {
             if (taskId.HasValue)
@@ -47,42 +53,45 @@ namespace Toggly.Metrics.SystemMetrics.Collectors
             return Task.CompletedTask;
         }
 
-        protected override void OnEventSourceCreated(EventSource source)
+        /// <inheritdoc />
+        protected override void OnEventSourceCreated(EventSource eventSource)
         {
             if (!constructed)
             {
-                preConstructorEvents.Add(source);
+                preConstructorEvents.Add(eventSource);
                 return;
             }
 
-            if (!_eventSources.Keys.Contains(source.Name))
+            if (!_eventSources.ContainsKey(eventSource.Name))
             {
                 return;
             }
 
-            EnableEvents(source, EventLevel.Verbose, EventKeywords.All, new Dictionary<string, string>()
+            EnableEvents(eventSource, EventLevel.Verbose, EventKeywords.All, new Dictionary<string, string?>
             {
                 ["EventCounterIntervalSec"] = "10"
             });
         }
 
+        /// <inheritdoc />
         protected override void OnEventWritten(EventWrittenEventArgs eventData)
         {
             if (!eventData.EventName.Equals("EventCounters"))
                 return;
 
-            for (int i = 0; i < eventData.Payload.Count; ++i)
+            foreach (var payload in eventData.Payload)
             {
-                if (eventData.Payload[i] is IDictionary<string, object> eventPayload)
+                if (payload is IDictionary<string, object> eventPayload)
                 {
                     var (counterName, counterValue) = GetRelevantMetric(eventPayload);
 
-                    if (_eventSources.ContainsKey(eventData.EventSource.Name) && _eventSources[eventData.EventSource.Name].ContainsKey(counterName))
+                    if (_eventSources.TryGetValue(eventData.EventSource.Name, out var sourceMetrics) &&
+                        sourceMetrics.TryGetValue(counterName, out var metricName))
                     {
-                        if (currentValues.ContainsKey(_eventSources[eventData.EventSource.Name][counterName]))
-                            currentValues[_eventSources[eventData.EventSource.Name][counterName]] = counterValue;
-                        else
-                            currentValues.Add(_eventSources[eventData.EventSource.Name][counterName], counterValue);
+                        lock (_lock)
+                        {
+                            currentValues[metricName] = counterValue;
+                        }
                     }
                 }
             }
@@ -90,8 +99,8 @@ namespace Toggly.Metrics.SystemMetrics.Collectors
 
         private static (string counterName, double counterValue) GetRelevantMetric(IDictionary<string, object> eventPayload)
         {
-            var counterName = "";
-            double counterValue = 0;
+            var counterName = string.Empty;
+            var counterValue = 0d;
 
             if (eventPayload.TryGetValue("Name", out object displayValue))
             {
@@ -112,6 +121,9 @@ namespace Toggly.Metrics.SystemMetrics.Collectors
         /// </summary>
         public bool IsSupported => true;
         
+        /// <summary>
+        /// Gets and clears the observations accumulated since the prior call.
+        /// </summary>
         public Task<Dictionary<string, (DateTime, double)>> GetObservations()
         {
             var observations = new Dictionary<string, (DateTime, double)>();

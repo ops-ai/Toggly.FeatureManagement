@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Hangfire;
 using Moq;
+using System.Linq.Expressions;
 using Toggly.FeatureManagement;
 using Toggly.FeatureManagement.HangfireExtensions;
 using Xunit;
@@ -107,6 +108,47 @@ public class HangfireExtensionsTests
     }
 
     #endregion
+
+    [Fact]
+    public void AddOrUpdateJob_WhenFeatureTurnsOnAndOff_UpdatesAndRemovesRecurringJob()
+    {
+        Action? onEnabled = null;
+        Action? onDisabled = null;
+        var manager = new Mock<IRecurringJobManager>();
+        _serviceProviderMock
+            .Setup(provider => provider.GetService(typeof(IRecurringJobManager)))
+            .Returns(manager.Object);
+        _featureStateServiceMock
+            .Setup(service => service.WhenFeatureTurnsOn(It.Is<object>(key => key.Equals("billing")), It.IsAny<Action>()))
+            .Callback<object, Action>((_, callback) => onEnabled = callback)
+            .Returns(Guid.NewGuid());
+        _featureStateServiceMock
+            .Setup(service => service.WhenFeatureTurnsOff(It.Is<object>(key => key.Equals("billing")), It.IsAny<Action>()))
+            .Callback<object, Action>((_, callback) => onDisabled = callback)
+            .Returns(Guid.NewGuid());
+
+        Expression<Action> methodCall = () => Console.WriteLine("sync");
+
+        _featureStateServiceMock.Object.AddOrUpdateJob(
+            _serviceProviderMock.Object,
+            "billing",
+            "billing-sync",
+            methodCall,
+            "*/10 * * * *");
+
+        onEnabled.Should().NotBeNull();
+        onDisabled.Should().NotBeNull();
+        onEnabled!.Invoke();
+        onDisabled!.Invoke();
+
+        manager.Invocations.Should().Contain(invocation =>
+            invocation.Method.Name == "AddOrUpdate" &&
+            invocation.Arguments.OfType<string>().Contains("billing-sync") &&
+            invocation.Arguments.OfType<string>().Contains("*/10 * * * *"));
+        manager.Invocations.Should().Contain(invocation =>
+            invocation.Method.Name == "RemoveIfExists" &&
+            invocation.Arguments.OfType<string>().Contains("billing-sync"));
+    }
 
     #region Callback Registration Tests (Action overloads)
 

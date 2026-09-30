@@ -1,8 +1,11 @@
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
+using System.Collections.Concurrent;
 using System.Diagnostics.Tracing;
 using System.Reflection;
 using Toggly.FeatureManagement;
+using Toggly.FeatureManagement.Web.Configuration;
 using Toggly.Metrics.SystemMetrics.Collectors;
 using Xunit;
 
@@ -62,6 +65,39 @@ public class TogglyPerformanceCollectorServiceTests
     }
 
     #endregion
+
+    [Theory]
+    [InlineData("Mean", 12.5d)]
+    [InlineData("Increment", 3d)]
+    public void GetRelevantMetric_UsesSupportedCounterValues(string valueName, double expectedValue)
+    {
+        var method = typeof(TogglyPerformanceCollectorService)
+            .GetMethod("GetRelevantMetric", BindingFlags.NonPublic | BindingFlags.Static);
+        var payload = new Dictionary<string, object>
+        {
+            ["Name"] = "request-rate",
+            [valueName] = expectedValue
+        };
+
+        var result = ((string counterName, double counterValue))method!.Invoke(null, new object[] { payload })!;
+
+        result.counterName.Should().Be("request-rate");
+        result.counterValue.Should().Be(expectedValue);
+    }
+
+    [Fact]
+    public async Task AddPerformanceMetrics_RegistersTheCollectorAsAHostedService()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(_metricsRegistryServiceMock.Object);
+
+        services.AddPerformanceMetrics(_eventSources);
+
+        await using var provider = services.BuildServiceProvider();
+        var hostedService = provider.GetRequiredService<Microsoft.Extensions.Hosting.IHostedService>();
+
+        hostedService.Should().BeOfType<TogglyPerformanceCollectorService>();
+    }
 
     #region IsSupported Tests
 
@@ -415,5 +451,163 @@ public class TogglyPerformanceCollectorServiceTests
         // Even if empty, the structure is correct
     }
 
+    [Fact]
+    public async Task EventCounterCallback_AndConcurrentObservationReads_AreSynchronized()
+    {
+        var eventSources = new Dictionary<string, Dictionary<string, string>>
+        {
+            [TestMetricEventSource.EventSourceName] = new Dictionary<string, string>
+            {
+                ["requests"] = "request_count"
+            }
+        };
+        using var service = new TogglyPerformanceCollectorService(eventSources, _metricsRegistryServiceMock.Object);
+        using var cancellation = new CancellationTokenSource();
+        var observations = new ConcurrentQueue<Dictionary<string, (DateTime, double)>>();
+        var reader = Task.Run(async () =>
+        {
+            while (!cancellation.Token.IsCancellationRequested)
+            {
+                observations.Enqueue(await service.GetObservations());
+                await Task.Delay(1, cancellation.Token);
+            }
+        });
+
+        try
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(15);
+            while (DateTime.UtcNow < deadline && !observations.Any(values => values.ContainsKey("request_count")))
+            {
+                TestMetricEventSource.Log.WriteMetric(42);
+                await Task.Delay(100);
+            }
+        }
+        finally
+        {
+            cancellation.Cancel();
+            try
+            {
+                await reader;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        observations.Should().Contain(values => values.ContainsKey("request_count") && values["request_count"].Item2 == 42);
+    }
+
+    [Fact]
+    public async Task EventCounterCallback_WaitsForObservationSnapshotBeforePublishing()
+    {
+        var eventSources = new Dictionary<string, Dictionary<string, string>>
+        {
+            [TestMetricEventSource.EventSourceName] = new Dictionary<string, string>
+            {
+                ["requests"] = "request_count"
+            }
+        };
+        using var service = new TestablePerformanceCollectorService(eventSources, _metricsRegistryServiceMock.Object);
+        using var callbackEntered = new ManualResetEventSlim();
+        using var resumeCallback = new ManualResetEventSlim();
+        var snapshotLock = typeof(TogglyPerformanceCollectorService)
+            .GetField("_lock", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(service)!;
+        var counterEvent = CreateCounterEvent(new SignalingCounterName(callbackEntered, resumeCallback));
+
+        Task writer;
+        Monitor.Enter(snapshotLock);
+        try
+        {
+            writer = Task.Run(() => service.PublishCounter(counterEvent));
+            callbackEntered.Wait(TimeSpan.FromSeconds(5)).Should().BeTrue();
+            resumeCallback.Set();
+
+            writer.Wait(TimeSpan.FromSeconds(2)).Should().BeFalse(
+                "counter callbacks must wait until an observation snapshot releases its lock");
+            service.GetObservations().Result.Should().BeEmpty();
+        }
+        finally
+        {
+            resumeCallback.Set();
+            Monitor.Exit(snapshotLock);
+        }
+
+        await writer.WaitAsync(TimeSpan.FromSeconds(5));
+        var observations = await service.GetObservations();
+        observations.Should().ContainKey("request_count");
+        observations["request_count"].Item2.Should().Be(42);
+    }
+
+    private static EventWrittenEventArgs CreateCounterEvent(object counterName)
+    {
+        var eventData = (EventWrittenEventArgs)Activator.CreateInstance(
+            typeof(EventWrittenEventArgs),
+            BindingFlags.Instance | BindingFlags.NonPublic,
+            binder: null,
+            args: new object[] { TestMetricEventSource.Log, 0 },
+            culture: null)!;
+        var flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+        typeof(EventWrittenEventArgs).GetProperty(nameof(EventWrittenEventArgs.EventName), flags)!
+            .SetValue(eventData, "EventCounters");
+        typeof(EventWrittenEventArgs).GetProperty(nameof(EventWrittenEventArgs.Payload), flags)!
+            .SetValue(eventData, new List<object>
+            {
+                new Dictionary<string, object>
+                {
+                    ["Name"] = counterName,
+                    ["Mean"] = 42d
+                }
+            }.AsReadOnly());
+        return eventData;
+    }
+
+    private sealed class TestablePerformanceCollectorService : TogglyPerformanceCollectorService
+    {
+        public TestablePerformanceCollectorService(
+            Dictionary<string, Dictionary<string, string>> eventSources,
+            IMetricsRegistryService metricsRegistryService)
+            : base(eventSources, metricsRegistryService)
+        {
+        }
+
+        public void PublishCounter(EventWrittenEventArgs eventData) => OnEventWritten(eventData);
+    }
+
+    private sealed class SignalingCounterName
+    {
+        private readonly ManualResetEventSlim _callbackEntered;
+        private readonly ManualResetEventSlim _resumeCallback;
+
+        public SignalingCounterName(ManualResetEventSlim callbackEntered, ManualResetEventSlim resumeCallback)
+        {
+            _callbackEntered = callbackEntered;
+            _resumeCallback = resumeCallback;
+        }
+
+        public override string ToString()
+        {
+            _callbackEntered.Set();
+            if (!_resumeCallback.Wait(TimeSpan.FromSeconds(5)))
+                throw new TimeoutException("Counter callback was not released by the test.");
+            return "requests";
+        }
+    }
+
     #endregion
+
+    [EventSource(Name = EventSourceName)]
+    private sealed class TestMetricEventSource : EventSource
+    {
+        public const string EventSourceName = "Toggly.Tests.SystemMetrics";
+        public static readonly TestMetricEventSource Log = new();
+        private readonly EventCounter _requests;
+
+        private TestMetricEventSource()
+        {
+            _requests = new EventCounter("requests", this);
+        }
+
+        public void WriteMetric(double value) => _requests.WriteMetric(value);
+    }
 }

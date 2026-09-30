@@ -19,7 +19,8 @@ namespace Toggly.FeatureManagement.Storage.Dapper
     {
         private static readonly Regex SqlIdentifierRegex = new Regex(
             @"^[A-Za-z_][A-Za-z0-9_]*$",
-            RegexOptions.CultureInvariant | RegexOptions.Compiled);
+            RegexOptions.CultureInvariant | RegexOptions.Compiled,
+            TimeSpan.FromSeconds(1));
 
         private readonly Func<IDbConnection> _connectionFactory;
         private readonly IOptions<TogglySnapshotSettings> _snapshotSettings;
@@ -100,7 +101,7 @@ namespace Toggly.FeatureManagement.Storage.Dapper
             }
         }
 
-        private IEnumerable<string> GetEnsureColumnsSql()
+        private string[] GetEnsureColumnsSql()
         {
             var tableName = _snapshotSettings.Value.TableName;
             ValidateTableName(tableName);
@@ -186,7 +187,7 @@ namespace Toggly.FeatureManagement.Storage.Dapper
             };
         }
 
-        private string GetSelectSql(string id)
+        private string GetSelectSql()
         {
             var tableName = _snapshotSettings.Value.TableName;
             ValidateTableName(tableName);
@@ -271,7 +272,7 @@ namespace Toggly.FeatureManagement.Storage.Dapper
 
                 using var connection = _connectionFactory();
                 var documentName = _snapshotSettings.Value.DocumentName;
-                var sql = GetSelectSql(documentName);
+                var sql = GetSelectSql();
                 var snapshot = await connection.QueryFirstOrDefaultAsync<SnapshotRecord>(sql, new { Id = documentName }).ConfigureAwait(false);
 
                 if (snapshot == null || string.IsNullOrEmpty(snapshot.Data))
@@ -375,7 +376,7 @@ namespace Toggly.FeatureManagement.Storage.Dapper
 
                 using var connection = _connectionFactory();
                 var documentName = _snapshotSettings.Value.JwkDocumentName;
-                var sql = GetSelectSql(documentName);
+                var sql = GetSelectSql();
                 var snapshot = await connection.QueryFirstOrDefaultAsync<SnapshotRecord>(sql, new { Id = documentName }).ConfigureAwait(false);
 
                 if (snapshot == null || string.IsNullOrEmpty(snapshot.Data))
@@ -405,7 +406,7 @@ namespace Toggly.FeatureManagement.Storage.Dapper
             await connection.ExecuteAsync(sql, new { Id = _snapshotSettings.Value.JwkDocumentName }).ConfigureAwait(false);
         }
 
-        private class SnapshotRecord
+        private sealed class SnapshotRecord
         {
             public string Id { get; set; } = string.Empty;
             public string Data { get; set; } = string.Empty;
