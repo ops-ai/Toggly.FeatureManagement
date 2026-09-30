@@ -1,18 +1,38 @@
 .\" Generated from Docs/command-catalog.json — do not edit by hand.
 .\" Regenerate: ./Toggly.CLI/scripts/generate-manpages.py
-.TH TOGGLY-RELEASE 1 "" "Toggly CLI" "User Commands"
+.TH TOGGLY-RELEASE 1 "2026-09-29" "Toggly CLI" "User Commands"
 .SH NAME
 toggly-release \- List, inspect, and manage releases
 .SH SYNOPSIS
 toggly\-cli release <command>
 .SH DESCRIPTION
 List, inspect, and manage releases
-.SH ASSOCIATE BUILD
+.SS associate\-build
 Associate a CI build with a release\&.
 .PP
 .B toggly\-cli release associate\-build \-\-project\-key <key> \-\-ci\-provider <provider> \-\-run\-id <id> \-\-pipeline\-name <name> [\-\-env <name>] [options]
 .PP
-Options:
+Aliases: associate\-build.
+.SS create
+Create a new release\&.
+.PP
+.B toggly\-cli release create \-\-name <name> [\-\-app <id>] [options]
+.PP
+Aliases: create\-release.
+.SS get
+Get a release by id\&.
+.PP
+.B toggly\-cli release get <id> [options]
+.TP
+.I id
+Release id
+.SS list
+List releases\&. Optional filters for application, environment, status, and
+name search\&. Application defaults from context when \-\-app is omitted\&.
+.PP
+.B toggly\-cli release list [\-\-app <id>] [\-\-env <name>] [\-\-status <status>] [\-\-search <text>] [options]
+.SH OPTIONS
+Options for release associate\-build:
 .TP
 .B \-\-project\-key
 Application ID or name (required)
@@ -21,7 +41,8 @@ Application ID or name (required)
 Environment name (e\&.g\&., Production, Staging)
 .TP
 .B \-\-ci\-provider
-CI provider (e\&.g\&., azure\-devops, github, gitlab, jenkins, circleci) (required)
+CI provider (e\&.g\&., azure\-devops, github, gitlab, jenkins, circleci)
+(required)
 .TP
 .B \-\-run\-id
 CI run/build ID (required)
@@ -48,19 +69,10 @@ Mode for finding/creating release (default: use\-latest\-draft\-or\-create)
 Release template key to use when creating a new release
 .TP
 .B \-\-name\-pattern
-Name pattern for release (Handlebars\-style: ${branch}, ${buildNumber}, ${commitSha})
+Name pattern for release (Handlebars\-style: ${branch}, ${buildNumber},
+${commitSha})
 .PP
-Examples:
-.PP
-.B toggly\-cli release associate\-build \-\-project\-key <app\-id> \-\-env Production \-\-ci\-provider github \-\-run\-id 123456 \-\-pipeline\-name deploy\-production
-.PP
-Aliases: associate\-build.
-.SH CREATE
-Create a new release\&.
-.PP
-.B toggly\-cli release create \-\-name <name> [\-\-app <id>] [options]
-.PP
-Options:
+Options for release create:
 .TP
 .B \-\-app, \-\-application\-id
 Application id (or set via 'toggly context set \-\-app')
@@ -74,32 +86,7 @@ Release notes
 .B \-\-feature\-changes
 JSON array of feature changes
 .PP
-Examples:
-.PP
-.B toggly\-cli release create \-\-app <app\-id> \-\-name "v1\&.2\&.0"
-.PP
-Aliases: create\-release.
-.SH GET
-Get a release by id\&.
-.PP
-.B toggly\-cli release get <id> [options]
-.PP
-Arguments:
-.TP
-.I id
-Release id
-.PP
-Examples:
-.PP
-.B toggly\-cli release get <release\-id>
-.PP
-.B toggly\-cli \-\-json release get <release\-id>
-.SH LIST
-List releases\&. Optional filters for application, environment, status, and name search\&. Application defaults from context when \-\-app is omitted\&.
-.PP
-.B toggly\-cli release list [\-\-app <id>] [\-\-env <name>] [\-\-status <status>] [\-\-search <text>] [options]
-.PP
-Options:
+Options for release list:
 .TP
 .B \-\-app, \-\-application\-id
 Application id (or set via 'toggly context set \-\-app')
@@ -113,12 +100,7 @@ Filter by status
 .B \-\-search
 Search by release name
 .PP
-Examples:
-.PP
-.B toggly\-cli release list \-\-app <app\-id>
-.PP
-.B toggly\-cli release list \-\-status Draft
-.SH GLOBAL OPTIONS
+Global options (all commands):
 .TP
 .B \-\-client\-id
 OAuth2 client ID (or set TOGGLY_CLIENT_ID)
@@ -137,6 +119,21 @@ Enable verbose output
 .TP
 .B \-\-json
 Emit machine\-readable camelCase JSON instead of human text
+.SH EXAMPLES
+.B
+toggly\-cli release associate\-build \-\-project\-key <app\-id> \-\-env
+Production \-\-ci\-provider github \-\-run\-id 123456 \-\-pipeline\-name
+deploy\-production
+.PP
+.B toggly\-cli release create \-\-app <app\-id> \-\-name "v1\&.2\&.0"
+.PP
+.B toggly\-cli release get <release\-id>
+.PP
+.B toggly\-cli \-\-json release get <release\-id>
+.PP
+.B toggly\-cli release list \-\-app <app\-id>
+.PP
+.B toggly\-cli release list \-\-status Draft
 .SH EXIT STATUS
 .TP
 .B 0
@@ -146,7 +143,8 @@ Success
 Runtime or API error (including HTTP 404)
 .TP
 .B 2
-Usage, validation, missing auth, or missing \-\-app/\-\-env when no context default is set
+Usage, validation, missing auth, or missing \-\-app/\-\-env when no context
+default is set
 .SH SEE ALSO
 toggly\-feature(1), toggly\-app(1), toggly(1).
 .SH ONLINE DOCS

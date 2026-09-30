@@ -3,14 +3,18 @@
 
 Usage (from repo root or Toggly.CLI):
   ./Toggly.CLI/scripts/generate-manpages.py
-  ./Toggly.CLI/scripts/generate-manpages.py --check   # exit 1 if man/ drifts
+  ./Toggly.CLI/scripts/generate-manpages.py --check   # drift + structural lint
+  ./Toggly.CLI/scripts/generate-manpages.py --lint    # mandoc -Tlint when available
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import shutil
+import subprocess
 import sys
+import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +23,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 CLI_ROOT = SCRIPT_DIR.parent
 CATALOG_PATH = CLI_ROOT / "Docs" / "command-catalog.json"
 MAN_DIR = CLI_ROOT / "man"
+# mandoc STYLE: input text line longer than 80 bytes
+MAX_LINE = 78
 
 
 def path_key(path: list[str]) -> str:
@@ -38,6 +44,20 @@ def roff_escape(text: str) -> str:
     )
 
 
+def wrap_text(text: str, width: int = MAX_LINE) -> list[str]:
+    """Word-wrap plain (already escaped) text to mandoc's 80-byte STYLE limit."""
+    if not text:
+        return []
+    if len(text) <= width:
+        return [text]
+    return textwrap.wrap(
+        text,
+        width=width,
+        break_long_words=True,
+        break_on_hyphens=False,
+    )
+
+
 def write_section(lines: list[str], name: str, body_lines: list[str]) -> None:
     if not body_lines:
         return
@@ -50,9 +70,9 @@ def format_option_block(options: list[dict[str, str]] | None) -> list[str]:
         return []
     out: list[str] = []
     for opt in options:
-        out.append(f".TP")
+        out.append(".TP")
         out.append(f".B {roff_escape(opt['name'])}")
-        out.append(roff_escape(opt["description"]))
+        out.extend(wrap_text(roff_escape(opt["description"])))
     return out
 
 
@@ -63,7 +83,7 @@ def format_argument_block(arguments: list[dict[str, str]] | None) -> list[str]:
     for arg in arguments:
         out.append(".TP")
         out.append(f".I {roff_escape(arg['name'])}")
-        out.append(roff_escape(arg["description"]))
+        out.extend(wrap_text(roff_escape(arg["description"])))
     return out
 
 
@@ -71,9 +91,16 @@ def format_examples(examples: list[str] | None) -> list[str]:
     if not examples:
         return []
     out: list[str] = []
-    for example in examples:
-        out.append(".PP")
-        out.append(f".B {roff_escape(example)}")
+    for index, example in enumerate(examples):
+        if index > 0:
+            out.append(".PP")
+        # Keep examples as a single bold line when possible; wrap if needed
+        escaped = roff_escape(example)
+        if len(f".B {escaped}") <= MAX_LINE:
+            out.append(f".B {escaped}")
+        else:
+            out.append(".B")
+            out.extend(wrap_text(escaped))
     return out
 
 
@@ -90,7 +117,7 @@ def format_see_also(refs: list[str] | None) -> list[str]:
                 rendered.append(f"{roff_escape(page)}(1)")
             else:
                 rendered.append(roff_escape(page))
-    return [", ".join(rendered) + "."]
+    return wrap_text(", ".join(rendered) + ".")
 
 
 def format_exit_status(exit_codes: list[dict[str, Any]]) -> list[str]:
@@ -98,8 +125,12 @@ def format_exit_status(exit_codes: list[dict[str, Any]]) -> list[str]:
     for item in exit_codes:
         out.append(".TP")
         out.append(f".B {item['code']}")
-        out.append(roff_escape(str(item["meaning"])))
+        out.extend(wrap_text(roff_escape(str(item["meaning"]))))
     return out
+
+
+def man_date(catalog: dict[str, Any]) -> str:
+    return str(catalog.get("manDate") or "2026-09-29")
 
 
 def group_pages(catalog: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
@@ -115,28 +146,84 @@ def group_pages(catalog: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     return groups
 
 
+def assert_no_bare_ellipsis(content: str, name: str) -> list[str]:
+    """Lines that are exactly '...' are parsed as unknown mandoc macros."""
+    problems: list[str] = []
+    for idx, line in enumerate(content.splitlines(), start=1):
+        if line.strip() == "...":
+            problems.append(f"{name}:{idx}: bare ellipsis line (use \\&...)")
+    return problems
+
+
+def assert_required_sections(content: str, name: str) -> list[str]:
+    problems: list[str] = []
+    for section in ("NAME", "SYNOPSIS", "DESCRIPTION", "OPTIONS", "EXAMPLES", "EXIT STATUS", "SEE ALSO"):
+        if f".SH {section}" not in content:
+            problems.append(f"{name}: missing .SH {section}")
+    return problems
+
+
+def structural_lint(pages: dict[str, str]) -> list[str]:
+    problems: list[str] = []
+    for name, content in sorted(pages.items()):
+        problems.extend(assert_no_bare_ellipsis(content, name))
+        problems.extend(assert_required_sections(content, name))
+    return problems
+
+
+def run_mandoc_lint(pages: dict[str, str] | None = None) -> int:
+    """Run mandoc -Tlint on man pages. Returns process exit code (0 = clean)."""
+    mandoc = shutil.which("mandoc")
+    if mandoc is None:
+        print("mandoc not installed; skipping mandoc -Tlint", file=sys.stderr)
+        return 0
+
+    targets = sorted((MAN_DIR / name) for name in (pages or {}).keys()) if pages else sorted(MAN_DIR.glob("*.1"))
+    if pages:
+        # Lint the in-memory content via temp? Prefer committed files after write.
+        targets = [MAN_DIR / name for name in sorted(pages.keys())]
+
+    worst = 0
+    for target in targets:
+        if not target.is_file():
+            print(f"missing for mandoc lint: {target}", file=sys.stderr)
+            worst = max(worst, 1)
+            continue
+        result = subprocess.run(
+            [mandoc, "-Tlint", str(target)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.stdout:
+            sys.stdout.write(result.stdout)
+        if result.stderr:
+            sys.stderr.write(result.stderr)
+        worst = max(worst, result.returncode)
+    return worst
+
+
 def render_root_page(catalog: dict[str, Any]) -> str:
     man = catalog["manName"]
     binary = catalog["binary"]
+    date = man_date(catalog)
     lines = [
         f'.\\" Generated from Docs/command-catalog.json — do not edit by hand.',
         f'.\\" Regenerate: ./Toggly.CLI/scripts/generate-manpages.py',
-        f".TH {man.upper()} 1 \"\" \"Toggly CLI\" \"User Commands\"",
+        f'.TH {man.upper()} 1 "{date}" "Toggly CLI" "User Commands"',
         ".SH NAME",
         f"{man} \\- {roff_escape(catalog['description'].split('.')[0])}",
         ".SH SYNOPSIS",
         f".B {roff_escape(binary)}",
         "[\\fIoptions\\fR]",
         "\\fIcommand\\fR",
-        "...",
+        "\\&...",
         ".SH DESCRIPTION",
-        roff_escape(catalog["description"]),
-        f"Full documentation: {roff_escape(catalog['docsUrl'])}",
     ]
+    lines.extend(wrap_text(roff_escape(catalog["description"])))
+    lines.extend(wrap_text(f"Full documentation: {roff_escape(catalog['docsUrl'])}"))
 
-    write_section(lines, "GLOBAL OPTIONS", format_option_block(catalog.get("globals")))
-
-    cmd_lines = [".PP", "Noun groups:"]
+    cmd_lines: list[str] = ["Noun groups:"]
     for name in ("auth", "app", "env", "feature", "release", "context"):
         cmd_lines.append(".TP")
         cmd_lines.append(f".B {roff_escape(name)}")
@@ -145,17 +232,29 @@ def render_root_page(catalog: dict[str, Any]) -> str:
             None,
         )
         if group:
-            cmd_lines.append(roff_escape(group["description"]))
+            cmd_lines.extend(wrap_text(roff_escape(group["description"])))
     cmd_lines.append(".PP")
-    cmd_lines.append(
-        "Flat write aliases (deprecation window): "
-        + roff_escape(
-            "create-feature, update-feature, update-feature-environment, "
-            "create-release, associate-build"
+    cmd_lines.extend(
+        wrap_text(
+            "Flat write aliases (deprecation window): "
+            + roff_escape(
+                "create-feature, update-feature, update-feature-environment, "
+                "create-release, associate-build"
+            )
+            + "."
         )
-        + "."
     )
     write_section(lines, "COMMANDS", cmd_lines)
+
+    write_section(lines, "OPTIONS", format_option_block(catalog.get("globals")))
+
+    root_examples = [
+        f"{binary} auth login",
+        f"{binary} context set --app <app-id> --env Production",
+        f"{binary} app list",
+        f"{binary} --json feature list",
+    ]
+    write_section(lines, "EXAMPLES", format_examples(root_examples))
     write_section(lines, "EXIT STATUS", format_exit_status(catalog["exitCodes"]))
     write_section(
         lines,
@@ -172,7 +271,7 @@ def render_root_page(catalog: dict[str, Any]) -> str:
         ),
     )
     lines.append(".SH ONLINE DOCS")
-    lines.append(roff_escape(catalog["docsUrl"]))
+    lines.extend(wrap_text(roff_escape(catalog["docsUrl"])))
     return "\n".join(lines) + "\n"
 
 
@@ -181,51 +280,70 @@ def render_group_page(catalog: dict[str, Any], group_name: str, leaves: list[dic
     binary = catalog["binary"]
     group = next(c for c in catalog["commands"] if c.get("path") == [group_name])
     page = f"{man}-{group_name}"
+    date = man_date(catalog)
+    sorted_leaves = sorted(leaves, key=lambda e: path_key(e["path"]))
+
     lines = [
         f'.\\" Generated from Docs/command-catalog.json — do not edit by hand.',
         f'.\\" Regenerate: ./Toggly.CLI/scripts/generate-manpages.py',
-        f".TH {page.upper()} 1 \"\" \"Toggly CLI\" \"User Commands\"",
+        f'.TH {page.upper()} 1 "{date}" "Toggly CLI" "User Commands"',
         ".SH NAME",
         f"{page} \\- {roff_escape(group['description'])}",
         ".SH SYNOPSIS",
         roff_escape(group.get("synopsis") or f"{binary} {group_name} <command>"),
         ".SH DESCRIPTION",
-        roff_escape(group["description"]),
     ]
+    lines.extend(wrap_text(roff_escape(group["description"])))
 
-    for leaf in sorted(leaves, key=lambda e: path_key(e["path"])):
+    for leaf in sorted_leaves:
         sub = path_key(leaf["path"][1:])
-        lines.append(".SH " + roff_escape(sub.upper().replace("-", " ")))
-        lines.append(roff_escape(leaf["description"]))
+        lines.append(f".SS {roff_escape(sub)}")
+        lines.extend(wrap_text(roff_escape(leaf["description"])))
         lines.append(".PP")
         lines.append(f".B {roff_escape(leaf.get('synopsis') or '')}")
         arg_block = format_argument_block(leaf.get("arguments"))
         if arg_block:
-            lines.append(".PP")
-            lines.append("Arguments:")
             lines.extend(arg_block)
-        opt_block = format_option_block(leaf.get("options"))
-        if opt_block:
-            lines.append(".PP")
-            lines.append("Options:")
-            lines.extend(opt_block)
-        examples = format_examples(leaf.get("examples"))
-        if examples:
-            lines.append(".PP")
-            lines.append("Examples:")
-            lines.extend(examples)
         aliases = leaf.get("aliases") or []
         if aliases:
             lines.append(".PP")
-            lines.append("Aliases: " + roff_escape(", ".join(aliases)) + ".")
+            lines.extend(wrap_text("Aliases: " + roff_escape(", ".join(aliases)) + "."))
 
-    write_section(lines, "GLOBAL OPTIONS", format_option_block(catalog.get("globals")))
+    # Aggregate OPTIONS: leaf options (tagged) then globals — never lead with .PP after .SH
+    option_body: list[str] = []
+    for leaf in sorted_leaves:
+        opts = leaf.get("options") or []
+        if not opts:
+            continue
+        sub = path_key(leaf["path"])
+        if option_body:
+            option_body.append(".PP")
+        option_body.extend(wrap_text(f"Options for {roff_escape(sub)}:"))
+        option_body.extend(format_option_block(opts))
+    if option_body:
+        option_body.append(".PP")
+    option_body.extend(wrap_text("Global options (all commands):"))
+    option_body.extend(format_option_block(catalog.get("globals")))
+    write_section(lines, "OPTIONS", option_body)
+
+    example_body: list[str] = []
+    for leaf in sorted_leaves:
+        ex = leaf.get("examples") or []
+        if not ex:
+            continue
+        if example_body:
+            example_body.append(".PP")
+        example_body.extend(format_examples(ex))
+    if not example_body:
+        example_body = format_examples([f"{binary} {group_name} --help"])
+    write_section(lines, "EXAMPLES", example_body)
+
     write_section(lines, "EXIT STATUS", format_exit_status(catalog["exitCodes"]))
     see = list(group.get("seeAlso") or [])
     see.append("toggly")
     write_section(lines, "SEE ALSO", format_see_also(see))
     lines.append(".SH ONLINE DOCS")
-    lines.append(roff_escape(catalog["docsUrl"]))
+    lines.extend(wrap_text(roff_escape(catalog["docsUrl"])))
     return "\n".join(lines) + "\n"
 
 
@@ -246,7 +364,12 @@ def main() -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="Verify committed man/ matches generator output without writing",
+        help="Verify committed man/ matches generator output and passes structural lint",
+    )
+    parser.add_argument(
+        "--lint",
+        action="store_true",
+        help="Run mandoc -Tlint on man pages (skip with message if mandoc missing)",
     )
     args = parser.parse_args()
 
@@ -255,6 +378,7 @@ def main() -> int:
         return 1
 
     pages = generate()
+
     if args.check:
         drift = False
         for name, content in sorted(pages.items()):
@@ -272,12 +396,26 @@ def main() -> int:
             if existing_file.name not in expected:
                 print(f"unexpected: {existing_file}", file=sys.stderr)
                 drift = True
-        return 1 if drift else 0
+        for problem in structural_lint(pages):
+            print(problem, file=sys.stderr)
+            drift = True
+        if drift:
+            return 1
+        if args.lint:
+            return run_mandoc_lint(pages)
+        return 0
 
     MAN_DIR.mkdir(parents=True, exist_ok=True)
     for name, content in pages.items():
         (MAN_DIR / name).write_text(content, encoding="utf-8")
         print(f"wrote {MAN_DIR / name}")
+
+    for problem in structural_lint(pages):
+        print(problem, file=sys.stderr)
+        return 1
+
+    if args.lint:
+        return run_mandoc_lint(pages)
     return 0
 
 

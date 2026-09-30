@@ -1,38 +1,25 @@
 .\" Generated from Docs/command-catalog.json — do not edit by hand.
 .\" Regenerate: ./Toggly.CLI/scripts/generate-manpages.py
-.TH TOGGLY-APP 1 "" "Toggly CLI" "User Commands"
+.TH TOGGLY-APP 1 "2026-09-29" "Toggly CLI" "User Commands"
 .SH NAME
 toggly-app \- List and inspect applications
 .SH SYNOPSIS
 toggly\-cli app <command>
 .SH DESCRIPTION
 List and inspect applications
-.SH GET
+.SS get
 Get an application by id\&.
 .PP
 .B toggly\-cli app get <id> [options]
-.PP
-Arguments:
 .TP
 .I id
 Application id
-.PP
-Examples:
-.PP
-.B toggly\-cli app get <app\-id>
-.PP
-.B toggly\-cli \-\-json app get <app\-id>
-.SH LIST
+.SS list
 List applications available to the authenticated principal\&.
 .PP
 .B toggly\-cli app list [options]
-.PP
-Examples:
-.PP
-.B toggly\-cli app list
-.PP
-.B toggly\-cli \-\-json app list
-.SH GLOBAL OPTIONS
+.SH OPTIONS
+Global options (all commands):
 .TP
 .B \-\-client\-id
 OAuth2 client ID (or set TOGGLY_CLIENT_ID)
@@ -51,6 +38,14 @@ Enable verbose output
 .TP
 .B \-\-json
 Emit machine\-readable camelCase JSON instead of human text
+.SH EXAMPLES
+.B toggly\-cli app get <app\-id>
+.PP
+.B toggly\-cli \-\-json app get <app\-id>
+.PP
+.B toggly\-cli app list
+.PP
+.B toggly\-cli \-\-json app list
 .SH EXIT STATUS
 .TP
 .B 0
@@ -60,7 +55,8 @@ Success
 Runtime or API error (including HTTP 404)
 .TP
 .B 2
-Usage, validation, missing auth, or missing \-\-app/\-\-env when no context default is set
+Usage, validation, missing auth, or missing \-\-app/\-\-env when no context
+default is set
 .SH SEE ALSO
 toggly\-env(1), toggly\-feature(1), toggly\-context(1), toggly(1).
 .SH ONLINE DOCS

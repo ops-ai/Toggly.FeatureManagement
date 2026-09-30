@@ -60,16 +60,7 @@ public class CommandCatalogTests
         var manDir = ResolveManDir();
         Assert.True(Directory.Exists(manDir), $"Missing man directory at {manDir}");
 
-        foreach (var page in new[]
-                 {
-                     "toggly.1",
-                     "toggly-auth.1",
-                     "toggly-app.1",
-                     "toggly-env.1",
-                     "toggly-feature.1",
-                     "toggly-release.1",
-                     "toggly-context.1"
-                 })
+        foreach (var page in RequiredManPages)
         {
             var path = Path.Combine(manDir, page);
             Assert.True(File.Exists(path), $"Missing man page {path}");
@@ -78,6 +69,54 @@ public class CommandCatalogTests
             Assert.Contains("Generated from Docs/command-catalog.json", text);
         }
     }
+
+    [Fact]
+    public void GeneratedManPages_HaveRequiredSectionsAndNoBareEllipsis()
+    {
+        var manDir = ResolveManDir();
+        Assert.True(Directory.Exists(manDir), $"Missing man directory at {manDir}");
+
+        string[] requiredSections =
+        [
+            ".SH NAME",
+            ".SH SYNOPSIS",
+            ".SH DESCRIPTION",
+            ".SH OPTIONS",
+            ".SH EXAMPLES",
+            ".SH EXIT STATUS",
+            ".SH SEE ALSO"
+        ];
+
+        foreach (var page in RequiredManPages)
+        {
+            var path = Path.Combine(manDir, page);
+            var lines = File.ReadAllLines(path);
+            var text = string.Join('\n', lines);
+
+            foreach (var section in requiredSections)
+                Assert.Contains(section, text);
+
+            // Bare "..." is parsed as an unknown mandoc macro (ERROR).
+            var bareEllipsis = lines.Where(static line => line.Trim() == "...").ToList();
+            Assert.True(
+                bareEllipsis.Count == 0,
+                $"Man page {page} has a bare ellipsis line; use \\&...");
+        }
+
+        var root = File.ReadAllText(Path.Combine(manDir, "toggly.1"));
+        Assert.Contains("\\&...", root);
+    }
+
+    private static readonly string[] RequiredManPages =
+    [
+        "toggly.1",
+        "toggly-auth.1",
+        "toggly-app.1",
+        "toggly-env.1",
+        "toggly-feature.1",
+        "toggly-release.1",
+        "toggly-context.1"
+    ];
 
     private static IEnumerable<string> EnumerateLeafPaths(Command command, string prefix = "")
     {

@@ -1,6 +1,7 @@
 {
   "binary": "toggly-cli",
   "manName": "toggly",
+  "manDate": "2026-09-29",
   "docsUrl": "https://docs.toggly.io/sdks/cli",
   "description": "Command-line interface for Toggly feature flag management. Supports interactive device-code login and CI client credentials.",
   "exitCodes": [
