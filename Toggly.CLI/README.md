@@ -6,7 +6,22 @@ Command-line interface for Toggly feature flag management.
 
 ## Install
 
-Download the archive for your platform from the latest CLI GitHub Release ([`cli-v*`](https://github.com/ops-ai/Toggly.FeatureManagement/releases) tags):
+Package managers (installed binary is `toggly`; see full commands and trust
+notes at [docs.toggly.io/sdks/cli/install](https://docs.toggly.io/sdks/cli/install)):
+
+| Manager | Command |
+|---------|---------|
+| Homebrew | `brew tap ops-ai/toggly-cli-dist https://github.com/ops-ai/toggly-cli-dist && brew install toggly-cli` |
+| Scoop | `scoop bucket add toggly https://github.com/ops-ai/toggly-cli-dist && scoop install toggly/toggly-cli` |
+| winget | `winget install Opsai.TogglyCLI` |
+| Chocolatey | `choco install toggly-cli` |
+| apt | see docs — flat repo published to `ops-ai/toggly-cli-dist` (`gh-pages`) |
+| yum / dnf | see docs — same repo, `rpm/` path |
+
+Package-manager availability depends on the [`cli-distribute.yml`](../.github/workflows/cli-distribute.yml)
+workflow having the right ops secrets configured (see `packaging/README.md`);
+until then, or as a manual fallback, download the archive for your platform
+from the latest CLI GitHub Release ([`cli-v*`](https://github.com/ops-ai/Toggly.FeatureManagement/releases) tags):
 
 | Platform | Release asset |
 |----------|---------------|
@@ -17,8 +32,6 @@ Download the archive for your platform from the latest CLI GitHub Release ([`cli
 | macOS Apple Silicon | `toggly-cli-macos-arm64.tar.gz` |
 
 Extract and place `toggly-cli` (or `toggly-cli.exe`) on your `PATH`. On Linux, optional man pages are under `man/` in the archive (`man -l man/toggly.1`).
-
-Package managers (Homebrew, winget, apt, …) land in a later wave; GitHub Releases are the source of truth today.
 
 ### Build from source
 

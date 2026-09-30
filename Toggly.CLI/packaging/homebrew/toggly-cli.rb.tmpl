@@ -1,0 +1,37 @@
+class TogglyCli < Formula
+  desc "Command-line interface for Toggly feature flag management"
+  homepage "https://docs.toggly.io/sdks/cli"
+  version "{{VERSION}}"
+  license "MIT"
+
+  on_macos do
+    if Hardware::CPU.arm?
+      url "https://github.com/ops-ai/Toggly.FeatureManagement/releases/download/cli-v{{VERSION}}/toggly-cli-macos-arm64.tar.gz"
+      sha256 "{{SHA256_MACOS_ARM64}}"
+    else
+      url "https://github.com/ops-ai/Toggly.FeatureManagement/releases/download/cli-v{{VERSION}}/toggly-cli-macos-x64.tar.gz"
+      sha256 "{{SHA256_MACOS_X64}}"
+    end
+  end
+
+  on_linux do
+    if Hardware::CPU.arm?
+      url "https://github.com/ops-ai/Toggly.FeatureManagement/releases/download/cli-v{{VERSION}}/toggly-cli-linux-arm64.tar.gz"
+      sha256 "{{SHA256_LINUX_ARM64}}"
+    else
+      url "https://github.com/ops-ai/Toggly.FeatureManagement/releases/download/cli-v{{VERSION}}/toggly-cli-linux-x64.tar.gz"
+      sha256 "{{SHA256_LINUX_X64}}"
+    end
+  end
+
+  def install
+    # Archives ship the binary as `toggly-cli`; install it on PATH as `toggly`
+    # per the Wave 5 UX lock (docs/man reference `toggly`).
+    bin.install "toggly-cli" => "toggly"
+    man1.install Dir["man/*.1"] if File.directory?("man")
+  end
+
+  test do
+    assert_match version.to_s, shell_output("#{bin}/toggly --version")
+  end
+end

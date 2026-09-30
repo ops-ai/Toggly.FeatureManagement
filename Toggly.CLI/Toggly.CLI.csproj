@@ -12,6 +12,17 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
+  <!--
+    Wire the checked-in VERSION file into the assembly version so the CLI's
+    version option reports the same value as the cli-v* release tag.
+    Package-manager distribution smoke checks (Wave 5, OPS-1580) assert this.
+  -->
+  <PropertyGroup>
+    <CliVersionFile>$(MSBuildThisFileDirectory)VERSION</CliVersionFile>
+    <CliVersion Condition="Exists('$(CliVersionFile)')">$([System.IO.File]::ReadAllText('$(CliVersionFile)').Trim())</CliVersion>
+    <Version Condition="'$(CliVersion)' != ''">$(CliVersion)</Version>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
     <PackageReference Include="System.Text.Json" Version="10.0.1" />

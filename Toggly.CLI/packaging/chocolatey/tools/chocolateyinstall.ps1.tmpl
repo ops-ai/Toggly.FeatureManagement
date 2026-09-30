@@ -1,0 +1,22 @@
+$ErrorActionPreference = 'Stop'
+
+$packageName = 'toggly-cli'
+$url64 = 'https://github.com/ops-ai/Toggly.FeatureManagement/releases/download/cli-v{{VERSION}}/toggly-cli-windows-x64.zip'
+$checksum64 = '{{SHA256_WINDOWS_X64}}'
+
+$toolsDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+
+Install-ChocolateyZipPackage -PackageName $packageName `
+  -Url64bit $url64 `
+  -Checksum64 $checksum64 `
+  -ChecksumType64 'sha256' `
+  -UnzipLocation $toolsDir
+
+# The release archive ships the binary as toggly-cli.exe; rename it to
+# toggly.exe so Chocolatey's shim generator puts `toggly` on PATH, matching
+# the Wave 5 UX lock (docs/man reference `toggly`).
+$extracted = Join-Path $toolsDir 'toggly-cli.exe'
+$renamed = Join-Path $toolsDir 'toggly.exe'
+if ((Test-Path $extracted) -and -not (Test-Path $renamed)) {
+  Rename-Item -Path $extracted -NewName 'toggly.exe'
+}
