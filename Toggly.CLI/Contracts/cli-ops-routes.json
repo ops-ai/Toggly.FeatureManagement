@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "notes": [
+    "Ops OpenAPI subset for the curated Toggly CLI surface — not a full SaaS OpenAPI import.",
+    "Auth client credentials: POST {authority}/connect/token (AuthService contract tests).",
+    "Device authorize / token poll: discovery + device endpoints (AuthService device-flow tests).",
+    "Flat write aliases (create-feature, update-feature, …) must hit the same routes as noun commands."
+  ],
+  "routes": [
+    { "id": "app-list", "method": "GET", "pathTemplate": "/applications", "command": "app list" },
+    { "id": "app-get", "method": "GET", "pathTemplate": "/applications/{id}", "command": "app get" },
+    { "id": "env-list", "method": "GET", "pathTemplate": "/applications/{id}/environments", "command": "env list" },
+    { "id": "env-get", "method": "GET", "pathTemplate": "/applications/{id}/environments/{name}", "command": "env get" },
+    { "id": "feature-list", "method": "GET", "pathTemplate": "/applications/{id}/features", "command": "feature list" },
+    { "id": "feature-get", "method": "GET", "pathTemplate": "/applications/{id}/features/{key}", "command": "feature get" },
+    { "id": "feature-create", "method": "POST", "pathTemplate": "/applications/{id}/features", "command": "feature create" },
+    { "id": "feature-update", "method": "PUT", "pathTemplate": "/applications/{id}/features/{key}", "command": "feature update" },
+    { "id": "feature-update-environment", "method": "PUT", "pathTemplate": "/applications/{id}/environments/{env}/features/{key}", "command": "feature update-environment" },
+    { "id": "release-list", "method": "GET", "pathTemplate": "/releases", "command": "release list" },
+    { "id": "release-get", "method": "GET", "pathTemplate": "/releases/{releaseId}", "command": "release get" },
+    { "id": "release-create", "method": "POST", "pathTemplate": "/releases", "command": "release create" },
+    { "id": "release-associate-build", "method": "POST", "pathTemplate": "/releases/associate-build", "command": "release associate-build" }
+  ]
+}

@@ -24,4 +24,10 @@
     <ProjectReference Include="../Toggly.CLI/Toggly.CLI.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\Toggly.CLI\Contracts\cli-ops-routes.json"
+          Link="Contracts\cli-ops-routes.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
