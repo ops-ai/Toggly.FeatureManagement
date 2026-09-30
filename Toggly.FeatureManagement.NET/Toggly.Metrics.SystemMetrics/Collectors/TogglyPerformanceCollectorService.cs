@@ -76,7 +76,7 @@ namespace Toggly.Metrics.SystemMetrics.Collectors
         /// <inheritdoc />
         protected override void OnEventWritten(EventWrittenEventArgs eventData)
         {
-            if (!eventData.EventName.Equals("EventCounters"))
+            if (eventData.EventName != "EventCounters" || eventData.Payload is null)
                 return;
 
             foreach (var payload in eventData.Payload)

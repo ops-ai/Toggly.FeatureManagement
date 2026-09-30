@@ -498,6 +498,34 @@ public class TogglyPerformanceCollectorServiceTests
     }
 
     [Fact]
+    public void EventCounterCallback_IgnoresEventsWithoutAName()
+    {
+        using var service = new TestablePerformanceCollectorService(_eventSources, _metricsRegistryServiceMock.Object);
+        var eventData = CreateCounterEvent("requests");
+        typeof(EventWrittenEventArgs).GetProperty(nameof(EventWrittenEventArgs.EventName),
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!
+            .SetValue(eventData, null);
+
+        var action = () => service.PublishCounter(eventData);
+
+        action.Should().NotThrow();
+    }
+
+    [Fact]
+    public void EventCounterCallback_IgnoresEventsWithoutPayload()
+    {
+        using var service = new TestablePerformanceCollectorService(_eventSources, _metricsRegistryServiceMock.Object);
+        var eventData = CreateCounterEvent("requests");
+        typeof(EventWrittenEventArgs).GetProperty(nameof(EventWrittenEventArgs.Payload),
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!
+            .SetValue(eventData, null);
+
+        var action = () => service.PublishCounter(eventData);
+
+        action.Should().NotThrow();
+    }
+
+    [Fact]
     public async Task EventCounterCallback_WaitsForObservationSnapshotBeforePublishing()
     {
         var eventSources = new Dictionary<string, Dictionary<string, string>>
@@ -515,25 +543,43 @@ public class TogglyPerformanceCollectorServiceTests
             .GetValue(service)!;
         var counterEvent = CreateCounterEvent(new SignalingCounterName(callbackEntered, resumeCallback));
 
-        Task writer;
-        Monitor.Enter(snapshotLock);
+        using var releaseSnapshot = new ManualResetEventSlim();
+        var snapshotAcquired = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var snapshotHolder = Task.Run(() =>
+        {
+            Monitor.Enter(snapshotLock);
+            try
+            {
+                snapshotAcquired.SetResult(true);
+                if (!releaseSnapshot.Wait(TimeSpan.FromSeconds(10)))
+                    throw new TimeoutException("Observation snapshot was not released by the test.");
+            }
+            finally
+            {
+                Monitor.Exit(snapshotLock);
+            }
+        });
+
+        Task? writer = null;
         try
         {
+            await snapshotAcquired.Task.WaitAsync(TimeSpan.FromSeconds(5));
             writer = Task.Run(() => service.PublishCounter(counterEvent));
-            callbackEntered.Wait(TimeSpan.FromSeconds(5)).Should().BeTrue();
+            (await Task.Run(() => callbackEntered.Wait(TimeSpan.FromSeconds(5)))).Should().BeTrue();
             resumeCallback.Set();
 
-            writer.Wait(TimeSpan.FromSeconds(2)).Should().BeFalse(
+            var firstCompleted = await Task.WhenAny(writer, Task.Delay(TimeSpan.FromSeconds(2)));
+            firstCompleted.Should().NotBe(writer,
                 "counter callbacks must wait until an observation snapshot releases its lock");
-            service.GetObservations().Result.Should().BeEmpty();
         }
         finally
         {
             resumeCallback.Set();
-            Monitor.Exit(snapshotLock);
+            releaseSnapshot.Set();
+            await snapshotHolder.WaitAsync(TimeSpan.FromSeconds(5));
         }
 
-        await writer.WaitAsync(TimeSpan.FromSeconds(5));
+        await writer!.WaitAsync(TimeSpan.FromSeconds(5));
         var observations = await service.GetObservations();
         observations.Should().ContainKey("request_count");
         observations["request_count"].Item2.Should().Be(42);

@@ -6,6 +6,7 @@
 - `Toggly.Metrics.SystemMetrics` now reads and clears collected observations
   atomically with counter updates, preventing lost measurements and collection
   errors when the collector and metrics reporter run concurrently.
+- Counter events without a name or payload are ignored safely.
 
 ## All .NET SDK packages 3.12.3 - 2026-09-29
 
