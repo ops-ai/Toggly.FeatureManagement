@@ -17,53 +17,38 @@ channel and never rolls back the Release.
 
 | Channel | Destination | Install command (once wired) |
 | --- | --- | --- |
-| Homebrew | `ops-ai/toggly-cli-dist` repo, `main` branch, `Formula/toggly-cli.rb` | `brew tap ops-ai/toggly-cli-dist https://github.com/ops-ai/toggly-cli-dist`<br>`brew install toggly-cli` |
+| Homebrew | `ops-ai/homebrew-toggly` repo, `main`, `Formula/toggly-cli.rb` | `brew install ops-ai/toggly/toggly-cli` (auto-taps) |
 | Scoop | `ops-ai/toggly-cli-dist` repo, `main` branch, `toggly-cli.json` (repo root) | `scoop bucket add toggly https://github.com/ops-ai/toggly-cli-dist`<br>`scoop install toggly/toggly-cli` |
 | apt | `ops-ai/toggly-cli-dist` repo, `gh-pages` branch, `apt/` (flat repo) | `echo 'deb [trusted=yes] https://ops-ai.github.io/toggly-cli-dist/apt ./' \| sudo tee /etc/apt/sources.list.d/toggly-cli.list`<br>`sudo apt-get update && sudo apt-get install toggly-cli` |
 | yum / dnf | `ops-ai/toggly-cli-dist` repo, `gh-pages` branch, `rpm/` (createrepo_c repodata) | add a `.repo` file with `baseurl=https://ops-ai.github.io/toggly-cli-dist/rpm/` (see docs install page) |
 | winget | PR to `microsoft/winget-pkgs`, package id `Opsai.TogglyCLI` (manifests rendered under `packaging/winget/`) | `winget install Opsai.TogglyCLI` (after the PR merges) |
 | Chocolatey | community feed, package id `toggly-cli` | `choco install toggly-cli` |
 
-**Important — `ops-ai/toggly-cli-dist` does not use the `homebrew-*` repo
-naming convention.** Homebrew's `brew tap <user>/<name>` shorthand expects a
-remote repo literally named `homebrew-<name>`; without that prefix it will
-try to clone a repo that does not exist. Always pass the explicit clone URL
-when tapping this repo (`brew tap ops-ai/toggly-cli-dist
-https://github.com/ops-ai/toggly-cli-dist`), both in docs and in this
-workflow's own smoke-test step.
-
-One repo, three channel types — no `homebrew-toggly` / `scoop-toggly` /
-`toggly-cli-packages` sibling repos. (An earlier draft of this wave used
-three separate repos; that decision was reversed before shipping — see the
-Linear issue history on OPS-1580 if you find stale references.)
+**Topology:** Homebrew lives in `ops-ai/homebrew-toggly` so the tap follows
+Homebrew's `homebrew-*` naming and users get a one-liner
+(`brew install ops-ai/toggly/toggly-cli`). Scoop + apt/rpm stay on
+`ops-ai/toggly-cli-dist`. GitHub `cli-v*` Releases remain the binary SoT.
 
 ## Secrets (ops, one-time)
 
 | Secret | Used by | Notes |
 | --- | --- | --- |
-| `CLI_DIST_TOKEN` | homebrew, scoop, apt-rpm jobs | Fine-grained PAT with **contents: write** on `ops-ai/toggly-cli-dist` only. Falls back to `RELEASE_PUSH_TOKEN` if that token already has push access to `toggly-cli-dist` — prefer a dedicated `CLI_DIST_TOKEN` scoped to just that repo instead of widening `RELEASE_PUSH_TOKEN`'s reach. |
+| `CLI_DIST_TOKEN` | homebrew, scoop, apt-rpm jobs | Fine-grained PAT with **contents: write** on both `ops-ai/homebrew-toggly` and `ops-ai/toggly-cli-dist`. Falls back to `RELEASE_PUSH_TOKEN` if that token already has push access to both repos. |
 | `WINGET_TOKEN` | winget job | Optional. Classic PAT with `public_repo` scope, used by `wingetcreate` to open a PR against `microsoft/winget-pkgs`. Without it, the job renders manifests and uploads them as a workflow artifact for manual submission instead of failing. |
 | `CHOCO_API_KEY` | chocolatey job | Optional. Chocolatey Community Repository API key. Without it, the job still packs the `.nupkg` and runs a local install smoke test — it just skips the `choco push`. |
-| `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE` | homebrew, scoop, apt-rpm jobs | Already exist as repo secrets (reused from `cli-build-release.yml`). **Required**, not optional: `ops-ai`'s org-wide "Branch security" ruleset rejects unsigned commits on every branch of every repo, so every push to `toggly-cli-dist` (`main` for Homebrew/Scoop, `gh-pages` for apt/rpm) must be GPG-signed the same way release commits already are. |
-
-A single `CLI_DIST_TOKEN` replaces the three separate tap/bucket/packages
-tokens an earlier draft of this plan called for — one repo, one secret.
+| `GPG_PRIVATE_KEY` / `GPG_PASSPHRASE` | homebrew, scoop, apt-rpm jobs | Already exist as repo secrets (reused from `cli-build-release.yml`). **Required**, not optional: `ops-ai`'s org-wide "Branch security" ruleset rejects unsigned commits on every branch of every repo, so every push to the channel repos must be GPG-signed. |
 
 ### One-time ops checklist
 
-1. Confirm `ops-ai/toggly-cli-dist` exists (public) with `main` as the
-   default branch. `gh-pages` is created automatically by the `apt-rpm` job
-   the first time it publishes (orphan branch).
-2. Enable **GitHub Pages** on `ops-ai/toggly-cli-dist` → Settings → Pages →
-   source: `gh-pages` branch, `/` root. (The workflow pushes to the branch;
-   it cannot enable Pages itself without repo-admin scope on the token.)
-3. Add `CLI_DIST_TOKEN` as an Actions secret on
+1. Confirm `ops-ai/homebrew-toggly` (public, default `main`) and
+   `ops-ai/toggly-cli-dist` (public, default `main`, Pages on `gh-pages`).
+2. Add `CLI_DIST_TOKEN` as an Actions secret on
    `ops-ai/Toggly.FeatureManagement` (fine-grained PAT, `contents: write`
-   scoped to `ops-ai/toggly-cli-dist`).
-4. Optional: add `WINGET_TOKEN` / `CHOCO_API_KEY` for those two channels.
-5. First real distribute run: `workflow_dispatch` on `cli-distribute.yml`
-   against the latest `cli-v*` tag after this PR merges and a `0.4.0`
-   release is cut.
+   on both channel repos) — or confirm `RELEASE_PUSH_TOKEN` can push to both.
+3. Optional: add `WINGET_TOKEN` / `CHOCO_API_KEY` for those two channels.
+4. First real distribute run: `workflow_dispatch` on `cli-distribute.yml`
+   against the latest `cli-v*` tag (prefer a `cli-v0.4.0+` release that
+   matches `Toggly.CLI/VERSION`).
 
 If secrets or the sibling repo are missing, every affected job step prints
 a clear `::warning::` and the job still completes (skip, not silent
@@ -91,8 +76,9 @@ CI):
 
 ```bash
 ./Toggly.CLI/packaging/scripts/render-templates.sh cli-v0.3.2 /tmp/dist
-brew tap ops-ai/toggly-cli-dist /tmp/dist/homebrew   # or the real GitHub URL once pushed
-# if using the rendered file directly instead of a tap:
+# one-liner against the published tap (after distribute has pushed):
+brew install ops-ai/toggly/toggly-cli
+# or install the rendered formula without tapping:
 brew install --formula /tmp/dist/homebrew/Formula/toggly-cli.rb
 ```
 

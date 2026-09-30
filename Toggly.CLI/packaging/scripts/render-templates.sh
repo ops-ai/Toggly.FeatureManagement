@@ -72,11 +72,8 @@ render() {
 
 echo "==> Rendering templates for $TAG (version $VERSION) into $OUT_DIR"
 
-# Homebrew + Scoop both publish into the single ops-ai/toggly-cli-dist repo
-# (main branch). Rendered paths below already mirror that repo's layout so
-# the distribute workflow can copy them in directly:
-#   Formula/toggly-cli.rb   <- homebrew/Formula/toggly-cli.rb
-#   toggly-cli.json         <- scoop/toggly-cli.json
+# Homebrew formula -> ops-ai/homebrew-toggly (Formula/toggly-cli.rb)
+# Scoop manifest  -> ops-ai/toggly-cli-dist (toggly-cli.json at repo root)
 render "$SCRIPT_DIR/homebrew/toggly-cli.rb.tmpl" \
   "$OUT_DIR/homebrew/Formula/toggly-cli.rb"
 

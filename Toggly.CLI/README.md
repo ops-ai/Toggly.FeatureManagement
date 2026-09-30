@@ -11,7 +11,7 @@ notes at [docs.toggly.io/sdks/cli/install](https://docs.toggly.io/sdks/cli/insta
 
 | Manager | Command |
 |---------|---------|
-| Homebrew | `brew tap ops-ai/toggly-cli-dist https://github.com/ops-ai/toggly-cli-dist && brew install toggly-cli` |
+| Homebrew | `brew install ops-ai/toggly/toggly-cli` |
 | Scoop | `scoop bucket add toggly https://github.com/ops-ai/toggly-cli-dist && scoop install toggly/toggly-cli` |
 | winget | `winget install Opsai.TogglyCLI` |
 | Chocolatey | `choco install toggly-cli` |
