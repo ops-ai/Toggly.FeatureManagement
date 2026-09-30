@@ -30,9 +30,9 @@ public sealed class EmbeddedCatalogCoordinator : IDisposable
 
     public EmbeddedRuntimeDiagnostics Diagnostics { get; }
 
-    public Task RefreshAsync(CancellationToken cancellationToken) => RefreshAsync(cancellationToken, null);
+    public Task RefreshAsync(CancellationToken cancellationToken) => RefreshAsync(null, cancellationToken);
 
-    internal async Task RefreshAsync(CancellationToken cancellationToken, TimeSpan? readTimeout)
+    internal async Task RefreshAsync(TimeSpan? readTimeout, CancellationToken cancellationToken)
     {
         await _refreshGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -85,7 +85,7 @@ public sealed class EmbeddedCatalogCoordinator : IDisposable
         }
         catch (Exception exception)
         {
-            _readCancellation?.Cancel();
+            if (_readCancellation != null) await _readCancellation.CancelAsync().ConfigureAwait(false);
             SetFailure(exception);
         }
         finally

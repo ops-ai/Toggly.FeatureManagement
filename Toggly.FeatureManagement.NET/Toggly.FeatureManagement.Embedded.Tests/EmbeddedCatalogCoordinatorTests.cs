@@ -123,6 +123,59 @@ public class EmbeddedCatalogCoordinatorTests
         active!.Filters.Should().ContainSingle(filter => filter.Name == "AlwaysOn");
     }
 
+    [Fact]
+    public async Task RefreshAsync_DoesNotRunFailedReadCancellationCallbackInline()
+    {
+        using var store = new CancellationBlockingStore(failImmediately: true);
+        using var coordinator = new EmbeddedCatalogCoordinator(store, new EmbeddedFeatureProvider(),
+            new TogglyEmbeddedOptions { CatalogName = "Orders" });
+        var returned = new TaskCompletionSource<Task>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var invocation = Task.Factory.StartNew(() =>
+        {
+            var refresh = coordinator.RefreshAsync(CancellationToken.None);
+            returned.TrySetResult(refresh);
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
+        await store.CancellationObserved.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        bool returnedBeforeCallbackFinished;
+        try
+        {
+            returnedBeforeCallbackFinished = await Task.WhenAny(returned.Task, Task.Delay(TimeSpan.FromSeconds(5))) == returned.Task;
+        }
+        finally
+        {
+            store.ReleaseCancellation.Set();
+        }
+
+        await invocation.WaitAsync(TimeSpan.FromSeconds(5));
+        await (await returned.Task).WaitAsync(TimeSpan.FromSeconds(5));
+        returnedBeforeCallbackFinished.Should().BeTrue("cancellation callbacks must not block the refresh invocation thread");
+        coordinator.Diagnostics.StorageState.Should().Be(EmbeddedStorageState.Unavailable);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_WaitsForReadCancellationBeforeRecordingFailure()
+    {
+        using var store = new CancellationBlockingStore();
+        using var coordinator = new EmbeddedCatalogCoordinator(store, new EmbeddedFeatureProvider(),
+            new TogglyEmbeddedOptions { CatalogName = "Orders", InitialLoadTimeout = TimeSpan.FromMilliseconds(25) });
+
+        var refresh = coordinator.RefreshAsync(TimeSpan.FromMilliseconds(25), CancellationToken.None);
+        await store.CancellationObserved.Task.WaitAsync(TimeSpan.FromSeconds(1));
+
+        try
+        {
+            refresh.IsCompleted.Should().BeFalse("the cancellation callback has not completed yet");
+        }
+        finally
+        {
+            store.ReleaseCancellation.Set();
+        }
+        await refresh.WaitAsync(TimeSpan.FromSeconds(1));
+
+        coordinator.Diagnostics.StorageState.Should().Be(EmbeddedStorageState.Unavailable);
+    }
+
     private static CatalogSnapshot EnabledSnapshot(string revision, string key) => new()
     {
         CatalogName = "Orders", Revision = revision, UpdatedAtUtc = DateTimeOffset.UtcNow,
@@ -136,5 +189,29 @@ public class EmbeddedCatalogCoordinatorTests
         public CatalogStoreCapabilities Capabilities => new() { SupportsMultipleWriters = true };
         public Task<CatalogSnapshot?> ReadAsync(string catalogName, CancellationToken cancellationToken = default) => Task.FromResult(Current);
         public Task<CatalogWriteResult> TryWriteAsync(string catalogName, CatalogDocument document, string? expectedRevision, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    private sealed class CancellationBlockingStore : ITogglyCatalogStore, IDisposable
+    {
+        private readonly bool _failImmediately;
+        public CancellationBlockingStore(bool failImmediately = false) => _failImmediately = failImmediately;
+        public TaskCompletionSource<bool> CancellationObserved { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public ManualResetEventSlim ReleaseCancellation { get; } = new(false);
+        public CatalogStoreCapabilities Capabilities => new() { SupportsMultipleWriters = true };
+
+        public Task<CatalogSnapshot?> ReadAsync(string catalogName, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.Register(() =>
+            {
+                CancellationObserved.TrySetResult(true);
+                ReleaseCancellation.Wait();
+            });
+            return _failImmediately
+                ? Task.FromException<CatalogSnapshot?>(new InvalidOperationException("Catalog read failed."))
+                : new TaskCompletionSource<CatalogSnapshot?>().Task;
+        }
+
+        public Task<CatalogWriteResult> TryWriteAsync(string catalogName, CatalogDocument document, string? expectedRevision, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public void Dispose() => ReleaseCancellation.Dispose();
     }
 }
