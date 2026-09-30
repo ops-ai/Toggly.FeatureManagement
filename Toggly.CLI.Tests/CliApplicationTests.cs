@@ -106,17 +106,6 @@ public class CliApplicationTests
     };
 }
 
-internal sealed class RecordingHandler(Func<HttpRequestMessage, HttpResponseMessage> responseFactory) : HttpMessageHandler
-{
-    public List<HttpRequestMessage> Requests { get; } = [];
-
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-    {
-        Requests.Add(request);
-        return Task.FromResult(responseFactory(request));
-    }
-}
-
 internal sealed class CliTestServer : IAsyncDisposable
 {
     private readonly HttpListener listener;

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.1
+
+2026-09-29
+
+### Added
+- Checked-in ops route subset (`Contracts/cli-ops-routes.json`) shared with `CliApiRoutes` for CI drift detection.
+- HTTP contract tests covering every curated management-API command (method/path and write body shape).
+- Advisory live smoke script (`scripts/smoke.sh`) and secrets-gated GitHub Actions workflow (`cli-live-smoke.yml`).
+
 ## 0.3.0
 
 2026-09-29

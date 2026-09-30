@@ -140,7 +140,7 @@ public class TogglyApiClient
     /// </summary>
     public Task<List<ApplicationSummary>> ListApplicationsAsync(CancellationToken cancellationToken = default) =>
         GetJsonAsync(
-            "/applications",
+            CliApiRoutes.Applications,
             TogglyJsonSerializerContext.Default.ListApplicationSummary,
             "Applications",
             cancellationToken);
@@ -150,7 +150,7 @@ public class TogglyApiClient
     /// </summary>
     public Task<ApplicationSummary> GetApplicationAsync(string applicationId, CancellationToken cancellationToken = default) =>
         GetJsonAsync(
-            $"/applications/{Uri.EscapeDataString(applicationId)}",
+            CliApiRoutes.Application(applicationId),
             TogglyJsonSerializerContext.Default.ApplicationSummary,
             $"Application '{applicationId}'",
             cancellationToken);
@@ -160,7 +160,7 @@ public class TogglyApiClient
     /// </summary>
     public Task<List<EnvironmentSummary>> ListEnvironmentsAsync(string applicationId, CancellationToken cancellationToken = default) =>
         GetJsonAsync(
-            $"/applications/{Uri.EscapeDataString(applicationId)}/environments",
+            CliApiRoutes.EnvironmentList(applicationId),
             TogglyJsonSerializerContext.Default.ListEnvironmentSummary,
             $"Environments for application '{applicationId}'",
             cancellationToken);
@@ -173,7 +173,7 @@ public class TogglyApiClient
         string environmentName,
         CancellationToken cancellationToken = default) =>
         GetJsonAsync(
-            $"/applications/{Uri.EscapeDataString(applicationId)}/environments/{Uri.EscapeDataString(environmentName)}",
+            CliApiRoutes.Environment(applicationId, environmentName),
             TogglyJsonSerializerContext.Default.EnvironmentSummary,
             $"Environment '{environmentName}'",
             cancellationToken);
@@ -183,7 +183,7 @@ public class TogglyApiClient
     /// </summary>
     public Task<List<FeatureDefinition>> ListFeaturesAsync(string applicationId, CancellationToken cancellationToken = default) =>
         GetJsonAsync(
-            $"/applications/{Uri.EscapeDataString(applicationId)}/features",
+            CliApiRoutes.FeatureList(applicationId),
             TogglyJsonSerializerContext.Default.ListFeatureDefinition,
             $"Features for application '{applicationId}'",
             cancellationToken);
@@ -196,7 +196,7 @@ public class TogglyApiClient
         string featureKey,
         CancellationToken cancellationToken = default) =>
         GetJsonAsync(
-            $"/applications/{Uri.EscapeDataString(applicationId)}/features/{Uri.EscapeDataString(featureKey)}",
+            CliApiRoutes.Feature(applicationId, featureKey),
             TogglyJsonSerializerContext.Default.FeatureDefinition,
             $"Feature '{featureKey}'",
             cancellationToken);
@@ -221,7 +221,7 @@ public class TogglyApiClient
     /// </summary>
     public Task<ReleaseModel> GetReleaseAsync(string releaseId, CancellationToken cancellationToken = default) =>
         GetJsonAsync(
-            $"/releases/{Uri.EscapeDataString(releaseId)}",
+            CliApiRoutes.Release(releaseId),
             TogglyJsonSerializerContext.Default.ReleaseModel,
             $"Release '{releaseId}'",
             cancellationToken);
@@ -232,7 +232,11 @@ public class TogglyApiClient
     public async Task<ReleaseModel> CreateReleaseAsync(CreateReleaseRequest request, CancellationToken cancellationToken = default)
     {
         await EnsureAuthAsync(cancellationToken);
-        var response = await _httpClient.PostAsJsonAsync($"{_baseUrl}/releases", request, TogglyJsonSerializerContext.Default.CreateReleaseRequest, cancellationToken);
+        var response = await _httpClient.PostAsJsonAsync(
+            $"{_baseUrl}{CliApiRoutes.Releases}",
+            request,
+            TogglyJsonSerializerContext.Default.CreateReleaseRequest,
+            cancellationToken);
         await EnsureSuccessOrThrowAsync(response, "Release");
         return await response.Content.ReadFromJsonAsync(TogglyJsonSerializerContext.Default.ReleaseModel, cancellationToken)
             ?? throw new InvalidOperationException("Failed to deserialize release response");
@@ -244,7 +248,11 @@ public class TogglyApiClient
     public async Task<AssociateBuildResponse> AssociateBuildAsync(AssociateBuildRequest request, CancellationToken cancellationToken = default)
     {
         await EnsureAuthAsync(cancellationToken);
-        var response = await _httpClient.PostAsJsonAsync($"{_baseUrl}/releases/associate-build", request, TogglyJsonSerializerContext.Default.AssociateBuildRequest, cancellationToken);
+        var response = await _httpClient.PostAsJsonAsync(
+            $"{_baseUrl}{CliApiRoutes.AssociateBuild}",
+            request,
+            TogglyJsonSerializerContext.Default.AssociateBuildRequest,
+            cancellationToken);
         await EnsureSuccessOrThrowAsync(response, "Associate build");
         return await response.Content.ReadFromJsonAsync(TogglyJsonSerializerContext.Default.AssociateBuildResponse, cancellationToken)
             ?? throw new InvalidOperationException("Failed to deserialize associate build response");
@@ -256,7 +264,11 @@ public class TogglyApiClient
     public async Task<FeatureDefinition> CreateFeatureAsync(string applicationId, FeatureDefinitionCreateModel model, CancellationToken cancellationToken = default)
     {
         await EnsureAuthAsync(cancellationToken);
-        var response = await _httpClient.PostAsJsonAsync($"{_baseUrl}/applications/{applicationId}/features", model, TogglyJsonSerializerContext.Default.FeatureDefinitionCreateModel, cancellationToken);
+        var response = await _httpClient.PostAsJsonAsync(
+            $"{_baseUrl}{CliApiRoutes.FeatureList(applicationId)}",
+            model,
+            TogglyJsonSerializerContext.Default.FeatureDefinitionCreateModel,
+            cancellationToken);
         await EnsureSuccessOrThrowAsync(response, "Feature");
         return await response.Content.ReadFromJsonAsync(TogglyJsonSerializerContext.Default.FeatureDefinition, cancellationToken)
             ?? throw new InvalidOperationException("Failed to deserialize feature response");
@@ -268,7 +280,11 @@ public class TogglyApiClient
     public async Task<FeatureDefinition> UpdateFeatureAsync(string applicationId, string featureKey, FeatureDefinition model, CancellationToken cancellationToken = default)
     {
         await EnsureAuthAsync(cancellationToken);
-        var response = await _httpClient.PutAsJsonAsync($"{_baseUrl}/applications/{applicationId}/features/{featureKey}", model, TogglyJsonSerializerContext.Default.FeatureDefinition, cancellationToken);
+        var response = await _httpClient.PutAsJsonAsync(
+            $"{_baseUrl}{CliApiRoutes.Feature(applicationId, featureKey)}",
+            model,
+            TogglyJsonSerializerContext.Default.FeatureDefinition,
+            cancellationToken);
         await EnsureSuccessOrThrowAsync(response, $"Feature '{featureKey}'");
         return await response.Content.ReadFromJsonAsync(TogglyJsonSerializerContext.Default.FeatureDefinition, cancellationToken)
             ?? throw new InvalidOperationException("Failed to deserialize feature response");
@@ -286,7 +302,7 @@ public class TogglyApiClient
     {
         await EnsureAuthAsync(cancellationToken);
         var response = await _httpClient.PutAsJsonAsync(
-            $"{_baseUrl}/applications/{applicationId}/environments/{environment}/features/{featureKey}",
+            $"{_baseUrl}{CliApiRoutes.FeatureInEnvironment(applicationId, environment, featureKey)}",
             filters,
             TogglyJsonSerializerContext.Default.ListFeatureFilter,
             cancellationToken);
@@ -329,7 +345,7 @@ public class TogglyApiClient
         Append("environment", environment);
         Append("status", status);
         Append("search", search);
-        return $"/releases{query}";
+        return $"{CliApiRoutes.Releases}{query}";
     }
 
     private static async Task EnsureSuccessOrThrowAsync(HttpResponseMessage response, string resource)

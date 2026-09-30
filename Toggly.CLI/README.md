@@ -136,6 +136,41 @@ toggly-cli --json feature get --app <app-id> payments-enabled
 - `1`: Runtime / API error (including HTTP 404)
 - `2`: Usage / validation / missing auth or missing `--app` when no context default
 
+## Contract tests & API verification
+
+PR CI runs `dotnet test Toggly.CLI.Tests` (via `.github/workflows/analysis-dotnet.yml`). That suite includes:
+
+- **HTTP contracts** — every curated command asserts method + path (and write body keys) against a fake `HttpMessageHandler`.
+- **Ops subset drift** — `CliApiRoutes` must match `Contracts/cli-ops-routes.json`. Changing a CLI route without updating the subset fails the build.
+
+```bash
+cd Toggly.FeatureManagement
+DOTNET_ROLL_FORWARD=LatestMajor dotnet test Toggly.CLI.Tests/Toggly.CLI.Tests.csproj -c Release
+```
+
+Device-code login is covered by mocks in PR CI only (no interactive live device flow).
+
+## Live smoke (advisory)
+
+`.github/workflows/cli-live-smoke.yml` runs on `workflow_dispatch`, weekly schedule, and `cli-v*` tags. It is **non-blocking** (`continue-on-error: true`) and skips when secrets are missing.
+
+Required repository secrets:
+
+| Secret | Purpose |
+|--------|---------|
+| `TOGGLY_SMOKE_CLIENT_ID` | Client credentials id |
+| `TOGGLY_SMOKE_CLIENT_SECRET` | Client credentials secret |
+
+Optional: `TOGGLY_SMOKE_APP_ID`, `TOGGLY_SMOKE_BASE_URL`, `TOGGLY_SMOKE_AUTHORITY`.
+
+Locally:
+
+```bash
+export TOGGLY_CLIENT_ID=... TOGGLY_CLIENT_SECRET=...
+# optional: TOGGLY_SMOKE_APP_ID=...
+./Toggly.CLI/scripts/smoke.sh
+```
+
 ## CI/CD example
 
 ```yaml

@@ -21,5 +21,9 @@
     <InternalsVisibleTo Include="Toggly.CLI.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Contracts\cli-ops-routes.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
 

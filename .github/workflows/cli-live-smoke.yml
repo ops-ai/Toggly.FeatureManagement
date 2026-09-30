@@ -1,0 +1,60 @@
+name: CLI live smoke
+
+# Advisory harness — does not block PR merge. Secrets-gated; skip when unset.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'
+  push:
+    tags:
+      - 'cli-v*'
+
+concurrency:
+  group: cli-live-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Live app list smoke
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Check smoke secrets
+        id: secrets
+        env:
+          CLIENT_ID: ${{ secrets.TOGGLY_SMOKE_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.TOGGLY_SMOKE_CLIENT_SECRET }}
+        run: |
+          if [ -z "$CLIENT_ID" ] || [ -z "$CLIENT_SECRET" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "TOGGLY_SMOKE_CLIENT_ID / TOGGLY_SMOKE_CLIENT_SECRET not configured; skipping."
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup .NET
+        if: steps.secrets.outputs.present == 'true'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Build CLI
+        if: steps.secrets.outputs.present == 'true'
+        working-directory: Toggly.CLI
+        run: DOTNET_ROLL_FORWARD=LatestMajor dotnet build Toggly.CLI.csproj -c Release
+
+      - name: Run smoke
+        if: steps.secrets.outputs.present == 'true'
+        working-directory: Toggly.CLI
+        env:
+          TOGGLY_CLIENT_ID: ${{ secrets.TOGGLY_SMOKE_CLIENT_ID }}
+          TOGGLY_CLIENT_SECRET: ${{ secrets.TOGGLY_SMOKE_CLIENT_SECRET }}
+          TOGGLY_SMOKE_APP_ID: ${{ secrets.TOGGLY_SMOKE_APP_ID }}
+          TOGGLY_BASE_URL: ${{ secrets.TOGGLY_SMOKE_BASE_URL }}
+          TOGGLY_AUTHORITY: ${{ secrets.TOGGLY_SMOKE_AUTHORITY }}
+        run: |
+          chmod +x scripts/smoke.sh
+          ./scripts/smoke.sh
