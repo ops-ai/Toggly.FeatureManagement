@@ -339,7 +339,7 @@ jobs:
           for arch in "${!ASSET_FOR_ARCH[@]}"; do
             asset="${ASSET_FOR_ARCH[$arch]}"
             mkdir -p "/tmp/payload-$arch"
-            curl -fsSL "$BASE_URL/toggly-cli-$asset.tar.gz" -o "/tmp/toggly-cli-$asset.tar.gz"
+            curl --proto '=https' --tlsv1.2 -fsSL "$BASE_URL/toggly-cli-$asset.tar.gz" -o "/tmp/toggly-cli-$asset.tar.gz"
             tar -xzf "/tmp/toggly-cli-$asset.tar.gz" -C "/tmp/payload-$arch"
           done
 

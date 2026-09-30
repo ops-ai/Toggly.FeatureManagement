@@ -32,7 +32,8 @@ mkdir -p "$OUT_DIR"
 echo "==> Fetching SHA256SUMS for $TAG"
 SUMS_FILE="$(mktemp)"
 trap 'rm -f "$SUMS_FILE"' EXIT
-curl -fsSL "$BASE_URL/SHA256SUMS" -o "$SUMS_FILE"
+# Enforce HTTPS end-to-end (Sonar shell:S6506); BASE_URL is always https://github.com/...
+curl --proto '=https' --tlsv1.2 -fsSL "$BASE_URL/SHA256SUMS" -o "$SUMS_FILE"
 
 sha_for() {
   local asset="$1"
