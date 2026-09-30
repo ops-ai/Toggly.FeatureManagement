@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <None Include="Contracts\cli-ops-routes.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Docs\command-catalog.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

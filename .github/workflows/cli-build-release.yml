@@ -202,7 +202,13 @@ jobs:
         run: |
           cd ./publish/${{ matrix.rid }}
           chmod +x ${{ matrix.binary-name }}
-          tar -czf ../../${{ matrix.artifact-name }}.tar.gz ${{ matrix.binary-name }}
+          ARCHIVE_PATHS=(${{ matrix.binary-name }})
+          if [[ "${{ matrix.rid }}" == linux-x64 || "${{ matrix.rid }}" == linux-arm64 ]]; then
+            mkdir -p man
+            cp -R ../../Toggly.CLI/man/. man/
+            ARCHIVE_PATHS+=(man)
+          fi
+          tar -czf ../../${{ matrix.artifact-name }}.tar.gz "${ARCHIVE_PATHS[@]}"
 
       - name: Create archive (Windows)
         if: runner.os == 'Windows'

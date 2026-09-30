@@ -1,22 +1,26 @@
 # Toggly CLI
 
-Command-line interface for Toggly feature flag management. Supports interactive device-code login and CI client credentials equally.
+Command-line interface for Toggly feature flag management.
 
-## Installation
+**Docs:** [https://docs.toggly.io/sdks/cli](https://docs.toggly.io/sdks/cli) — install, auth, command reference, and CI.
 
-### Download Pre-built Binaries
+## Install
 
-Download the appropriate archive for your platform from the latest CLI GitHub Release ([`cli-v*`](https://github.com/ops-ai/Toggly.FeatureManagement/releases) tags):
+Download the archive for your platform from the latest CLI GitHub Release ([`cli-v*`](https://github.com/ops-ai/Toggly.FeatureManagement/releases) tags):
 
-| Platform | Release asset | Binary |
-|----------|---------------|--------|
-| Windows x64 | `toggly-cli-windows-x64.zip` | `toggly-cli.exe` |
-| Linux x64 | `toggly-cli-linux-x64.tar.gz` | `toggly-cli` |
-| Linux ARM64 | `toggly-cli-linux-arm64.tar.gz` | `toggly-cli` |
-| macOS Intel | `toggly-cli-macos-x64.tar.gz` | `toggly-cli` |
-| macOS Apple Silicon | `toggly-cli-macos-arm64.tar.gz` | `toggly-cli` |
+| Platform | Release asset |
+|----------|---------------|
+| Windows x64 | `toggly-cli-windows-x64.zip` |
+| Linux x64 | `toggly-cli-linux-x64.tar.gz` (includes `man/`) |
+| Linux ARM64 | `toggly-cli-linux-arm64.tar.gz` (includes `man/`) |
+| macOS Intel | `toggly-cli-macos-x64.tar.gz` |
+| macOS Apple Silicon | `toggly-cli-macos-arm64.tar.gz` |
 
-### Build from Source
+Extract and place `toggly-cli` (or `toggly-cli.exe`) on your `PATH`. On Linux, optional man pages are under `man/` in the archive (`man -l man/toggly.1`).
+
+Package managers (Homebrew, winget, apt, …) land in a later wave; GitHub Releases are the source of truth today.
+
+### Build from source
 
 ```bash
 git clone https://github.com/ops-ai/Toggly.FeatureManagement.git
@@ -24,181 +28,19 @@ cd Toggly.FeatureManagement/Toggly.CLI
 dotnet publish -c Release -r <RID> --self-contained -p:PublishSingleFile=true -p:PublishAot=true
 ```
 
-Where `<RID>` is one of: `win-x64`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`.
+`<RID>`: `win-x64`, `linux-x64`, `linux-arm64`, `osx-x64`, or `osx-arm64`.
 
-## Authentication
-
-Priority order (highest first):
-
-1. **Explicit client credentials** — `--client-id` + `--client-secret`, or `TOGGLY_CLIENT_ID` + `TOGGLY_CLIENT_SECRET` (CI / machines)
-2. **Device-code session** — OS credential store after `toggly auth login`
-3. Otherwise the command fails with guidance to log in or set CI env vars
-
-**Never** write tokens or client secrets to plaintext files. A legacy `~/.toggly/config.json` (if present) is deleted automatically on use.
+## Quickstart
 
 ```bash
 toggly-cli auth login
-toggly-cli auth status
-toggly-cli auth logout
-```
-
-## Context preferences (non-secret)
-
-Default application and environment are stored under the user config directory — never secrets:
-
-| OS | Path |
-|----|------|
-| Linux / macOS | `$XDG_CONFIG_HOME/toggly/prefs.json` or `~/.config/toggly/prefs.json` |
-| Windows | `%AppData%\toggly\prefs.json` |
-
-```bash
 toggly-cli context set --app <app-id> --env Production
-toggly-cli context get
-toggly-cli context clear
-```
-
-When `--app` / `--env` (or `--application-id` / `--environment`) are omitted, list/get and write commands use these defaults. Exit code `2` if neither flag nor pref is set.
-
-## Command tree
-
-```text
-toggly
-├── auth login|logout|status
-├── app list|get <id>
-├── env list|get <name>          # --app
-├── feature list|get <key>       # --app
-│         create|update|update-environment
-├── release list|get <id>        # optional --app / --env / --status / --search
-│         create|associate-build
-└── context set|get|clear
-```
-
-Flat write aliases (same handlers; deprecation window):
-
-- `create-feature` → `feature create`
-- `update-feature` → `feature update`
-- `update-feature-environment` → `feature update-environment`
-- `create-release` → `release create`
-- `associate-build` → `release associate-build`
-
-### Read examples
-
-```bash
 toggly-cli app list
-toggly-cli app get <app-id>
-toggly-cli env list --app <app-id>
-toggly-cli env get --app <app-id> Production
-toggly-cli feature list --app <app-id>
-toggly-cli feature get --app <app-id> payments-enabled
-toggly-cli release list --app <app-id>
-toggly-cli release get <release-id>
+toggly-cli --json feature list
 ```
 
-### Write examples
-
-```bash
-toggly-cli feature create --app <app-id> --name "New Feature" --feature-key new-feature
-toggly-cli feature update --app <app-id> --feature-key new-feature --description "Updated"
-toggly-cli feature update-environment --app <app-id> --env Production --feature-key new-feature --enable
-
-toggly-cli release create --app <app-id> --name "v1.2.0"
-toggly-cli release associate-build \
-  --project-key <app-id-or-name> \
-  --env Production \
-  --ci-provider github \
-  --run-id 123456 \
-  --pipeline-name "deploy-production"
-```
-
-Flat aliases still accept `--application-id` / `--environment` as used in existing scripts.
-
-## Output
-
-- Default: human-readable text
-- `--json`: camelCase JSON via source-generated serializers (AOT-friendly)
-
-```bash
-toggly-cli --json app list
-toggly-cli --json feature get --app <app-id> payments-enabled
-```
-
-## Global options
-
-- `--client-id` / `--client-secret` (or `TOGGLY_CLIENT_ID` / `TOGGLY_CLIENT_SECRET`)
-- `--authority` (or `TOGGLY_AUTHORITY`; default https://auth.toggly.io)
-- `--base-url` (or `TOGGLY_BASE_URL`; default https://app.toggly.io/api)
-- `--verbose`
-- `--json`
-
-## Exit codes
-
-- `0`: Success
-- `1`: Runtime / API error (including HTTP 404)
-- `2`: Usage / validation / missing auth or missing `--app` when no context default
-
-## Contract tests & API verification
-
-PR CI runs `dotnet test Toggly.CLI.Tests` (via `.github/workflows/analysis-dotnet.yml`). That suite includes:
-
-- **HTTP contracts** — every curated command asserts method + path (and write body keys) against a fake `HttpMessageHandler`.
-- **Ops subset drift** — `CliApiRoutes` must match `Contracts/cli-ops-routes.json`. Changing a CLI route without updating the subset fails the build.
-
-```bash
-cd Toggly.FeatureManagement
-DOTNET_ROLL_FORWARD=LatestMajor dotnet test Toggly.CLI.Tests/Toggly.CLI.Tests.csproj -c Release
-```
-
-Device-code login is covered by mocks in PR CI only (no interactive live device flow).
-
-## Live smoke (advisory)
-
-`.github/workflows/cli-live-smoke.yml` runs on `workflow_dispatch`, weekly schedule, and `cli-v*` tags. It is **non-blocking** (`continue-on-error: true`) and skips when secrets are missing.
-
-Required repository secrets:
-
-| Secret | Purpose |
-|--------|---------|
-| `TOGGLY_SMOKE_CLIENT_ID` | Client credentials id |
-| `TOGGLY_SMOKE_CLIENT_SECRET` | Client credentials secret |
-
-Optional: `TOGGLY_SMOKE_APP_ID`, `TOGGLY_SMOKE_BASE_URL`, `TOGGLY_SMOKE_AUTHORITY`.
-
-Locally:
-
-```bash
-export TOGGLY_CLIENT_ID=... TOGGLY_CLIENT_SECRET=...
-# optional: TOGGLY_SMOKE_APP_ID=...
-./Toggly.CLI/scripts/smoke.sh
-```
-
-## CI/CD example
-
-```yaml
-- name: Associate build with release
-  run: |
-    toggly-cli associate-build \
-      --project-key ${{ github.repository }} \
-      --environment Production \
-      --ci-provider github \
-      --run-id ${{ github.run_id }} \
-      --pipeline-name "${{ github.workflow }}" \
-      --branch ${{ github.ref_name }} \
-      --commit-sha ${{ github.sha }} \
-      --client-id ${{ secrets.TOGGLY_CLIENT_ID }} \
-      --client-secret ${{ secrets.TOGGLY_CLIENT_SECRET }}
-```
-
-## Troubleshooting
-
-- Interactive: `toggly-cli auth login`, then `auth status`.
-- CI: provide both client id and secret via flags or env.
-- Linux device login needs libsecret + a desktop keyring.
-- Missing app: pass `--app` or run `context set --app <id>`.
+CI client credentials: set `TOGGLY_CLIENT_ID` + `TOGGLY_CLIENT_SECRET` (or pass `--client-id` / `--client-secret`). Auth priority and exit codes are documented at [docs.toggly.io/sdks/cli](https://docs.toggly.io/sdks/cli).
 
 ## License
 
-See the main repository LICENSE file.
-
-## Support
-
-For issues and questions, please open an issue on [GitHub](https://github.com/ops-ai/Toggly.FeatureManagement/issues).
+See the repository LICENSE file.

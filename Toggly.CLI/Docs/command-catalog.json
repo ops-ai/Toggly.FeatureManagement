@@ -1,0 +1,543 @@
+{
+  "binary": "toggly-cli",
+  "manName": "toggly",
+  "docsUrl": "https://docs.toggly.io/sdks/cli",
+  "description": "Command-line interface for Toggly feature flag management. Supports interactive device-code login and CI client credentials.",
+  "exitCodes": [
+    {
+      "code": 0,
+      "meaning": "Success"
+    },
+    {
+      "code": 1,
+      "meaning": "Runtime or API error (including HTTP 404)"
+    },
+    {
+      "code": 2,
+      "meaning": "Usage, validation, missing auth, or missing --app/--env when no context default is set"
+    }
+  ],
+  "globals": [
+    {
+      "name": "--client-id",
+      "description": "OAuth2 client ID (or set TOGGLY_CLIENT_ID)"
+    },
+    {
+      "name": "--client-secret",
+      "description": "OAuth2 client secret (or set TOGGLY_CLIENT_SECRET)"
+    },
+    {
+      "name": "--authority",
+      "description": "OAuth2 authority URL (defaults to https://auth.toggly.io)"
+    },
+    {
+      "name": "--base-url",
+      "description": "Base URL for Toggly API (defaults to https://app.toggly.io/api)"
+    },
+    {
+      "name": "--verbose",
+      "description": "Enable verbose output"
+    },
+    {
+      "name": "--json",
+      "description": "Emit machine-readable camelCase JSON instead of human text"
+    }
+  ],
+  "commands": [
+    {
+      "path": ["auth"],
+      "description": "Manage interactive authentication",
+      "synopsis": "toggly-cli auth <command>",
+      "seeAlso": ["toggly-app", "toggly-context"]
+    },
+    {
+      "path": ["auth", "login"],
+      "description": "Log in with the OAuth2 device-code flow. Stores the session in the OS credential store (macOS Keychain, Windows Credential Manager, or Linux libsecret).",
+      "synopsis": "toggly-cli auth login [options]",
+      "options": [
+        {
+          "name": "--authority",
+          "description": "OAuth2 authority URL (defaults to https://auth.toggly.io)"
+        },
+        {
+          "name": "--client-id",
+          "description": "Public device client id (defaults to toggly-cli)"
+        },
+        {
+          "name": "--scopes",
+          "description": "OAuth scopes (defaults to 'openid toggly offline_access')"
+        }
+      ],
+      "examples": [
+        "toggly-cli auth login",
+        "toggly-cli auth login --authority https://auth.toggly.io"
+      ],
+      "seeAlso": ["toggly-auth", "auth logout", "auth status"]
+    },
+    {
+      "path": ["auth", "logout"],
+      "description": "Remove the stored device-code session from the OS credential store.",
+      "synopsis": "toggly-cli auth logout",
+      "examples": [
+        "toggly-cli auth logout"
+      ],
+      "seeAlso": ["auth login", "auth status"]
+    },
+    {
+      "path": ["auth", "status"],
+      "description": "Show whether a device-code session is stored. Never prints access or refresh tokens.",
+      "synopsis": "toggly-cli auth status",
+      "examples": [
+        "toggly-cli auth status"
+      ],
+      "seeAlso": ["auth login", "auth logout"]
+    },
+    {
+      "path": ["app"],
+      "description": "List and inspect applications",
+      "synopsis": "toggly-cli app <command>",
+      "seeAlso": ["toggly-env", "toggly-feature", "toggly-context"]
+    },
+    {
+      "path": ["app", "list"],
+      "description": "List applications available to the authenticated principal.",
+      "synopsis": "toggly-cli app list [options]",
+      "examples": [
+        "toggly-cli app list",
+        "toggly-cli --json app list"
+      ],
+      "seeAlso": ["app get", "context set"]
+    },
+    {
+      "path": ["app", "get"],
+      "description": "Get an application by id.",
+      "synopsis": "toggly-cli app get <id> [options]",
+      "arguments": [
+        {
+          "name": "id",
+          "description": "Application id"
+        }
+      ],
+      "examples": [
+        "toggly-cli app get <app-id>",
+        "toggly-cli --json app get <app-id>"
+      ],
+      "seeAlso": ["app list", "env list"]
+    },
+    {
+      "path": ["env"],
+      "description": "List and inspect application environments",
+      "synopsis": "toggly-cli env <command>",
+      "seeAlso": ["toggly-app", "toggly-feature", "toggly-context"]
+    },
+    {
+      "path": ["env", "list"],
+      "description": "List environments for an application. Requires --app or a context default.",
+      "synopsis": "toggly-cli env list [--app <id>] [options]",
+      "options": [
+        {
+          "name": "--app, --application-id",
+          "description": "Application id (or set via 'toggly context set --app')"
+        }
+      ],
+      "examples": [
+        "toggly-cli env list --app <app-id>",
+        "toggly-cli env list"
+      ],
+      "seeAlso": ["env get", "context set"]
+    },
+    {
+      "path": ["env", "get"],
+      "description": "Get an environment by name. Requires --app or a context default.",
+      "synopsis": "toggly-cli env get [--app <id>] <name> [options]",
+      "arguments": [
+        {
+          "name": "name",
+          "description": "Environment name"
+        }
+      ],
+      "options": [
+        {
+          "name": "--app, --application-id",
+          "description": "Application id (or set via 'toggly context set --app')"
+        }
+      ],
+      "examples": [
+        "toggly-cli env get --app <app-id> Production"
+      ],
+      "seeAlso": ["env list", "feature update-environment"]
+    },
+    {
+      "path": ["feature"],
+      "description": "List, inspect, and manage features",
+      "synopsis": "toggly-cli feature <command>",
+      "seeAlso": ["toggly-app", "toggly-env", "toggly-release"]
+    },
+    {
+      "path": ["feature", "list"],
+      "description": "List features for an application. Requires --app or a context default.",
+      "synopsis": "toggly-cli feature list [--app <id>] [options]",
+      "options": [
+        {
+          "name": "--app, --application-id",
+          "description": "Application id (or set via 'toggly context set --app')"
+        }
+      ],
+      "examples": [
+        "toggly-cli feature list --app <app-id>",
+        "toggly-cli --json feature list --app <app-id>"
+      ],
+      "seeAlso": ["feature get", "feature create"]
+    },
+    {
+      "path": ["feature", "get"],
+      "description": "Get a feature by key. Requires --app or a context default.",
+      "synopsis": "toggly-cli feature get [--app <id>] <key> [options]",
+      "arguments": [
+        {
+          "name": "key",
+          "description": "Feature key"
+        }
+      ],
+      "options": [
+        {
+          "name": "--app, --application-id",
+          "description": "Application id (or set via 'toggly context set --app')"
+        }
+      ],
+      "examples": [
+        "toggly-cli feature get --app <app-id> payments-enabled"
+      ],
+      "seeAlso": ["feature list", "feature update"]
+    },
+    {
+      "path": ["feature", "create"],
+      "description": "Create a new feature definition.",
+      "synopsis": "toggly-cli feature create --name <name> --feature-key <key> [--app <id>] [options]",
+      "options": [
+        {
+          "name": "--app, --application-id",
+          "description": "Application id (or set via 'toggly context set --app')"
+        },
+        {
+          "name": "--name",
+          "description": "Feature display name (required)"
+        },
+        {
+          "name": "--feature-key",
+          "description": "Feature key used as the application reference (required)"
+        },
+        {
+          "name": "--description",
+          "description": "Feature description"
+        },
+        {
+          "name": "--category",
+          "description": "Feature category"
+        },
+        {
+          "name": "--tags",
+          "description": "Comma-separated list of tags"
+        },
+        {
+          "name": "--environment-filters",
+          "description": "JSON object mapping environment names to filter arrays"
+        }
+      ],
+      "examples": [
+        "toggly-cli feature create --app <app-id> --name \"New Feature\" --feature-key new-feature"
+      ],
+      "seeAlso": ["feature update", "create-feature"],
+      "aliases": ["create-feature"]
+    },
+    {
+      "path": ["feature", "update"],
+      "description": "Update an existing feature definition metadata.",
+      "synopsis": "toggly-cli feature update --feature-key <key> [--app <id>] [options]",
+      "options": [
+        {
+          "name": "--app, --application-id",
+          "description": "Application id (or set via 'toggly context set --app')"
+        },
+        {
+          "name": "--feature-key",
+          "description": "Feature key to update (required)"
+        },
+        {
+          "name": "--name",
+          "description": "Feature display name"
+        },
+        {
+          "name": "--description",
+          "description": "Feature description"
+        },
+        {
+          "name": "--category",
+          "description": "Feature category"
+        },
+        {
+          "name": "--tags",
+          "description": "Comma-separated list of tags"
+        }
+      ],
+      "examples": [
+        "toggly-cli feature update --app <app-id> --feature-key new-feature --description \"Updated\""
+      ],
+      "seeAlso": ["feature create", "feature update-environment", "update-feature"],
+      "aliases": ["update-feature"]
+    },
+    {
+      "path": ["feature", "update-environment"],
+      "description": "Update feature configuration on a specific environment. Specify exactly one of --enable, --disable, or --filters.",
+      "synopsis": "toggly-cli feature update-environment --feature-key <key> [--app <id>] [--env <name>] (--enable | --disable | --filters <json>) [options]",
+      "options": [
+        {
+          "name": "--app, --application-id",
+          "description": "Application id (or set via 'toggly context set --app')"
+        },
+        {
+          "name": "--environment, --env",
+          "description": "Environment name (e.g., Production, Staging)"
+        },
+        {
+          "name": "--feature-key",
+          "description": "Feature key (required)"
+        },
+        {
+          "name": "--enable",
+          "description": "Enable the feature (sets AlwaysOn filter)"
+        },
+        {
+          "name": "--disable",
+          "description": "Disable the feature (removes all filters)"
+        },
+        {
+          "name": "--filters",
+          "description": "JSON array of filter objects"
+        }
+      ],
+      "examples": [
+        "toggly-cli feature update-environment --app <app-id> --env Production --feature-key new-feature --enable"
+      ],
+      "seeAlso": ["feature update", "update-feature-environment"],
+      "aliases": ["update-feature-environment"]
+    },
+    {
+      "path": ["release"],
+      "description": "List, inspect, and manage releases",
+      "synopsis": "toggly-cli release <command>",
+      "seeAlso": ["toggly-feature", "toggly-app"]
+    },
+    {
+      "path": ["release", "list"],
+      "description": "List releases. Optional filters for application, environment, status, and name search. Application defaults from context when --app is omitted.",
+      "synopsis": "toggly-cli release list [--app <id>] [--env <name>] [--status <status>] [--search <text>] [options]",
+      "options": [
+        {
+          "name": "--app, --application-id",
+          "description": "Application id (or set via 'toggly context set --app')"
+        },
+        {
+          "name": "--environment, --env",
+          "description": "Filter by environment"
+        },
+        {
+          "name": "--status",
+          "description": "Filter by status"
+        },
+        {
+          "name": "--search",
+          "description": "Search by release name"
+        }
+      ],
+      "examples": [
+        "toggly-cli release list --app <app-id>",
+        "toggly-cli release list --status Draft"
+      ],
+      "seeAlso": ["release get", "release create"]
+    },
+    {
+      "path": ["release", "get"],
+      "description": "Get a release by id.",
+      "synopsis": "toggly-cli release get <id> [options]",
+      "arguments": [
+        {
+          "name": "id",
+          "description": "Release id"
+        }
+      ],
+      "examples": [
+        "toggly-cli release get <release-id>",
+        "toggly-cli --json release get <release-id>"
+      ],
+      "seeAlso": ["release list", "release associate-build"]
+    },
+    {
+      "path": ["release", "create"],
+      "description": "Create a new release.",
+      "synopsis": "toggly-cli release create --name <name> [--app <id>] [options]",
+      "options": [
+        {
+          "name": "--app, --application-id",
+          "description": "Application id (or set via 'toggly context set --app')"
+        },
+        {
+          "name": "--name",
+          "description": "Release name (required)"
+        },
+        {
+          "name": "--release-notes",
+          "description": "Release notes"
+        },
+        {
+          "name": "--feature-changes",
+          "description": "JSON array of feature changes"
+        }
+      ],
+      "examples": [
+        "toggly-cli release create --app <app-id> --name \"v1.2.0\""
+      ],
+      "seeAlso": ["release associate-build", "create-release"],
+      "aliases": ["create-release"]
+    },
+    {
+      "path": ["release", "associate-build"],
+      "description": "Associate a CI build with a release.",
+      "synopsis": "toggly-cli release associate-build --project-key <key> --ci-provider <provider> --run-id <id> --pipeline-name <name> [--env <name>] [options]",
+      "options": [
+        {
+          "name": "--project-key",
+          "description": "Application ID or name (required)"
+        },
+        {
+          "name": "--environment, --env",
+          "description": "Environment name (e.g., Production, Staging)"
+        },
+        {
+          "name": "--ci-provider",
+          "description": "CI provider (e.g., azure-devops, github, gitlab, jenkins, circleci) (required)"
+        },
+        {
+          "name": "--run-id",
+          "description": "CI run/build ID (required)"
+        },
+        {
+          "name": "--run-url",
+          "description": "URL to view the build in the CI system"
+        },
+        {
+          "name": "--pipeline-name",
+          "description": "Name of the pipeline/workflow (required)"
+        },
+        {
+          "name": "--branch",
+          "description": "Git branch name"
+        },
+        {
+          "name": "--commit-sha",
+          "description": "Git commit SHA"
+        },
+        {
+          "name": "--build-number",
+          "description": "Build number/version"
+        },
+        {
+          "name": "--mode",
+          "description": "Mode for finding/creating release (default: use-latest-draft-or-create)"
+        },
+        {
+          "name": "--release-template-key",
+          "description": "Release template key to use when creating a new release"
+        },
+        {
+          "name": "--name-pattern",
+          "description": "Name pattern for release (Handlebars-style: ${branch}, ${buildNumber}, ${commitSha})"
+        }
+      ],
+      "examples": [
+        "toggly-cli release associate-build --project-key <app-id> --env Production --ci-provider github --run-id 123456 --pipeline-name deploy-production"
+      ],
+      "seeAlso": ["release create", "associate-build"],
+      "aliases": ["associate-build"]
+    },
+    {
+      "path": ["context"],
+      "description": "Manage non-secret default application and environment prefs",
+      "synopsis": "toggly-cli context <command>",
+      "seeAlso": ["toggly-app", "toggly-env"]
+    },
+    {
+      "path": ["context", "set"],
+      "description": "Set default application and/or environment. Stored under the user config directory (never secrets).",
+      "synopsis": "toggly-cli context set [--app <id>] [--env <name>] [options]",
+      "options": [
+        {
+          "name": "--app, --application-id",
+          "description": "Default application id"
+        },
+        {
+          "name": "--env, --environment",
+          "description": "Default environment name"
+        }
+      ],
+      "examples": [
+        "toggly-cli context set --app <app-id> --env Production"
+      ],
+      "seeAlso": ["context get", "context clear"]
+    },
+    {
+      "path": ["context", "get"],
+      "description": "Show current context preferences.",
+      "synopsis": "toggly-cli context get [options]",
+      "examples": [
+        "toggly-cli context get",
+        "toggly-cli --json context get"
+      ],
+      "seeAlso": ["context set", "context clear"]
+    },
+    {
+      "path": ["context", "clear"],
+      "description": "Clear context preferences.",
+      "synopsis": "toggly-cli context clear [options]",
+      "examples": [
+        "toggly-cli context clear"
+      ],
+      "seeAlso": ["context set", "context get"]
+    },
+    {
+      "path": ["create-feature"],
+      "description": "Flat alias for 'feature create' (deprecation window).",
+      "synopsis": "toggly-cli create-feature --name <name> --feature-key <key> [--app <id>] [options]",
+      "aliasOf": ["feature", "create"],
+      "seeAlso": ["feature create"]
+    },
+    {
+      "path": ["update-feature"],
+      "description": "Flat alias for 'feature update' (deprecation window).",
+      "synopsis": "toggly-cli update-feature --feature-key <key> [--app <id>] [options]",
+      "aliasOf": ["feature", "update"],
+      "seeAlso": ["feature update"]
+    },
+    {
+      "path": ["update-feature-environment"],
+      "description": "Flat alias for 'feature update-environment' (deprecation window).",
+      "synopsis": "toggly-cli update-feature-environment --feature-key <key> [--app <id>] [--env <name>] (--enable | --disable | --filters <json>) [options]",
+      "aliasOf": ["feature", "update-environment"],
+      "seeAlso": ["feature update-environment"]
+    },
+    {
+      "path": ["create-release"],
+      "description": "Flat alias for 'release create' (deprecation window).",
+      "synopsis": "toggly-cli create-release --name <name> [--app <id>] [options]",
+      "aliasOf": ["release", "create"],
+      "seeAlso": ["release create"]
+    },
+    {
+      "path": ["associate-build"],
+      "description": "Flat alias for 'release associate-build' (deprecation window).",
+      "synopsis": "toggly-cli associate-build --project-key <key> --ci-provider <provider> --run-id <id> --pipeline-name <name> [--env <name>] [options]",
+      "aliasOf": ["release", "associate-build"],
+      "seeAlso": ["release associate-build"]
+    }
+  ]
+}

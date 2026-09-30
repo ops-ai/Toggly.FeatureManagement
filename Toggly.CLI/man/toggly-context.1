@@ -1,0 +1,76 @@
+.\" Generated from Docs/command-catalog.json — do not edit by hand.
+.\" Regenerate: ./Toggly.CLI/scripts/generate-manpages.py
+.TH TOGGLY-CONTEXT 1 "" "Toggly CLI" "User Commands"
+.SH NAME
+toggly-context \- Manage non\-secret default application and environment prefs
+.SH SYNOPSIS
+toggly\-cli context <command>
+.SH DESCRIPTION
+Manage non\-secret default application and environment prefs
+.SH CLEAR
+Clear context preferences\&.
+.PP
+.B toggly\-cli context clear [options]
+.PP
+Examples:
+.PP
+.B toggly\-cli context clear
+.SH GET
+Show current context preferences\&.
+.PP
+.B toggly\-cli context get [options]
+.PP
+Examples:
+.PP
+.B toggly\-cli context get
+.PP
+.B toggly\-cli \-\-json context get
+.SH SET
+Set default application and/or environment\&. Stored under the user config directory (never secrets)\&.
+.PP
+.B toggly\-cli context set [\-\-app <id>] [\-\-env <name>] [options]
+.PP
+Options:
+.TP
+.B \-\-app, \-\-application\-id
+Default application id
+.TP
+.B \-\-env, \-\-environment
+Default environment name
+.PP
+Examples:
+.PP
+.B toggly\-cli context set \-\-app <app\-id> \-\-env Production
+.SH GLOBAL OPTIONS
+.TP
+.B \-\-client\-id
+OAuth2 client ID (or set TOGGLY_CLIENT_ID)
+.TP
+.B \-\-client\-secret
+OAuth2 client secret (or set TOGGLY_CLIENT_SECRET)
+.TP
+.B \-\-authority
+OAuth2 authority URL (defaults to https://auth\&.toggly\&.io)
+.TP
+.B \-\-base\-url
+Base URL for Toggly API (defaults to https://app\&.toggly\&.io/api)
+.TP
+.B \-\-verbose
+Enable verbose output
+.TP
+.B \-\-json
+Emit machine\-readable camelCase JSON instead of human text
+.SH EXIT STATUS
+.TP
+.B 0
+Success
+.TP
+.B 1
+Runtime or API error (including HTTP 404)
+.TP
+.B 2
+Usage, validation, missing auth, or missing \-\-app/\-\-env when no context default is set
+.SH SEE ALSO
+toggly\-app(1), toggly\-env(1), toggly(1).
+.SH ONLINE DOCS
+https://docs\&.toggly\&.io/sdks/cli

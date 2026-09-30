@@ -28,6 +28,9 @@
     <None Include="..\Toggly.CLI\Contracts\cli-ops-routes.json"
           Link="Contracts\cli-ops-routes.json"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Toggly.CLI\Docs\command-catalog.json"
+          Link="Docs\command-catalog.json"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
