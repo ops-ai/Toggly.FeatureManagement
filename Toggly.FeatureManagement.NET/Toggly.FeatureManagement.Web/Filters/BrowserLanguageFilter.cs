@@ -46,7 +46,7 @@ namespace Toggly.FeatureManagement.Web.Filters
             var acceptLanguage = _httpContextAccessor.HttpContext.Request.Headers["Accept-Language"].FirstOrDefault();
 
             return settings.BrowserLanguage != null &&
-                   settings.BrowserLanguage.Any(t => acceptLanguage?.Contains(t, StringComparison.OrdinalIgnoreCase) ?? false);
+                   settings.BrowserLanguage.Any(t => !string.IsNullOrWhiteSpace(t) && acceptLanguage?.Contains(t, StringComparison.OrdinalIgnoreCase) == true);
         }
 
         public class BrowserLanguageFilterSettings

@@ -77,6 +77,34 @@ public class BrowserFamilyFilterTests
     }
 
     [Fact]
+    public async Task EvaluateAsync_WithBlankConfiguredBrowserFamily_ReturnsFalse()
+    {
+        // Arrange
+        SetupUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+        var context = CreateContext(new[] { "Firefox", string.Empty }, 100);
+
+        // Act
+        var result = await _filter.EvaluateAsync(context);
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_WithWhitespaceConfiguredBrowserFamily_ReturnsFalse()
+    {
+        // Arrange
+        SetupUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1");
+        var context = CreateContext(new[] { "Firefox", " " }, 100);
+
+        // Act
+        var result = await _filter.EvaluateAsync(context);
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task EvaluateAsync_With0Percent_ReturnsFalse()
     {
         // Arrange
@@ -152,6 +180,34 @@ public class BrowserLanguageFilterTests
         // Arrange
         SetupAcceptLanguage("en-US,en;q=0.9");
         var context = CreateContext(FrenchLanguage, 100);
+
+        // Act
+        var result = await _filter.EvaluateAsync(context);
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_WithBlankConfiguredBrowserLanguage_ReturnsFalse()
+    {
+        // Arrange
+        SetupAcceptLanguage("en-US,en;q=0.9");
+        var context = CreateContext(new[] { "fr", string.Empty }, 100);
+
+        // Act
+        var result = await _filter.EvaluateAsync(context);
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_WithWhitespaceConfiguredBrowserLanguage_ReturnsFalse()
+    {
+        // Arrange
+        SetupAcceptLanguage("en-US, en;q=0.9");
+        var context = CreateContext(new[] { "fr", " " }, 100);
 
         // Act
         var result = await _filter.EvaluateAsync(context);
@@ -252,6 +308,34 @@ public class CountryFilterTests
     }
 
     [Fact]
+    public async Task EvaluateAsync_WithBlankConfiguredCountry_ReturnsFalse()
+    {
+        // Arrange
+        SetupCountryHeader("US");
+        var context = CreateContext(new[] { "CA", string.Empty }, 100);
+
+        // Act
+        var result = await _filter.EvaluateAsync(context);
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_WithWhitespaceConfiguredCountry_ReturnsFalse()
+    {
+        // Arrange
+        SetupCountryHeader(" ");
+        var context = CreateContext(new[] { "CA", " " }, 100);
+
+        // Act
+        var result = await _filter.EvaluateAsync(context);
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task EvaluateAsync_WithCaseInsensitiveMatch_ReturnsTrue()
     {
         // Arrange
@@ -335,6 +419,34 @@ public class DeviceTypeFilterTests
     }
 
     [Fact]
+    public async Task EvaluateAsync_WithBlankConfiguredDeviceType_ReturnsFalse()
+    {
+        // Arrange
+        SetupUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+        var context = CreateContext(new[] { "iPhone", string.Empty }, 100);
+
+        // Act
+        var result = await _filter.EvaluateAsync(context);
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_WithWhitespaceConfiguredDeviceType_ReturnsFalse()
+    {
+        // Arrange
+        SetupUserAgent("Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Mobile Safari/537.36");
+        var context = CreateContext(new[] { "iPhone", " " }, 100);
+
+        // Act
+        var result = await _filter.EvaluateAsync(context);
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task EvaluateAsync_With0Percent_ReturnsFalse()
     {
         SetupUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1");
@@ -404,6 +516,34 @@ public class OSFilterTests
         // Arrange - Windows user agent
         SetupUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
         var context = CreateContext(MacOs, 100);
+
+        // Act
+        var result = await _filter.EvaluateAsync(context);
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_WithBlankConfiguredOperatingSystem_ReturnsFalse()
+    {
+        // Arrange
+        SetupUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+        var context = CreateContext(new[] { "Mac OS", string.Empty }, 100);
+
+        // Act
+        var result = await _filter.EvaluateAsync(context);
+
+        // Assert
+        result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_WithWhitespaceConfiguredOperatingSystem_ReturnsFalse()
+    {
+        // Arrange
+        SetupUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+        var context = CreateContext(new[] { "Windows", " " }, 100);
 
         // Act
         var result = await _filter.EvaluateAsync(context);

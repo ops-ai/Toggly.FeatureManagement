@@ -1,5 +1,12 @@
 # Changelog
 
+## All .NET SDK packages 3.12.6 - 2026-09-30
+
+### Fixed
+- Web request targeting filters now ignore empty configuration values and
+  return a non-match instead of throwing when an allow-list contains a
+  missing value.
+
 ## All .NET SDK packages 3.12.5 - 2026-09-29
 
 ### Fixed

@@ -46,7 +46,7 @@ namespace Toggly.FeatureManagement.Web.Filters
             var ipCountry = _httpContextAccessor.HttpContext.Request.Headers["CF-IPCountry"];
 
             return settings.Country != null &&
-                   settings.Country.Any(t => t.Equals(ipCountry, StringComparison.OrdinalIgnoreCase));
+                   settings.Country.Any(t => !string.IsNullOrWhiteSpace(t) && string.Equals(t, ipCountry, StringComparison.OrdinalIgnoreCase));
         }
 
         public class CountryFilterSettings

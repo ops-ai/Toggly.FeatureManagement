@@ -50,7 +50,7 @@ namespace Toggly.FeatureManagement.Web.Filters
             var ua = uaParser.Parse(userAgent);
 
             return settings.OperatingSystem != null &&
-                   settings.OperatingSystem.Any(t => ua.OS.Family.Contains(t, StringComparison.OrdinalIgnoreCase));
+                   settings.OperatingSystem.Any(t => !string.IsNullOrWhiteSpace(t) && ua.OS.Family.Contains(t, StringComparison.OrdinalIgnoreCase));
         }
 
         public class OSFilterSettings
