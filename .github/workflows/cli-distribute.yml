@@ -426,14 +426,22 @@ jobs:
       - name: Smoke - deb install (container)
         run: |
           set -euo pipefail
-          docker run --rm -v /tmp/dist/apt:/pkg debian:stable bash -c \
-            "apt-get update -qq && dpkg -i /pkg/toggly-cli_*_amd64.deb && toggly --version"
+          VERSION='${{ needs.resolve.outputs.version }}'
+          docker run --rm \
+            -v /tmp/dist/apt:/pkg \
+            -v "$PWD/Toggly.CLI/packaging/scripts/smoke-channel.sh:/smoke-channel.sh:ro" \
+            debian:stable bash -c \
+            "apt-get update -qq && dpkg -i /pkg/toggly-cli_*_amd64.deb && bash /smoke-channel.sh '$VERSION' toggly"
 
       - name: Smoke - rpm install (container)
         run: |
           set -euo pipefail
-          docker run --rm -v /tmp/dist/rpm:/pkg rockylinux:9 bash -c \
-            "rpm -i /pkg/toggly-cli-*-1.x86_64.rpm && toggly --version"
+          VERSION='${{ needs.resolve.outputs.version }}'
+          docker run --rm \
+            -v /tmp/dist/rpm:/pkg \
+            -v "$PWD/Toggly.CLI/packaging/scripts/smoke-channel.sh:/smoke-channel.sh:ro" \
+            rockylinux:9 bash -c \
+            "rpm -i /pkg/toggly-cli-*-1.x86_64.rpm && bash /smoke-channel.sh '$VERSION' toggly"
 
   summary:
     needs: [resolve, homebrew, scoop, winget, chocolatey, apt-rpm]
