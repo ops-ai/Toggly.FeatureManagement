@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.Diagnostics;
 using System.Text.Json;
 using Toggly.CLI;
 using Xunit;
@@ -107,6 +108,47 @@ public class CommandCatalogTests
         Assert.Contains("\\&...", root);
     }
 
+    /// <summary>
+    /// Merge-blocking: committed <c>man/*.1</c> must match generator output from the catalog.
+    /// </summary>
+    [Fact]
+    public void GenerateManpages_Check_MatchesCommittedManPages()
+    {
+        var cliRoot = ResolveCliRoot();
+        var script = Path.Combine(cliRoot, "scripts", "generate-manpages.py");
+        Assert.True(File.Exists(script), $"Missing generator script at {script}");
+
+        var python = ResolvePython3();
+        Assert.False(
+            string.IsNullOrEmpty(python),
+            "python3 (or Python 3 via 'python') is required to verify man page drift");
+
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = python,
+                // --check: drift vs committed man/; --lint: mandoc -Tlint when installed (no-op skip otherwise)
+                ArgumentList = { script, "--check", "--lint" },
+                WorkingDirectory = cliRoot,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            }
+        };
+
+        process.Start();
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        var exited = process.WaitForExit(60_000);
+        Assert.True(exited, "generate-manpages.py --check --lint timed out after 60s");
+        Assert.True(
+            process.ExitCode == 0,
+            $"generate-manpages.py --check --lint failed (exit {process.ExitCode}). "
+            + "Regenerate with ./Toggly.CLI/scripts/generate-manpages.py and commit man/.\n"
+            + $"stdout:\n{stdout}\nstderr:\n{stderr}");
+    }
+
     private static readonly string[] RequiredManPages =
     [
         "toggly.1",
@@ -146,19 +188,60 @@ public class CommandCatalogTests
         return catalog;
     }
 
-    private static string ResolveManDir()
+    private static string ResolveCliRoot()
     {
-        var fromOutput = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Toggly.CLI", "man"));
-        if (Directory.Exists(fromOutput))
+        var fromOutput = Path.GetFullPath(
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Toggly.CLI"));
+        if (Directory.Exists(Path.Combine(fromOutput, "scripts"))
+            && File.Exists(Path.Combine(fromOutput, "Docs", "command-catalog.json")))
             return fromOutput;
 
-        // Fallback when tests run from a different layout.
         var cwd = Directory.GetCurrentDirectory();
-        var candidate = Path.Combine(cwd, "Toggly.CLI", "man");
-        if (Directory.Exists(candidate))
+        var candidate = Path.Combine(cwd, "Toggly.CLI");
+        if (Directory.Exists(Path.Combine(candidate, "scripts")))
             return candidate;
 
-        return Path.Combine(cwd, "man");
+        if (Directory.Exists(Path.Combine(cwd, "scripts"))
+            && File.Exists(Path.Combine(cwd, "Docs", "command-catalog.json")))
+            return cwd;
+
+        return fromOutput;
+    }
+
+    private static string ResolveManDir() => Path.Combine(ResolveCliRoot(), "man");
+
+    private static string? ResolvePython3()
+    {
+        foreach (var candidate in new[] { "python3", "python" })
+        {
+            try
+            {
+                using var probe = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = candidate,
+                        ArgumentList = { "--version" },
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false
+                    }
+                };
+                probe.Start();
+                var output = probe.StandardOutput.ReadToEnd() + probe.StandardError.ReadToEnd();
+                if (!probe.WaitForExit(5_000))
+                    continue;
+                if (probe.ExitCode == 0
+                    && output.Contains("Python 3", StringComparison.Ordinal))
+                    return candidate;
+            }
+            catch (Exception)
+            {
+                // Try the next candidate (missing binary, PATH, etc.).
+            }
+        }
+
+        return null;
     }
 
     private sealed class CommandCatalog
