@@ -125,6 +125,7 @@ jobs:
           else
             git commit -S -m "Update toggly-cli formula to ${{ needs.resolve.outputs.version }} [OPS-1580]"
             git verify-commit HEAD
+            git pull --rebase --gpg-sign origin main
             git push origin HEAD:main
           fi
 
@@ -144,7 +145,8 @@ jobs:
 
   scoop:
     name: Scoop (toggly-cli-dist)
-    needs: resolve
+    # Serialize with homebrew: both push signed commits to toggly-cli-dist main.
+    needs: [resolve, homebrew]
     continue-on-error: true
     runs-on: windows-latest
     steps:
@@ -155,7 +157,7 @@ jobs:
         shell: bash
         run: |
           chmod +x Toggly.CLI/packaging/scripts/render-templates.sh
-          Toggly.CLI/packaging/scripts/render-templates.sh "${{ needs.resolve.outputs.tag }}" /tmp/dist
+          Toggly.CLI/packaging/scripts/render-templates.sh "${{ needs.resolve.outputs.tag }}" "$RUNNER_TEMP/dist"
 
       - name: Check dist token
         id: secrets
@@ -192,15 +194,17 @@ jobs:
           GIT_COMMITTER_EMAIL: ${{ steps.import_gpg.outputs.email }}
         run: |
           set -euo pipefail
-          git clone "https://x-access-token:${TOKEN}@github.com/${DIST_REPO}.git" /tmp/dist-repo
-          cp /tmp/dist/scoop/toggly-cli.json /tmp/dist-repo/toggly-cli.json
-          cd /tmp/dist-repo
+          git clone "https://x-access-token:${TOKEN}@github.com/${DIST_REPO}.git" "$RUNNER_TEMP/dist-repo"
+          cp "$RUNNER_TEMP/dist/scoop/toggly-cli.json" "$RUNNER_TEMP/dist-repo/toggly-cli.json"
+          cd "$RUNNER_TEMP/dist-repo"
           git add toggly-cli.json
           if git diff --cached --quiet; then
             echo "Manifest already up to date at ${{ needs.resolve.outputs.version }}"
           else
             git commit -S -m "Update toggly-cli scoop manifest to ${{ needs.resolve.outputs.version }} [OPS-1580]"
             git verify-commit HEAD
+            # Pull/rebase in case another channel landed on main between clone and push.
+            git pull --rebase --gpg-sign origin main
             git push origin HEAD:main
           fi
 
@@ -269,21 +273,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # Use RUNNER_TEMP (not /tmp): bash on windows-latest is MSYS2 and /tmp is
+      # not the same path PowerShell sees. runner.temp is shared across shells.
       - name: Render Chocolatey package
         shell: bash
         run: |
           chmod +x Toggly.CLI/packaging/scripts/render-templates.sh
-          Toggly.CLI/packaging/scripts/render-templates.sh "${{ needs.resolve.outputs.tag }}" /tmp/dist
+          Toggly.CLI/packaging/scripts/render-templates.sh "${{ needs.resolve.outputs.tag }}" "$RUNNER_TEMP/dist"
 
       - name: choco pack
         shell: pwsh
         run: |
-          choco pack /tmp/dist/chocolatey/toggly-cli.nuspec --outputdirectory /tmp/dist/chocolatey
+          $dist = Join-Path $env:RUNNER_TEMP 'dist/chocolatey'
+          choco pack (Join-Path $dist 'toggly-cli.nuspec') --outputdirectory $dist
 
       - name: Smoke - choco install (local package)
         shell: pwsh
         run: |
-          choco install toggly-cli -s "/tmp/dist/chocolatey" -y --force
+          $dist = Join-Path $env:RUNNER_TEMP 'dist/chocolatey'
+          choco install toggly-cli -s $dist -y --force
           $env:PATH = "$env:ChocolateyInstall\bin;$env:PATH"
           bash Toggly.CLI/packaging/scripts/smoke-channel.sh "${{ needs.resolve.outputs.version }}" toggly
 
@@ -304,8 +312,9 @@ jobs:
         env:
           CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
         run: |
+          $nupkg = Join-Path $env:RUNNER_TEMP "dist/chocolatey/toggly-cli.${{ needs.resolve.outputs.version }}.nupkg"
           choco apikey --api-key $env:CHOCO_API_KEY --source https://push.chocolatey.org/
-          choco push "/tmp/dist/chocolatey/toggly-cli.${{ needs.resolve.outputs.version }}.nupkg" --source https://push.chocolatey.org/
+          choco push $nupkg --source https://push.chocolatey.org/
 
   apt-rpm:
     name: apt + rpm (toggly-cli-dist gh-pages)
