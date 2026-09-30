@@ -215,6 +215,16 @@ keep those pins current. Before first publication, verify that the `opsai` trust
 policy covers each new package through `sdk-dotnet-release.yml` and the existing
 environment. No API-key fallback is introduced.
 
+## CLI package-manager distribution
+
+`cli-build-release.yml` remains the only CLI binary publisher (`cli-v*` tags,
+`SHA256SUMS`). A separate workflow, `cli-distribute.yml`, runs after a `cli-v*`
+release and updates Homebrew, Scoop, winget, Chocolatey, and apt/rpm from
+those same release assets — see [`Toggly.CLI/packaging/README.md`](../Toggly.CLI/packaging/README.md)
+for the channel map, required ops secrets, and local smoke commands. Channel
+jobs are isolated (`continue-on-error`); a channel failing never rolls back
+the Release.
+
 Server GitHub release tags retain `dotnet-sdk-v<version>`. Other families
 use `dotnet-<family>-sdk-v<version>`, with package IDs/versions in the release
 notes and GPG-signed checksums for the signed artifacts. A family tag retains its

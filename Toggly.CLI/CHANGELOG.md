@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0
+
+2026-09-30
+
+### Added
+- Package-manager distribution (Wave 5, OPS-1580): `Toggly.CLI/packaging/` templates + `render-templates.sh` (renders every channel recipe from a published `cli-v*` release's `SHA256SUMS` — no rebuild-per-channel) and `smoke-channel.sh` (generic post-install `--version` assertion).
+- `.github/workflows/cli-distribute.yml`: post-release workflow with isolated, `continue-on-error` jobs for Homebrew, Scoop, winget, Chocolatey, and apt/rpm. One channel failing (or a missing ops secret) never fails another and never touches the GitHub Release.
+- Homebrew formula and Scoop manifest publish to a single `ops-ai/toggly-cli-dist` repo (`main` branch: `Formula/toggly-cli.rb`, `toggly-cli.json`); apt/rpm feeds (via `nfpm` + `dpkg-scanpackages`/`createrepo_c`) publish to that same repo's `gh-pages` branch.
+- winget (`Opsai.TogglyCLI`) and Chocolatey (`toggly-cli`) manifests/packages render every run; automated submission is secrets-gated (`WINGET_TOKEN`, `CHOCO_API_KEY`) and skips gracefully with a clear message when unset.
+- All formulas/manifests install the binary on `PATH` as `toggly` (archives keep the `toggly-cli` binary name) per the Wave 5 UX lock.
+
+### Changed
+- `Toggly.CLI.csproj` now reads `Toggly.CLI/VERSION` into the assembly `<Version>` so the CLI's version option reports the same value as the `cli-v*` release tag — required for the new per-channel install smoke checks to mean anything.
+
 ## 0.3.2
 
 2026-09-29

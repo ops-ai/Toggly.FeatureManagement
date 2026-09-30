@@ -1,0 +1,464 @@
+name: CLI Distribute
+
+# Post-release package-manager distribution (Wave 5, OPS-1580).
+#
+# GitHub `cli-v*` Release assets + SHA256SUMS remain the single source of
+# truth (published by cli-build-release.yml). This workflow only reads those
+# assets and pushes rendered recipes/packages to the distribution channels
+# below — it never rebuilds a binary and never touches the GitHub Release.
+#
+# Channels:
+#   - Homebrew formula  -> ops-ai/toggly-cli-dist  (main, Formula/toggly-cli.rb)
+#   - Scoop manifest     -> ops-ai/toggly-cli-dist  (main, toggly-cli.json)
+#   - apt + rpm feeds     -> ops-ai/toggly-cli-dist  (gh-pages branch)
+#   - winget manifest PR -> microsoft/winget-pkgs   (when WINGET_TOKEN set)
+#   - Chocolatey package  -> community feed          (when CHOCO_API_KEY set)
+#
+# Every channel job is independent and `continue-on-error: true` so one
+# channel's failure (or a missing secret) never fails the others and never
+# rolls back the Release. See Toggly.CLI/packaging/README.md for the ops
+# checklist (secrets, sibling repo).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'cli-v* tag to distribute (defaults to the latest cli-v* release)'
+        required: false
+        type: string
+
+concurrency:
+  group: cli-distribute
+  cancel-in-progress: false
+
+env:
+  DIST_REPO: ops-ai/toggly-cli-dist
+
+jobs:
+  resolve:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.release.tag_name, 'cli-v')
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - name: Resolve tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          TAG="${INPUT_TAG:-${EVENT_TAG:-}}"
+          if [ -z "$TAG" ]; then
+            TAG="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 20 --json tagName \
+              -q '[.[] | select(.tagName | startswith("cli-v"))][0].tagName')"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "Could not resolve a cli-v* tag to distribute" >&2
+            exit 1
+          fi
+          echo "Distributing $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#cli-v}" >> "$GITHUB_OUTPUT"
+
+  homebrew:
+    name: Homebrew (toggly-cli-dist)
+    needs: resolve
+    continue-on-error: true
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Render Homebrew formula
+        run: |
+          chmod +x Toggly.CLI/packaging/scripts/render-templates.sh
+          Toggly.CLI/packaging/scripts/render-templates.sh "${{ needs.resolve.outputs.tag }}" /tmp/dist
+
+      - name: Check dist token
+        id: secrets
+        env:
+          TOKEN: ${{ secrets.CLI_DIST_TOKEN || secrets.RELEASE_PUSH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::CLI_DIST_TOKEN (or RELEASE_PUSH_TOKEN) not set — skipping Homebrew tap push. See Toggly.CLI/packaging/README.md."
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ops-ai's org-wide "Branch security" ruleset (required_signatures)
+      # rejects unsigned commits on every branch of every repo, including
+      # toggly-cli-dist. Reuse the same release GPG key cli-build-release.yml
+      # already signs commits with.
+      - name: Import GPG key for commit signing
+        if: steps.secrets.outputs.present == 'true'
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v7
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+
+      - name: Push formula to toggly-cli-dist
+        if: steps.secrets.outputs.present == 'true'
+        env:
+          TOKEN: ${{ secrets.CLI_DIST_TOKEN || secrets.RELEASE_PUSH_TOKEN }}
+          GIT_AUTHOR_NAME: ${{ steps.import_gpg.outputs.name }}
+          GIT_AUTHOR_EMAIL: ${{ steps.import_gpg.outputs.email }}
+          GIT_COMMITTER_NAME: ${{ steps.import_gpg.outputs.name }}
+          GIT_COMMITTER_EMAIL: ${{ steps.import_gpg.outputs.email }}
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${TOKEN}@github.com/${DIST_REPO}.git" /tmp/dist-repo
+          mkdir -p /tmp/dist-repo/Formula
+          cp /tmp/dist/homebrew/Formula/toggly-cli.rb /tmp/dist-repo/Formula/toggly-cli.rb
+          cd /tmp/dist-repo
+          git add Formula/toggly-cli.rb
+          if git diff --cached --quiet; then
+            echo "Formula already up to date at ${{ needs.resolve.outputs.version }}"
+          else
+            git commit -S -m "Update toggly-cli formula to ${{ needs.resolve.outputs.version }} [OPS-1580]"
+            git verify-commit HEAD
+            git pull --rebase --gpg-sign origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Smoke - brew install
+        if: steps.secrets.outputs.present == 'true'
+        run: |
+          set -euo pipefail
+          # ops-ai/toggly-cli-dist does not follow Homebrew's `homebrew-*`
+          # naming convention, so `brew tap ops-ai/toggly-cli-dist` alone
+          # would try to clone a non-existent `homebrew-toggly-cli-dist`
+          # repo. Pass the real clone URL explicitly (also required in the
+          # install docs — see packaging/README.md).
+          brew tap ops-ai/toggly-cli-dist "https://github.com/${DIST_REPO}.git"
+          brew install ops-ai/toggly-cli-dist/toggly-cli
+          chmod +x Toggly.CLI/packaging/scripts/smoke-channel.sh
+          Toggly.CLI/packaging/scripts/smoke-channel.sh "${{ needs.resolve.outputs.version }}" toggly
+
+  scoop:
+    name: Scoop (toggly-cli-dist)
+    # Serialize with homebrew: both push signed commits to toggly-cli-dist main.
+    needs: [resolve, homebrew]
+    continue-on-error: true
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Render Scoop manifest
+        shell: bash
+        run: |
+          chmod +x Toggly.CLI/packaging/scripts/render-templates.sh
+          Toggly.CLI/packaging/scripts/render-templates.sh "${{ needs.resolve.outputs.tag }}" "$RUNNER_TEMP/dist"
+
+      - name: Check dist token
+        id: secrets
+        shell: bash
+        env:
+          TOKEN: ${{ secrets.CLI_DIST_TOKEN || secrets.RELEASE_PUSH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::CLI_DIST_TOKEN (or RELEASE_PUSH_TOKEN) not set — skipping Scoop bucket push. See Toggly.CLI/packaging/README.md."
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # See homebrew job: ops-ai's org-wide ruleset rejects unsigned commits.
+      - name: Import GPG key for commit signing
+        if: steps.secrets.outputs.present == 'true'
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v7
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+
+      - name: Push manifest to toggly-cli-dist
+        if: steps.secrets.outputs.present == 'true'
+        shell: bash
+        env:
+          TOKEN: ${{ secrets.CLI_DIST_TOKEN || secrets.RELEASE_PUSH_TOKEN }}
+          GIT_AUTHOR_NAME: ${{ steps.import_gpg.outputs.name }}
+          GIT_AUTHOR_EMAIL: ${{ steps.import_gpg.outputs.email }}
+          GIT_COMMITTER_NAME: ${{ steps.import_gpg.outputs.name }}
+          GIT_COMMITTER_EMAIL: ${{ steps.import_gpg.outputs.email }}
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${TOKEN}@github.com/${DIST_REPO}.git" "$RUNNER_TEMP/dist-repo"
+          cp "$RUNNER_TEMP/dist/scoop/toggly-cli.json" "$RUNNER_TEMP/dist-repo/toggly-cli.json"
+          cd "$RUNNER_TEMP/dist-repo"
+          git add toggly-cli.json
+          if git diff --cached --quiet; then
+            echo "Manifest already up to date at ${{ needs.resolve.outputs.version }}"
+          else
+            git commit -S -m "Update toggly-cli scoop manifest to ${{ needs.resolve.outputs.version }} [OPS-1580]"
+            git verify-commit HEAD
+            # Pull/rebase in case another channel landed on main between clone and push.
+            git pull --rebase --gpg-sign origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Smoke - scoop install
+        if: steps.secrets.outputs.present == 'true'
+        shell: pwsh
+        run: |
+          Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+          Invoke-RestMethod -Uri https://get.scoop.sh | Invoke-Expression
+          scoop bucket add toggly https://github.com/${env:DIST_REPO}
+          scoop install toggly/toggly-cli
+          $env:PATH = "$env:USERPROFILE\scoop\shims;$env:PATH"
+          bash Toggly.CLI/packaging/scripts/smoke-channel.sh "${{ needs.resolve.outputs.version }}" toggly
+
+  winget:
+    name: winget (Opsai.TogglyCLI)
+    needs: resolve
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Render winget manifests
+        run: |
+          chmod +x Toggly.CLI/packaging/scripts/render-templates.sh
+          Toggly.CLI/packaging/scripts/render-templates.sh "${{ needs.resolve.outputs.tag }}" /tmp/dist
+
+      - name: Upload rendered manifests
+        uses: actions/upload-artifact@v7
+        with:
+          name: winget-manifests-${{ needs.resolve.outputs.version }}
+          path: /tmp/dist/winget/manifests/**
+          retention-days: 90
+
+      - name: Check winget token
+        id: secrets
+        run: |
+          if [ -z "${{ secrets.WINGET_TOKEN }}" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::WINGET_TOKEN not set — rendered manifests uploaded as an artifact for manual submission to microsoft/winget-pkgs. See Toggly.CLI/packaging/README.md."
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Submit to winget-pkgs
+        if: steps.secrets.outputs.present == 'true'
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          set -euo pipefail
+          dotnet tool install --global wingetcreate
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          wingetcreate update Opsai.TogglyCLI \
+            --version "${{ needs.resolve.outputs.version }}" \
+            --urls "https://github.com/ops-ai/Toggly.FeatureManagement/releases/download/${{ needs.resolve.outputs.tag }}/toggly-cli-windows-x64.zip" \
+            --token "$WINGET_TOKEN" \
+            --submit
+
+  chocolatey:
+    name: Chocolatey (toggly-cli)
+    needs: resolve
+    continue-on-error: true
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Use RUNNER_TEMP (not /tmp): bash on windows-latest is MSYS2 and /tmp is
+      # not the same path PowerShell sees. runner.temp is shared across shells.
+      - name: Render Chocolatey package
+        shell: bash
+        run: |
+          chmod +x Toggly.CLI/packaging/scripts/render-templates.sh
+          Toggly.CLI/packaging/scripts/render-templates.sh "${{ needs.resolve.outputs.tag }}" "$RUNNER_TEMP/dist"
+
+      - name: choco pack
+        shell: pwsh
+        run: |
+          $dist = Join-Path $env:RUNNER_TEMP 'dist/chocolatey'
+          choco pack (Join-Path $dist 'toggly-cli.nuspec') --outputdirectory $dist
+
+      - name: Smoke - choco install (local package)
+        shell: pwsh
+        run: |
+          $dist = Join-Path $env:RUNNER_TEMP 'dist/chocolatey'
+          choco install toggly-cli -s $dist -y --force
+          $env:PATH = "$env:ChocolateyInstall\bin;$env:PATH"
+          bash Toggly.CLI/packaging/scripts/smoke-channel.sh "${{ needs.resolve.outputs.version }}" toggly
+
+      - name: Check Chocolatey API key
+        id: secrets
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.CHOCO_API_KEY }}" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::CHOCO_API_KEY not set — skipping choco push. Package packed and smoke-tested locally only. See Toggly.CLI/packaging/README.md."
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: choco push
+        if: steps.secrets.outputs.present == 'true'
+        shell: pwsh
+        env:
+          CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
+        run: |
+          $nupkg = Join-Path $env:RUNNER_TEMP "dist/chocolatey/toggly-cli.${{ needs.resolve.outputs.version }}.nupkg"
+          choco apikey --api-key $env:CHOCO_API_KEY --source https://push.chocolatey.org/
+          choco push $nupkg --source https://push.chocolatey.org/
+
+  apt-rpm:
+    name: apt + rpm (toggly-cli-dist gh-pages)
+    needs: resolve
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install packaging tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev createrepo-c
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Render nfpm configs
+        run: |
+          chmod +x Toggly.CLI/packaging/scripts/render-templates.sh
+          Toggly.CLI/packaging/scripts/render-templates.sh "${{ needs.resolve.outputs.tag }}" /tmp/dist
+
+      - name: Download + stage linux payloads
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          BASE_URL="https://github.com/ops-ai/Toggly.FeatureManagement/releases/download/$TAG"
+          declare -A ASSET_FOR_ARCH=([amd64]=linux-x64 [arm64]=linux-arm64)
+          for arch in "${!ASSET_FOR_ARCH[@]}"; do
+            asset="${ASSET_FOR_ARCH[$arch]}"
+            mkdir -p "/tmp/payload-$arch"
+            curl --proto '=https' --tlsv1.2 -fsSL "$BASE_URL/toggly-cli-$asset.tar.gz" -o "/tmp/toggly-cli-$asset.tar.gz"
+            tar -xzf "/tmp/toggly-cli-$asset.tar.gz" -C "/tmp/payload-$arch"
+          done
+
+      - name: Build .deb / .rpm packages
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/dist/apt /tmp/dist/rpm
+          # deb uses Debian arch names; rpm filenames use RPM arch (x86_64/aarch64).
+          declare -A RPM_ARCH=([amd64]=x86_64 [arm64]=aarch64)
+          for arch in amd64 arm64; do
+            ln -sfn "/tmp/payload-$arch" /tmp/dist/nfpm/payload
+            (cd /tmp/dist/nfpm && nfpm package --config "toggly-cli-$arch.yaml" --packager deb \
+              --target "/tmp/dist/apt/toggly-cli_${{ needs.resolve.outputs.version }}_${arch}.deb")
+            (cd /tmp/dist/nfpm && nfpm package --config "toggly-cli-$arch.yaml" --packager rpm \
+              --target "/tmp/dist/rpm/toggly-cli-${{ needs.resolve.outputs.version }}-1.${RPM_ARCH[$arch]}.rpm")
+          done
+          ls -la /tmp/dist/apt /tmp/dist/rpm
+
+      - name: Check dist token
+        id: secrets
+        env:
+          TOKEN: ${{ secrets.CLI_DIST_TOKEN || secrets.RELEASE_PUSH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::CLI_DIST_TOKEN (or RELEASE_PUSH_TOKEN) not set — skipping apt/rpm gh-pages publish. See Toggly.CLI/packaging/README.md."
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # See homebrew job: ops-ai's org-wide ruleset rejects unsigned commits
+      # on every branch, including gh-pages.
+      - name: Import GPG key for commit signing
+        if: steps.secrets.outputs.present == 'true'
+        id: import_gpg
+        uses: crazy-max/ghaction-import-gpg@v7
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+          git_user_signingkey: true
+          git_commit_gpgsign: true
+
+      - name: Publish to gh-pages
+        if: steps.secrets.outputs.present == 'true'
+        env:
+          TOKEN: ${{ secrets.CLI_DIST_TOKEN || secrets.RELEASE_PUSH_TOKEN }}
+          GIT_AUTHOR_NAME: ${{ steps.import_gpg.outputs.name }}
+          GIT_AUTHOR_EMAIL: ${{ steps.import_gpg.outputs.email }}
+          GIT_COMMITTER_NAME: ${{ steps.import_gpg.outputs.name }}
+          GIT_COMMITTER_EMAIL: ${{ steps.import_gpg.outputs.email }}
+        run: |
+          set -euo pipefail
+          git clone "https://x-access-token:${TOKEN}@github.com/${DIST_REPO}.git" /tmp/dist-repo
+          cd /tmp/dist-repo
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git checkout gh-pages
+          else
+            git checkout --orphan gh-pages
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
+          mkdir -p apt rpm
+          cp /tmp/dist/apt/*.deb apt/
+          cp /tmp/dist/rpm/*.rpm rpm/
+          (cd apt && dpkg-scanpackages --multiversion . /dev/null > Packages && gzip -kf Packages)
+          (cd rpm && createrepo_c .)
+          git add apt rpm
+          if git diff --cached --quiet; then
+            echo "apt/rpm feeds already up to date at ${{ needs.resolve.outputs.version }}"
+          else
+            git commit -S -m "Publish toggly-cli ${{ needs.resolve.outputs.version }} apt/rpm packages [OPS-1580]"
+            git verify-commit HEAD
+            git push origin HEAD:gh-pages
+          fi
+
+      - name: Smoke - deb install (container)
+        run: |
+          set -euo pipefail
+          VERSION='${{ needs.resolve.outputs.version }}'
+          docker run --rm \
+            -v /tmp/dist/apt:/pkg \
+            -v "$PWD/Toggly.CLI/packaging/scripts/smoke-channel.sh:/smoke-channel.sh:ro" \
+            debian:stable bash -c \
+            "apt-get update -qq && dpkg -i /pkg/toggly-cli_*_amd64.deb && bash /smoke-channel.sh '$VERSION' toggly"
+
+      - name: Smoke - rpm install (container)
+        run: |
+          set -euo pipefail
+          VERSION='${{ needs.resolve.outputs.version }}'
+          docker run --rm \
+            -v /tmp/dist/rpm:/pkg \
+            -v "$PWD/Toggly.CLI/packaging/scripts/smoke-channel.sh:/smoke-channel.sh:ro" \
+            rockylinux:9 bash -c \
+            "rpm -i /pkg/toggly-cli-*-1.x86_64.rpm && bash /smoke-channel.sh '$VERSION' toggly"
+
+  summary:
+    needs: [resolve, homebrew, scoop, winget, chocolatey, apt-rpm]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          {
+            echo "## CLI Distribute — ${{ needs.resolve.outputs.tag }}"
+            echo "| Channel | Result |"
+            echo "|---|---|"
+            echo "| Homebrew | ${{ needs.homebrew.result }} |"
+            echo "| Scoop | ${{ needs.scoop.result }} |"
+            echo "| winget | ${{ needs.winget.result }} |"
+            echo "| Chocolatey | ${{ needs.chocolatey.result }} |"
+            echo "| apt/rpm | ${{ needs['apt-rpm'].result }} |"
+            echo
+            echo "A channel showing \`failure\` may simply be missing an ops secret/repo — see job logs and Toggly.CLI/packaging/README.md. The GitHub Release itself is never modified by this workflow."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,32 @@
+# nfpm config template for deb/rpm packaging.
+# {{ARCH}} is substituted per architecture (amd64/arm64 for deb, x86_64/aarch64
+# for rpm — nfpm normalizes go-arch names per packager).
+# render-templates.sh stages the extracted linux archive under ./payload/
+# (binary at ./payload/toggly-cli, man pages under ./payload/man/) before
+# invoking `nfpm package` against the rendered copy of this file.
+name: toggly-cli
+arch: "{{ARCH}}"
+platform: linux
+version: "{{VERSION}}"
+version_schema: semver
+section: utils
+priority: optional
+maintainer: "Opsai LLC <support@toggly.io>"
+description: |
+  Command-line interface for Toggly feature flag management.
+  Manage applications, environments, features, and releases from the
+  terminal or CI. See https://docs.toggly.io/sdks/cli for full docs.
+vendor: "Opsai LLC"
+homepage: "https://docs.toggly.io/sdks/cli"
+license: "MIT"
+contents:
+  # Archive ships the binary as toggly-cli; install on PATH as `toggly`
+  # per the Wave 5 UX lock (docs/man reference `toggly`).
+  - src: ./payload/toggly-cli
+    dst: /usr/bin/toggly
+    file_info:
+      mode: 0755
+  - src: ./payload/man
+    dst: /usr/share/man/man1
+    file_info:
+      mode: 0644

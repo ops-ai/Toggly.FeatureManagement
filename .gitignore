@@ -367,3 +367,6 @@ Toggly.FeatureManagement.Remix/remix-toggly-server/dist
 /.build/
 /.swiftpm/
 /Package.resolved
+
+# CLI package-manager distribution: local render-templates.sh output
+Toggly.CLI/packaging/dist/
