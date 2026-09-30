@@ -89,12 +89,12 @@ namespace NSwag.AspNetCore
             }
 
 #if AspNetOwin
-            return headers[matchingName].Split(',').Select(s => s.Trim()).FirstOrDefault();
+            var firstValue = headers[matchingName].Split(',').Select(s => s.Trim()).FirstOrDefault();
 #else
             var values = headers[matchingName];
-            var firstValue = values.Count > 0 ? values[0] : null;
-            return firstValue?.Split(',')[0].Trim();
+            var firstValue = values.Count > 0 ? values[0]?.Split(',')[0].Trim() : null;
 #endif
+            return System.String.IsNullOrWhiteSpace(firstValue) ? null : firstValue;
         }
     }
 }

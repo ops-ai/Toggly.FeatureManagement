@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
+using Microsoft.Extensions.Primitives;
 using Moq;
 using NSwag;
 using NSwag.AspNetCore;
@@ -285,6 +286,65 @@ public class OpenApiDocumentMiddlewareTests
 
         document.Servers.Should().ContainSingle()
             .Which.Url.Should().Be("https://api.example.com/tenant");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Invoke_WithBlankForwardedProtoAndHost_UsesRequestOrigin(string forwardedHeaderValue)
+    {
+        var serviceProvider = CreateServiceProvider();
+        var document = new OpenApiDocument();
+        _documentGeneratorMock.Setup(x => x.GenerateAsync("v1")).ReturnsAsync(document);
+        var middleware = new OpenApiDocumentMiddleware(
+            _ => Task.CompletedTask, serviceProvider, "v1", "/swagger/v1/swagger.json",
+            new OpenApiDocumentMiddlewareSettings());
+        var context = CreateHttpContext(serviceProvider);
+        context.Request.Headers["X-Forwarded-Proto"] = forwardedHeaderValue;
+        context.Request.Headers["X-Forwarded-Host"] = forwardedHeaderValue;
+
+        await middleware.Invoke(context);
+
+        document.Servers.Should().ContainSingle()
+            .Which.Url.Should().Be("https://localhost:5000");
+    }
+
+    [Fact]
+    public async Task Invoke_WithEmptyForwardedHeaderValues_UsesRequestOrigin()
+    {
+        var serviceProvider = CreateServiceProvider();
+        var document = new OpenApiDocument();
+        _documentGeneratorMock.Setup(x => x.GenerateAsync("v1")).ReturnsAsync(document);
+        var middleware = new OpenApiDocumentMiddleware(
+            _ => Task.CompletedTask, serviceProvider, "v1", "/swagger/v1/swagger.json",
+            new OpenApiDocumentMiddlewareSettings());
+        var context = CreateHttpContext(serviceProvider);
+        context.Request.Headers.TryAdd("X-Forwarded-Proto", StringValues.Empty).Should().BeTrue();
+        context.Request.Headers.TryAdd("X-Forwarded-Host", StringValues.Empty).Should().BeTrue();
+
+        await middleware.Invoke(context);
+
+        document.Servers.Should().ContainSingle()
+            .Which.Url.Should().Be("https://localhost:5000");
+    }
+
+    [Fact]
+    public async Task Invoke_WithNullFirstForwardedHeaderValues_UsesRequestOrigin()
+    {
+        var serviceProvider = CreateServiceProvider();
+        var document = new OpenApiDocument();
+        _documentGeneratorMock.Setup(x => x.GenerateAsync("v1")).ReturnsAsync(document);
+        var middleware = new OpenApiDocumentMiddleware(
+            _ => Task.CompletedTask, serviceProvider, "v1", "/swagger/v1/swagger.json",
+            new OpenApiDocumentMiddlewareSettings());
+        var context = CreateHttpContext(serviceProvider);
+        context.Request.Headers["X-Forwarded-Proto"] = new StringValues(new string?[] { null });
+        context.Request.Headers["X-Forwarded-Host"] = new StringValues(new string?[] { null });
+
+        await middleware.Invoke(context);
+
+        document.Servers.Should().ContainSingle()
+            .Which.Url.Should().Be("https://localhost:5000");
     }
 
     [Fact]
