@@ -131,9 +131,8 @@ Enable verbose output
 .B \-\-json
 Emit machine\-readable camelCase JSON instead of human text
 .SH EXAMPLES
-.B
-toggly\-cli feature create \-\-app <app\-id> \-\-name "New Feature"
-\-\-feature\-key new\-feature
+.B toggly\-cli feature create \-\-app <app\-id> \-\-name "New Feature"
+.B \-\-feature\-key new\-feature
 .PP
 .B toggly\-cli feature get \-\-app <app\-id> payments\-enabled
 .PP
@@ -141,13 +140,11 @@ toggly\-cli feature create \-\-app <app\-id> \-\-name "New Feature"
 .PP
 .B toggly\-cli \-\-json feature list \-\-app <app\-id>
 .PP
-.B
-toggly\-cli feature update \-\-app <app\-id> \-\-feature\-key new\-feature
-\-\-description "Updated"
+.B toggly\-cli feature update \-\-app <app\-id> \-\-feature\-key new\-feature
+.B \-\-description "Updated"
 .PP
-.B
-toggly\-cli feature update\-environment \-\-app <app\-id> \-\-env Production
-\-\-feature\-key new\-feature \-\-enable
+.B toggly\-cli feature update\-environment \-\-app <app\-id> \-\-env
+.B Production \-\-feature\-key new\-feature \-\-enable
 .SH EXIT STATUS
 .TP
 .B 0

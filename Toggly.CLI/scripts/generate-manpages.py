@@ -91,16 +91,19 @@ def format_examples(examples: list[str] | None) -> list[str]:
     if not examples:
         return []
     out: list[str] = []
+    bold_prefix = ".B "
+    # Leave room for the ".B " prefix so wrapped lines stay within mandoc STYLE.
+    wrap_width = MAX_LINE - len(bold_prefix)
     for index, example in enumerate(examples):
         if index > 0:
             out.append(".PP")
-        # Keep examples as a single bold line when possible; wrap if needed
+        # Bold every wrapped line: a lone ".B" only bolds the next input line.
         escaped = roff_escape(example)
-        if len(f".B {escaped}") <= MAX_LINE:
-            out.append(f".B {escaped}")
+        if len(bold_prefix + escaped) <= MAX_LINE:
+            out.append(bold_prefix + escaped)
         else:
-            out.append(".B")
-            out.extend(wrap_text(escaped))
+            for line in wrap_text(escaped, width=wrap_width):
+                out.append(bold_prefix + line)
     return out
 
 
@@ -410,8 +413,11 @@ def main() -> int:
         (MAN_DIR / name).write_text(content, encoding="utf-8")
         print(f"wrote {MAN_DIR / name}")
 
+    lint_failed = False
     for problem in structural_lint(pages):
         print(problem, file=sys.stderr)
+        lint_failed = True
+    if lint_failed:
         return 1
 
     if args.lint:
