@@ -356,12 +356,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/dist/apt /tmp/dist/rpm
+          # deb uses Debian arch names; rpm filenames use RPM arch (x86_64/aarch64).
+          declare -A RPM_ARCH=([amd64]=x86_64 [arm64]=aarch64)
           for arch in amd64 arm64; do
             ln -sfn "/tmp/payload-$arch" /tmp/dist/nfpm/payload
             (cd /tmp/dist/nfpm && nfpm package --config "toggly-cli-$arch.yaml" --packager deb \
               --target "/tmp/dist/apt/toggly-cli_${{ needs.resolve.outputs.version }}_${arch}.deb")
             (cd /tmp/dist/nfpm && nfpm package --config "toggly-cli-$arch.yaml" --packager rpm \
-              --target "/tmp/dist/rpm/toggly-cli-${{ needs.resolve.outputs.version }}-1.${arch}.rpm")
+              --target "/tmp/dist/rpm/toggly-cli-${{ needs.resolve.outputs.version }}-1.${RPM_ARCH[$arch]}.rpm")
           done
           ls -la /tmp/dist/apt /tmp/dist/rpm
 
