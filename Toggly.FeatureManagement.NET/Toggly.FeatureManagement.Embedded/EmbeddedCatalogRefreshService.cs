@@ -13,7 +13,7 @@ internal sealed class EmbeddedCatalogRefreshService : BackgroundService
 
     public override async Task StartAsync(CancellationToken cancellationToken)
     {
-        await _coordinator.RefreshAsync(cancellationToken, _options.InitialLoadTimeout).ConfigureAwait(false);
+        await _coordinator.RefreshAsync(_options.InitialLoadTimeout, cancellationToken).ConfigureAwait(false);
         await base.StartAsync(cancellationToken).ConfigureAwait(false);
     }
 

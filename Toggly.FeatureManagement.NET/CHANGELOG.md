@@ -1,5 +1,13 @@
 # Changelog
 
+## All .NET SDK packages 3.12.5 - 2026-09-29
+
+### Fixed
+- `Toggly.FeatureManagement.Embedded` now requests catalog-read cancellation
+  asynchronously after a failed or timed-out refresh, so store callbacks
+  do not run synchronously in the refresh continuation. Diagnostics still
+  update after those callbacks finish.
+
 ## All .NET SDK packages 3.12.4 - 2026-09-29
 
 ### Fixed

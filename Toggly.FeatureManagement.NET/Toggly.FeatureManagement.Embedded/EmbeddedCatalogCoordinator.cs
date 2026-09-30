@@ -30,9 +30,9 @@ public sealed class EmbeddedCatalogCoordinator : IDisposable
 
     public EmbeddedRuntimeDiagnostics Diagnostics { get; }
 
-    public Task RefreshAsync(CancellationToken cancellationToken) => RefreshAsync(cancellationToken, null);
+    public Task RefreshAsync(CancellationToken cancellationToken) => RefreshAsync(null, cancellationToken);
 
-    internal async Task RefreshAsync(CancellationToken cancellationToken, TimeSpan? readTimeout)
+    internal async Task RefreshAsync(TimeSpan? readTimeout, CancellationToken cancellationToken)
     {
         await _refreshGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -75,17 +75,11 @@ public sealed class EmbeddedCatalogCoordinator : IDisposable
                 Diagnostics.StorageState = EmbeddedStorageState.Available;
                 Diagnostics.LastError = null;
             }
-            var nextStates = snapshot.Document.Features.ToDictionary(feature => feature.Key, feature => feature.Enabled && feature.Rules.Count == 0, StringComparer.Ordinal);
-            foreach (var deletedKey in _activeFeatureStates.Keys.Except(nextStates.Keys, StringComparer.Ordinal))
-                _stateService?.UpdateFeatureState(deletedKey, false);
-            foreach (var state in nextStates)
-                _stateService?.UpdateFeatureState(state.Key, state.Value);
-            _activeFeatureStates = nextStates;
-            _stateService?.NotifyDefinitionsChanged();
+            UpdateFeatureStates(snapshot.Document);
         }
         catch (Exception exception)
         {
-            _readCancellation?.Cancel();
+            if (_readCancellation != null) await _readCancellation.CancelAsync().ConfigureAwait(false);
             SetFailure(exception);
         }
         finally
@@ -93,6 +87,17 @@ public sealed class EmbeddedCatalogCoordinator : IDisposable
             if (_pendingRead == null || _pendingRead.IsCompleted) ClearRead();
             _refreshGate.Release();
         }
+    }
+
+    private void UpdateFeatureStates(CatalogDocument document)
+    {
+        var nextStates = document.Features.ToDictionary(feature => feature.Key, feature => feature.Enabled && feature.Rules.Count == 0, StringComparer.Ordinal);
+        foreach (var deletedKey in _activeFeatureStates.Keys.Except(nextStates.Keys, StringComparer.Ordinal))
+            _stateService?.UpdateFeatureState(deletedKey, false);
+        foreach (var state in nextStates)
+            _stateService?.UpdateFeatureState(state.Key, state.Value);
+        _activeFeatureStates = nextStates;
+        _stateService?.NotifyDefinitionsChanged();
     }
 
     private void ClearRead()
