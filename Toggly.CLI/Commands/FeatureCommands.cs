@@ -2,18 +2,18 @@ using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.Text.Json;
 using Toggly.CLI.Models;
+using Toggly.CLI.Output;
 using Toggly.CLI.Services;
-using Toggly.CLI;
 
 namespace Toggly.CLI.Commands;
 
 /// <summary>
-/// Feature-related commands
+/// Feature noun commands and flat write aliases.
 /// </summary>
 public static class FeatureCommands
 {
     private sealed record CreateFeatureOptions(
-        Option<string> ApplicationId,
+        Option<string?> ApplicationId,
         Option<string> Name,
         Option<string> FeatureKey,
         Option<string?> Description,
@@ -22,56 +22,126 @@ public static class FeatureCommands
         Option<string?> EnvironmentFilters);
 
     private sealed record UpdateFeatureOptions(
-        Option<string> ApplicationId,
+        Option<string?> ApplicationId,
         Option<string> FeatureKey,
         Option<string?> Name,
         Option<string?> Description,
         Option<string?> Category,
         Option<string?> Tags);
 
+    private sealed record UpdateFeatureEnvironmentOptions(
+        Option<string?> ApplicationId,
+        Option<string?> Environment,
+        Option<string> FeatureKey,
+        Option<bool> Enable,
+        Option<bool> Disable,
+        Option<string?> Filters);
+
     /// <summary>
-    /// Create the feature command group
+    /// Create the <c>feature</c> noun group.
     /// </summary>
-    public static Command CreateFeatureCommand(Func<InvocationContext, TogglyApiClient?> apiClientFactory)
+    public static Command CreateNoun(
+        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
+        CliCommandContext cli)
     {
-        var command = new Command("create-feature", "Create a new feature");
+        var feature = new Command("feature", "List, inspect, and manage features");
+        feature.AddCommand(CreateListCommand(apiClientFactory, cli));
+        feature.AddCommand(CreateGetCommand(apiClientFactory, cli));
+        feature.AddCommand(CreateCreateCommand("create", "Create a new feature", apiClientFactory, cli));
+        feature.AddCommand(CreateUpdateCommand("update", "Update an existing feature", apiClientFactory, cli));
+        feature.AddCommand(CreateUpdateEnvironmentCommand(
+            "update-environment",
+            "Update feature configuration on a specific environment",
+            apiClientFactory,
+            cli));
+        return feature;
+    }
 
-        var applicationIdOption = new Option<string>(
-            "--application-id",
-            description: "Application ID")
+    /// <summary>Flat alias: <c>create-feature</c>.</summary>
+    public static Command CreateFeatureAlias(
+        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
+        CliCommandContext cli) =>
+        CreateCreateCommand("create-feature", "Create a new feature", apiClientFactory, cli);
+
+    /// <summary>Flat alias: <c>update-feature</c>.</summary>
+    public static Command CreateUpdateFeatureAlias(
+        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
+        CliCommandContext cli) =>
+        CreateUpdateCommand("update-feature", "Update an existing feature", apiClientFactory, cli);
+
+    /// <summary>Flat alias: <c>update-feature-environment</c>.</summary>
+    public static Command CreateUpdateFeatureEnvironmentAlias(
+        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
+        CliCommandContext cli) =>
+        CreateUpdateEnvironmentCommand(
+            "update-feature-environment",
+            "Update feature configuration on a specific environment",
+            apiClientFactory,
+            cli);
+
+    private static Command CreateListCommand(
+        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
+        CliCommandContext cli) =>
+        CommandOptions.CreateAppScopedListCommand(
+            "List features for an application",
+            apiClientFactory,
+            cli,
+            "Error listing features",
+            async (apiClient, applicationId, context, commandContext) =>
+            {
+                var features = await apiClient.ListFeaturesAsync(applicationId, context.GetCancellationToken());
+                await CommandOptions.WriteResultAsync(
+                    context,
+                    commandContext,
+                    features,
+                    TogglyJsonSerializerContext.Default.ListFeatureDefinition,
+                    FormatFeatureList);
+            });
+
+    private static Command CreateGetCommand(
+        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
+        CliCommandContext cli) =>
+        CommandOptions.CreateAppScopedGetCommand(
+            "Get a feature by key",
+            "key",
+            "Feature key",
+            apiClientFactory,
+            cli,
+            "Error getting feature",
+            async (apiClient, applicationId, key, context, commandContext) =>
+            {
+                var feature = await apiClient.GetFeatureAsync(
+                    applicationId,
+                    key,
+                    context.GetCancellationToken());
+                await CommandOptions.WriteResultAsync(
+                    context,
+                    commandContext,
+                    feature,
+                    TogglyJsonSerializerContext.Default.FeatureDefinition,
+                    f => FormatFeature(f));
+            });
+
+    private static Command CreateCreateCommand(
+        string name,
+        string description,
+        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
+        CliCommandContext cli)
+    {
+        var command = new Command(name, description);
+
+        var applicationIdOption = CommandOptions.CreateAppOption();
+        var nameOption = new Option<string>("--name", "Feature display name") { IsRequired = true };
+        var featureKeyOption = new Option<string>("--feature-key", "Feature key (used as reference in application)")
         {
             IsRequired = true
         };
-
-        var nameOption = new Option<string>(
-            "--name",
-            description: "Feature display name")
-        {
-            IsRequired = true
-        };
-
-        var featureKeyOption = new Option<string>(
-            "--feature-key",
-            description: "Feature key (used as reference in application)")
-        {
-            IsRequired = true
-        };
-
-        var descriptionOption = new Option<string?>(
-            "--description",
-            description: "Feature description");
-
-        var categoryOption = new Option<string?>(
-            "--category",
-            description: "Feature category");
-
-        var tagsOption = new Option<string?>(
-            "--tags",
-            description: "Comma-separated list of tags");
-
+        var descriptionOption = new Option<string?>("--description", "Feature description");
+        var categoryOption = new Option<string?>("--category", "Feature category");
+        var tagsOption = new Option<string?>("--tags", "Comma-separated list of tags");
         var environmentFiltersOption = new Option<string?>(
             "--environment-filters",
-            description: "JSON object mapping environment names to filter arrays. Format: {\"Production\":[{\"name\":\"AlwaysOn\",\"parameters\":{}}]}");
+            "JSON object mapping environment names to filter arrays. Format: {\"Production\":[{\"name\":\"AlwaysOn\",\"parameters\":{}}]}");
 
         command.AddOption(applicationIdOption);
         command.AddOption(nameOption);
@@ -96,48 +166,26 @@ public static class FeatureCommands
             if (apiClient is null)
                 return;
 
-            await HandleCreateFeatureAsync(context, apiClient, options);
+            await HandleCreateFeatureAsync(context, apiClient, cli, options);
         });
 
         return command;
     }
 
-    /// <summary>
-    /// Create the update-feature command
-    /// </summary>
-    public static Command CreateUpdateFeatureCommand(Func<InvocationContext, TogglyApiClient?> apiClientFactory)
+    private static Command CreateUpdateCommand(
+        string name,
+        string description,
+        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
+        CliCommandContext cli)
     {
-        var command = new Command("update-feature", "Update an existing feature");
+        var command = new Command(name, description);
 
-        var applicationIdOption = new Option<string>(
-            "--application-id",
-            description: "Application ID")
-        {
-            IsRequired = true
-        };
-
-        var featureKeyOption = new Option<string>(
-            "--feature-key",
-            description: "Feature key to update")
-        {
-            IsRequired = true
-        };
-
-        var nameOption = new Option<string?>(
-            "--name",
-            description: "Feature display name");
-
-        var descriptionOption = new Option<string?>(
-            "--description",
-            description: "Feature description");
-
-        var categoryOption = new Option<string?>(
-            "--category",
-            description: "Feature category");
-
-        var tagsOption = new Option<string?>(
-            "--tags",
-            description: "Comma-separated list of tags");
+        var applicationIdOption = CommandOptions.CreateAppOption();
+        var featureKeyOption = new Option<string>("--feature-key", "Feature key to update") { IsRequired = true };
+        var nameOption = new Option<string?>("--name", "Feature display name");
+        var descriptionOption = new Option<string?>("--description", "Feature description");
+        var categoryOption = new Option<string?>("--category", "Feature category");
+        var tagsOption = new Option<string?>("--tags", "Comma-separated list of tags");
 
         command.AddOption(applicationIdOption);
         command.AddOption(featureKeyOption);
@@ -160,7 +208,52 @@ public static class FeatureCommands
             if (apiClient is null)
                 return;
 
-            await HandleUpdateFeatureAsync(context, apiClient, options);
+            await HandleUpdateFeatureAsync(context, apiClient, cli, options);
+        });
+
+        return command;
+    }
+
+    private static Command CreateUpdateEnvironmentCommand(
+        string name,
+        string description,
+        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
+        CliCommandContext cli)
+    {
+        var command = new Command(name, description);
+
+        var applicationIdOption = CommandOptions.CreateAppOption();
+        var environmentOption = CommandOptions.CreateEnvOption(
+            "Environment name (e.g., Production, Staging)");
+        var featureKeyOption = new Option<string>("--feature-key", "Feature key") { IsRequired = true };
+        var enableOption = new Option<bool>("--enable", "Enable the feature (sets AlwaysOn filter)");
+        var disableOption = new Option<bool>("--disable", "Disable the feature (removes all filters)");
+        var filtersOption = new Option<string?>(
+            "--filters",
+            "JSON array of filter objects. Format: [{\"name\":\"FilterName\",\"parameters\":{\"Key\":\"Value\"}}]");
+
+        command.AddOption(applicationIdOption);
+        command.AddOption(environmentOption);
+        command.AddOption(featureKeyOption);
+        command.AddOption(enableOption);
+        command.AddOption(disableOption);
+        command.AddOption(filtersOption);
+
+        var options = new UpdateFeatureEnvironmentOptions(
+            applicationIdOption,
+            environmentOption,
+            featureKeyOption,
+            enableOption,
+            disableOption,
+            filtersOption);
+
+        command.SetHandler(async (InvocationContext context) =>
+        {
+            var apiClient = apiClientFactory(context);
+            if (apiClient is null)
+                return;
+
+            await HandleUpdateFeatureEnvironmentAsync(context, apiClient, cli, options);
         });
 
         return command;
@@ -169,9 +262,12 @@ public static class FeatureCommands
     private static async Task HandleCreateFeatureAsync(
         InvocationContext context,
         TogglyApiClient apiClient,
+        CliCommandContext cli,
         CreateFeatureOptions options)
     {
-        var applicationId = context.ParseResult.GetValueForOption(options.ApplicationId)!;
+        if (!CommandOptions.TryResolveApp(context, cli, options.ApplicationId, out var applicationId))
+            return;
+
         var name = context.ParseResult.GetValueForOption(options.Name)!;
         var featureKey = context.ParseResult.GetValueForOption(options.FeatureKey)!;
         var description = context.ParseResult.GetValueForOption(options.Description);
@@ -192,37 +288,37 @@ public static class FeatureCommands
 
         if (!TryApplyEnvironmentFilters(environmentFilters, model, out var parseError))
         {
-            await Console.Error.WriteLineAsync(parseError);
+            await cli.Output.WriteErrorAsync(parseError);
             context.ExitCode = 2;
             return;
         }
 
-        try
+        await CommandOptions.RunApiAsync(context, cli, "Error creating feature", async () =>
         {
             var feature = await apiClient.CreateFeatureAsync(applicationId, model);
-            await WriteFeatureSummaryAsync("Feature created", feature);
-        }
-        catch (Exception ex)
-        {
-            await Console.Error.WriteLineAsync($"Error creating feature: {ex.Message}");
-            context.ExitCode = 1;
-        }
+            await cli.Output.WriteAsync(
+                context,
+                feature,
+                TogglyJsonSerializerContext.Default.FeatureDefinition,
+                f => FormatFeature(f, "Feature created"));
+        });
     }
 
     private static async Task HandleUpdateFeatureAsync(
         InvocationContext context,
         TogglyApiClient apiClient,
+        CliCommandContext cli,
         UpdateFeatureOptions options)
     {
-        var applicationId = context.ParseResult.GetValueForOption(options.ApplicationId)!;
+        if (!CommandOptions.TryResolveApp(context, cli, options.ApplicationId, out var applicationId))
+            return;
+
         var featureKey = context.ParseResult.GetValueForOption(options.FeatureKey)!;
         var name = context.ParseResult.GetValueForOption(options.Name);
         var description = context.ParseResult.GetValueForOption(options.Description);
         var category = context.ParseResult.GetValueForOption(options.Category);
         var tags = context.ParseResult.GetValueForOption(options.Tags);
 
-        // Note: In a real implementation, you'd first fetch the existing feature
-        // For now, we'll create a minimal update model
         var model = new FeatureDefinition
         {
             FeatureKey = featureKey,
@@ -234,16 +330,66 @@ public static class FeatureCommands
         if (!string.IsNullOrEmpty(tags))
             model.Tags = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
-        try
+        await CommandOptions.RunApiAsync(context, cli, "Error updating feature", async () =>
         {
             var feature = await apiClient.UpdateFeatureAsync(applicationId, featureKey, model);
-            await WriteFeatureSummaryAsync("Feature updated", feature);
-        }
-        catch (Exception ex)
+            await cli.Output.WriteAsync(
+                context,
+                feature,
+                TogglyJsonSerializerContext.Default.FeatureDefinition,
+                f => FormatFeature(f, "Feature updated"));
+        });
+    }
+
+    private static async Task HandleUpdateFeatureEnvironmentAsync(
+        InvocationContext context,
+        TogglyApiClient apiClient,
+        CliCommandContext cli,
+        UpdateFeatureEnvironmentOptions options)
+    {
+        if (!CommandOptions.TryResolveApp(context, cli, options.ApplicationId, out var applicationId))
+            return;
+
+        if (!CommandOptions.TryResolveEnv(context, cli, options.Environment, out var environment))
+            return;
+
+        var featureKey = context.ParseResult.GetValueForOption(options.FeatureKey)!;
+        var enable = context.ParseResult.GetValueForOption(options.Enable);
+        var disable = context.ParseResult.GetValueForOption(options.Disable);
+        var filters = context.ParseResult.GetValueForOption(options.Filters);
+
+        if (!TryResolveFilterList(enable, disable, filters, out var filterList, out var errorMessage))
         {
-            await Console.Error.WriteLineAsync($"Error updating feature: {ex.Message}");
-            context.ExitCode = 1;
+            await cli.Output.WriteErrorAsync(errorMessage);
+            context.ExitCode = 2;
+            return;
         }
+
+        await CommandOptions.RunApiAsync(context, cli, "Error updating feature environment", async () =>
+        {
+            var updatedFilters = await apiClient.UpdateFeatureEnvironmentAsync(
+                applicationId,
+                environment,
+                featureKey,
+                filterList);
+
+            if (cli.Output.IsJson(context))
+            {
+                await cli.Output.WriteAsync(
+                    context,
+                    updatedFilters,
+                    TogglyJsonSerializerContext.Default.ListFeatureFilter,
+                    _ => []);
+            }
+            else
+            {
+                await cli.Output.WriteLinesAsync([
+                    $"Feature '{featureKey}' updated in environment '{environment}'",
+                    $"Filters: {updatedFilters.Count}",
+                    .. updatedFilters.Select(filter => $"  - {filter.Name}")
+                ]);
+            }
+        });
     }
 
     private static bool TryApplyEnvironmentFilters(
@@ -269,11 +415,71 @@ public static class FeatureCommands
         }
     }
 
-    private static async Task WriteFeatureSummaryAsync(string verb, FeatureDefinition feature)
+    private static bool TryResolveFilterList(
+        bool enable,
+        bool disable,
+        string? filters,
+        out List<FeatureFilter> filterList,
+        out string errorMessage)
     {
-        await Console.Out.WriteLineAsync($"{verb}: {feature.FeatureKey}");
-        await Console.Out.WriteLineAsync($"Name: {feature.Name}");
+        filterList = [];
+        errorMessage = string.Empty;
+
+        if (enable && disable)
+        {
+            errorMessage = "Cannot specify both --enable and --disable";
+            return false;
+        }
+
+        if (enable)
+        {
+            filterList =
+            [
+                new FeatureFilter
+                {
+                    Name = "AlwaysOn",
+                    Parameters = new Dictionary<string, object>()
+                }
+            ];
+            return true;
+        }
+
+        if (disable)
+            return true;
+
+        if (string.IsNullOrEmpty(filters))
+        {
+            errorMessage = "Must specify one of: --enable, --disable, or --filters";
+            return false;
+        }
+
+        try
+        {
+            filterList = JsonSerializer.Deserialize(filters, TogglyJsonSerializerContext.Default.ListFeatureFilter)
+                ?? [];
+            return true;
+        }
+        catch (JsonException ex)
+        {
+            errorMessage = $"Error parsing filters: {ex.Message}";
+            return false;
+        }
+    }
+
+    private static IEnumerable<string> FormatFeatureList(List<FeatureDefinition> features) =>
+        CommandOptions.FormatListOrEmpty(features, "No features found.", f => FormatFeature(f));
+
+    private static IEnumerable<string> FormatFeature(FeatureDefinition feature, string? verb = null)
+    {
+        if (!string.IsNullOrEmpty(verb))
+            yield return $"{verb}: {feature.FeatureKey}";
+        else
+            yield return feature.FeatureKey;
+
+        yield return $"  Name: {feature.Name}";
         if (!string.IsNullOrEmpty(feature.Description))
-            await Console.Out.WriteLineAsync($"Description: {feature.Description}");
+            yield return $"  Description: {feature.Description}";
+        if (!string.IsNullOrEmpty(feature.Category))
+            yield return $"  Category: {feature.Category}";
     }
 }
