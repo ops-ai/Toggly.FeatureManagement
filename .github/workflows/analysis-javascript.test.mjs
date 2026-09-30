@@ -199,6 +199,24 @@ test('maps evaluator source, tests, and LCOV into both Sonar scans', () => {
   assert.match(testJob, /matrix\.sdk == 'Evaluator'/);
 });
 
+test('maps local gates source, tests, and LCOV into both Sonar scans', () => {
+  const sources = [...workflow.matchAll(/-Dsonar\.sources=([^\n]+)/g)].map((match) => match[1]);
+  const tests = [...workflow.matchAll(/-Dsonar\.tests=([^\n]+)/g)].map((match) => match[1]);
+  const sonarSetup = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+
+  assert.equal(sources.length, 2, 'both Sonar scans must declare sources');
+  assert.equal(tests.length, 2, 'both Sonar scans must declare tests');
+  for (const value of [...sources, ...tests]) {
+    assert.ok(value.split(',').includes('toggly-local-gates/src'));
+    assert.ok(!value.split(',').includes('toggly-local-gates'));
+  }
+  assert.match(sonarSetup, /\["Local-Gates"\]="toggly-local-gates"/);
+  assert.match(testJob, /matrix\.sdk == 'Local-Gates'/);
+  assert.match(testJob, /name: coverage-\$\{\{ matrix\.sdk \}\}/);
+  assert.match(sonarSetup, /-Dsonar\.test\.inclusions=.*\*\*\/\*\.spec\.ts/);
+});
+
 test('runs evaluator through only its locked dependency install', () => {
   const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   const installSteps = [...testJob.matchAll(/\n      - name: (Install [^\n]+)\n([\s\S]*?)(?=\n      - name:|$)/g)].map(([, name, body]) => ({

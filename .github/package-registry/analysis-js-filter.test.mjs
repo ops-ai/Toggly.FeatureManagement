@@ -83,6 +83,19 @@ test('Evaluator runs its own coverage in the analysis matrix', () => {
   assert.ok(result.requiredJobs.split(',').includes('test'));
 });
 
+test('Local Gates runs its coverage and packed consumer without shared dependencies', () => {
+  const result = filterAnalysisJs('Local-Gates');
+  assert.deepEqual(result.testMatrix, [{
+    sdk: 'Local-Gates',
+    path: 'toggly-local-gates',
+    'test-cmd': 'npm test',
+    'has-lint': false,
+  }]);
+  assert.equal(result.needSharedDeps, false);
+  assert.ok(result.requiredJobs.split(',').includes('test'));
+  assert.ok(result.requiredJobs.split(',').includes('sonar'));
+});
+
 test('Evaluator with a shared-dependency SDK still builds shared artifacts', () => {
   const result = filterAnalysisJs('Evaluator,Vue');
   assert.equal(result.needSharedDeps, true);
