@@ -14,7 +14,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Resolve public SwiftPM tag
         run: xcodebuild -resolvePackageDependencies -project Toggly.FeatureManagement.iOS/acceptance/PublicAppleHost/PublicAppleHost.xcodeproj -scheme PublicAppleHost-iOS -clonedSourcePackagesDirPath "$RUNNER_TEMP/apple-public-packages"
       - name: Build iOS simulator host

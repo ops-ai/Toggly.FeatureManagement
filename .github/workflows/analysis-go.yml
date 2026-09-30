@@ -404,7 +404,7 @@ jobs:
 
       # Generated protobuf/grpc bindings are never hand-edited; analyze authored Go.
       - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -430,7 +430,7 @@ jobs:
         continue-on-error: true
 
       - name: SonarQube Server Scan
-        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -466,7 +466,7 @@ jobs:
           path: toggly-go-mongodb-v2/
 
       - name: SonarCloud Scan - MongoDB Driver v2
-        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -485,7 +485,7 @@ jobs:
             -Dsonar.qualitygate.wait=true
 
       - name: SonarQube Server Scan - MongoDB Driver v2
-        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -553,7 +553,7 @@ jobs:
 
       - name: SonarCloud main analysis
         if: ${{ always() && steps.coverage.outcome == 'success' }}
-        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -575,7 +575,7 @@ jobs:
 
       - name: SonarQube Server main analysis
         if: ${{ always() && steps.coverage.outcome == 'success' }}
-        uses: SonarSource/sonarqube-scan-action@v8.2.1
+        uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
