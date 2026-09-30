@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -59,7 +60,7 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     private final RedisCacheConfig config;
     private final JedisPool pool;
     private final String cacheKey;
-    private volatile DefinitionCacheRecorder definitionCacheRecorder;
+    private final AtomicReference<DefinitionCacheRecorder> definitionCacheRecorder = new AtomicReference<>();
     private final AtomicBoolean durableStartupCounted = new AtomicBoolean(false);
 
     /**
@@ -198,7 +199,7 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
 
     @Override
     public void setDefinitionCacheRecorder(DefinitionCacheRecorder recorder) {
-        this.definitionCacheRecorder = recorder;
+        this.definitionCacheRecorder.set(recorder);
         delegate.setDefinitionCacheRecorder(recorder);
     }
 
@@ -343,13 +344,17 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
 
     private FeatureSnapshot deserialize(String json) {
         try {
+            if (!isCompleteJsonObject(json)) {
+                return null;
+            }
             Map<String, FeatureDefinition> features = new HashMap<>();
             Map<String, MetricDefinition> metrics = new HashMap<>();
 
             String featuresJson = extractObjectByKey(json, "features");
-            if (featuresJson != null) {
-                parseFeatures(featuresJson, features);
+            if (featuresJson == null) {
+                return null;
             }
+            parseFeatures(featuresJson, features);
 
             // Parse timestamp
             String timestampStr = extractStringValue(json, "timestamp");
@@ -367,13 +372,12 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
 
             // Route durable Redis loads (signed and unsigned) through Http apply so
             // startup-from-cache records exactly one definition-cache hit.
-            if (delegate instanceof HttpSnapshotProvider) {
-                HttpSnapshotProvider http = (HttpSnapshotProvider) delegate;
+            if (delegate instanceof HttpSnapshotProvider http) {
                 if (!http.applyCachedSnapshot(snapshot)) {
                     return null;
                 }
             } else if (durableStartupCounted.compareAndSet(false, true)) {
-                DefinitionCacheRecorder recorder = definitionCacheRecorder;
+                DefinitionCacheRecorder recorder = definitionCacheRecorder.get();
                 if (recorder != null) {
                     recorder.recordDefinitionCacheHit();
                 }
@@ -387,6 +391,33 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     }
 
     /**
+     * Rejects truncated cache values before their nested feature object can be
+     * mistaken for a complete root object.
+     */
+    private boolean isCompleteJsonObject(String json) {
+        if (json == null) {
+            return false;
+        }
+        int start = 0;
+        while (start < json.length() && Character.isWhitespace(json.charAt(start))) {
+            start++;
+        }
+        if (start >= json.length() || json.charAt(start) != '{') {
+            return false;
+        }
+        int end = findMatchingBrace(json, start);
+        if (end < 0) {
+            return false;
+        }
+        for (int index = end + 1; index < json.length(); index++) {
+            if (!Character.isWhitespace(json.charAt(index))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Extracts the raw object body (without surrounding braces) for a top-level JSON key.
      */
     private String extractObjectByKey(String json, String key) {
@@ -395,8 +426,18 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
         if (idx < 0) {
             return null;
         }
-        idx = json.indexOf('{', idx + search.length());
-        if (idx < 0) {
+        idx += search.length();
+        while (idx < json.length() && Character.isWhitespace(json.charAt(idx))) {
+            idx++;
+        }
+        if (idx >= json.length() || json.charAt(idx) != ':') {
+            return null;
+        }
+        idx++;
+        while (idx < json.length() && Character.isWhitespace(json.charAt(idx))) {
+            idx++;
+        }
+        if (idx >= json.length() || json.charAt(idx) != '{') {
             return null;
         }
         int end = findMatchingBrace(json, idx);
@@ -439,51 +480,52 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     private void parseFeatures(String json, Map<String, FeatureDefinition> features) {
         // Only top-level "featureKey":{...} entries — nested filter "parameters":{} must not
         // become phantom features.
-        int i = 0;
-        while (i < json.length()) {
-            while (i < json.length()
-                    && (Character.isWhitespace(json.charAt(i)) || json.charAt(i) == ',')) {
-                i++;
+        int cursor = skipFeatureSeparators(json, 0);
+        while (cursor < json.length()) {
+            int next = parseFeatureAt(json, cursor, features);
+            if (next <= cursor) {
+                throw new IllegalArgumentException("Invalid cached feature entry");
             }
-            if (i >= json.length()) {
-                break;
-            }
-            if (json.charAt(i) != '"') {
-                i++;
-                continue;
-            }
-            int keyStart = i + 1;
-            int keyEnd = json.indexOf('"', keyStart);
-            if (keyEnd < 0) {
-                break;
-            }
-            String key = json.substring(keyStart, keyEnd);
-            i = keyEnd + 1;
-            while (i < json.length() && Character.isWhitespace(json.charAt(i))) {
-                i++;
-            }
-            if (i >= json.length() || json.charAt(i) != ':') {
-                continue;
-            }
-            i++;
-            while (i < json.length() && Character.isWhitespace(json.charAt(i))) {
-                i++;
-            }
-            if (i >= json.length() || json.charAt(i) != '{') {
-                continue;
-            }
-            int start = i;
-            int end = findMatchingBrace(json, start);
-            if (end <= start) {
-                break;
-            }
-            String featureJson = json.substring(start, end + 1);
-            FeatureDefinition def = parseFeatureDefinition(featureJson, key);
-            if (def != null) {
-                features.put(key, def);
-            }
-            i = end + 1;
+            cursor = skipFeatureSeparators(json, next);
         }
+    }
+
+    private int skipFeatureSeparators(String json, int cursor) {
+        while (cursor < json.length()
+                && (Character.isWhitespace(json.charAt(cursor)) || json.charAt(cursor) == ',')) {
+            cursor++;
+        }
+        return cursor;
+    }
+
+    private int parseFeatureAt(String json, int start, Map<String, FeatureDefinition> features) {
+        if (json.charAt(start) != '"') {
+            return -1;
+        }
+        int[] position = {start};
+        String key = (String) SimpleJson.parseValue(json, position);
+        int colon = skipFeatureWhitespace(json, position[0]);
+        if (colon >= json.length() || json.charAt(colon) != ':') {
+            return -1;
+        }
+        int valueStart = skipFeatureWhitespace(json, colon + 1);
+        if (valueStart >= json.length() || json.charAt(valueStart) != '{') {
+            return -1;
+        }
+        int end = findMatchingBrace(json, valueStart);
+        if (end <= valueStart) {
+            return -1;
+        }
+        FeatureDefinition definition = parseFeatureDefinition(json.substring(valueStart, end + 1), key);
+        features.put(key, definition);
+        return end + 1;
+    }
+
+    private int skipFeatureWhitespace(String json, int cursor) {
+        while (cursor < json.length() && Character.isWhitespace(json.charAt(cursor))) {
+            cursor++;
+        }
+        return cursor;
     }
 
     private int findMatchingBrace(String json, int start) {

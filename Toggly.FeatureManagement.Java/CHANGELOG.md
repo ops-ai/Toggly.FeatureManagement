@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.1.4
+
+2026-09-29
+
+### Fixed
+
+- `toggly-cache-redis` now treats truncated or non-object cached feature
+  payloads as cache misses and refreshes definitions from its delegate instead
+  of treating those entries as valid snapshots.
+
+### Changed
+
+- User-Agent and live-update `sdkVersion` report `toggly-java/2.1.4`.
+
 ## 2.1.3
 
 2026-09-29
