@@ -8,7 +8,7 @@ name: CLI Distribute
 # below — it never rebuilds a binary and never touches the GitHub Release.
 #
 # Channels:
-#   - Homebrew formula  -> ops-ai/toggly-cli-dist  (main, Formula/toggly-cli.rb)
+#   - Homebrew formula  -> ops-ai/homebrew-toggly   (main, Formula/toggly-cli.rb)
 #   - Scoop manifest     -> ops-ai/toggly-cli-dist  (main, toggly-cli.json)
 #   - apt + rpm feeds     -> ops-ai/toggly-cli-dist  (gh-pages branch)
 #   - winget manifest PR -> microsoft/winget-pkgs   (when WINGET_TOKEN set)
@@ -17,7 +17,7 @@ name: CLI Distribute
 # Every channel job is independent and `continue-on-error: true` so one
 # channel's failure (or a missing secret) never fails the others and never
 # rolls back the Release. See Toggly.CLI/packaging/README.md for the ops
-# checklist (secrets, sibling repo).
+# checklist (secrets, channel repos).
 
 on:
   release:
@@ -35,6 +35,7 @@ concurrency:
 
 env:
   DIST_REPO: ops-ai/toggly-cli-dist
+  HOMEBREW_TAP_REPO: ops-ai/homebrew-toggly
 
 jobs:
   resolve:
@@ -66,7 +67,7 @@ jobs:
           echo "version=${TAG#cli-v}" >> "$GITHUB_OUTPUT"
 
   homebrew:
-    name: Homebrew (toggly-cli-dist)
+    name: Homebrew (homebrew-toggly)
     needs: resolve
     continue-on-error: true
     runs-on: macos-latest
@@ -92,9 +93,8 @@ jobs:
           fi
 
       # ops-ai's org-wide "Branch security" ruleset (required_signatures)
-      # rejects unsigned commits on every branch of every repo, including
-      # toggly-cli-dist. Reuse the same release GPG key cli-build-release.yml
-      # already signs commits with.
+      # rejects unsigned commits on every branch of every repo. Reuse the same
+      # release GPG key cli-build-release.yml already signs commits with.
       - name: Import GPG key for commit signing
         if: steps.secrets.outputs.present == 'true'
         id: import_gpg
@@ -105,7 +105,7 @@ jobs:
           git_user_signingkey: true
           git_commit_gpgsign: true
 
-      - name: Push formula to toggly-cli-dist
+      - name: Push formula to homebrew-toggly
         if: steps.secrets.outputs.present == 'true'
         env:
           TOKEN: ${{ secrets.CLI_DIST_TOKEN || secrets.RELEASE_PUSH_TOKEN }}
@@ -115,15 +115,15 @@ jobs:
           GIT_COMMITTER_EMAIL: ${{ steps.import_gpg.outputs.email }}
         run: |
           set -euo pipefail
-          git clone "https://x-access-token:${TOKEN}@github.com/${DIST_REPO}.git" /tmp/dist-repo
-          mkdir -p /tmp/dist-repo/Formula
-          cp /tmp/dist/homebrew/Formula/toggly-cli.rb /tmp/dist-repo/Formula/toggly-cli.rb
-          cd /tmp/dist-repo
+          git clone "https://x-access-token:${TOKEN}@github.com/${HOMEBREW_TAP_REPO}.git" /tmp/tap-repo
+          mkdir -p /tmp/tap-repo/Formula
+          cp /tmp/dist/homebrew/Formula/toggly-cli.rb /tmp/tap-repo/Formula/toggly-cli.rb
+          cd /tmp/tap-repo
           git add Formula/toggly-cli.rb
           if git diff --cached --quiet; then
             echo "Formula already up to date at ${{ needs.resolve.outputs.version }}"
           else
-            git commit -S -m "Update toggly-cli formula to ${{ needs.resolve.outputs.version }} [OPS-1580]"
+            git commit -S -m "Update toggly-cli formula to ${{ needs.resolve.outputs.version }} [OPS-1640]"
             git verify-commit HEAD
             git pull --rebase --gpg-sign origin main
             git push origin HEAD:main
@@ -133,20 +133,15 @@ jobs:
         if: steps.secrets.outputs.present == 'true'
         run: |
           set -euo pipefail
-          # ops-ai/toggly-cli-dist does not follow Homebrew's `homebrew-*`
-          # naming convention, so `brew tap ops-ai/toggly-cli-dist` alone
-          # would try to clone a non-existent `homebrew-toggly-cli-dist`
-          # repo. Pass the real clone URL explicitly (also required in the
-          # install docs — see packaging/README.md).
-          brew tap ops-ai/toggly-cli-dist "https://github.com/${DIST_REPO}.git"
-          brew install ops-ai/toggly-cli-dist/toggly-cli
+          # homebrew-toggly follows Homebrew's homebrew-* naming, so the
+          # one-liner `brew install ops-ai/toggly/toggly-cli` auto-taps.
+          brew install ops-ai/toggly/toggly-cli
           chmod +x Toggly.CLI/packaging/scripts/smoke-channel.sh
           Toggly.CLI/packaging/scripts/smoke-channel.sh "${{ needs.resolve.outputs.version }}" toggly
 
   scoop:
     name: Scoop (toggly-cli-dist)
-    # Serialize with homebrew: both push signed commits to toggly-cli-dist main.
-    needs: [resolve, homebrew]
+    needs: resolve
     continue-on-error: true
     runs-on: windows-latest
     steps:
