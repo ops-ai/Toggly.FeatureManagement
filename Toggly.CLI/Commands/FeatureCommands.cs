@@ -45,7 +45,9 @@ public static class FeatureCommands
         Option<string?> Category,
         Option<string?> Tags,
         Option<string?> Variants,
-        Option<string?> Allocation);
+        Option<string?> Allocation,
+        Option<string?> Filters,
+        FilterBuilderOptions FilterBuilder);
 
     private sealed record UpdateFeatureEnvironmentOptions(
         Option<string?> ApplicationId,
@@ -245,7 +247,19 @@ public static class FeatureCommands
         Func<InvocationContext, TogglyApiClient?> apiClientFactory,
         CliCommandContext cli)
     {
-        var command = new Command(name, description);
+        // NOTE: --filters / --enable / --percentage / --targeting-* / --time-window-* here set
+        // FeatureDefinition.Filters — the definition-level *base/default* filters used to seed a
+        // feature when it is added to a new environment (see
+        // ApplicationFeatureMutationService.AddDefinitionToEnvironment in the SaaS). They are
+        // NOT per-environment overrides: those live on `feature update-environment` /
+        // `update-feature-environment`, which write ApplicationEnvironment.Definitions for one
+        // named environment. Omitting all filter options here leaves the feature's existing base
+        // filters untouched (no HTTP read-modify-write is performed).
+        var command = new Command(
+            name,
+            description + ". --filters / --enable / --percentage / --targeting-* / --time-window-* set "
+                + "the definition-level base filters (used when provisioning new environments); "
+                + "per-environment overrides are set via 'feature update-environment'.");
 
         var applicationIdOption = CommandOptions.CreateAppOption();
         var featureKeyOption = new Option<string>("--feature-key", "Feature key to update") { IsRequired = true };
@@ -259,6 +273,10 @@ public static class FeatureCommands
         var allocationOption = new Option<string?>(
             "--allocation",
             "JSON allocation object. Format: {\"percentile\":[{\"variant\":\"Control\",\"from\":0,\"to\":50}]}");
+        var filtersOption = new Option<string?>(
+            "--filters",
+            "JSON array of filter objects to set as the definition-level base filters "
+                + "(used when provisioning new environments; does not change existing per-environment overrides)");
 
         command.AddOption(applicationIdOption);
         command.AddOption(featureKeyOption);
@@ -268,6 +286,8 @@ public static class FeatureCommands
         command.AddOption(tagsOption);
         command.AddOption(variantsOption);
         command.AddOption(allocationOption);
+        command.AddOption(filtersOption);
+        var filterBuilderOptions = AddFilterBuilderOptions(command);
 
         var options = new UpdateFeatureOptions(
             applicationIdOption,
@@ -277,7 +297,9 @@ public static class FeatureCommands
             categoryOption,
             tagsOption,
             variantsOption,
-            allocationOption);
+            allocationOption,
+            filtersOption,
+            filterBuilderOptions);
 
         command.SetHandler(async (InvocationContext context) =>
         {
@@ -433,6 +455,7 @@ public static class FeatureCommands
         var tags = context.ParseResult.GetValueForOption(options.Tags);
         var variantsJson = context.ParseResult.GetValueForOption(options.Variants);
         var allocationJson = context.ParseResult.GetValueForOption(options.Allocation);
+        var filtersJson = context.ParseResult.GetValueForOption(options.Filters);
 
         var model = new FeatureDefinition
         {
@@ -451,6 +474,19 @@ public static class FeatureCommands
             context.ExitCode = 2;
             return;
         }
+
+        // Only touch the definition-level base filters when the caller actually asked to;
+        // an empty/default list here would silently wipe existing base filters on every
+        // metadata-only update (see the CreateUpdateCommand NOTE above).
+        if (!TryBuildFlatFilterList(context, options.FilterBuilder, filtersJson, out var filters, out var filtersError))
+        {
+            await cli.Output.WriteErrorAsync(filtersError);
+            context.ExitCode = 2;
+            return;
+        }
+
+        if (filters.Count > 0)
+            model.Filters = filters;
 
         await CommandOptions.RunApiAsync(context, cli, "Error updating feature", async () =>
         {
@@ -678,6 +714,37 @@ public static class FeatureCommands
             ? null
             : raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
+    /// <summary>
+    /// Builds a flat filter list by combining validated <c>--filters</c> JSON (if any) with
+    /// filters built from the first-class filter-builder options (<see cref="TryBuildFilters"/>).
+    /// An empty result (not an error) means neither was supplied. Shared by
+    /// <c>update-feature</c> (definition-level base filters) and <c>update-feature-environment</c>
+    /// (per-environment overrides, once <c>--disable</c> exclusivity is handled by the caller).
+    /// </summary>
+    private static bool TryBuildFlatFilterList(
+        InvocationContext context,
+        FilterBuilderOptions filterBuilderOptions,
+        string? filtersJson,
+        out List<FeatureFilter> filterList,
+        out string errorMessage)
+    {
+        filterList = [];
+        errorMessage = string.Empty;
+
+        if (!string.IsNullOrEmpty(filtersJson))
+        {
+            if (!FilterValidator.TryParseAndValidate(filtersJson, out var jsonFilters, out errorMessage))
+                return false;
+            filterList.AddRange(jsonFilters);
+        }
+
+        if (!TryBuildFilters(context, filterBuilderOptions, allowEmpty: true, out var builtFilters, out errorMessage))
+            return false;
+
+        filterList.AddRange(builtFilters);
+        return true;
+    }
+
     private static bool TryResolveFilterList(
         InvocationContext context,
         UpdateFeatureEnvironmentOptions options,
@@ -689,11 +756,11 @@ public static class FeatureCommands
         filterList = [];
         errorMessage = string.Empty;
 
-        if (!TryBuildFilters(context, options.FilterBuilder, allowEmpty: true, out var builtFilters, out errorMessage))
-            return false;
-
         if (disable)
         {
+            if (!TryBuildFilters(context, options.FilterBuilder, allowEmpty: true, out var builtFilters, out errorMessage))
+                return false;
+
             if (builtFilters.Count > 0 || !string.IsNullOrEmpty(filtersJson))
             {
                 errorMessage = "--disable cannot be combined with --enable, --percentage, --targeting-*, "
@@ -704,14 +771,8 @@ public static class FeatureCommands
             return true;
         }
 
-        if (!string.IsNullOrEmpty(filtersJson))
-        {
-            if (!FilterValidator.TryParseAndValidate(filtersJson, out var jsonFilters, out errorMessage))
-                return false;
-            filterList.AddRange(jsonFilters);
-        }
-
-        filterList.AddRange(builtFilters);
+        if (!TryBuildFlatFilterList(context, options.FilterBuilder, filtersJson, out filterList, out errorMessage))
+            return false;
 
         if (filterList.Count == 0)
         {

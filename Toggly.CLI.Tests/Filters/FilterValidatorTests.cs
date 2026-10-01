@@ -26,7 +26,7 @@ public class FilterValidatorTests
     [InlineData("ContextProperty")]
     [InlineData("UserClaims")]
     [InlineData("BrowserLanguage")]
-    [InlineData("OperatingSystem")]
+    [InlineData("OS")]
     [InlineData("BrowserFamily")]
     [InlineData("Country")]
     [InlineData("DeviceType")]
@@ -44,6 +44,78 @@ public class FilterValidatorTests
 
         Assert.Single(errors);
         Assert.Contains("Unknown filter name", errors[0]);
+    }
+
+    [Fact]
+    public void Validate_RejectsOperatingSystemAsFilterName()
+    {
+        // "OperatingSystem" is the array *parameter* carried inside the "OS" filter,
+        // not a filter name on its own. See StandardFilters/OS in Startup.cs.
+        var filters = new List<FeatureFilter> { new() { Name = "OperatingSystem", Parameters = new Dictionary<string, object>() } };
+
+        var errors = FilterValidator.Validate(filters);
+
+        Assert.Single(errors);
+        Assert.Contains("Unknown filter name 'OperatingSystem'", errors[0]);
+    }
+
+    [Theory]
+    [InlineData("BrowserLanguage", "BrowserLanguage")]
+    [InlineData("OS", "OperatingSystem")]
+    [InlineData("BrowserFamily", "BrowserFamily")]
+    [InlineData("Country", "Country")]
+    [InlineData("DeviceType", "DeviceType")]
+    public void Validate_AcceptsBrowserOrDeviceFilterWithRequiredArrayParameter(string filterName, string parameterName)
+    {
+        var filters = new List<FeatureFilter>
+        {
+            new() { Name = filterName, Parameters = new Dictionary<string, object> { [parameterName] = new[] { "a" } } }
+        };
+
+        var errors = FilterValidator.Validate(filters);
+
+        Assert.Empty(errors);
+    }
+
+    [Theory]
+    [InlineData("BrowserLanguage", "BrowserLanguage")]
+    [InlineData("OS", "OperatingSystem")]
+    [InlineData("BrowserFamily", "BrowserFamily")]
+    [InlineData("Country", "Country")]
+    [InlineData("DeviceType", "DeviceType")]
+    public void Validate_RejectsBrowserOrDeviceFilterMissingRequiredArrayParameter(string filterName, string parameterName)
+    {
+        var filters = new List<FeatureFilter> { new() { Name = filterName, Parameters = new Dictionary<string, object>() } };
+
+        var errors = FilterValidator.Validate(filters);
+
+        Assert.Single(errors);
+        Assert.Contains($"missing required parameter '{parameterName}'", errors[0]);
+    }
+
+    [Fact]
+    public void Validate_AcceptsUserClaimsWithClaimAndValue()
+    {
+        var filters = new List<FeatureFilter>
+        {
+            new() { Name = "UserClaims", Parameters = new Dictionary<string, object> { ["Claim"] = "role", ["Value"] = "admin" } }
+        };
+
+        var errors = FilterValidator.Validate(filters);
+
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void Validate_RejectsUserClaimsMissingClaimOrValue()
+    {
+        var filters = new List<FeatureFilter> { new() { Name = "UserClaims", Parameters = new Dictionary<string, object>() } };
+
+        var errors = FilterValidator.Validate(filters);
+
+        Assert.Equal(2, errors.Count);
+        Assert.Contains(errors, e => e.Contains("missing required parameter 'Claim'"));
+        Assert.Contains(errors, e => e.Contains("missing required parameter 'Value'"));
     }
 
     [Fact]
@@ -136,5 +208,21 @@ public class FilterValidatorTests
 
         Assert.True(ok, error);
         Assert.Equal(4, filters.Count);
+    }
+
+    [Fact]
+    public void TryParseAndValidate_AcceptsOSAndCountryFilters()
+    {
+        const string json = """
+            [
+              {"name":"OS","parameters":{"OperatingSystem":["windows","macos"]}},
+              {"name":"Country","parameters":{"Country":["US","CA"]}}
+            ]
+            """;
+
+        var ok = FilterValidator.TryParseAndValidate(json, out var filters, out var error);
+
+        Assert.True(ok, error);
+        Assert.Equal(2, filters.Count);
     }
 }

@@ -28,9 +28,13 @@ List features for an application\&. Requires \-\-app or a context default\&.
 .PP
 .B toggly\-cli feature list [\-\-app <id>] [options]
 .SS update
-Update an existing feature definition metadata, variants, and allocation\&.
+Update an existing feature definition's metadata, variants, and allocation\&.
+\-\-filters / \-\-enable / \-\-percentage / \-\-targeting\-* /
+\-\-time\-window\-* set the definition\-level base filters used when
+provisioning new environments; per\-environment overrides are set via 'feature
+update\-environment'\&.
 .PP
-.B toggly\-cli feature update \-\-feature\-key <key> [\-\-app <id>] [options]
+.B toggly\-cli feature update \-\-feature\-key <key> [\-\-app <id>] [filter\-options] [options]
 .PP
 Aliases: update\-feature.
 .SS update\-environment
@@ -139,6 +143,34 @@ JSON array of variants, e\&.g\&.
 .B \-\-allocation
 JSON allocation object, e\&.g\&.
 {"percentile":[{"variant":"Control","from":0,"to":50}]}
+.TP
+.B \-\-filters
+JSON array of filter objects, validated against the standard filter catalog,
+set as the definition\-level base filters
+.TP
+.B \-\-enable
+Build an AlwaysOn base filter
+.TP
+.B \-\-percentage
+Build a Percentage base filter with this rollout value (0\-100)
+.TP
+.B \-\-targeting\-users
+Comma\-separated user ids for a Targeting base filter
+.TP
+.B \-\-targeting\-groups
+Comma\-separated group names for a Targeting base filter
+.TP
+.B \-\-targeting\-default\-rollout
+Targeting base filter default rollout percentage (0\-100)
+.TP
+.B \-\-targeting\-ignore\-case
+Targeting base filter: ignore case when matching users/groups
+.TP
+.B \-\-time\-window\-start
+Build a TimeWindow base filter starting at this ISO\-8601 timestamp
+.TP
+.B \-\-time\-window\-end
+Build a TimeWindow base filter ending at this ISO\-8601 timestamp
 .PP
 Options for feature update\-environment:
 .TP
@@ -226,6 +258,9 @@ Emit machine\-readable camelCase JSON instead of human text
 .B toggly\-cli feature update \-\-app <app\-id> \-\-feature\-key new\-feature
 .B \-\-variants '[{"name":"Control"},{"name":"Treatment"}]' \-\-allocation
 .B '{"defaultWhenEnabled":"Control"}'
+.PP
+.B toggly\-cli feature update \-\-app <app\-id> \-\-feature\-key new\-feature
+.B \-\-percentage 25
 .PP
 .B toggly\-cli feature update\-environment \-\-app <app\-id> \-\-env
 .B Production \-\-feature\-key new\-feature \-\-enable

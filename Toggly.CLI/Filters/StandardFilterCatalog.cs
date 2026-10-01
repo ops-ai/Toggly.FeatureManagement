@@ -29,8 +29,13 @@ public static class StandardFilterCatalog
     /// <summary>Browser language allow-list filter.</summary>
     public const string BrowserLanguage = "BrowserLanguage";
 
-    /// <summary>Operating system allow-list filter.</summary>
-    public const string OperatingSystem = "OperatingSystem";
+    /// <summary>
+    /// Operating system allow-list filter. The SaaS wire <c>name</c> is the
+    /// short-name catalog id suffix <c>OS</c> (<c>StandardFilters/OS</c> in
+    /// <c>Startup.cs</c>) — NOT <c>OperatingSystem</c>. The array parameter
+    /// carried inside the filter's <c>parameters</c> is named <c>OperatingSystem</c>.
+    /// </summary>
+    public const string OS = "OS";
 
     /// <summary>Browser family allow-list filter.</summary>
     public const string BrowserFamily = "BrowserFamily";
@@ -54,9 +59,9 @@ public static class StandardFilterCatalog
             [Targeting] = [],
             [TimeWindow] = [],
             [ContextProperty] = ["ContextKind", "Property", "Operator", "Value"],
-            [UserClaims] = [],
+            [UserClaims] = ["Claim", "Value"],
             [BrowserLanguage] = ["BrowserLanguage"],
-            [OperatingSystem] = ["OperatingSystem"],
+            [OS] = ["OperatingSystem"],
             [BrowserFamily] = ["BrowserFamily"],
             [Country] = ["Country"],
             [DeviceType] = ["DeviceType"],

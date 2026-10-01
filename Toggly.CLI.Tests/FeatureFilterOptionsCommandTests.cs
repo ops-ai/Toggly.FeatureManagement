@@ -91,7 +91,7 @@ public class FeatureFilterOptionsCommandTests
         var exitCode = await CreateCommand(client).InvokeAsync([
             "update-feature-environment", "--application-id", "app-1", "--environment", "Production",
             "--feature-key", "payments-enabled", "--percentage", "10",
-            "--filters", """[{"name":"UserClaims","parameters":{}}]"""
+            "--filters", """[{"name":"UserClaims","parameters":{"Claim":"role","Value":"admin"}}]"""
         ]);
 
         Assert.Equal(0, exitCode);
@@ -266,6 +266,61 @@ public class FeatureFilterOptionsCommandTests
         using var document = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
         Assert.Equal(2, document.RootElement.GetProperty("variants").GetArrayLength());
         Assert.Equal("Control", document.RootElement.GetProperty("allocation").GetProperty("defaultWhenEnabled").GetString());
+    }
+
+    [Fact]
+    public async Task UpdateFeature_Percentage_SetsDefinitionLevelBaseFilters()
+    {
+        using var handler = new RecordingHandler(_ => JsonResponse("""{"name":"Pay","featureKey":"pay"}"""));
+        using var client = CreateHttpClient(handler);
+
+        var exitCode = await CreateCommand(client).InvokeAsync([
+            "update-feature", "--application-id", "app-1", "--feature-key", "pay", "--percentage", "40"
+        ]);
+
+        Assert.Equal(0, exitCode);
+        var request = Assert.Single(handler.Requests);
+        using var document = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+        var filter = Assert.Single(document.RootElement.GetProperty("filters").EnumerateArray());
+        Assert.Equal("Percentage", filter.GetProperty("name").GetString());
+        Assert.Equal(40, filter.GetProperty("parameters").GetProperty("Value").GetDouble());
+    }
+
+    [Fact]
+    public async Task UpdateFeature_WithoutFilterOptions_SendsEmptyFiltersArray()
+    {
+        // Pre-existing behavior (not changed by this slice): metadata-only updates
+        // currently always send an empty "filters" array because the CLI does not
+        // fetch-then-merge before PUT. This is a known follow-up, not introduced here.
+        using var handler = new RecordingHandler(_ => JsonResponse("""{"name":"Pay","featureKey":"pay"}"""));
+        using var client = CreateHttpClient(handler);
+
+        var exitCode = await CreateCommand(client).InvokeAsync([
+            "update-feature", "--application-id", "app-1", "--feature-key", "pay", "--name", "Pay"
+        ]);
+
+        Assert.Equal(0, exitCode);
+        var request = Assert.Single(handler.Requests);
+        using var document = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+        Assert.Empty(document.RootElement.GetProperty("filters").EnumerateArray());
+    }
+
+    [Fact]
+    public async Task UpdateFeature_InvalidFiltersJson_Fails()
+    {
+        using var handler = new RecordingHandler(_ => JsonResponse("""{"name":"Pay","featureKey":"pay"}"""));
+        using var client = CreateHttpClient(handler);
+        var stderr = new StringWriter();
+        var command = CliApplication.CreateRootCommand(_ => new TogglyApiClient(client, new AuthService(client), "https://api.example.test"), errorWriter: stderr);
+
+        var exitCode = await command.InvokeAsync([
+            "update-feature", "--application-id", "app-1", "--feature-key", "pay",
+            "--filters", """[{"name":"NotReal"}]"""
+        ]);
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("Unknown filter name", stderr.ToString());
+        Assert.Empty(handler.Requests);
     }
 
     [Fact]
