@@ -5,22 +5,64 @@
     <version>{{VERSION}}</version>
     <title>Toggly CLI</title>
     <authors>Opsai LLC</authors>
-    <owners>Opsai LLC</owners>
+    <owners>toggly</owners>
     <projectUrl>https://docs.toggly.io/sdks/cli</projectUrl>
+    <iconUrl>https://raw.githubusercontent.com/ops-ai/toggly-cli-dist/main/assets/package-icon.png</iconUrl>
     <licenseUrl>https://github.com/ops-ai/Toggly.FeatureManagement/blob/develop/LICENSE</licenseUrl>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <projectSourceUrl>https://github.com/ops-ai/Toggly.FeatureManagement</projectSourceUrl>
+    <projectSourceUrl>https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop/Toggly.CLI</projectSourceUrl>
+    <packageSourceUrl>https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop/Toggly.CLI/packaging/chocolatey</packageSourceUrl>
     <docsUrl>https://docs.toggly.io/sdks/cli</docsUrl>
+    <mailingListUrl>https://docs.toggly.io/sdks/cli</mailingListUrl>
     <bugTrackerUrl>https://github.com/ops-ai/Toggly.FeatureManagement/issues</bugTrackerUrl>
-    <tags>toggly feature-flags cli feature-management</tags>
-    <summary>Command-line interface for Toggly feature flag management.</summary>
-    <description>
-Command-line interface for Toggly feature flag management. Installs as `toggly` on PATH.
+    <tags>toggly feature-flags feature-flag feature-management cli devops release-management devops-tools</tags>
+    <summary>Official Toggly CLI — manage feature flags, environments, and releases from your terminal or CI.</summary>
+    <releaseNotes>https://github.com/ops-ai/Toggly.FeatureManagement/releases/tag/cli-v{{VERSION}}</releaseNotes>
+    <copyright>Copyright © Opsai LLC</copyright>
+    <description><![CDATA[
+# Toggly CLI
 
-Manage applications, environments, features, and releases from the terminal or CI. See https://docs.toggly.io/sdks/cli for full command reference.
-    </description>
+**Ship features with confidence.** The official command-line interface for [Toggly](https://toggly.io) — feature flags, environments, and releases for humans and CI.
+
+Installs the `toggly` binary on your PATH (package id stays `toggly-cli`).
+
+![Toggly](https://raw.githubusercontent.com/ops-ai/toggly-cli-dist/main/assets/package-icon.png)
+
+## Why Toggly CLI?
+
+- **Device-code login** for developers (tokens stay in the OS credential store)
+- **Client-credentials** for pipelines (`TOGGLY_CLIENT_ID` / `TOGGLY_CLIENT_SECRET`)
+- **Noun-first commands** — `toggly app`, `env`, `feature`, `release`, `context`
+- **`--json` output** for scripts and automation
+- **Same binaries** as GitHub Releases (`cli-v*`) — no rebuild-per-channel
+
+## Quick start
+
+```powershell
+choco install toggly-cli
+toggly auth login
+toggly app list
+toggly --json feature list --app <app-id>
+```
+
+## Docs
+
+| Resource | Link |
+| --- | --- |
+| Install & auth | https://docs.toggly.io/sdks/cli |
+| Commands | https://docs.toggly.io/sdks/cli/commands |
+| CI examples | https://docs.toggly.io/sdks/cli/ci |
+| Releases | https://github.com/ops-ai/Toggly.FeatureManagement/releases |
+| Source | https://github.com/ops-ai/Toggly.FeatureManagement/tree/develop/Toggly.CLI |
+
+## Notes
+
+- This package downloads the official Windows x64 zip from GitHub Releases and verifies the SHA256 checksum.
+- Archive filename is `toggly-cli.exe`; the install script renames it to `toggly.exe` so the shim is `toggly`.
+]]></description>
   </metadata>
   <files>
     <file src="tools\**" target="tools" />
+    <file src="README.md" target="README.md" />
   </files>
 </package>

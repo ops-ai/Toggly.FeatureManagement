@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.1
+
+2026-10-01
+
+### Changed
+- Richer package-manager listings: Chocolatey `iconUrl` + markdown description/README, improved winget locale (long description, moniker, tags), Scoop notes, Homebrew caveats, and nfpm blurb (OPS-1645).
+
 ## 0.4.0
 
 2026-09-30

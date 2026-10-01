@@ -1,5 +1,5 @@
 class TogglyCli < Formula
-  desc "Command-line interface for Toggly feature flag management"
+  desc "Official Toggly CLI for feature flags, environments, and releases"
   homepage "https://docs.toggly.io/sdks/cli"
   version "{{VERSION}}"
   license "MIT"
@@ -29,6 +29,17 @@ class TogglyCli < Formula
     # per the Wave 5 UX lock (docs/man reference `toggly`).
     bin.install "toggly-cli" => "toggly"
     man1.install Dir["man/*.1"] if File.directory?("man")
+  end
+
+  def caveats
+    <<~EOS
+      The binary is installed as `toggly` (not `toggly-cli`).
+
+        toggly auth login
+        toggly app list
+
+      Docs: https://docs.toggly.io/sdks/cli
+    EOS
   end
 
   test do

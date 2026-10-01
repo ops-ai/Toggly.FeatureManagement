@@ -1,0 +1,32 @@
+# Toggly CLI {{VERSION}}
+
+Official command-line interface for [Toggly](https://toggly.io) feature flag management.
+
+## Install
+
+```powershell
+choco install toggly-cli
+```
+
+Puts **`toggly`** on your PATH.
+
+## Get started
+
+```powershell
+toggly auth login
+toggly context set --app <app-id> --env Production
+toggly app list
+toggly --json feature list --app <app-id>
+```
+
+For CI, skip device login and set `TOGGLY_CLIENT_ID` + `TOGGLY_CLIENT_SECRET`.
+
+## Documentation
+
+- https://docs.toggly.io/sdks/cli
+- https://docs.toggly.io/sdks/cli/commands
+- https://docs.toggly.io/sdks/cli/ci
+
+## Release
+
+https://github.com/ops-ai/Toggly.FeatureManagement/releases/tag/cli-v{{VERSION}}
