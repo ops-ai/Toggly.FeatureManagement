@@ -50,7 +50,7 @@ namespace Toggly.FeatureManagement.Web.Filters
             var ua = uaParser.Parse(userAgent);
 
             return settings.DeviceType != null &&
-                   settings.DeviceType.Any(t => ua.Device.Family.Contains(t, StringComparison.OrdinalIgnoreCase));
+                   settings.DeviceType.Any(t => !string.IsNullOrWhiteSpace(t) && ua.Device.Family.Contains(t, StringComparison.OrdinalIgnoreCase));
         }
 
         public class DeviceTypeFilterSettings
