@@ -96,10 +96,11 @@ cd /tmp/dist/nfpm && nfpm package --config toggly-cli-amd64.yaml --packager deb 
 
 | Path | Responsibility |
 | --- | --- |
+| `assets/package-icon.png` | 256×256 package icon (mirrored to `toggly-cli-dist` for `iconUrl`) |
 | `homebrew/toggly-cli.rb.tmpl` | Homebrew formula template; installs binary as `toggly`, man pages when present |
 | `scoop/toggly-cli.json.tmpl` | Scoop manifest template; renames shim to `toggly` |
 | `winget/*.tmpl` | winget multi-file manifest templates (version / installer / `en-US` locale), portable install type, `toggly` alias |
-| `chocolatey/toggly-cli.nuspec.tmpl` + `chocolatey/tools/*.ps1.tmpl` | Chocolatey package; renames extracted exe to `toggly.exe` so the generated shim is `toggly` |
+| `chocolatey/toggly-cli.nuspec.tmpl` + `README.md.tmpl` + `tools/*.ps1.tmpl` | Chocolatey package with rich markdown description + iconUrl; renames exe to `toggly.exe` |
 | `nfpm/toggly-cli.yaml.tmpl` | nfpm config for `.deb` / `.rpm`; installs binary at `/usr/bin/toggly` + man pages under `/usr/share/man/man1/` |
 | `scripts/render-templates.sh` | Fetches `SHA256SUMS` for a tag, renders every template above |
 | `scripts/smoke-channel.sh` | Generic `<bin> --version` assertion used by every channel's CI smoke step |

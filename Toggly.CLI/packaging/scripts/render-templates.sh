@@ -90,6 +90,8 @@ render "$SCRIPT_DIR/winget/Opsai.TogglyCLI.locale.en-US.yaml.tmpl" \
 
 render "$SCRIPT_DIR/chocolatey/toggly-cli.nuspec.tmpl" \
   "$OUT_DIR/chocolatey/toggly-cli.nuspec"
+render "$SCRIPT_DIR/chocolatey/README.md.tmpl" \
+  "$OUT_DIR/chocolatey/README.md"
 render "$SCRIPT_DIR/chocolatey/tools/chocolateyinstall.ps1.tmpl" \
   "$OUT_DIR/chocolatey/tools/chocolateyinstall.ps1"
 render "$SCRIPT_DIR/chocolatey/tools/chocolateyuninstall.ps1.tmpl" \
