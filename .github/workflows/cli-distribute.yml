@@ -218,27 +218,33 @@ jobs:
     name: winget (Opsai.TogglyCLI)
     needs: resolve
     continue-on-error: true
-    runs-on: ubuntu-latest
+    # wingetcreate ships as a Windows exe (aka.ms/wingetcreate/latest), not a
+    # cross-platform dotnet tool — must run on windows-latest.
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
       - name: Render winget manifests
+        shell: bash
         run: |
           chmod +x Toggly.CLI/packaging/scripts/render-templates.sh
-          Toggly.CLI/packaging/scripts/render-templates.sh "${{ needs.resolve.outputs.tag }}" /tmp/dist
+          Toggly.CLI/packaging/scripts/render-templates.sh "${{ needs.resolve.outputs.tag }}" "$RUNNER_TEMP/dist"
 
       - name: Upload rendered manifests
         uses: actions/upload-artifact@v7
         with:
           name: winget-manifests-${{ needs.resolve.outputs.version }}
-          path: /tmp/dist/winget/manifests/**
+          path: ${{ runner.temp }}/dist/winget/manifests/**
           retention-days: 90
 
       - name: Check winget token
         id: secrets
+        shell: bash
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: |
-          if [ -z "${{ secrets.WINGET_TOKEN }}" ]; then
+          if [ -z "$WINGET_TOKEN" ]; then
             echo "present=false" >> "$GITHUB_OUTPUT"
             echo "::warning::WINGET_TOKEN not set — rendered manifests uploaded as an artifact for manual submission to microsoft/winget-pkgs. See Toggly.CLI/packaging/README.md."
           else
@@ -247,17 +253,23 @@ jobs:
 
       - name: Submit to winget-pkgs
         if: steps.secrets.outputs.present == 'true'
+        shell: pwsh
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          CLI_VERSION: ${{ needs.resolve.outputs.version }}
         run: |
-          set -euo pipefail
-          dotnet tool install --global wingetcreate
-          export PATH="$PATH:$HOME/.dotnet/tools"
-          wingetcreate update Opsai.TogglyCLI \
-            --version "${{ needs.resolve.outputs.version }}" \
-            --urls "https://github.com/ops-ai/Toggly.FeatureManagement/releases/download/${{ needs.resolve.outputs.tag }}/toggly-cli-windows-x64.zip" \
-            --token "$WINGET_TOKEN" \
-            --submit
+          $ErrorActionPreference = 'Stop'
+          # wingetcreate submit expects the version directory that contains the
+          # three YAML files, not the manifests/ root.
+          $manifestDir = Join-Path $env:RUNNER_TEMP "dist/winget/manifests/o/Opsai/TogglyCLI/$env:CLI_VERSION"
+          if (-not (Test-Path -LiteralPath $manifestDir)) {
+            throw "Manifest directory not found: $manifestDir"
+          }
+          Get-ChildItem -LiteralPath $manifestDir | ForEach-Object { $_.FullName }
+          Invoke-WebRequest -Uri 'https://aka.ms/wingetcreate/latest' -OutFile wingetcreate.exe
+          # submit works for first publish and later versions (unlike update,
+          # which requires the package to already exist in winget-pkgs).
+          .\wingetcreate.exe submit $manifestDir --token $env:WINGET_TOKEN
 
   chocolatey:
     name: Chocolatey (toggly-cli)
