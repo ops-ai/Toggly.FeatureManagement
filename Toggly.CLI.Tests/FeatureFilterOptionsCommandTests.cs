@@ -287,11 +287,12 @@ public class FeatureFilterOptionsCommandTests
     }
 
     [Fact]
-    public async Task UpdateFeature_WithoutFilterOptions_SendsEmptyFiltersArray()
+    public async Task UpdateFeature_WithoutFilterOptions_OmitsFiltersFromRequestBody()
     {
-        // Pre-existing behavior (not changed by this slice): metadata-only updates
-        // currently always send an empty "filters" array because the CLI does not
-        // fetch-then-merge before PUT. This is a known follow-up, not introduced here.
+        // Metadata-only updates must not PUT an empty "filters" array: the server
+        // (ApplicationFeatureMutationService.UpdateCatalogMetadata) unconditionally assigns
+        // existing.Filters = model.Filters, so sending "[]" would wipe the definition's
+        // existing base filters. Omitting the key entirely means "do not touch filters".
         using var handler = new RecordingHandler(_ => JsonResponse("""{"name":"Pay","featureKey":"pay"}"""));
         using var client = CreateHttpClient(handler);
 
@@ -302,7 +303,28 @@ public class FeatureFilterOptionsCommandTests
         Assert.Equal(0, exitCode);
         var request = Assert.Single(handler.Requests);
         using var document = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
-        Assert.Empty(document.RootElement.GetProperty("filters").EnumerateArray());
+        Assert.False(
+            document.RootElement.TryGetProperty("filters", out _),
+            "metadata-only update-feature must omit 'filters' entirely, not send an empty array");
+    }
+
+    [Fact]
+    public async Task UpdateFeature_WithFiltersJson_IncludesFiltersInRequestBody()
+    {
+        using var handler = new RecordingHandler(_ => JsonResponse("""{"name":"Pay","featureKey":"pay"}"""));
+        using var client = CreateHttpClient(handler);
+
+        var exitCode = await CreateCommand(client).InvokeAsync([
+            "update-feature", "--application-id", "app-1", "--feature-key", "pay",
+            "--filters", """[{"name":"AlwaysOn","parameters":{}}]"""
+        ]);
+
+        Assert.Equal(0, exitCode);
+        var request = Assert.Single(handler.Requests);
+        using var document = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+        Assert.True(document.RootElement.TryGetProperty("filters", out var filtersElement));
+        var filter = Assert.Single(filtersElement.EnumerateArray());
+        Assert.Equal("AlwaysOn", filter.GetProperty("name").GetString());
     }
 
     [Fact]
