@@ -256,13 +256,20 @@ jobs:
         shell: pwsh
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+          CLI_VERSION: ${{ needs.resolve.outputs.version }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $manifestRoot = Join-Path $env:RUNNER_TEMP 'dist/winget/manifests'
+          # wingetcreate submit expects the version directory that contains the
+          # three YAML files, not the manifests/ root.
+          $manifestDir = Join-Path $env:RUNNER_TEMP "dist/winget/manifests/o/Opsai/TogglyCLI/$env:CLI_VERSION"
+          if (-not (Test-Path -LiteralPath $manifestDir)) {
+            throw "Manifest directory not found: $manifestDir"
+          }
+          Get-ChildItem -LiteralPath $manifestDir | ForEach-Object { $_.FullName }
           Invoke-WebRequest -Uri 'https://aka.ms/wingetcreate/latest' -OutFile wingetcreate.exe
           # submit works for first publish and later versions (unlike update,
           # which requires the package to already exist in winget-pkgs).
-          .\wingetcreate.exe submit $manifestRoot --token $env:WINGET_TOKEN
+          .\wingetcreate.exe submit $manifestDir --token $env:WINGET_TOKEN
 
   chocolatey:
     name: Chocolatey (toggly-cli)
