@@ -178,7 +178,7 @@ jobs:
           git_user_signingkey: true
           git_commit_gpgsign: true
 
-      - name: Push manifest to toggly-cli-dist
+      - name: Push manifest + package icons to toggly-cli-dist
         if: steps.secrets.outputs.present == 'true'
         shell: bash
         env:
@@ -191,12 +191,17 @@ jobs:
           set -euo pipefail
           git clone "https://x-access-token:${TOKEN}@github.com/${DIST_REPO}.git" "$RUNNER_TEMP/dist-repo"
           cp "$RUNNER_TEMP/dist/scoop/toggly-cli.json" "$RUNNER_TEMP/dist-repo/toggly-cli.json"
+          # Keep Chocolatey iconUrl stable: sync icons from this repo's packaging assets.
+          mkdir -p "$RUNNER_TEMP/dist-repo/assets"
+          cp Toggly.CLI/packaging/assets/package-icon.png \
+            Toggly.CLI/packaging/assets/package-icon-128.png \
+            "$RUNNER_TEMP/dist-repo/assets/"
           cd "$RUNNER_TEMP/dist-repo"
-          git add toggly-cli.json
+          git add toggly-cli.json assets/package-icon.png assets/package-icon-128.png
           if git diff --cached --quiet; then
-            echo "Manifest already up to date at ${{ needs.resolve.outputs.version }}"
+            echo "Manifest and icons already up to date at ${{ needs.resolve.outputs.version }}"
           else
-            git commit -S -m "Update toggly-cli scoop manifest to ${{ needs.resolve.outputs.version }} [OPS-1580]"
+            git commit -S -m "Update toggly-cli scoop manifest and package icons to ${{ needs.resolve.outputs.version }} [OPS-1645]"
             git verify-commit HEAD
             # Pull/rebase in case another channel landed on main between clone and push.
             git pull --rebase --gpg-sign origin main
