@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Toggly.CLI.Variants;
 
 namespace Toggly.CLI.Models;
 
@@ -276,6 +277,18 @@ public class FeatureDefinition
     /// </summary>
     [JsonPropertyName("createdOnUtc")]
     public DateTime CreatedOnUtc { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Named variants for this feature flag (e.g., for A/B testing).
+    /// </summary>
+    [JsonPropertyName("variants")]
+    public List<VariantModel>? Variants { get; set; }
+
+    /// <summary>
+    /// Allocation rules determining which variant is assigned to each user.
+    /// </summary>
+    [JsonPropertyName("allocation")]
+    public VariantAllocationModel? Allocation { get; set; }
 }
 
 /// <summary>

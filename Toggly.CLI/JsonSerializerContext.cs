@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Toggly.CLI.Models;
+using Toggly.CLI.Variants;
 
 namespace Toggly.CLI;
 
@@ -9,6 +10,7 @@ namespace Toggly.CLI;
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     WriteIndented = false)]
+[JsonSerializable(typeof(System.Text.Json.JsonElement))]
 [JsonSerializable(typeof(CreateReleaseRequest))]
 [JsonSerializable(typeof(AssociateBuildRequest))]
 [JsonSerializable(typeof(ReleaseModel))]
@@ -27,6 +29,15 @@ namespace Toggly.CLI;
 [JsonSerializable(typeof(ReleaseSummary))]
 [JsonSerializable(typeof(List<ReleaseSummary>), TypeInfoPropertyName = "ListReleaseSummary")]
 [JsonSerializable(typeof(List<FeatureDefinition>), TypeInfoPropertyName = "ListFeatureDefinition")]
+[JsonSerializable(typeof(VariantModel))]
+[JsonSerializable(typeof(List<VariantModel>), TypeInfoPropertyName = "ListVariantModel")]
+[JsonSerializable(typeof(VariantAllocationModel))]
+[JsonSerializable(typeof(UserAllocationModel))]
+[JsonSerializable(typeof(List<UserAllocationModel>), TypeInfoPropertyName = "ListUserAllocationModel")]
+[JsonSerializable(typeof(GroupAllocationModel))]
+[JsonSerializable(typeof(List<GroupAllocationModel>), TypeInfoPropertyName = "ListGroupAllocationModel")]
+[JsonSerializable(typeof(PercentileAllocationModel))]
+[JsonSerializable(typeof(List<PercentileAllocationModel>), TypeInfoPropertyName = "ListPercentileAllocationModel")]
 [JsonSerializable(typeof(ContextPrefs))]
 [JsonSerializable(typeof(Services.AuthService.TokenResponse))]
 [JsonSerializable(typeof(Services.AuthService.OpenIdConfig))]
