@@ -397,7 +397,7 @@ public static class FeatureCommands
             return;
         }
 
-        if (!TryBuildFilters(context, options.FilterBuilder, allowEmpty: true, out var builtFilters, out var builderError))
+        if (!TryBuildFilters(context, options.FilterBuilder, allowEmpty: true, out var builtFilters, out _, out var builderError))
         {
             await cli.Output.WriteErrorAsync(builderError);
             context.ExitCode = 2;
@@ -477,15 +477,17 @@ public static class FeatureCommands
 
         // Only touch the definition-level base filters when the caller actually asked to;
         // an empty/default list here would silently wipe existing base filters on every
-        // metadata-only update (see the CreateUpdateCommand NOTE above).
-        if (!TryBuildFlatFilterList(context, options.FilterBuilder, filtersJson, out var filters, out var filtersError))
+        // metadata-only update (see the CreateUpdateCommand NOTE above). Use
+        // anyFilterOptionProvided (not filters.Count > 0) so an explicit `--filters '[]'`
+        // still sends an empty array — it means "clear filters", not "don't touch filters".
+        if (!TryBuildFlatFilterList(context, options.FilterBuilder, filtersJson, out var filters, out var anyFilterOptionProvided, out var filtersError))
         {
             await cli.Output.WriteErrorAsync(filtersError);
             context.ExitCode = 2;
             return;
         }
 
-        if (filters.Count > 0)
+        if (anyFilterOptionProvided)
             model.Filters = filters;
 
         await CommandOptions.RunApiAsync(context, cli, "Error updating feature", async () =>
@@ -627,6 +629,7 @@ public static class FeatureCommands
         FilterBuilderOptions options,
         bool allowEmpty,
         out List<FeatureFilter> filters,
+        out bool anyOptionProvided,
         out string errorMessage)
     {
         filters = [];
@@ -640,6 +643,16 @@ public static class FeatureCommands
         var targetingIgnoreCase = context.ParseResult.GetValueForOption(options.TargetingIgnoreCase);
         var timeWindowStartRaw = context.ParseResult.GetValueForOption(options.TimeWindowStart);
         var timeWindowEndRaw = context.ParseResult.GetValueForOption(options.TimeWindowEnd);
+
+        var targetingRequestedForTracking = !string.IsNullOrEmpty(targetingUsersRaw)
+            || !string.IsNullOrEmpty(targetingGroupsRaw)
+            || targetingDefaultRollout is not null
+            || targetingIgnoreCase;
+        var timeWindowRequestedForTracking = !string.IsNullOrEmpty(timeWindowStartRaw) || !string.IsNullOrEmpty(timeWindowEndRaw);
+        anyOptionProvided = enable
+            || percentage is not null
+            || targetingRequestedForTracking
+            || timeWindowRequestedForTracking;
 
         try
         {
@@ -720,28 +733,44 @@ public static class FeatureCommands
     /// An empty result (not an error) means neither was supplied. Shared by
     /// <c>update-feature</c> (definition-level base filters) and <c>update-feature-environment</c>
     /// (per-environment overrides, once <c>--disable</c> exclusivity is handled by the caller).
+    /// <paramref name="anyFilterOptionProvided"/> is true when the caller explicitly passed
+    /// <c>--filters</c> (even <c>'[]'</c>) and/or any filter-builder option — distinct from
+    /// <c>filterList.Count &gt; 0</c>, which is false for an explicit <c>--filters '[]'</c>.
+    /// Callers that need to distinguish "clear filters" from "don't touch filters" (e.g.
+    /// <c>update-feature</c>, which treats a null/omitted <c>Filters</c> as "leave alone") must
+    /// use this flag rather than <c>filterList.Count</c>.
     /// </summary>
     private static bool TryBuildFlatFilterList(
         InvocationContext context,
         FilterBuilderOptions filterBuilderOptions,
         string? filtersJson,
         out List<FeatureFilter> filterList,
+        out bool anyFilterOptionProvided,
         out string errorMessage)
     {
         filterList = [];
         errorMessage = string.Empty;
+        var filtersJsonProvided = filtersJson is not null;
 
         if (!string.IsNullOrEmpty(filtersJson))
         {
             if (!FilterValidator.TryParseAndValidate(filtersJson, out var jsonFilters, out errorMessage))
+            {
+                anyFilterOptionProvided = filtersJsonProvided;
                 return false;
+            }
+
             filterList.AddRange(jsonFilters);
         }
 
-        if (!TryBuildFilters(context, filterBuilderOptions, allowEmpty: true, out var builtFilters, out errorMessage))
+        if (!TryBuildFilters(context, filterBuilderOptions, allowEmpty: true, out var builtFilters, out var builderOptionProvided, out errorMessage))
+        {
+            anyFilterOptionProvided = filtersJsonProvided || builderOptionProvided;
             return false;
+        }
 
         filterList.AddRange(builtFilters);
+        anyFilterOptionProvided = filtersJsonProvided || builderOptionProvided;
         return true;
     }
 
@@ -758,7 +787,7 @@ public static class FeatureCommands
 
         if (disable)
         {
-            if (!TryBuildFilters(context, options.FilterBuilder, allowEmpty: true, out var builtFilters, out errorMessage))
+            if (!TryBuildFilters(context, options.FilterBuilder, allowEmpty: true, out var builtFilters, out _, out errorMessage))
                 return false;
 
             if (builtFilters.Count > 0 || !string.IsNullOrEmpty(filtersJson))
@@ -771,7 +800,7 @@ public static class FeatureCommands
             return true;
         }
 
-        if (!TryBuildFlatFilterList(context, options.FilterBuilder, filtersJson, out filterList, out errorMessage))
+        if (!TryBuildFlatFilterList(context, options.FilterBuilder, filtersJson, out filterList, out _, out errorMessage))
             return false;
 
         if (filterList.Count == 0)

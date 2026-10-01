@@ -328,6 +328,29 @@ public class FeatureFilterOptionsCommandTests
     }
 
     [Fact]
+    public async Task UpdateFeature_WithExplicitEmptyFiltersJson_SendsEmptyFiltersArray()
+    {
+        // --filters '[]' is an explicit "clear the definition's base filters" request, distinct
+        // from omitting --filters entirely (which must leave existing filters untouched). The
+        // request body must therefore contain "filters":[] rather than omitting the key.
+        using var handler = new RecordingHandler(_ => JsonResponse("""{"name":"Pay","featureKey":"pay"}"""));
+        using var client = CreateHttpClient(handler);
+
+        var exitCode = await CreateCommand(client).InvokeAsync([
+            "update-feature", "--application-id", "app-1", "--feature-key", "pay",
+            "--filters", "[]"
+        ]);
+
+        Assert.Equal(0, exitCode);
+        var request = Assert.Single(handler.Requests);
+        using var document = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+        Assert.True(
+            document.RootElement.TryGetProperty("filters", out var filtersElement),
+            "explicit --filters '[]' must send the 'filters' key, not omit it");
+        Assert.Empty(filtersElement.EnumerateArray());
+    }
+
+    [Fact]
     public async Task UpdateFeature_InvalidFiltersJson_Fails()
     {
         using var handler = new RecordingHandler(_ => JsonResponse("""{"name":"Pay","featureKey":"pay"}"""));
