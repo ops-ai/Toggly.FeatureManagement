@@ -475,11 +475,8 @@ public static class FeatureCommands
             return;
         }
 
-        // Only touch the definition-level base filters when the caller actually asked to;
-        // an empty/default list here would silently wipe existing base filters on every
-        // metadata-only update (see the CreateUpdateCommand NOTE above). Use
-        // anyFilterOptionProvided (not filters.Count > 0) so an explicit `--filters '[]'`
-        // still sends an empty array — it means "clear filters", not "don't touch filters".
+        // Omit Filters on metadata-only updates so SaaS leaves base filters unchanged.
+        // anyFilterOptionProvided covers an explicit empty JSON array (clear filters).
         if (!TryBuildFlatFilterList(context, options.FilterBuilder, filtersJson, out var filters, out var anyFilterOptionProvided, out var filtersError))
         {
             await cli.Output.WriteErrorAsync(filtersError);
@@ -721,7 +718,11 @@ public static class FeatureCommands
         if (string.IsNullOrEmpty(raw))
             return true;
 
-        if (!DateTimeOffset.TryParse(raw, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsed))
+        if (!DateTimeOffset.TryParse(
+                raw,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind,
+                out var parsed))
         {
             errorMessage = $"{optionName}: '{raw}' is not a valid ISO-8601 timestamp";
             return false;

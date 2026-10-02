@@ -52,13 +52,10 @@ public static class FilterValidator
             yield return error;
     }
 
-    private static IEnumerable<string> ValidateRequiredParameters(FeatureFilter filter)
-    {
-        var missingRequired = StandardFilterCatalog.RequiredParameters[filter.Name]
-            .Where(required => filter.Parameters is null || !filter.Parameters.ContainsKey(required));
-        foreach (var required in missingRequired)
-            yield return $"Filter '{filter.Name}' is missing required parameter '{required}'.";
-    }
+    private static IEnumerable<string> ValidateRequiredParameters(FeatureFilter filter) =>
+        StandardFilterCatalog.RequiredParameters[filter.Name]
+            .Where(required => filter.Parameters is null || !filter.Parameters.ContainsKey(required))
+            .Select(required => $"Filter '{filter.Name}' is missing required parameter '{required}'.");
 
     /// <summary>Value-shape checks for the hybrid filters where it is cheap and
     /// unambiguous (TimeWindow presence, Percentage range).</summary>
