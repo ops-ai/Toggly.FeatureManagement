@@ -24,42 +24,61 @@ public static class FilterValidator
             return errors;
 
         foreach (var filter in filters)
-        {
-            if (string.IsNullOrWhiteSpace(filter.Name))
-            {
-                errors.Add("Filter name is required.");
-                continue;
-            }
-
-            if (!StandardFilterCatalog.IsKnown(filter.Name))
-            {
-                errors.Add($"Unknown filter name '{filter.Name}'.");
-                continue;
-            }
-
-            var missingRequired = StandardFilterCatalog.RequiredParameters[filter.Name]
-                .Where(required => filter.Parameters is null || !filter.Parameters.ContainsKey(required));
-            foreach (var required in missingRequired)
-                errors.Add($"Filter '{filter.Name}' is missing required parameter '{required}'.");
-
-            if (filter.Name == StandardFilterCatalog.TimeWindow)
-            {
-                var hasStart = filter.Parameters?.ContainsKey("Start") == true;
-                var hasEnd = filter.Parameters?.ContainsKey("End") == true;
-                if (!hasStart && !hasEnd)
-                    errors.Add("Filter 'TimeWindow' requires at least one of 'Start' or 'End'.");
-            }
-
-            if (filter.Name == StandardFilterCatalog.Percentage
-                && filter.Parameters is not null
-                && filter.Parameters.TryGetValue("Value", out var rawValue)
-                && !IsValidPercentage(rawValue))
-            {
-                errors.Add("Filter 'Percentage' parameter 'Value' must be a number between 0 and 100.");
-            }
-        }
+            errors.AddRange(ValidateFilter(filter));
 
         return errors;
+    }
+
+    /// <summary>Validates a single filter: catalog-name checks, then (only for a known
+    /// name) required-parameter and value-shape checks.</summary>
+    private static IEnumerable<string> ValidateFilter(FeatureFilter filter)
+    {
+        if (string.IsNullOrWhiteSpace(filter.Name))
+        {
+            yield return "Filter name is required.";
+            yield break;
+        }
+
+        if (!StandardFilterCatalog.IsKnown(filter.Name))
+        {
+            yield return $"Unknown filter name '{filter.Name}'.";
+            yield break;
+        }
+
+        foreach (var error in ValidateRequiredParameters(filter))
+            yield return error;
+
+        foreach (var error in ValidateValueShape(filter))
+            yield return error;
+    }
+
+    private static IEnumerable<string> ValidateRequiredParameters(FeatureFilter filter)
+    {
+        var missingRequired = StandardFilterCatalog.RequiredParameters[filter.Name]
+            .Where(required => filter.Parameters is null || !filter.Parameters.ContainsKey(required));
+        foreach (var required in missingRequired)
+            yield return $"Filter '{filter.Name}' is missing required parameter '{required}'.";
+    }
+
+    /// <summary>Value-shape checks for the hybrid filters where it is cheap and
+    /// unambiguous (TimeWindow presence, Percentage range).</summary>
+    private static IEnumerable<string> ValidateValueShape(FeatureFilter filter)
+    {
+        if (filter.Name == StandardFilterCatalog.TimeWindow)
+        {
+            var hasStart = filter.Parameters?.ContainsKey("Start") == true;
+            var hasEnd = filter.Parameters?.ContainsKey("End") == true;
+            if (!hasStart && !hasEnd)
+                yield return "Filter 'TimeWindow' requires at least one of 'Start' or 'End'.";
+        }
+
+        if (filter.Name == StandardFilterCatalog.Percentage
+            && filter.Parameters is not null
+            && filter.Parameters.TryGetValue("Value", out var rawValue)
+            && !IsValidPercentage(rawValue))
+        {
+            yield return "Filter 'Percentage' parameter 'Value' must be a number between 0 and 100.";
+        }
     }
 
     /// <summary>

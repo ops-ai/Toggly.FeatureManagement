@@ -113,57 +113,80 @@ public static class VariantPayload
         if (allocation is null)
             return errors;
 
-        var known = knownVariantNames;
-
-        bool IsKnownVariant(string? variant) =>
-            known is null || known.Count == 0 || string.IsNullOrWhiteSpace(variant) ||
-            known.Contains(variant, StringComparer.OrdinalIgnoreCase);
-
-        if (!string.IsNullOrWhiteSpace(allocation.DefaultWhenEnabled) && !IsKnownVariant(allocation.DefaultWhenEnabled))
-            errors.Add($"Allocation 'defaultWhenEnabled' references unknown variant '{allocation.DefaultWhenEnabled}'.");
-
-        if (!string.IsNullOrWhiteSpace(allocation.DefaultWhenDisabled) && !IsKnownVariant(allocation.DefaultWhenDisabled))
-            errors.Add($"Allocation 'defaultWhenDisabled' references unknown variant '{allocation.DefaultWhenDisabled}'.");
-
-        foreach (var user in allocation.User ?? [])
-        {
-            if (string.IsNullOrWhiteSpace(user.Variant))
-                errors.Add("User allocation requires a variant name.");
-            else if (!IsKnownVariant(user.Variant))
-                errors.Add($"User allocation references unknown variant '{user.Variant}'.");
-
-            if (user.Users is null || user.Users.Count == 0)
-                errors.Add($"User allocation for variant '{user.Variant}' requires at least one user.");
-        }
-
-        foreach (var group in allocation.Group ?? [])
-        {
-            if (string.IsNullOrWhiteSpace(group.Variant))
-                errors.Add("Group allocation requires a variant name.");
-            else if (!IsKnownVariant(group.Variant))
-                errors.Add($"Group allocation references unknown variant '{group.Variant}'.");
-
-            if (group.Groups is null || group.Groups.Count == 0)
-                errors.Add($"Group allocation for variant '{group.Variant}' requires at least one group.");
-        }
-
-        foreach (var percentile in allocation.Percentile ?? [])
-        {
-            if (string.IsNullOrWhiteSpace(percentile.Variant))
-                errors.Add("Percentile allocation requires a variant name.");
-            else if (!IsKnownVariant(percentile.Variant))
-                errors.Add($"Percentile allocation references unknown variant '{percentile.Variant}'.");
-
-            if (percentile.From is < 0 or > 100)
-                errors.Add($"Percentile allocation 'from' must be between 0 and 100 (got {percentile.From}).");
-
-            if (percentile.To is < 0 or > 100)
-                errors.Add($"Percentile allocation 'to' must be between 0 and 100 (got {percentile.To}).");
-
-            if (percentile.To <= percentile.From)
-                errors.Add($"Percentile allocation 'to' ({percentile.To}) must be greater than 'from' ({percentile.From}).");
-        }
+        errors.AddRange(ValidateDefaultVariantReferences(allocation, knownVariantNames));
+        errors.AddRange(ValidateUserAllocations(allocation.User, knownVariantNames));
+        errors.AddRange(ValidateGroupAllocations(allocation.Group, knownVariantNames));
+        errors.AddRange(ValidatePercentileAllocations(allocation.Percentile, knownVariantNames));
 
         return errors;
+    }
+
+    private static bool IsKnownVariant(string? variant, IReadOnlyCollection<string>? knownVariantNames) =>
+        knownVariantNames is null || knownVariantNames.Count == 0 || string.IsNullOrWhiteSpace(variant)
+            || knownVariantNames.Contains(variant, StringComparer.OrdinalIgnoreCase);
+
+    private static IEnumerable<string> ValidateDefaultVariantReferences(
+        VariantAllocationModel allocation,
+        IReadOnlyCollection<string>? knownVariantNames)
+    {
+        if (!string.IsNullOrWhiteSpace(allocation.DefaultWhenEnabled) && !IsKnownVariant(allocation.DefaultWhenEnabled, knownVariantNames))
+            yield return $"Allocation 'defaultWhenEnabled' references unknown variant '{allocation.DefaultWhenEnabled}'.";
+
+        if (!string.IsNullOrWhiteSpace(allocation.DefaultWhenDisabled) && !IsKnownVariant(allocation.DefaultWhenDisabled, knownVariantNames))
+            yield return $"Allocation 'defaultWhenDisabled' references unknown variant '{allocation.DefaultWhenDisabled}'.";
+    }
+
+    private static IEnumerable<string> ValidateUserAllocations(
+        List<UserAllocationModel>? users,
+        IReadOnlyCollection<string>? knownVariantNames)
+    {
+        foreach (var user in users ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(user.Variant))
+                yield return "User allocation requires a variant name.";
+            else if (!IsKnownVariant(user.Variant, knownVariantNames))
+                yield return $"User allocation references unknown variant '{user.Variant}'.";
+
+            if (user.Users is null || user.Users.Count == 0)
+                yield return $"User allocation for variant '{user.Variant}' requires at least one user.";
+        }
+    }
+
+    private static IEnumerable<string> ValidateGroupAllocations(
+        List<GroupAllocationModel>? groups,
+        IReadOnlyCollection<string>? knownVariantNames)
+    {
+        foreach (var group in groups ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(group.Variant))
+                yield return "Group allocation requires a variant name.";
+            else if (!IsKnownVariant(group.Variant, knownVariantNames))
+                yield return $"Group allocation references unknown variant '{group.Variant}'.";
+
+            if (group.Groups is null || group.Groups.Count == 0)
+                yield return $"Group allocation for variant '{group.Variant}' requires at least one group.";
+        }
+    }
+
+    private static IEnumerable<string> ValidatePercentileAllocations(
+        List<PercentileAllocationModel>? percentiles,
+        IReadOnlyCollection<string>? knownVariantNames)
+    {
+        foreach (var percentile in percentiles ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(percentile.Variant))
+                yield return "Percentile allocation requires a variant name.";
+            else if (!IsKnownVariant(percentile.Variant, knownVariantNames))
+                yield return $"Percentile allocation references unknown variant '{percentile.Variant}'.";
+
+            if (percentile.From is < 0 or > 100)
+                yield return $"Percentile allocation 'from' must be between 0 and 100 (got {percentile.From}).";
+
+            if (percentile.To is < 0 or > 100)
+                yield return $"Percentile allocation 'to' must be between 0 and 100 (got {percentile.To}).";
+
+            if (percentile.To <= percentile.From)
+                yield return $"Percentile allocation 'to' ({percentile.To}) must be greater than 'from' ({percentile.From}).";
+        }
     }
 }

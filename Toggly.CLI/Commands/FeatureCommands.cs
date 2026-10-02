@@ -644,11 +644,8 @@ public static class FeatureCommands
         var timeWindowStartRaw = context.ParseResult.GetValueForOption(options.TimeWindowStart);
         var timeWindowEndRaw = context.ParseResult.GetValueForOption(options.TimeWindowEnd);
 
-        var targetingRequested = !string.IsNullOrEmpty(targetingUsersRaw)
-            || !string.IsNullOrEmpty(targetingGroupsRaw)
-            || targetingDefaultRollout is not null
-            || targetingIgnoreCase;
-        var timeWindowRequested = !string.IsNullOrEmpty(timeWindowStartRaw) || !string.IsNullOrEmpty(timeWindowEndRaw);
+        var targetingRequested = IsTargetingRequested(targetingUsersRaw, targetingGroupsRaw, targetingDefaultRollout, targetingIgnoreCase);
+        var timeWindowRequested = IsTimeWindowRequested(timeWindowStartRaw, timeWindowEndRaw);
         anyOptionProvided = enable || percentage is not null || targetingRequested || timeWindowRequested;
 
         try
@@ -660,24 +657,14 @@ public static class FeatureCommands
                 filters.Add(FilterBuilder.Percentage(percentage.Value));
 
             if (targetingRequested)
-            {
-                var users = SplitCsv(targetingUsersRaw);
-                var groups = SplitCsv(targetingGroupsRaw);
-                filters.Add(FilterBuilder.Targeting(
-                    users,
-                    groups,
-                    targetingDefaultRollout,
-                    targetingIgnoreCase ? true : null));
-            }
+                filters.Add(BuildTargetingFilter(targetingUsersRaw, targetingGroupsRaw, targetingDefaultRollout, targetingIgnoreCase));
 
             if (timeWindowRequested)
             {
-                if (!TryParseTimestamp(timeWindowStartRaw, "--time-window-start", out var start, out errorMessage))
-                    return false;
-                if (!TryParseTimestamp(timeWindowEndRaw, "--time-window-end", out var end, out errorMessage))
+                if (!TryBuildTimeWindowFilter(timeWindowStartRaw, timeWindowEndRaw, out var timeWindowFilter, out errorMessage))
                     return false;
 
-                filters.Add(FilterBuilder.TimeWindow(start, end));
+                filters.Add(timeWindowFilter);
             }
         }
         catch (ArgumentException ex)
@@ -694,6 +681,36 @@ public static class FeatureCommands
             return false;
         }
 
+        return true;
+    }
+
+    private static bool IsTargetingRequested(string? usersRaw, string? groupsRaw, double? defaultRollout, bool ignoreCase) =>
+        !string.IsNullOrEmpty(usersRaw) || !string.IsNullOrEmpty(groupsRaw) || defaultRollout is not null || ignoreCase;
+
+    private static bool IsTimeWindowRequested(string? startRaw, string? endRaw) =>
+        !string.IsNullOrEmpty(startRaw) || !string.IsNullOrEmpty(endRaw);
+
+    private static FeatureFilter BuildTargetingFilter(string? usersRaw, string? groupsRaw, double? defaultRollout, bool ignoreCase)
+    {
+        var users = SplitCsv(usersRaw);
+        var groups = SplitCsv(groupsRaw);
+        return FilterBuilder.Targeting(users, groups, defaultRollout, ignoreCase ? true : null);
+    }
+
+    private static bool TryBuildTimeWindowFilter(
+        string? startRaw,
+        string? endRaw,
+        out FeatureFilter filter,
+        out string errorMessage)
+    {
+        filter = null!;
+
+        if (!TryParseTimestamp(startRaw, "--time-window-start", out var start, out errorMessage))
+            return false;
+        if (!TryParseTimestamp(endRaw, "--time-window-end", out var end, out errorMessage))
+            return false;
+
+        filter = FilterBuilder.TimeWindow(start, end);
         return true;
     }
 
