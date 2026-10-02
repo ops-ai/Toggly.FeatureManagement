@@ -288,14 +288,20 @@ public class FeatureDefinition
 
     /// <summary>
     /// Named variants for this feature flag (e.g., for A/B testing).
+    /// Null (the default) means "do not touch the server's existing variants" — omitted
+    /// from the JSON payload rather than sent as null, which would wipe server state on a
+    /// metadata-only update. Same omit/clear contract as <see cref="Filters"/>.
     /// </summary>
     [JsonPropertyName("variants")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<VariantModel>? Variants { get; set; }
 
     /// <summary>
     /// Allocation rules determining which variant is assigned to each user.
+    /// Null means omit from the payload (leave server allocation unchanged).
     /// </summary>
     [JsonPropertyName("allocation")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public VariantAllocationModel? Allocation { get; set; }
 }
 
