@@ -475,16 +475,14 @@ public static class FeatureCommands
             return;
         }
 
-        // Omit Filters on metadata-only updates so SaaS leaves base filters unchanged.
-        // anyFilterOptionProvided covers an explicit empty JSON array (clear filters).
-        if (!TryBuildFlatFilterList(context, options.FilterBuilder, filtersJson, out var filters, out var anyFilterOptionProvided, out var filtersError))
+        if (!TryBuildFlatFilterList(context, options.FilterBuilder, filtersJson, out var filters, out var filterOptionsProvided, out var filtersError))
         {
             await cli.Output.WriteErrorAsync(filtersError);
             context.ExitCode = 2;
             return;
         }
 
-        if (anyFilterOptionProvided)
+        if (filterOptionsProvided)
             model.Filters = filters;
 
         await CommandOptions.RunApiAsync(context, cli, "Error updating feature", async () =>
