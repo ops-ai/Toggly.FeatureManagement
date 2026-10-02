@@ -213,8 +213,8 @@
     },
     {
       "path": ["feature", "create"],
-      "description": "Create a new feature definition.",
-      "synopsis": "toggly-cli feature create --name <name> --feature-key <key> [--app <id>] [options]",
+      "description": "Create a new feature definition. First-class filter options (--enable, --percentage, --targeting-*, --time-window-*) require --environment and are validated/merged with --environment-filters via the standard filter catalog.",
+      "synopsis": "toggly-cli feature create --name <name> --feature-key <key> [--app <id>] [--environment <name>] [filter-options] [options]",
       "options": [
         {
           "name": "--app, --application-id",
@@ -242,19 +242,65 @@
         },
         {
           "name": "--environment-filters",
-          "description": "JSON object mapping environment names to filter arrays"
+          "description": "JSON object mapping environment names to filter arrays, validated against the standard filter catalog"
+        },
+        {
+          "name": "--environment",
+          "description": "Environment name to apply first-class filter options to (required when any filter-builder option is set)"
+        },
+        {
+          "name": "--enable",
+          "description": "Build an AlwaysOn filter for --environment"
+        },
+        {
+          "name": "--percentage",
+          "description": "Build a Percentage filter with this rollout value (0-100) for --environment"
+        },
+        {
+          "name": "--targeting-users",
+          "description": "Comma-separated user ids for a Targeting filter"
+        },
+        {
+          "name": "--targeting-groups",
+          "description": "Comma-separated group names for a Targeting filter"
+        },
+        {
+          "name": "--targeting-default-rollout",
+          "description": "Targeting filter default rollout percentage (0-100)"
+        },
+        {
+          "name": "--targeting-ignore-case",
+          "description": "Targeting filter: ignore case when matching users/groups"
+        },
+        {
+          "name": "--time-window-start",
+          "description": "Build a TimeWindow filter starting at this ISO-8601 timestamp"
+        },
+        {
+          "name": "--time-window-end",
+          "description": "Build a TimeWindow filter ending at this ISO-8601 timestamp"
+        },
+        {
+          "name": "--variants",
+          "description": "JSON array of variants, e.g. [{\"name\":\"Control\",\"configurationValue\":false}]"
+        },
+        {
+          "name": "--allocation",
+          "description": "JSON allocation object, e.g. {\"percentile\":[{\"variant\":\"Control\",\"from\":0,\"to\":50}]}"
         }
       ],
       "examples": [
-        "toggly-cli feature create --app <app-id> --name \"New Feature\" --feature-key new-feature"
+        "toggly-cli feature create --app <app-id> --name \"New Feature\" --feature-key new-feature",
+        "toggly-cli feature create --app <app-id> --name \"New Feature\" --feature-key new-feature --environment Production --percentage 25",
+        "toggly-cli feature create --app <app-id> --name \"New Feature\" --feature-key new-feature --variants '[{\"name\":\"Control\"},{\"name\":\"Treatment\"}]' --allocation '{\"defaultWhenEnabled\":\"Control\"}'"
       ],
       "seeAlso": ["feature update", "create-feature"],
       "aliases": ["create-feature"]
     },
     {
       "path": ["feature", "update"],
-      "description": "Update an existing feature definition metadata.",
-      "synopsis": "toggly-cli feature update --feature-key <key> [--app <id>] [options]",
+      "description": "Update an existing feature definition's metadata, variants, and allocation. --filters / --enable / --percentage / --targeting-* / --time-window-* set the definition-level base filters used when provisioning new environments; per-environment overrides are set via 'feature update-environment'.",
+      "synopsis": "toggly-cli feature update --feature-key <key> [--app <id>] [filter-options] [options]",
       "options": [
         {
           "name": "--app, --application-id",
@@ -279,18 +325,64 @@
         {
           "name": "--tags",
           "description": "Comma-separated list of tags"
+        },
+        {
+          "name": "--variants",
+          "description": "JSON array of variants, e.g. [{\"name\":\"Control\",\"configurationValue\":false}]"
+        },
+        {
+          "name": "--allocation",
+          "description": "JSON allocation object, e.g. {\"percentile\":[{\"variant\":\"Control\",\"from\":0,\"to\":50}]}"
+        },
+        {
+          "name": "--filters",
+          "description": "JSON array of filter objects, validated against the standard filter catalog, set as the definition-level base filters"
+        },
+        {
+          "name": "--enable",
+          "description": "Build an AlwaysOn base filter"
+        },
+        {
+          "name": "--percentage",
+          "description": "Build a Percentage base filter with this rollout value (0-100)"
+        },
+        {
+          "name": "--targeting-users",
+          "description": "Comma-separated user ids for a Targeting base filter"
+        },
+        {
+          "name": "--targeting-groups",
+          "description": "Comma-separated group names for a Targeting base filter"
+        },
+        {
+          "name": "--targeting-default-rollout",
+          "description": "Targeting base filter default rollout percentage (0-100)"
+        },
+        {
+          "name": "--targeting-ignore-case",
+          "description": "Targeting base filter: ignore case when matching users/groups"
+        },
+        {
+          "name": "--time-window-start",
+          "description": "Build a TimeWindow base filter starting at this ISO-8601 timestamp"
+        },
+        {
+          "name": "--time-window-end",
+          "description": "Build a TimeWindow base filter ending at this ISO-8601 timestamp"
         }
       ],
       "examples": [
-        "toggly-cli feature update --app <app-id> --feature-key new-feature --description \"Updated\""
+        "toggly-cli feature update --app <app-id> --feature-key new-feature --description \"Updated\"",
+        "toggly-cli feature update --app <app-id> --feature-key new-feature --variants '[{\"name\":\"Control\"},{\"name\":\"Treatment\"}]' --allocation '{\"defaultWhenEnabled\":\"Control\"}'",
+        "toggly-cli feature update --app <app-id> --feature-key new-feature --percentage 25"
       ],
       "seeAlso": ["feature create", "feature update-environment", "update-feature"],
       "aliases": ["update-feature"]
     },
     {
       "path": ["feature", "update-environment"],
-      "description": "Update feature configuration on a specific environment. Specify exactly one of --enable, --disable, or --filters.",
-      "synopsis": "toggly-cli feature update-environment --feature-key <key> [--app <id>] [--env <name>] (--enable | --disable | --filters <json>) [options]",
+      "description": "Update feature configuration on a specific environment. Combine --enable, --percentage, --targeting-*, --time-window-*, and/or --filters (validated via the standard filter catalog), or specify --disable alone.",
+      "synopsis": "toggly-cli feature update-environment --feature-key <key> [--app <id>] [--env <name>] (--disable | [filter-options] [--filters <json>]) [options]",
       "options": [
         {
           "name": "--app, --application-id",
@@ -310,15 +402,45 @@
         },
         {
           "name": "--disable",
-          "description": "Disable the feature (removes all filters)"
+          "description": "Disable the feature (removes all filters; cannot combine with other filter options)"
+        },
+        {
+          "name": "--percentage",
+          "description": "Build a Percentage filter with this rollout value (0-100)"
+        },
+        {
+          "name": "--targeting-users",
+          "description": "Comma-separated user ids for a Targeting filter"
+        },
+        {
+          "name": "--targeting-groups",
+          "description": "Comma-separated group names for a Targeting filter"
+        },
+        {
+          "name": "--targeting-default-rollout",
+          "description": "Targeting filter default rollout percentage (0-100)"
+        },
+        {
+          "name": "--targeting-ignore-case",
+          "description": "Targeting filter: ignore case when matching users/groups"
+        },
+        {
+          "name": "--time-window-start",
+          "description": "Build a TimeWindow filter starting at this ISO-8601 timestamp"
+        },
+        {
+          "name": "--time-window-end",
+          "description": "Build a TimeWindow filter ending at this ISO-8601 timestamp"
         },
         {
           "name": "--filters",
-          "description": "JSON array of filter objects"
+          "description": "JSON array of filter objects, validated against the standard filter catalog and merged with any filter-builder options"
         }
       ],
       "examples": [
-        "toggly-cli feature update-environment --app <app-id> --env Production --feature-key new-feature --enable"
+        "toggly-cli feature update-environment --app <app-id> --env Production --feature-key new-feature --enable",
+        "toggly-cli feature update-environment --app <app-id> --env Production --feature-key new-feature --percentage 25",
+        "toggly-cli feature update-environment --app <app-id> --env Production --feature-key new-feature --targeting-users alice,bob --targeting-default-rollout 10"
       ],
       "seeAlso": ["feature update", "update-feature-environment"],
       "aliases": ["update-feature-environment"]
@@ -508,21 +630,21 @@
     {
       "path": ["create-feature"],
       "description": "Flat alias for 'feature create' (deprecation window).",
-      "synopsis": "toggly-cli create-feature --name <name> --feature-key <key> [--app <id>] [options]",
+      "synopsis": "toggly-cli create-feature --name <name> --feature-key <key> [--app <id>] [--environment <name>] [filter-options] [options]",
       "aliasOf": ["feature", "create"],
       "seeAlso": ["feature create"]
     },
     {
       "path": ["update-feature"],
       "description": "Flat alias for 'feature update' (deprecation window).",
-      "synopsis": "toggly-cli update-feature --feature-key <key> [--app <id>] [options]",
+      "synopsis": "toggly-cli update-feature --feature-key <key> [--app <id>] [filter-options] [options]",
       "aliasOf": ["feature", "update"],
       "seeAlso": ["feature update"]
     },
     {
       "path": ["update-feature-environment"],
       "description": "Flat alias for 'feature update-environment' (deprecation window).",
-      "synopsis": "toggly-cli update-feature-environment --feature-key <key> [--app <id>] [--env <name>] (--enable | --disable | --filters <json>) [options]",
+      "synopsis": "toggly-cli update-feature-environment --feature-key <key> [--app <id>] [--env <name>] (--disable | [filter-options] [--filters <json>]) [options]",
       "aliasOf": ["feature", "update-environment"],
       "seeAlso": ["feature update-environment"]
     },

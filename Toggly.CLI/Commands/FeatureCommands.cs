@@ -1,9 +1,11 @@
 using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.Text.Json;
+using Toggly.CLI.Filters;
 using Toggly.CLI.Models;
 using Toggly.CLI.Output;
 using Toggly.CLI.Services;
+using Toggly.CLI.Variants;
 
 namespace Toggly.CLI.Commands;
 
@@ -12,6 +14,16 @@ namespace Toggly.CLI.Commands;
 /// </summary>
 public static class FeatureCommands
 {
+    private sealed record FilterBuilderOptions(
+        Option<bool> Enable,
+        Option<double?> Percentage,
+        Option<string?> TargetingUsers,
+        Option<string?> TargetingGroups,
+        Option<double?> TargetingDefaultRollout,
+        Option<bool> TargetingIgnoreCase,
+        Option<string?> TimeWindowStart,
+        Option<string?> TimeWindowEnd);
+
     private sealed record CreateFeatureOptions(
         Option<string?> ApplicationId,
         Option<string> Name,
@@ -19,7 +31,11 @@ public static class FeatureCommands
         Option<string?> Description,
         Option<string?> Category,
         Option<string?> Tags,
-        Option<string?> EnvironmentFilters);
+        Option<string?> EnvironmentFilters,
+        Option<string?> Environment,
+        FilterBuilderOptions FilterBuilder,
+        Option<string?> Variants,
+        Option<string?> Allocation);
 
     private sealed record UpdateFeatureOptions(
         Option<string?> ApplicationId,
@@ -27,15 +43,19 @@ public static class FeatureCommands
         Option<string?> Name,
         Option<string?> Description,
         Option<string?> Category,
-        Option<string?> Tags);
+        Option<string?> Tags,
+        Option<string?> Variants,
+        Option<string?> Allocation,
+        Option<string?> Filters,
+        FilterBuilderOptions FilterBuilder);
 
     private sealed record UpdateFeatureEnvironmentOptions(
         Option<string?> ApplicationId,
         Option<string?> Environment,
         Option<string> FeatureKey,
-        Option<bool> Enable,
         Option<bool> Disable,
-        Option<string?> Filters);
+        Option<string?> Filters,
+        FilterBuilderOptions FilterBuilder);
 
     /// <summary>
     /// Create the <c>feature</c> noun group.
@@ -122,6 +142,39 @@ public static class FeatureCommands
                     f => FormatFeature(f));
             });
 
+    private static FilterBuilderOptions AddFilterBuilderOptions(Command command)
+    {
+        var enableOption = new Option<bool>("--enable", "Enable the feature (sets AlwaysOn filter)");
+        var percentageOption = new Option<double?>("--percentage", "Build a Percentage filter with this rollout value (0-100)");
+        var targetingUsersOption = new Option<string?>("--targeting-users", "Comma-separated user ids for a Targeting filter");
+        var targetingGroupsOption = new Option<string?>("--targeting-groups", "Comma-separated group names for a Targeting filter");
+        var targetingDefaultRolloutOption = new Option<double?>(
+            "--targeting-default-rollout",
+            "Targeting filter default rollout percentage (0-100)");
+        var targetingIgnoreCaseOption = new Option<bool>("--targeting-ignore-case", "Targeting filter: ignore case when matching users/groups");
+        var timeWindowStartOption = new Option<string?>("--time-window-start", "Build a TimeWindow filter starting at this ISO-8601 timestamp");
+        var timeWindowEndOption = new Option<string?>("--time-window-end", "Build a TimeWindow filter ending at this ISO-8601 timestamp");
+
+        command.AddOption(enableOption);
+        command.AddOption(percentageOption);
+        command.AddOption(targetingUsersOption);
+        command.AddOption(targetingGroupsOption);
+        command.AddOption(targetingDefaultRolloutOption);
+        command.AddOption(targetingIgnoreCaseOption);
+        command.AddOption(timeWindowStartOption);
+        command.AddOption(timeWindowEndOption);
+
+        return new FilterBuilderOptions(
+            enableOption,
+            percentageOption,
+            targetingUsersOption,
+            targetingGroupsOption,
+            targetingDefaultRolloutOption,
+            targetingIgnoreCaseOption,
+            timeWindowStartOption,
+            timeWindowEndOption);
+    }
+
     private static Command CreateCreateCommand(
         string name,
         string description,
@@ -142,6 +195,14 @@ public static class FeatureCommands
         var environmentFiltersOption = new Option<string?>(
             "--environment-filters",
             "JSON object mapping environment names to filter arrays. Format: {\"Production\":[{\"name\":\"AlwaysOn\",\"parameters\":{}}]}");
+        var environmentOption = CommandOptions.CreateEnvOption(
+            "Environment name to apply first-class filter options (--percentage, --targeting-*, --time-window-*) to");
+        var variantsOption = new Option<string?>(
+            "--variants",
+            "JSON array of variants. Format: [{\"name\":\"Control\",\"configurationValue\":false}]");
+        var allocationOption = new Option<string?>(
+            "--allocation",
+            "JSON allocation object. Format: {\"percentile\":[{\"variant\":\"Control\",\"from\":0,\"to\":50}]}");
 
         command.AddOption(applicationIdOption);
         command.AddOption(nameOption);
@@ -150,6 +211,10 @@ public static class FeatureCommands
         command.AddOption(categoryOption);
         command.AddOption(tagsOption);
         command.AddOption(environmentFiltersOption);
+        command.AddOption(environmentOption);
+        var filterBuilderOptions = AddFilterBuilderOptions(command);
+        command.AddOption(variantsOption);
+        command.AddOption(allocationOption);
 
         var options = new CreateFeatureOptions(
             applicationIdOption,
@@ -158,7 +223,11 @@ public static class FeatureCommands
             descriptionOption,
             categoryOption,
             tagsOption,
-            environmentFiltersOption);
+            environmentFiltersOption,
+            environmentOption,
+            filterBuilderOptions,
+            variantsOption,
+            allocationOption);
 
         command.SetHandler(async (InvocationContext context) =>
         {
@@ -178,7 +247,19 @@ public static class FeatureCommands
         Func<InvocationContext, TogglyApiClient?> apiClientFactory,
         CliCommandContext cli)
     {
-        var command = new Command(name, description);
+        // NOTE: --filters / --enable / --percentage / --targeting-* / --time-window-* here set
+        // FeatureDefinition.Filters — the definition-level *base/default* filters used to seed a
+        // feature when it is added to a new environment (see
+        // ApplicationFeatureMutationService.AddDefinitionToEnvironment in the SaaS). They are
+        // NOT per-environment overrides: those live on `feature update-environment` /
+        // `update-feature-environment`, which write ApplicationEnvironment.Definitions for one
+        // named environment. Omitting all filter options here leaves the feature's existing base
+        // filters untouched (no HTTP read-modify-write is performed).
+        var command = new Command(
+            name,
+            description + ". --filters / --enable / --percentage / --targeting-* / --time-window-* set "
+                + "the definition-level base filters (used when provisioning new environments); "
+                + "per-environment overrides are set via 'feature update-environment'.");
 
         var applicationIdOption = CommandOptions.CreateAppOption();
         var featureKeyOption = new Option<string>("--feature-key", "Feature key to update") { IsRequired = true };
@@ -186,6 +267,16 @@ public static class FeatureCommands
         var descriptionOption = new Option<string?>("--description", "Feature description");
         var categoryOption = new Option<string?>("--category", "Feature category");
         var tagsOption = new Option<string?>("--tags", "Comma-separated list of tags");
+        var variantsOption = new Option<string?>(
+            "--variants",
+            "JSON array of variants. Format: [{\"name\":\"Control\",\"configurationValue\":false}]");
+        var allocationOption = new Option<string?>(
+            "--allocation",
+            "JSON allocation object. Format: {\"percentile\":[{\"variant\":\"Control\",\"from\":0,\"to\":50}]}");
+        var filtersOption = new Option<string?>(
+            "--filters",
+            "JSON array of filter objects to set as the definition-level base filters "
+                + "(used when provisioning new environments; does not change existing per-environment overrides)");
 
         command.AddOption(applicationIdOption);
         command.AddOption(featureKeyOption);
@@ -193,6 +284,10 @@ public static class FeatureCommands
         command.AddOption(descriptionOption);
         command.AddOption(categoryOption);
         command.AddOption(tagsOption);
+        command.AddOption(variantsOption);
+        command.AddOption(allocationOption);
+        command.AddOption(filtersOption);
+        var filterBuilderOptions = AddFilterBuilderOptions(command);
 
         var options = new UpdateFeatureOptions(
             applicationIdOption,
@@ -200,7 +295,11 @@ public static class FeatureCommands
             nameOption,
             descriptionOption,
             categoryOption,
-            tagsOption);
+            tagsOption,
+            variantsOption,
+            allocationOption,
+            filtersOption,
+            filterBuilderOptions);
 
         command.SetHandler(async (InvocationContext context) =>
         {
@@ -220,13 +319,15 @@ public static class FeatureCommands
         Func<InvocationContext, TogglyApiClient?> apiClientFactory,
         CliCommandContext cli)
     {
-        var command = new Command(name, description);
+        var command = new Command(
+            name,
+            description + ". Specify one or more of --enable, --percentage, --targeting-*, "
+                + "--time-window-*, --filters, or --disable alone.");
 
         var applicationIdOption = CommandOptions.CreateAppOption();
         var environmentOption = CommandOptions.CreateEnvOption(
             "Environment name (e.g., Production, Staging)");
         var featureKeyOption = new Option<string>("--feature-key", "Feature key") { IsRequired = true };
-        var enableOption = new Option<bool>("--enable", "Enable the feature (sets AlwaysOn filter)");
         var disableOption = new Option<bool>("--disable", "Disable the feature (removes all filters)");
         var filtersOption = new Option<string?>(
             "--filters",
@@ -235,17 +336,17 @@ public static class FeatureCommands
         command.AddOption(applicationIdOption);
         command.AddOption(environmentOption);
         command.AddOption(featureKeyOption);
-        command.AddOption(enableOption);
         command.AddOption(disableOption);
         command.AddOption(filtersOption);
+        var filterBuilderOptions = AddFilterBuilderOptions(command);
 
         var options = new UpdateFeatureEnvironmentOptions(
             applicationIdOption,
             environmentOption,
             featureKeyOption,
-            enableOption,
             disableOption,
-            filtersOption);
+            filtersOption,
+            filterBuilderOptions);
 
         command.SetHandler(async (InvocationContext context) =>
         {
@@ -274,6 +375,9 @@ public static class FeatureCommands
         var category = context.ParseResult.GetValueForOption(options.Category);
         var tags = context.ParseResult.GetValueForOption(options.Tags);
         var environmentFilters = context.ParseResult.GetValueForOption(options.EnvironmentFilters);
+        var environment = context.ParseResult.GetValueForOption(options.Environment);
+        var variantsJson = context.ParseResult.GetValueForOption(options.Variants);
+        var allocationJson = context.ParseResult.GetValueForOption(options.Allocation);
 
         var model = new FeatureDefinitionCreateModel
         {
@@ -286,9 +390,40 @@ public static class FeatureCommands
         if (!string.IsNullOrEmpty(tags))
             model.Tags = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
-        if (!TryApplyEnvironmentFilters(environmentFilters, model, out var parseError))
+        if (!TryApplyEnvironmentFilters(environmentFilters, model, out var environmentFiltersError))
         {
-            await cli.Output.WriteErrorAsync(parseError);
+            await cli.Output.WriteErrorAsync(environmentFiltersError);
+            context.ExitCode = 2;
+            return;
+        }
+
+        if (!TryBuildFilters(context, options.FilterBuilder, allowEmpty: true, out var builtFilters, out _, out var builderError))
+        {
+            await cli.Output.WriteErrorAsync(builderError);
+            context.ExitCode = 2;
+            return;
+        }
+
+        if (builtFilters.Count > 0)
+        {
+            if (string.IsNullOrEmpty(environment))
+            {
+                await cli.Output.WriteErrorAsync(
+                    "--percentage, --targeting-*, --time-window-*, and --enable require --environment when creating a feature");
+                context.ExitCode = 2;
+                return;
+            }
+
+            model.EnvironmentFilters ??= new Dictionary<string, List<FeatureFilter>>();
+            if (model.EnvironmentFilters.TryGetValue(environment, out var existing))
+                existing.AddRange(builtFilters);
+            else
+                model.EnvironmentFilters[environment] = builtFilters;
+        }
+
+        if (!TryApplyVariantsAndAllocation(variantsJson, allocationJson, model, out var variantsError))
+        {
+            await cli.Output.WriteErrorAsync(variantsError);
             context.ExitCode = 2;
             return;
         }
@@ -318,6 +453,9 @@ public static class FeatureCommands
         var description = context.ParseResult.GetValueForOption(options.Description);
         var category = context.ParseResult.GetValueForOption(options.Category);
         var tags = context.ParseResult.GetValueForOption(options.Tags);
+        var variantsJson = context.ParseResult.GetValueForOption(options.Variants);
+        var allocationJson = context.ParseResult.GetValueForOption(options.Allocation);
+        var filtersJson = context.ParseResult.GetValueForOption(options.Filters);
 
         var model = new FeatureDefinition
         {
@@ -329,6 +467,23 @@ public static class FeatureCommands
 
         if (!string.IsNullOrEmpty(tags))
             model.Tags = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+        if (!TryApplyVariantsAndAllocation(variantsJson, allocationJson, model, out var variantsError))
+        {
+            await cli.Output.WriteErrorAsync(variantsError);
+            context.ExitCode = 2;
+            return;
+        }
+
+        if (!TryBuildFlatFilterList(context, options.FilterBuilder, filtersJson, out var filters, out var filterOptionsProvided, out var filtersError))
+        {
+            await cli.Output.WriteErrorAsync(filtersError);
+            context.ExitCode = 2;
+            return;
+        }
+
+        if (filterOptionsProvided)
+            model.Filters = filters;
 
         await CommandOptions.RunApiAsync(context, cli, "Error updating feature", async () =>
         {
@@ -354,11 +509,10 @@ public static class FeatureCommands
             return;
 
         var featureKey = context.ParseResult.GetValueForOption(options.FeatureKey)!;
-        var enable = context.ParseResult.GetValueForOption(options.Enable);
         var disable = context.ParseResult.GetValueForOption(options.Disable);
-        var filters = context.ParseResult.GetValueForOption(options.Filters);
+        var filtersJson = context.ParseResult.GetValueForOption(options.Filters);
 
-        if (!TryResolveFilterList(enable, disable, filters, out var filterList, out var errorMessage))
+        if (!TryResolveFilterList(context, options, disable, filtersJson, out var filterList, out var errorMessage))
         {
             await cli.Output.WriteErrorAsync(errorMessage);
             context.ExitCode = 2;
@@ -401,69 +555,303 @@ public static class FeatureCommands
         if (string.IsNullOrEmpty(environmentFilters))
             return true;
 
+        Dictionary<string, List<FeatureFilter>>? parsed;
         try
         {
-            model.EnvironmentFilters = JsonSerializer.Deserialize(
+            parsed = JsonSerializer.Deserialize(
                 environmentFilters,
                 TogglyJsonSerializerContext.Default.DictionaryStringListFeatureFilter);
-            return true;
         }
         catch (JsonException ex)
         {
             errorMessage = $"Error parsing environment filters: {ex.Message}";
             return false;
         }
+
+        if (parsed is not null)
+        {
+            var errors = new List<string>();
+            foreach (var (envName, filters) in parsed)
+            {
+                foreach (var error in FilterValidator.Validate(filters))
+                    errors.Add($"{envName}: {error}");
+            }
+
+            if (errors.Count > 0)
+            {
+                errorMessage = $"Error validating environment filters: {string.Join("; ", errors)}";
+                return false;
+            }
+        }
+
+        model.EnvironmentFilters = parsed;
+        return true;
+    }
+
+    private static bool TryApplyVariantsAndAllocation(
+        string? variantsJson,
+        string? allocationJson,
+        FeatureDefinition model,
+        out string errorMessage)
+    {
+        errorMessage = string.Empty;
+
+        if (!string.IsNullOrEmpty(variantsJson))
+        {
+            if (!VariantPayload.TryParseVariants(variantsJson, out var variants, out errorMessage))
+                return false;
+            model.Variants = variants;
+        }
+
+        if (!string.IsNullOrEmpty(allocationJson))
+        {
+            var knownVariantNames = model.Variants?.Select(v => v.Name).ToList();
+            if (!VariantPayload.TryParseAllocation(allocationJson, out var allocation, out errorMessage, knownVariantNames))
+                return false;
+            model.Allocation = allocation;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Builds a filter list from the first-class filter-builder options
+    /// (--enable, --percentage, --targeting-*, --time-window-*). Returns an
+    /// empty list (not an error) when none of the options are present.
+    /// </summary>
+    private static bool TryBuildFilters(
+        InvocationContext context,
+        FilterBuilderOptions options,
+        bool allowEmpty,
+        out List<FeatureFilter> filters,
+        out bool anyOptionProvided,
+        out string errorMessage)
+    {
+        filters = [];
+        errorMessage = string.Empty;
+
+        var enable = context.ParseResult.GetValueForOption(options.Enable);
+        var percentage = context.ParseResult.GetValueForOption(options.Percentage);
+        var targetingUsersRaw = context.ParseResult.GetValueForOption(options.TargetingUsers);
+        var targetingGroupsRaw = context.ParseResult.GetValueForOption(options.TargetingGroups);
+        var targetingDefaultRollout = context.ParseResult.GetValueForOption(options.TargetingDefaultRollout);
+        var targetingIgnoreCase = context.ParseResult.GetValueForOption(options.TargetingIgnoreCase);
+        var timeWindowStartRaw = context.ParseResult.GetValueForOption(options.TimeWindowStart);
+        var timeWindowEndRaw = context.ParseResult.GetValueForOption(options.TimeWindowEnd);
+
+        var targetingRequested = IsTargetingRequested(targetingUsersRaw, targetingGroupsRaw, targetingDefaultRollout, targetingIgnoreCase);
+        var timeWindowRequested = IsTimeWindowRequested(timeWindowStartRaw, timeWindowEndRaw);
+        anyOptionProvided = enable || percentage is not null || targetingRequested || timeWindowRequested;
+
+        try
+        {
+            if (enable)
+                filters.Add(FilterBuilder.AlwaysOn());
+
+            if (percentage is not null)
+                filters.Add(FilterBuilder.Percentage(percentage.Value));
+
+            if (targetingRequested)
+                filters.Add(BuildTargetingFilter(targetingUsersRaw, targetingGroupsRaw, targetingDefaultRollout, targetingIgnoreCase));
+
+            if (timeWindowRequested)
+            {
+                if (!TryBuildTimeWindowFilter(timeWindowStartRaw, timeWindowEndRaw, out var timeWindowFilter, out errorMessage))
+                    return false;
+
+                filters.Add(timeWindowFilter);
+            }
+        }
+        catch (ArgumentException ex)
+        {
+            errorMessage = ex.Message;
+            return false;
+        }
+
+        if (!allowEmpty && filters.Count == 0)
+        {
+            errorMessage = "Must specify one of: --enable, --disable, --percentage, --targeting-users, "
+                + "--targeting-groups, --targeting-default-rollout, --targeting-ignore-case, "
+                + "--time-window-start, --time-window-end, or --filters";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsTargetingRequested(string? usersRaw, string? groupsRaw, double? defaultRollout, bool ignoreCase) =>
+        !string.IsNullOrEmpty(usersRaw) || !string.IsNullOrEmpty(groupsRaw) || defaultRollout is not null || ignoreCase;
+
+    private static bool IsTimeWindowRequested(string? startRaw, string? endRaw) =>
+        !string.IsNullOrEmpty(startRaw) || !string.IsNullOrEmpty(endRaw);
+
+    /// <summary>
+    /// True when any filter-related option was supplied, without parsing or validating values.
+    /// Used for <c>--disable</c> exclusivity checks so invalid companion values still yield a conflict error.
+    /// </summary>
+    private static bool HasAnyFilterOption(
+        InvocationContext context,
+        FilterBuilderOptions options,
+        string? filtersJson)
+    {
+        if (!string.IsNullOrWhiteSpace(filtersJson))
+            return true;
+
+        var enable = context.ParseResult.GetValueForOption(options.Enable);
+        var percentage = context.ParseResult.GetValueForOption(options.Percentage);
+        var targetingUsersRaw = context.ParseResult.GetValueForOption(options.TargetingUsers);
+        var targetingGroupsRaw = context.ParseResult.GetValueForOption(options.TargetingGroups);
+        var targetingDefaultRollout = context.ParseResult.GetValueForOption(options.TargetingDefaultRollout);
+        var targetingIgnoreCase = context.ParseResult.GetValueForOption(options.TargetingIgnoreCase);
+        var timeWindowStartRaw = context.ParseResult.GetValueForOption(options.TimeWindowStart);
+        var timeWindowEndRaw = context.ParseResult.GetValueForOption(options.TimeWindowEnd);
+
+        return enable
+            || percentage is not null
+            || IsTargetingRequested(targetingUsersRaw, targetingGroupsRaw, targetingDefaultRollout, targetingIgnoreCase)
+            || IsTimeWindowRequested(timeWindowStartRaw, timeWindowEndRaw);
+    }
+
+    private static FeatureFilter BuildTargetingFilter(string? usersRaw, string? groupsRaw, double? defaultRollout, bool ignoreCase)
+    {
+        var users = SplitCsv(usersRaw);
+        var groups = SplitCsv(groupsRaw);
+        return FilterBuilder.Targeting(users, groups, defaultRollout, ignoreCase ? true : null);
+    }
+
+    private static bool TryBuildTimeWindowFilter(
+        string? startRaw,
+        string? endRaw,
+        out FeatureFilter filter,
+        out string errorMessage)
+    {
+        filter = null!;
+
+        if (!TryParseTimestamp(startRaw, "--time-window-start", out var start, out errorMessage))
+            return false;
+        if (!TryParseTimestamp(endRaw, "--time-window-end", out var end, out errorMessage))
+            return false;
+
+        filter = FilterBuilder.TimeWindow(start, end);
+        return true;
+    }
+
+    private static bool TryParseTimestamp(string? raw, string optionName, out DateTimeOffset? value, out string errorMessage)
+    {
+        value = null;
+        errorMessage = string.Empty;
+        if (string.IsNullOrEmpty(raw))
+            return true;
+
+        if (!DateTimeOffset.TryParse(
+                raw,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.RoundtripKind,
+                out var parsed))
+        {
+            errorMessage = $"{optionName}: '{raw}' is not a valid ISO-8601 timestamp";
+            return false;
+        }
+
+        value = parsed;
+        return true;
+    }
+
+    private static List<string>? SplitCsv(string? raw) =>
+        string.IsNullOrEmpty(raw)
+            ? null
+            : raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+
+    /// <summary>
+    /// Builds a flat filter list by combining validated <c>--filters</c> JSON (if any) with
+    /// filters built from the first-class filter-builder options (<see cref="TryBuildFilters"/>).
+    /// An empty result (not an error) means neither was supplied. Shared by
+    /// <c>update-feature</c> (definition-level base filters) and <c>update-feature-environment</c>
+    /// (per-environment overrides, once <c>--disable</c> exclusivity is handled by the caller).
+    /// <paramref name="anyFilterOptionProvided"/> is true when the caller explicitly passed
+    /// <c>--filters</c> (even <c>'[]'</c>) and/or any filter-builder option — distinct from
+    /// <c>filterList.Count &gt; 0</c>, which is false for an explicit <c>--filters '[]'</c>.
+    /// Callers that need to distinguish "clear filters" from "don't touch filters" (e.g.
+    /// <c>update-feature</c>, which treats a null/omitted <c>Filters</c> as "leave alone") must
+    /// use this flag rather than <c>filterList.Count</c>.
+    /// </summary>
+    private static bool TryBuildFlatFilterList(
+        InvocationContext context,
+        FilterBuilderOptions filterBuilderOptions,
+        string? filtersJson,
+        out List<FeatureFilter> filterList,
+        out bool anyFilterOptionProvided,
+        out string errorMessage)
+    {
+        filterList = [];
+        errorMessage = string.Empty;
+        // Null, empty, or whitespace-only --filters all count as "not provided" — an
+        // accidentally-blank value (e.g. `--filters ""` or `--filters "  "` from a shell
+        // variable expansion) must not be treated as an explicit "clear filters" request.
+        var filtersJsonProvided = !string.IsNullOrWhiteSpace(filtersJson);
+
+        if (!string.IsNullOrWhiteSpace(filtersJson))
+        {
+            if (!FilterValidator.TryParseAndValidate(filtersJson, out var jsonFilters, out errorMessage))
+            {
+                anyFilterOptionProvided = filtersJsonProvided;
+                return false;
+            }
+
+            filterList.AddRange(jsonFilters);
+        }
+
+        if (!TryBuildFilters(context, filterBuilderOptions, allowEmpty: true, out var builtFilters, out var builderOptionProvided, out errorMessage))
+        {
+            anyFilterOptionProvided = filtersJsonProvided || builderOptionProvided;
+            return false;
+        }
+
+        filterList.AddRange(builtFilters);
+        anyFilterOptionProvided = filtersJsonProvided || builderOptionProvided;
+        return true;
     }
 
     private static bool TryResolveFilterList(
-        bool enable,
+        InvocationContext context,
+        UpdateFeatureEnvironmentOptions options,
         bool disable,
-        string? filters,
+        string? filtersJson,
         out List<FeatureFilter> filterList,
         out string errorMessage)
     {
         filterList = [];
         errorMessage = string.Empty;
 
-        if (enable && disable)
-        {
-            errorMessage = "Cannot specify both --enable and --disable";
-            return false;
-        }
-
-        if (enable)
-        {
-            filterList =
-            [
-                new FeatureFilter
-                {
-                    Name = "AlwaysOn",
-                    Parameters = new Dictionary<string, object>()
-                }
-            ];
-            return true;
-        }
-
         if (disable)
-            return true;
-
-        if (string.IsNullOrEmpty(filters))
         {
-            errorMessage = "Must specify one of: --enable, --disable, or --filters";
+            // Check for conflicting option *presence* before parsing/validating values,
+            // so `--disable --time-window-start not-a-date` reports a conflict, not a parse error.
+            if (HasAnyFilterOption(context, options.FilterBuilder, filtersJson))
+            {
+                errorMessage = "--disable cannot be combined with --enable, --percentage, --targeting-*, "
+                    + "--time-window-*, or --filters";
+                return false;
+            }
+
+            return true;
+        }
+
+        // Use anyFilterOptionProvided (not filterList.Count) so an explicit `--filters '[]'`
+        // is accepted as "clear this environment's filters" rather than rejected as if no
+        // filter option were given at all.
+        if (!TryBuildFlatFilterList(context, options.FilterBuilder, filtersJson, out filterList, out var anyFilterOptionProvided, out errorMessage))
+            return false;
+
+        if (!anyFilterOptionProvided)
+        {
+            errorMessage = "Must specify one of: --enable, --disable, --percentage, --targeting-users, "
+                + "--targeting-groups, --targeting-default-rollout, --targeting-ignore-case, "
+                + "--time-window-start, --time-window-end, or --filters";
             return false;
         }
 
-        try
-        {
-            filterList = JsonSerializer.Deserialize(filters, TogglyJsonSerializerContext.Default.ListFeatureFilter)
-                ?? [];
-            return true;
-        }
-        catch (JsonException ex)
-        {
-            errorMessage = $"Error parsing filters: {ex.Message}";
-            return false;
-        }
+        return true;
     }
 
     private static IEnumerable<string> FormatFeatureList(List<FeatureDefinition> features) =>

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Toggly.CLI.Variants;
 
 namespace Toggly.CLI.Models;
 
@@ -254,10 +255,18 @@ public class FeatureDefinition
     public List<string>? Tags { get; set; }
 
     /// <summary>
-    /// List of filters the feature is enabled for
+    /// List of filters the feature is enabled for. Null (the default) means "do not touch
+    /// the server's existing filters for this definition" — it is omitted from the JSON
+    /// payload entirely (<see cref="JsonIgnoreCondition.WhenWritingNull"/>) rather than sent
+    /// as an explicit empty array, which would instruct the server to wipe existing
+    /// definition-level base filters on a metadata-only update (see
+    /// <c>ApplicationFeatureMutationService.UpdateCatalogMetadata</c> in the SaaS, which
+    /// unconditionally assigns <c>existing.Filters = filters</c>). Callers that want to
+    /// explicitly clear filters must send an empty array on purpose.
     /// </summary>
     [JsonPropertyName("filters")]
-    public List<FeatureFilter> Filters { get; set; } = new();
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<FeatureFilter>? Filters { get; set; }
 
     /// <summary>
     /// Feature is configurable for security
@@ -276,6 +285,24 @@ public class FeatureDefinition
     /// </summary>
     [JsonPropertyName("createdOnUtc")]
     public DateTime CreatedOnUtc { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Named variants for this feature flag (e.g., for A/B testing).
+    /// Null (the default) means "do not touch the server's existing variants" — omitted
+    /// from the JSON payload rather than sent as null, which would wipe server state on a
+    /// metadata-only update. Same omit/clear contract as <see cref="Filters"/>.
+    /// </summary>
+    [JsonPropertyName("variants")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<VariantModel>? Variants { get; set; }
+
+    /// <summary>
+    /// Allocation rules determining which variant is assigned to each user.
+    /// Null means omit from the payload (leave server allocation unchanged).
+    /// </summary>
+    [JsonPropertyName("allocation")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public VariantAllocationModel? Allocation { get; set; }
 }
 
 /// <summary>

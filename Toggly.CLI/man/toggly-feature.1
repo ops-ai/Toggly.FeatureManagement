@@ -8,9 +8,12 @@ toggly\-cli feature <command>
 .SH DESCRIPTION
 List, inspect, and manage features
 .SS create
-Create a new feature definition\&.
+Create a new feature definition\&. First\-class filter options (\-\-enable,
+\-\-percentage, \-\-targeting\-*, \-\-time\-window\-*) require \-\-environment
+and are validated/merged with \-\-environment\-filters via the standard filter
+catalog\&.
 .PP
-.B toggly\-cli feature create \-\-name <name> \-\-feature\-key <key> [\-\-app <id>] [options]
+.B toggly\-cli feature create \-\-name <name> \-\-feature\-key <key> [\-\-app <id>] [\-\-environment <name>] [filter\-options] [options]
 .PP
 Aliases: create\-feature.
 .SS get
@@ -25,16 +28,21 @@ List features for an application\&. Requires \-\-app or a context default\&.
 .PP
 .B toggly\-cli feature list [\-\-app <id>] [options]
 .SS update
-Update an existing feature definition metadata\&.
+Update an existing feature definition's metadata, variants, and allocation\&.
+\-\-filters / \-\-enable / \-\-percentage / \-\-targeting\-* /
+\-\-time\-window\-* set the definition\-level base filters used when
+provisioning new environments; per\-environment overrides are set via 'feature
+update\-environment'\&.
 .PP
-.B toggly\-cli feature update \-\-feature\-key <key> [\-\-app <id>] [options]
+.B toggly\-cli feature update \-\-feature\-key <key> [\-\-app <id>] [filter\-options] [options]
 .PP
 Aliases: update\-feature.
 .SS update\-environment
-Update feature configuration on a specific environment\&. Specify exactly one
-of \-\-enable, \-\-disable, or \-\-filters\&.
+Update feature configuration on a specific environment\&. Combine \-\-enable,
+\-\-percentage, \-\-targeting\-*, \-\-time\-window\-*, and/or \-\-filters
+(validated via the standard filter catalog), or specify \-\-disable alone\&.
 .PP
-.B toggly\-cli feature update\-environment \-\-feature\-key <key> [\-\-app <id>] [\-\-env <name>] (\-\-enable | \-\-disable | \-\-filters <json>) [options]
+.B toggly\-cli feature update\-environment \-\-feature\-key <key> [\-\-app <id>] [\-\-env <name>] (\-\-disable | [filter\-options] [\-\-filters <json>]) [options]
 .PP
 Aliases: update\-feature\-environment.
 .SH OPTIONS
@@ -59,7 +67,44 @@ Feature category
 Comma\-separated list of tags
 .TP
 .B \-\-environment\-filters
-JSON object mapping environment names to filter arrays
+JSON object mapping environment names to filter arrays, validated against the
+standard filter catalog
+.TP
+.B \-\-environment
+Environment name to apply first\-class filter options to (required when any
+filter\-builder option is set)
+.TP
+.B \-\-enable
+Build an AlwaysOn filter for \-\-environment
+.TP
+.B \-\-percentage
+Build a Percentage filter with this rollout value (0\-100) for \-\-environment
+.TP
+.B \-\-targeting\-users
+Comma\-separated user ids for a Targeting filter
+.TP
+.B \-\-targeting\-groups
+Comma\-separated group names for a Targeting filter
+.TP
+.B \-\-targeting\-default\-rollout
+Targeting filter default rollout percentage (0\-100)
+.TP
+.B \-\-targeting\-ignore\-case
+Targeting filter: ignore case when matching users/groups
+.TP
+.B \-\-time\-window\-start
+Build a TimeWindow filter starting at this ISO\-8601 timestamp
+.TP
+.B \-\-time\-window\-end
+Build a TimeWindow filter ending at this ISO\-8601 timestamp
+.TP
+.B \-\-variants
+JSON array of variants, e\&.g\&.
+[{"name":"Control","configurationValue":false}]
+.TP
+.B \-\-allocation
+JSON allocation object, e\&.g\&.
+{"percentile":[{"variant":"Control","from":0,"to":50}]}
 .PP
 Options for feature get:
 .TP
@@ -90,6 +135,42 @@ Feature category
 .TP
 .B \-\-tags
 Comma\-separated list of tags
+.TP
+.B \-\-variants
+JSON array of variants, e\&.g\&.
+[{"name":"Control","configurationValue":false}]
+.TP
+.B \-\-allocation
+JSON allocation object, e\&.g\&.
+{"percentile":[{"variant":"Control","from":0,"to":50}]}
+.TP
+.B \-\-filters
+JSON array of filter objects, validated against the standard filter catalog,
+set as the definition\-level base filters
+.TP
+.B \-\-enable
+Build an AlwaysOn base filter
+.TP
+.B \-\-percentage
+Build a Percentage base filter with this rollout value (0\-100)
+.TP
+.B \-\-targeting\-users
+Comma\-separated user ids for a Targeting base filter
+.TP
+.B \-\-targeting\-groups
+Comma\-separated group names for a Targeting base filter
+.TP
+.B \-\-targeting\-default\-rollout
+Targeting base filter default rollout percentage (0\-100)
+.TP
+.B \-\-targeting\-ignore\-case
+Targeting base filter: ignore case when matching users/groups
+.TP
+.B \-\-time\-window\-start
+Build a TimeWindow base filter starting at this ISO\-8601 timestamp
+.TP
+.B \-\-time\-window\-end
+Build a TimeWindow base filter ending at this ISO\-8601 timestamp
 .PP
 Options for feature update\-environment:
 .TP
@@ -106,10 +187,33 @@ Feature key (required)
 Enable the feature (sets AlwaysOn filter)
 .TP
 .B \-\-disable
-Disable the feature (removes all filters)
+Disable the feature (removes all filters; cannot combine with other filter
+options)
+.TP
+.B \-\-percentage
+Build a Percentage filter with this rollout value (0\-100)
+.TP
+.B \-\-targeting\-users
+Comma\-separated user ids for a Targeting filter
+.TP
+.B \-\-targeting\-groups
+Comma\-separated group names for a Targeting filter
+.TP
+.B \-\-targeting\-default\-rollout
+Targeting filter default rollout percentage (0\-100)
+.TP
+.B \-\-targeting\-ignore\-case
+Targeting filter: ignore case when matching users/groups
+.TP
+.B \-\-time\-window\-start
+Build a TimeWindow filter starting at this ISO\-8601 timestamp
+.TP
+.B \-\-time\-window\-end
+Build a TimeWindow filter ending at this ISO\-8601 timestamp
 .TP
 .B \-\-filters
-JSON array of filter objects
+JSON array of filter objects, validated against the standard filter catalog
+and merged with any filter\-builder options
 .PP
 Global options (all commands):
 .TP
@@ -134,6 +238,14 @@ Emit machine\-readable camelCase JSON instead of human text
 .B toggly\-cli feature create \-\-app <app\-id> \-\-name "New Feature"
 .B \-\-feature\-key new\-feature
 .PP
+.B toggly\-cli feature create \-\-app <app\-id> \-\-name "New Feature"
+.B \-\-feature\-key new\-feature \-\-environment Production \-\-percentage 25
+.PP
+.B toggly\-cli feature create \-\-app <app\-id> \-\-name "New Feature"
+.B \-\-feature\-key new\-feature \-\-variants
+.B '[{"name":"Control"},{"name":"Treatment"}]' \-\-allocation
+.B '{"defaultWhenEnabled":"Control"}'
+.PP
 .B toggly\-cli feature get \-\-app <app\-id> payments\-enabled
 .PP
 .B toggly\-cli feature list \-\-app <app\-id>
@@ -143,8 +255,22 @@ Emit machine\-readable camelCase JSON instead of human text
 .B toggly\-cli feature update \-\-app <app\-id> \-\-feature\-key new\-feature
 .B \-\-description "Updated"
 .PP
+.B toggly\-cli feature update \-\-app <app\-id> \-\-feature\-key new\-feature
+.B \-\-variants '[{"name":"Control"},{"name":"Treatment"}]' \-\-allocation
+.B '{"defaultWhenEnabled":"Control"}'
+.PP
+.B toggly\-cli feature update \-\-app <app\-id> \-\-feature\-key new\-feature
+.B \-\-percentage 25
+.PP
 .B toggly\-cli feature update\-environment \-\-app <app\-id> \-\-env
 .B Production \-\-feature\-key new\-feature \-\-enable
+.PP
+.B toggly\-cli feature update\-environment \-\-app <app\-id> \-\-env
+.B Production \-\-feature\-key new\-feature \-\-percentage 25
+.PP
+.B toggly\-cli feature update\-environment \-\-app <app\-id> \-\-env
+.B Production \-\-feature\-key new\-feature \-\-targeting\-users alice,bob
+.B \-\-targeting\-default\-rollout 10
 .SH EXIT STATUS
 .TP
 .B 0
