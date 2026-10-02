@@ -121,6 +121,26 @@ public class FeatureFilterOptionsCommandTests
     }
 
     [Fact]
+    public async Task UpdateFeatureEnvironment_DisableWithInvalidTimeWindow_ReportsConflictNotParseError()
+    {
+        using var handler = new RecordingHandler(_ => JsonResponse("[]"));
+        using var client = CreateHttpClient(handler);
+        var stderr = new StringWriter();
+        var command = CliApplication.CreateRootCommand(_ => new TogglyApiClient(client, new AuthService(client), "https://api.example.test"), errorWriter: stderr);
+
+        var exitCode = await command.InvokeAsync([
+            "update-feature-environment", "--application-id", "app-1", "--environment", "Production",
+            "--feature-key", "payments-enabled", "--disable", "--time-window-start", "not-a-date"
+        ]);
+
+        Assert.Equal(2, exitCode);
+        var err = stderr.ToString();
+        Assert.Contains("--disable cannot be combined", err);
+        Assert.DoesNotContain("not a valid ISO-8601", err);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
     public async Task UpdateFeatureEnvironment_NoOptions_Fails()
     {
         using var handler = new RecordingHandler(_ => JsonResponse("[]"));

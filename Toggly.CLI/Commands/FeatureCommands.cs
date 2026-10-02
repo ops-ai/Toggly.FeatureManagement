@@ -685,6 +685,33 @@ public static class FeatureCommands
     private static bool IsTimeWindowRequested(string? startRaw, string? endRaw) =>
         !string.IsNullOrEmpty(startRaw) || !string.IsNullOrEmpty(endRaw);
 
+    /// <summary>
+    /// True when any filter-related option was supplied, without parsing or validating values.
+    /// Used for <c>--disable</c> exclusivity checks so invalid companion values still yield a conflict error.
+    /// </summary>
+    private static bool HasAnyFilterOption(
+        InvocationContext context,
+        FilterBuilderOptions options,
+        string? filtersJson)
+    {
+        if (!string.IsNullOrWhiteSpace(filtersJson))
+            return true;
+
+        var enable = context.ParseResult.GetValueForOption(options.Enable);
+        var percentage = context.ParseResult.GetValueForOption(options.Percentage);
+        var targetingUsersRaw = context.ParseResult.GetValueForOption(options.TargetingUsers);
+        var targetingGroupsRaw = context.ParseResult.GetValueForOption(options.TargetingGroups);
+        var targetingDefaultRollout = context.ParseResult.GetValueForOption(options.TargetingDefaultRollout);
+        var targetingIgnoreCase = context.ParseResult.GetValueForOption(options.TargetingIgnoreCase);
+        var timeWindowStartRaw = context.ParseResult.GetValueForOption(options.TimeWindowStart);
+        var timeWindowEndRaw = context.ParseResult.GetValueForOption(options.TimeWindowEnd);
+
+        return enable
+            || percentage is not null
+            || IsTargetingRequested(targetingUsersRaw, targetingGroupsRaw, targetingDefaultRollout, targetingIgnoreCase)
+            || IsTimeWindowRequested(timeWindowStartRaw, timeWindowEndRaw);
+    }
+
     private static FeatureFilter BuildTargetingFilter(string? usersRaw, string? groupsRaw, double? defaultRollout, bool ignoreCase)
     {
         var users = SplitCsv(usersRaw);
@@ -798,10 +825,9 @@ public static class FeatureCommands
 
         if (disable)
         {
-            if (!TryBuildFilters(context, options.FilterBuilder, allowEmpty: true, out var builtFilters, out _, out errorMessage))
-                return false;
-
-            if (builtFilters.Count > 0 || !string.IsNullOrWhiteSpace(filtersJson))
+            // Check for conflicting option *presence* before parsing/validating values,
+            // so `--disable --time-window-start not-a-date` reports a conflict, not a parse error.
+            if (HasAnyFilterOption(context, options.FilterBuilder, filtersJson))
             {
                 errorMessage = "--disable cannot be combined with --enable, --percentage, --targeting-*, "
                     + "--time-window-*, or --filters";
