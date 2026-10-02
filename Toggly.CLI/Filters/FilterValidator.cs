@@ -37,11 +37,10 @@ public static class FilterValidator
                 continue;
             }
 
-            foreach (var required in StandardFilterCatalog.RequiredParameters[filter.Name])
-            {
-                if (filter.Parameters is null || !filter.Parameters.ContainsKey(required))
-                    errors.Add($"Filter '{filter.Name}' is missing required parameter '{required}'.");
-            }
+            var missingRequired = StandardFilterCatalog.RequiredParameters[filter.Name]
+                .Where(required => filter.Parameters is null || !filter.Parameters.ContainsKey(required));
+            foreach (var required in missingRequired)
+                errors.Add($"Filter '{filter.Name}' is missing required parameter '{required}'.");
 
             if (filter.Name == StandardFilterCatalog.TimeWindow)
             {

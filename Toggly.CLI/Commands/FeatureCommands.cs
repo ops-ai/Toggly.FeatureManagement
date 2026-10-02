@@ -644,15 +644,12 @@ public static class FeatureCommands
         var timeWindowStartRaw = context.ParseResult.GetValueForOption(options.TimeWindowStart);
         var timeWindowEndRaw = context.ParseResult.GetValueForOption(options.TimeWindowEnd);
 
-        var targetingRequestedForTracking = !string.IsNullOrEmpty(targetingUsersRaw)
+        var targetingRequested = !string.IsNullOrEmpty(targetingUsersRaw)
             || !string.IsNullOrEmpty(targetingGroupsRaw)
             || targetingDefaultRollout is not null
             || targetingIgnoreCase;
-        var timeWindowRequestedForTracking = !string.IsNullOrEmpty(timeWindowStartRaw) || !string.IsNullOrEmpty(timeWindowEndRaw);
-        anyOptionProvided = enable
-            || percentage is not null
-            || targetingRequestedForTracking
-            || timeWindowRequestedForTracking;
+        var timeWindowRequested = !string.IsNullOrEmpty(timeWindowStartRaw) || !string.IsNullOrEmpty(timeWindowEndRaw);
+        anyOptionProvided = enable || percentage is not null || targetingRequested || timeWindowRequested;
 
         try
         {
@@ -662,10 +659,6 @@ public static class FeatureCommands
             if (percentage is not null)
                 filters.Add(FilterBuilder.Percentage(percentage.Value));
 
-            var targetingRequested = !string.IsNullOrEmpty(targetingUsersRaw)
-                || !string.IsNullOrEmpty(targetingGroupsRaw)
-                || targetingDefaultRollout is not null
-                || targetingIgnoreCase;
             if (targetingRequested)
             {
                 var users = SplitCsv(targetingUsersRaw);
@@ -677,7 +670,6 @@ public static class FeatureCommands
                     targetingIgnoreCase ? true : null));
             }
 
-            var timeWindowRequested = !string.IsNullOrEmpty(timeWindowStartRaw) || !string.IsNullOrEmpty(timeWindowEndRaw);
             if (timeWindowRequested)
             {
                 if (!TryParseTimestamp(timeWindowStartRaw, "--time-window-start", out var start, out errorMessage))
@@ -712,7 +704,7 @@ public static class FeatureCommands
         if (string.IsNullOrEmpty(raw))
             return true;
 
-        if (!DateTimeOffset.TryParse(raw, out var parsed))
+        if (!DateTimeOffset.TryParse(raw, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsed))
         {
             errorMessage = $"{optionName}: '{raw}' is not a valid ISO-8601 timestamp";
             return false;
@@ -750,9 +742,12 @@ public static class FeatureCommands
     {
         filterList = [];
         errorMessage = string.Empty;
-        var filtersJsonProvided = filtersJson is not null;
+        // Null, empty, or whitespace-only --filters all count as "not provided" — an
+        // accidentally-blank value (e.g. `--filters ""` or `--filters "  "` from a shell
+        // variable expansion) must not be treated as an explicit "clear filters" request.
+        var filtersJsonProvided = !string.IsNullOrWhiteSpace(filtersJson);
 
-        if (!string.IsNullOrEmpty(filtersJson))
+        if (!string.IsNullOrWhiteSpace(filtersJson))
         {
             if (!FilterValidator.TryParseAndValidate(filtersJson, out var jsonFilters, out errorMessage))
             {
@@ -790,7 +785,7 @@ public static class FeatureCommands
             if (!TryBuildFilters(context, options.FilterBuilder, allowEmpty: true, out var builtFilters, out _, out errorMessage))
                 return false;
 
-            if (builtFilters.Count > 0 || !string.IsNullOrEmpty(filtersJson))
+            if (builtFilters.Count > 0 || !string.IsNullOrWhiteSpace(filtersJson))
             {
                 errorMessage = "--disable cannot be combined with --enable, --percentage, --targeting-*, "
                     + "--time-window-*, or --filters";
@@ -800,10 +795,13 @@ public static class FeatureCommands
             return true;
         }
 
-        if (!TryBuildFlatFilterList(context, options.FilterBuilder, filtersJson, out filterList, out _, out errorMessage))
+        // Use anyFilterOptionProvided (not filterList.Count) so an explicit `--filters '[]'`
+        // is accepted as "clear this environment's filters" rather than rejected as if no
+        // filter option were given at all.
+        if (!TryBuildFlatFilterList(context, options.FilterBuilder, filtersJson, out filterList, out var anyFilterOptionProvided, out errorMessage))
             return false;
 
-        if (filterList.Count == 0)
+        if (!anyFilterOptionProvided)
         {
             errorMessage = "Must specify one of: --enable, --disable, --percentage, --targeting-users, "
                 + "--targeting-groups, --targeting-default-rollout, --targeting-ignore-case, "

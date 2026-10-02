@@ -49,7 +49,7 @@ public class FilterBuilderTests
         Assert.Equal("bob", filter.Parameters!["Audience.Users:1"]);
         Assert.Equal("beta", filter.Parameters!["Audience.Groups:0"]);
         Assert.Equal(25d, filter.Parameters!["Audience.DefaultRolloutPercentage"]);
-        Assert.Equal(true, filter.Parameters!["IgnoreCase"]);
+        Assert.True((bool)filter.Parameters!["IgnoreCase"]);
     }
 
     [Fact]

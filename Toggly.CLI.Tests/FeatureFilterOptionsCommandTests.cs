@@ -139,6 +139,25 @@ public class FeatureFilterOptionsCommandTests
     }
 
     [Fact]
+    public async Task UpdateFeatureEnvironment_ExplicitEmptyFiltersArray_ClearsEnvironmentFilters()
+    {
+        // --filters '[]' is an explicit "clear this environment's filters" request and must
+        // be accepted (sending an empty array), not rejected as "no filter option given".
+        using var handler = new RecordingHandler(_ => JsonResponse("[]"));
+        using var client = CreateHttpClient(handler);
+
+        var exitCode = await CreateCommand(client).InvokeAsync([
+            "update-feature-environment", "--application-id", "app-1", "--environment", "Production",
+            "--feature-key", "payments-enabled", "--filters", "[]"
+        ]);
+
+        Assert.Equal(0, exitCode);
+        var request = Assert.Single(handler.Requests);
+        using var document = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+        Assert.Empty(document.RootElement.EnumerateArray());
+    }
+
+    [Fact]
     public async Task UpdateFeatureEnvironment_InvalidFiltersJson_Fails()
     {
         using var handler = new RecordingHandler(_ => JsonResponse("[]"));
@@ -348,6 +367,30 @@ public class FeatureFilterOptionsCommandTests
             document.RootElement.TryGetProperty("filters", out var filtersElement),
             "explicit --filters '[]' must send the 'filters' key, not omit it");
         Assert.Empty(filtersElement.EnumerateArray());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task UpdateFeature_WithBlankFiltersString_TreatedAsNotProvided_OmitsFiltersFromRequestBody(string blankFilters)
+    {
+        // An empty or whitespace-only --filters value (e.g. from an unset shell variable
+        // expanding to "") must be treated the same as omitting --filters entirely, not as
+        // an explicit "clear filters" request.
+        using var handler = new RecordingHandler(_ => JsonResponse("""{"name":"Pay","featureKey":"pay"}"""));
+        using var client = CreateHttpClient(handler);
+
+        var exitCode = await CreateCommand(client).InvokeAsync([
+            "update-feature", "--application-id", "app-1", "--feature-key", "pay",
+            "--name", "Pay", "--filters", blankFilters
+        ]);
+
+        Assert.Equal(0, exitCode);
+        var request = Assert.Single(handler.Requests);
+        using var document = JsonDocument.Parse(await request.Content!.ReadAsStringAsync());
+        Assert.False(
+            document.RootElement.TryGetProperty("filters", out _),
+            "blank --filters must omit 'filters' entirely, like not passing --filters at all");
     }
 
     [Fact]

@@ -6,6 +6,8 @@ namespace Toggly.CLI.Tests.Filters;
 
 public class FilterValidatorTests
 {
+    private static readonly string[] SingleArrayValue = ["a"];
+
     [Fact]
     public void Validate_AcceptsKnownFiltersWithRequiredParameters()
     {
@@ -69,7 +71,7 @@ public class FilterValidatorTests
     {
         var filters = new List<FeatureFilter>
         {
-            new() { Name = filterName, Parameters = new Dictionary<string, object> { [parameterName] = new[] { "a" } } }
+            new() { Name = filterName, Parameters = new Dictionary<string, object> { [parameterName] = SingleArrayValue } }
         };
 
         var errors = FilterValidator.Validate(filters);
