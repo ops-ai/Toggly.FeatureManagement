@@ -91,10 +91,18 @@ public static class VariantPayload
             if (!seen.Add(variant.Name))
                 errors.Add($"Duplicate variant name '{variant.Name}'.");
 
-            if (!AllowedStatusOverrides.Contains(variant.StatusOverride, StringComparer.OrdinalIgnoreCase))
+            if (variant.StatusOverride is null)
+            {
+                errors.Add(
+                    $"Variant '{variant.Name}' has statusOverride null. " +
+                    $"Expected one of: {string.Join(", ", AllowedStatusOverrides)}.");
+            }
+            else if (!AllowedStatusOverrides.Contains(variant.StatusOverride, StringComparer.OrdinalIgnoreCase))
+            {
                 errors.Add(
                     $"Variant '{variant.Name}' has invalid statusOverride '{variant.StatusOverride}'. " +
                     $"Expected one of: {string.Join(", ", AllowedStatusOverrides)}.");
+            }
         }
 
         return errors;

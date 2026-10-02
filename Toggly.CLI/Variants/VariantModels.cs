@@ -15,9 +15,9 @@ public class VariantModel
     [JsonPropertyName("configurationValue")]
     public object? ConfigurationValue { get; set; }
 
-    /// <summary>One of "None" (default), "Enabled", or "Disabled".</summary>
+    /// <summary>One of "None" (default), "Enabled", or "Disabled". Explicit JSON null is rejected.</summary>
     [JsonPropertyName("statusOverride")]
-    public string StatusOverride { get; set; } = "None";
+    public string? StatusOverride { get; set; } = "None";
 }
 
 /// <summary>

@@ -66,6 +66,18 @@ public class VariantPayloadTests
     }
 
     [Fact]
+    public void TryParseVariants_RejectsNullStatusOverrideWithExplicitMessage()
+    {
+        const string json = """[{"name":"A","statusOverride":null}]""";
+
+        var ok = VariantPayload.TryParseVariants(json, out _, out var error);
+
+        Assert.False(ok);
+        Assert.Contains("statusOverride null", error);
+        Assert.DoesNotContain("invalid statusOverride ''", error);
+    }
+
+    [Fact]
     public void TryParseAllocation_ParsesPercentileAllocation()
     {
         const string json = """
