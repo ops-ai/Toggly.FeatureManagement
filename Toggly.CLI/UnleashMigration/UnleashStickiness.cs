@@ -75,8 +75,7 @@ public static class UnleashStickiness
     {
         ArgumentNullException.ThrowIfNull(id);
         ArgumentNullException.ThrowIfNull(groupId);
-        if (normalizer <= 0)
-            throw new ArgumentOutOfRangeException(nameof(normalizer));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(normalizer);
 
         var hash = Murmur3X86_32(Encoding.UTF8.GetBytes($"{groupId}:{id}"), StrategySeed);
         return (int)(hash % (uint)normalizer) + 1;

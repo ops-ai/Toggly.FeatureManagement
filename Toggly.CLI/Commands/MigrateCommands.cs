@@ -51,126 +51,171 @@ public static class MigrateCommands
 
         command.SetHandler(async (InvocationContext context) =>
         {
-            var file = context.ParseResult.GetValueForOption(fileOption)!;
-            var apply = context.ParseResult.GetValueForOption(applyOption);
-            var dryRun = context.ParseResult.GetValueForOption(dryRunOption);
-
-            if (apply && dryRun)
-            {
-                await cli.Output.WriteErrorAsync("Specify either --apply or --dry-run, not both.");
-                context.ExitCode = 2;
-                return;
-            }
-
-            // Default is dry-run when --apply is absent.
-            var isApply = apply;
-
-            if (!CommandOptions.TryResolveApp(context, cli, appOption, out var applicationId))
-                return;
-
-            if (!CommandOptions.TryResolveEnv(context, cli, envOption, out var environment))
-                return;
-
-            if (!file.Exists)
-            {
-                await cli.Output.WriteErrorAsync($"File not found: {file.FullName}");
-                context.ExitCode = 2;
-                return;
-            }
-
-            UnleashParseResult parsed;
-            try
-            {
-                parsed = UnleashExportParser.ParseFile(file.FullName, environment);
-            }
-            catch (Exception ex) when (
-                ex is InvalidOperationException
-                    or JsonException
-                    or IOException
-                    or ArgumentException)
-            {
-                await cli.Output.WriteErrorAsync($"Failed to parse Unleash export: {ex.Message}");
-                context.ExitCode = 1;
-                return;
-            }
-
-            var plan = BuildImportPlan(parsed.Features);
-            var reportText = plan.Report.ToText();
-            var skippedImportWarnings = plan.Items
-                .Where(item => item.Status == UnleashMappingStatus.Skipped)
-                .Select(item => $"WARN: Skipped strategies for '{item.FeatureKey}': {item.Note}")
-                .ToArray();
-
-            if (!isApply)
-            {
-                await cli.Output.WriteLinesAsync([
-                    $"Dry-run import into app '{applicationId}' environment '{environment}'",
-                    $"Accepted shape: {parsed.AcceptedShape}",
-                    $"Features: {parsed.Features.Count}",
-                    reportText,
-                    .. skippedImportWarnings
-                ]);
-                context.ExitCode = 0;
-                return;
-            }
-
-            var apiClient = apiClientFactory(context);
-            if (apiClient is null)
-                return;
-
-            await CommandOptions.RunApiAsync(context, cli, "Error applying Unleash import", async () =>
-            {
-                var existing = await apiClient.ListFeaturesAsync(applicationId, context.GetCancellationToken());
-                var existingKeys = existing
-                    .Select(f => f.FeatureKey)
-                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-                var created = 0;
-                var updated = 0;
-
-                foreach (var item in plan.Items)
-                {
-                    var filtersForEnv = item.Filters;
-
-                    if (!existingKeys.Contains(item.FeatureKey))
-                    {
-                        var model = new FeatureDefinitionCreateModel
-                        {
-                            Name = string.IsNullOrWhiteSpace(item.DisplayName) ? item.FeatureKey : item.DisplayName,
-                            FeatureKey = item.FeatureKey,
-                            Description = item.Description,
-                            EnvironmentFilters = new Dictionary<string, List<FeatureFilter>>
-                            {
-                                [environment] = filtersForEnv
-                            }
-                        };
-
-                        await apiClient.CreateFeatureAsync(applicationId, model, context.GetCancellationToken());
-                        existingKeys.Add(item.FeatureKey);
-                        created++;
-                    }
-                    else
-                    {
-                        await apiClient.UpdateFeatureEnvironmentAsync(
-                            applicationId,
-                            environment,
-                            item.FeatureKey,
-                            filtersForEnv,
-                            context.GetCancellationToken());
-                        updated++;
-                    }
-                }
-
-                await cli.Output.WriteLinesAsync([
-                    $"Applied Unleash import into app '{applicationId}' environment '{environment}'",
-                    $"Created: {created}  Updated: {updated}",
-                    reportText,
-                    .. skippedImportWarnings
-                ]);
-            });
+            await HandleUnleashAsync(
+                context,
+                cli,
+                apiClientFactory,
+                context.ParseResult.GetValueForOption(fileOption)!,
+                context.ParseResult.GetValueForOption(applyOption),
+                context.ParseResult.GetValueForOption(dryRunOption),
+                appOption,
+                envOption);
         });
 
         return command;
+    }
+
+    private static async Task HandleUnleashAsync(
+        InvocationContext context,
+        CliCommandContext cli,
+        Func<InvocationContext, TogglyApiClient?> apiClientFactory,
+        FileInfo file,
+        bool apply,
+        bool dryRun,
+        Option<string?> appOption,
+        Option<string?> envOption)
+    {
+        if (apply && dryRun)
+        {
+            await cli.Output.WriteErrorAsync("Specify either --apply or --dry-run, not both.");
+            context.ExitCode = 2;
+            return;
+        }
+
+        if (!CommandOptions.TryResolveApp(context, cli, appOption, out var applicationId))
+            return;
+
+        if (!CommandOptions.TryResolveEnv(context, cli, envOption, out var environment))
+            return;
+
+        if (!file.Exists)
+        {
+            await cli.Output.WriteErrorAsync($"File not found: {file.FullName}");
+            context.ExitCode = 2;
+            return;
+        }
+
+        if (!TryParseUnleashExport(file.FullName, environment, out var parsed, out var parseError))
+        {
+            await cli.Output.WriteErrorAsync($"Failed to parse Unleash export: {parseError}");
+            context.ExitCode = 1;
+            return;
+        }
+
+        var plan = BuildImportPlan(parsed.Features);
+        var reportText = plan.Report.ToText();
+        var skippedImportWarnings = plan.Items
+            .Where(item => item.Status == UnleashMappingStatus.Skipped)
+            .Select(item => $"WARN: Skipped strategies for '{item.FeatureKey}': {item.Note}")
+            .ToArray();
+
+        if (!apply)
+        {
+            await cli.Output.WriteLinesAsync([
+                $"Dry-run import into app '{applicationId}' environment '{environment}'",
+                $"Accepted shape: {parsed.AcceptedShape}",
+                $"Features: {parsed.Features.Count}",
+                reportText,
+                .. skippedImportWarnings
+            ]);
+            context.ExitCode = 0;
+            return;
+        }
+
+        var apiClient = apiClientFactory(context);
+        if (apiClient is null)
+            return;
+
+        await CommandOptions.RunApiAsync(context, cli, "Error applying Unleash import", () =>
+            ApplyUnleashImportAsync(
+                context,
+                cli,
+                apiClient,
+                applicationId,
+                environment,
+                plan,
+                reportText,
+                skippedImportWarnings));
+    }
+
+    private static bool TryParseUnleashExport(
+        string filePath,
+        string environment,
+        out UnleashParseResult parsed,
+        out string errorMessage)
+    {
+        try
+        {
+            parsed = UnleashExportParser.ParseFile(filePath, environment);
+            errorMessage = string.Empty;
+            return true;
+        }
+        catch (Exception ex) when (
+            ex is InvalidOperationException
+                or JsonException
+                or IOException
+                or ArgumentException)
+        {
+            parsed = null!;
+            errorMessage = ex.Message;
+            return false;
+        }
+    }
+
+    private static async Task ApplyUnleashImportAsync(
+        InvocationContext context,
+        CliCommandContext cli,
+        TogglyApiClient apiClient,
+        string applicationId,
+        string environment,
+        UnleashImportPlan plan,
+        string reportText,
+        string[] skippedImportWarnings)
+    {
+        var existing = await apiClient.ListFeaturesAsync(applicationId, context.GetCancellationToken());
+        var existingKeys = existing
+            .Select(f => f.FeatureKey)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var created = 0;
+        var updated = 0;
+
+        foreach (var item in plan.Items)
+        {
+            if (existingKeys.Contains(item.FeatureKey))
+            {
+                await apiClient.UpdateFeatureEnvironmentAsync(
+                    applicationId,
+                    environment,
+                    item.FeatureKey,
+                    item.Filters,
+                    context.GetCancellationToken());
+                updated++;
+                continue;
+            }
+
+            var model = new FeatureDefinitionCreateModel
+            {
+                Name = string.IsNullOrWhiteSpace(item.DisplayName) ? item.FeatureKey : item.DisplayName,
+                FeatureKey = item.FeatureKey,
+                Description = item.Description,
+                EnvironmentFilters = new Dictionary<string, List<FeatureFilter>>
+                {
+                    [environment] = item.Filters
+                }
+            };
+
+            await apiClient.CreateFeatureAsync(applicationId, model, context.GetCancellationToken());
+            existingKeys.Add(item.FeatureKey);
+            created++;
+        }
+
+        await cli.Output.WriteLinesAsync([
+            $"Applied Unleash import into app '{applicationId}' environment '{environment}'",
+            $"Created: {created}  Updated: {updated}",
+            reportText,
+            .. skippedImportWarnings
+        ]);
     }
 
     internal static UnleashImportPlan BuildImportPlan(IReadOnlyList<UnleashFeatureDto> features)
@@ -183,67 +228,79 @@ public static class MigrateCommands
             if (string.IsNullOrWhiteSpace(feature.Name))
                 continue;
 
-            UnleashMappingStatus status;
-            string note;
-            List<FeatureFilter> filters;
-            var enabled = feature.Enabled;
-
-            if (feature.UnmatchedRequestedEnvironment is { } requestedEnv)
-            {
-                var present = feature.PresentUnleashEnvironmentNames is { Count: > 0 }
-                    ? string.Join(", ", feature.PresentUnleashEnvironmentNames)
-                    : "(none)";
-                status = UnleashMappingStatus.Skipped;
-                filters = [];
-                note =
-                    $"requested environment '{requestedEnv}' did not match Unleash environments: {present}; will import as disabled/off";
-                enabled = false;
-            }
-            else
-            {
-                var mapped = UnleashStrategyMapper.Map(feature.Strategies, feature.Name);
-                status = mapped.Status;
-                note = mapped.Note;
-                filters = mapped.Filters;
-
-                if (feature.Variants is { Count: > 0 })
-                {
-                    if (status != UnleashMappingStatus.Skipped)
-                        status = UnleashMappingStatus.Partial;
-                    note = string.IsNullOrWhiteSpace(note)
-                        ? "variants not imported"
-                        : $"{note}; variants not imported";
-                }
-
-                if (!enabled)
-                {
-                    filters = [];
-                    note = string.IsNullOrWhiteSpace(note)
-                        ? "disabled in Unleash; import as off"
-                        : $"{note}; disabled in Unleash; import as off";
-                }
-                else if (status == UnleashMappingStatus.Skipped)
-                {
-                    // All strategies unsupported — still create/update as off (empty filters).
-                    filters = [];
-                    note = string.IsNullOrWhiteSpace(note)
-                        ? "will import as disabled/off"
-                        : $"{note}; will import as disabled/off";
-                }
-            }
-
-            report.Add(feature.Name, status, note);
-            items.Add(new UnleashImportPlanItem(
-                feature.Name,
-                feature.Name,
-                feature.Description,
-                enabled && filters.Count > 0,
-                filters,
-                status,
-                note));
+            var item = MapFeatureToPlanItem(feature);
+            report.Add(feature.Name, item.Status, item.Note);
+            items.Add(item);
         }
 
         return new UnleashImportPlan(report, items);
+    }
+
+    private static UnleashImportPlanItem MapFeatureToPlanItem(UnleashFeatureDto feature)
+    {
+        if (feature.UnmatchedRequestedEnvironment is { } requestedEnv)
+            return CreateUnmatchedEnvironmentItem(feature, requestedEnv);
+
+        var mapped = UnleashStrategyMapper.Map(feature.Strategies, feature.Name);
+        var status = mapped.Status;
+        var note = mapped.Note;
+        var filters = mapped.Filters;
+        var enabled = feature.Enabled;
+
+        if (feature.Variants is { Count: > 0 })
+        {
+            if (status != UnleashMappingStatus.Skipped)
+                status = UnleashMappingStatus.Partial;
+            note = AppendNote(note, "variants not imported");
+        }
+
+        if (!enabled)
+        {
+            filters = [];
+            note = AppendNote(note, "disabled in Unleash; import as off");
+        }
+        else if (status == UnleashMappingStatus.Skipped)
+        {
+            filters = [];
+            note = AppendNote(note, "will import as disabled/off");
+        }
+
+        return new UnleashImportPlanItem(
+            feature.Name,
+            feature.Name,
+            feature.Description,
+            enabled && filters.Count > 0,
+            filters,
+            status,
+            note);
+    }
+
+    private static UnleashImportPlanItem CreateUnmatchedEnvironmentItem(
+        UnleashFeatureDto feature,
+        string requestedEnv)
+    {
+        var present = feature.PresentUnleashEnvironmentNames is { Count: > 0 }
+            ? string.Join(", ", feature.PresentUnleashEnvironmentNames)
+            : "(none)";
+        var note =
+            $"requested environment '{requestedEnv}' did not match Unleash environments: {present}; will import as disabled/off";
+
+        return new UnleashImportPlanItem(
+            feature.Name,
+            feature.Name,
+            feature.Description,
+            false,
+            [],
+            UnleashMappingStatus.Skipped,
+            note);
+    }
+
+    private static string AppendNote(string note, string addition)
+    {
+        if (string.IsNullOrWhiteSpace(note))
+            return addition;
+
+        return $"{note}; {addition}";
     }
 
     internal sealed record UnleashImportPlan(
