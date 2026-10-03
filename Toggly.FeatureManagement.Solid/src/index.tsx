@@ -120,7 +120,8 @@ export function createToggly(
       created.hydrate(snapshot);
       mutate(created.flags());
       if (mounted) {
-        refetch().then(
+        // refetch() may return a value or a thenable; Promise.resolve normalizes both.
+        Promise.resolve(refetch()).then(
           () => undefined,
           () => undefined,
         );
