@@ -697,7 +697,9 @@ export class TogglyService implements ITogglyService, OnDestroy {
       }
       // Persist the validator only after its response-mode bodies are present.
       if (loaded.revision) this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
-      if (this._features) this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
+      if (this._features) {
+        void this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
+      }
     } catch (error) {
       if (generation !== this._generation || this._destroyed) return this._features
       this._reportError('Error fetching feature flags', error)

@@ -182,7 +182,7 @@ jobs:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
     needs: [coverage, dependency-check]
-    if: ${{ always() && (github.event_name != 'workflow_call' || inputs.run_reporting) && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
+    if: ${{ always() && toJSON(inputs.run_reporting) != 'false' && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
 
     steps:
       - name: Checkout code
@@ -249,7 +249,7 @@ jobs:
   dependency-check:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
-    if: ${{ (github.event_name != 'workflow_call' || inputs.run_reporting) && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
+    if: ${{ toJSON(inputs.run_reporting) != 'false' && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
 
     steps:
       - name: Checkout code
@@ -313,7 +313,7 @@ jobs:
         with:
           needs-json: ${{ toJSON(needs) }}
           required-jobs: build,current-hosts,smoke-test,code-quality,coverage,sonar,dependency-check
-          allow-skipped: ${{ (github.event_name == 'workflow_call' && !inputs.run_reporting || github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork) && 'dependency-check,sonar' || 'none' }}
+          allow-skipped: ${{ (toJSON(inputs.run_reporting) == 'false' || github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork) && 'dependency-check,sonar' || 'none' }}
 
       - name: Generate summary
         run: |

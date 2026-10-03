@@ -149,7 +149,7 @@ jobs:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
     needs: [check-sdk, test, dependency-check]
-    if: ${{ always() && needs.check-sdk.outputs.present == 'true' && (github.event_name != 'workflow_call' || inputs.run_reporting) }}
+    if: ${{ always() && needs.check-sdk.outputs.present == 'true' && toJSON(inputs.run_reporting) != 'false' }}
 
     steps:
       - name: Checkout code
@@ -225,7 +225,7 @@ jobs:
   dependency-check:
     name: OWASP Dependency Check
     needs: check-sdk
-    if: ${{ needs.check-sdk.outputs.present == 'true' && (github.event_name != 'workflow_call' || inputs.run_reporting) }}
+    if: ${{ needs.check-sdk.outputs.present == 'true' && toJSON(inputs.run_reporting) != 'false' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -288,6 +288,7 @@ jobs:
         with:
           needs-json: ${{ toJSON(needs) }}
           required-jobs: test,smoke-test,dependency-check
+          allow-skipped: ${{ toJSON(inputs.run_reporting) == 'false' && 'sonar,dependency-check' || 'none' }}
 
       - name: Generate summary
         run: |
