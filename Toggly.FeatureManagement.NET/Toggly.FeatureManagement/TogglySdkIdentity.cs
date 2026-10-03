@@ -1,3 +1,4 @@
+using System;
 using System.Reflection;
 using System.Text.RegularExpressions;
 
@@ -64,8 +65,15 @@ namespace Toggly.FeatureManagement
 
             // Keep four-part numeric file versions available as the fallback identity.
             // SemVer prerelease identifiers must also be safe in an HTTP product token.
-            if (!Regex.IsMatch(raw, @"\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:\.(0|[1-9][0-9]*)|-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?\z"))
+            try
+            {
+                if (!Regex.IsMatch(raw, @"\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:\.(0|[1-9][0-9]*)|-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?\z", RegexOptions.None, TimeSpan.FromMilliseconds(100)))
+                    return false;
+            }
+            catch (RegexMatchTimeoutException)
+            {
                 return false;
+            }
 
             version = raw;
             return true;
