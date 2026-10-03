@@ -33,7 +33,7 @@ jobs:
   gates:
     uses: ./.github/workflows/analysis-elixir.yml
     with:
-      run_reporting: false
+      run_reporting: true
     secrets: inherit
 
   publish:

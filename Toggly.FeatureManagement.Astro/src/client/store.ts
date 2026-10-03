@@ -611,7 +611,7 @@ class TogglyClientInstance {
       }
 
       this.lastFallbackRefresh = Date.now();
-      this.refresh();
+      void this.refresh().catch(() => undefined);
     }, this.config.featureFlagsRefreshInterval!);
 
     if (this.config.isDebug) {

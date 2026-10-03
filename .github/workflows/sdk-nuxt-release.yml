@@ -97,7 +97,7 @@ jobs:
     if: needs.resolve.outputs.action != 'fail'
     uses: ./.github/workflows/analysis-nuxt.yml
     with:
-      run_reporting: false
+      run_reporting: true
     secrets: inherit
 
   publish:

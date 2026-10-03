@@ -120,7 +120,7 @@ export class FeatureFlagDirective implements OnInit, OnDestroy {
 
   private updateView() {
     const generation = ++this.evaluationGeneration
-    this._toggly
+    void this._toggly
       .evaluateFeatureGate(this.flag, this.requirement, this.negate, this.entityContext, this.kind)
       .then((isEnabled) => {
         if (generation !== this.evaluationGeneration) return
@@ -135,5 +135,6 @@ export class FeatureFlagDirective implements OnInit, OnDestroy {
         }
         this._changeDetector.markForCheck()
       })
+      .catch(() => undefined)
   }
 }

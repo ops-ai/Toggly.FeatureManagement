@@ -797,7 +797,11 @@ export class Toggly implements TogglyService {
   }
 
   private _notifyAfterRefresh(): void {
-    if (this._features) this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
+    if (this._features) {
+      void this._hookExecutor
+        .executeAfterRefresh(toBooleanDefinitions(this._features))
+        .catch((error) => this._reportError('Error running afterRefresh hooks', error))
+    }
   }
 
   private _recoverFromDefinitionsLoadFailure(

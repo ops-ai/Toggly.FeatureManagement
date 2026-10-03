@@ -16,7 +16,7 @@ See [OPS-1243 design](https://github.com/ops-ai/Toggly.wiki/blob/wikiMaster/Home
 After a human merges to `develop`, each path-filtered `sdk-*-release.yml` workflow:
 
 1. **Resolves** the manifest against the registry (`publish` / `skip` / `fail`). Push events always use `release_mode: publish` (no auto-bump).
-2. **Re-runs required analysis gates** via `workflow_call` into the matching `analysis-*.yml` (`run_reporting: false` skips Sonar/OWASP). Multi-package JS analysis accepts an `sdks` filter (e.g. `Vue`) so one package does not re-test the whole matrix.
+2. **Re-runs required analysis gates** via `workflow_call` into the matching `analysis-*.yml` (`run_reporting: true` runs Sonar/OWASP on release; set `false` only for intentional skip). Multi-package JS analysis accepts an `sdks` filter (e.g. `Vue`) so one package does not re-test the whole matrix.
 3. **Publishes** only from a job that uses the registry environment (`npm-publish`, `nuget-publish`, …). Resolve and gates do not use that environment.
 
 Analysis workflows remain the **PR** merge gate (`pull_request` + `workflow_dispatch`). They no longer run on push to `develop`/`main`; the release path owns post-merge verification.

@@ -119,7 +119,7 @@ export function createToggly(
       if (retired) return;
       created.hydrate(snapshot);
       mutate(created.flags());
-      if (mounted) refetch();
+      if (mounted) void refetch();
     },
     flags: definitions,
     loading: () => state().loading,

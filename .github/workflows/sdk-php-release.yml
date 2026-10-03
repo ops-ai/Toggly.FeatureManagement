@@ -89,7 +89,7 @@ jobs:
     if: needs.validate.outputs.action == 'publish'
     uses: ./.github/workflows/analysis-php.yml
     with:
-      run_reporting: false
+      run_reporting: true
     secrets: inherit
 
   release:

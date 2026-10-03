@@ -696,7 +696,9 @@ class TogglyClientInstance {
       if (!isCurrent()) return;
 
       // Trigger afterRefresh hooks
-      this.hookExecutor.executeAfterRefresh(toBooleanDefinitions(flags), isCurrent);
+      void this.hookExecutor
+        .executeAfterRefresh(toBooleanDefinitions(flags), isCurrent)
+        .catch(() => undefined);
 
       if (!isCurrent()) return;
       this.startWebSocket();

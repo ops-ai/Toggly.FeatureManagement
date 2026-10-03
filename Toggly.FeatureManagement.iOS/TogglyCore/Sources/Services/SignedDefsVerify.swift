@@ -230,7 +230,9 @@ enum SignedDefsVerify {
         var combined = Data()
         combined.append(xBytes)
         combined.append(yBytes)
-        let digest = Insecure.SHA1.hash(data: combined)
+        // SHA-1 fingerprints JWK coordinates into the wire-format kid (...ES256).
+        // Not password hashing; must match server/.NET/JS/Go kid derivation.
+        let digest = Insecure.SHA1.hash(data: combined) // NOSONAR swift:S4790
         let hex = digest.map { String(format: "%02X", $0) }.joined()
         return "\(hex)ES256"
     }

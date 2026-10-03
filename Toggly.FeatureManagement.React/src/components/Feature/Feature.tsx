@@ -65,7 +65,7 @@ class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
     }
     const service = this.context.toggly
     const evaluation = ++this.evaluation
-    service
+    void service
       .evaluateFeatureGate(
         gate,
         this.props.requirement ?? 'all',
@@ -78,6 +78,7 @@ class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
           this.setState({ shouldShow: this.applyVariantFilter(isEnabled) })
         }
       })
+      .catch(() => undefined)
   }
 
   private bindService() {

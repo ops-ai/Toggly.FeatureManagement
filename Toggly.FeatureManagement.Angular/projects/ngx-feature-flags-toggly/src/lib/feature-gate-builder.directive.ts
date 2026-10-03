@@ -113,12 +113,13 @@ export class FeatureGateBuilderDirective implements OnInit, OnDestroy {
         return
       }
 
-      this.toggly
+      void this.toggly
         .evaluateFeatureGate(this.flag, this.requirement, this.negate, this.entityContext, this.kind)
         .then((isEnabled) => {
           if (generation !== this.evaluationGeneration) return
           this.renderEnabled(isEnabled)
         })
+        .catch(() => undefined)
     }
 
     evaluate()

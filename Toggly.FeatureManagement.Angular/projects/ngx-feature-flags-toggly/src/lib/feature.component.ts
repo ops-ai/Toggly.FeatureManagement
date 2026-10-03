@@ -132,13 +132,14 @@ export class FeatureComponent implements OnChanges, OnInit, OnDestroy {
       this.changeDetector.markForCheck()
     } else {
       const kind = this.contextKind ?? this.kind
-      this.toggly
+      void this.toggly
         .evaluateFeatureGate(gate, this.requirement, this.negate, this.context, kind)
         .then((isEnabled) => {
           if (generation !== this.evaluationGeneration) return
           this.shouldShow = isEnabled
           this.changeDetector.markForCheck()
         })
+        .catch(() => undefined)
         .finally(() => {
           if (generation !== this.evaluationGeneration) return
           this.isLoading = false
