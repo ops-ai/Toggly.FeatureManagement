@@ -290,8 +290,15 @@ jobs:
           reportgenerator \
             -reports:"**/TestResults/**/coverage.opencover.xml" \
             -targetdir:"coverage-report" \
-            -reporttypes:"SonarQube;Cobertura" \
+            -reporttypes:"Cobertura" \
             -assemblyfilters:"-*Tests*"
+          # C# uses native OpenCover; generic coverage retains Razor views without duplicating C# branches.
+          reportgenerator \
+            -reports:"**/TestResults/**/coverage.opencover.xml" \
+            -targetdir:"coverage-report" \
+            -reporttypes:"SonarQube" \
+            -assemblyfilters:"-*Tests*" \
+            -filefilters:"-*.cs"
         continue-on-error: true
 
       - name: End SonarCloud Scan

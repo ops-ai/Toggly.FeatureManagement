@@ -136,6 +136,41 @@ test('.NET analysis scans and covers the CLI executable', () => {
   );
 });
 
+test('coverage merge preserves full Cobertura and imports only non-C# generic coverage', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'dotnet-coverage-merge-'));
+  const log = join(directory, 'reports.log');
+  writeFileSync(log, '');
+  writeFileSync(join(directory, 'reportgenerator'), `#!/usr/bin/env bash
+printf 'CALL\\n' >> "$REPORT_LOG"
+printf '%s\\n' "$@" >> "$REPORT_LOG"
+`, { mode: 0o755 });
+  try {
+    const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', runScript('Merge coverage reports')], {
+      encoding: 'utf8',
+      env: { ...process.env, PATH: `${directory}:${process.env.PATH}`, REPORT_LOG: log },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const calls = readFileSync(log, 'utf8').split('CALL\n').filter(Boolean).map(value => value.trim().split('\n'));
+    assert.equal(calls.length, 2);
+    for (const call of calls) {
+      assert.ok(call.includes('-reports:**/TestResults/**/coverage.opencover.xml'));
+      assert.ok(call.includes('-targetdir:coverage-report'));
+      assert.ok(call.includes('-assemblyfilters:-*Tests*'));
+    }
+    assert.ok(calls[0].includes('-reporttypes:Cobertura'));
+    assert.ok(calls[0].every(argument => !argument.startsWith('-filefilters:')));
+    assert.ok(calls[1].includes('-reporttypes:SonarQube'));
+    assert.ok(calls[1].includes('-filefilters:-*.cs'));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+  for (const name of ['Begin SonarCloud Scan', 'Begin SonarQube Server Scan']) {
+    assert.match(step(name), /sonar\.cs\.opencover\.reportsPaths=.*TestResults\/\*\*\/coverage\.opencover\.xml/);
+    assert.match(step(name), /sonar\.javascript\.lcov\.reportPaths=/);
+    assert.match(step(name), /sonar\.coverageReportPaths=.*coverage-report\/SonarQube\.xml/);
+  }
+});
+
 test('both scanners and summary use one validated common package version', () => {
   const versionStep = step('Read common .NET package version');
   assert.match(versionStep, /id: analysis_version/);
