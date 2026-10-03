@@ -68,9 +68,13 @@ function resolveNestCommonVersion() {
   for (;;) {
     const manifest = join(dir, 'package.json');
     if (existsSync(manifest)) {
-      const metadata = JSON.parse(readFileSync(manifest, 'utf8'));
-      if (metadata.name === '@nestjs/common' && typeof metadata.version === 'string') {
-        return metadata.version;
+      try {
+        const metadata = JSON.parse(readFileSync(manifest, 'utf8'));
+        if (metadata.name === '@nestjs/common' && typeof metadata.version === 'string') {
+          return metadata.version;
+        }
+      } catch {
+        // Skip unreadable/malformed manifests and keep walking parents.
       }
     }
     const parent = dirname(dir);
