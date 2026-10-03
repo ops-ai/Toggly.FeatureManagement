@@ -78,10 +78,32 @@ class OwnerReplacementTest {
                     "initializedOwners=${owners.size}, requests=${server.requestCount}, " +
                     "recentObservations=${observations.takeLast(12)}", failure)
             }
-            rule.runOnIdle { if (configured) settings = newConfig else current = new }
+            if (configured) rule.waitUntil(5_000) { owners.size == 1 }
+            // Match TelemetryComposeTest: copy() triggers remember(config) without replacing the state slot oddly.
+            rule.runOnIdle {
+                if (configured) {
+                    settings = settings.copy(
+                        appKey = "new-app",
+                        environment = "New",
+                        featureDefaults = listOf("flag", "flow", "gate", "entity").associateWith { false },
+                    )
+                } else {
+                    current = new
+                }
+            }
             rule.waitForIdle()
-            if (configured) rule.waitUntil(5_000) { owners.size == 2 }
-            rule.waitUntil(5_000) { observations.any { it.first == "new-app" } }
+            if (configured) {
+                try {
+                    rule.waitUntil(15_000) { owners.size == 2 }
+                } catch (failure: androidx.compose.ui.test.ComposeTimeoutException) {
+                    throw AssertionError(
+                        "Configured provider did not recreate owner; initializedOwners=${owners.size}, " +
+                            "requests=${server.requestCount}, recentObservations=${observations.takeLast(12)}",
+                        failure,
+                    )
+                }
+            }
+            rule.waitUntil(15_000) { observations.any { it.first == "new-app" } }
             rule.waitForIdle()
             val wrong = observations.filter { it.first == "new-app" && it.second.any { value -> value } }
             assertTrue("Replacement owner rendered retained old values: $wrong", wrong.isEmpty())

@@ -87,7 +87,7 @@ export class FeatureVariantDirective implements OnInit, OnChanges, OnDestroy {
       return
     }
 
-    this._toggly.getVariant(this.featureVariant).then((result) => {
+    void this._toggly.getVariant(this.featureVariant).then((result) => {
       if (generation !== this.evaluationGeneration) return
       const matches = result !== null && result.name === this.variant
       if (matches) {

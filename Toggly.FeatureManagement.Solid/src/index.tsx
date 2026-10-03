@@ -119,7 +119,8 @@ export function createToggly(
       if (retired) return;
       created.hydrate(snapshot);
       mutate(created.flags());
-      if (mounted) refetch();
+      // Fire-and-forget resource refetch; void marks the promise ignored (S9383).
+      if (mounted) void refetch(); // NOSONAR typescript:S3735
     },
     flags: definitions,
     loading: () => state().loading,

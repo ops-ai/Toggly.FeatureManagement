@@ -50,8 +50,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.release.outputs.version }}
-      action: ${{ steps.release.outputs.action }}
-      reason: ${{ steps.release.outputs.reason }}
+      action: ${{ steps.check.outputs.present == 'true' && steps.release.outputs.action || 'skip' }}
+      reason: ${{ steps.check.outputs.present == 'true' && steps.release.outputs.reason || 'PHP SDK tree absent from this monorepo' }}
       manifest_version: ${{ steps.release.outputs.manifest_version }}
       registry_latest: ${{ steps.release.outputs.registry_latest }}
       manifest_changed: ${{ steps.release.outputs.manifest_changed }}
@@ -61,17 +61,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify PHP SDK is present
+      - name: Detect PHP SDK checkout
+        id: check
         run: |
-          if [ ! -f "${{ env.SDK_ROOT }}/composer.json" ]; then
-            echo "::error::${{ env.SDK_ROOT }}/composer.json was not found in this checkout."
-            echo "The PHP SDK is released from the Toggly.FeatureManagement.PHP repository."
-            echo "Use .github/workflows/release.yml in that repo instead of this workflow."
-            exit 1
+          if [ -f "${{ env.SDK_ROOT }}/composer.json" ]; then
+            echo "present=true" >> $GITHUB_OUTPUT
+          else
+            echo "present=false" >> $GITHUB_OUTPUT
+            echo "PHP SDK is not in this repository checkout — skipping release."
+            echo "Use .github/workflows/release.yml in the Toggly.FeatureManagement.PHP repository instead."
           fi
 
       - name: Resolve release version
         id: release
+        if: steps.check.outputs.present == 'true'
         uses: ./.github/actions/resolve-release-version
         with:
           manifest_path: ${{ env.SDK_ROOT }}/composer.json
@@ -86,7 +89,7 @@ jobs:
     if: needs.validate.outputs.action == 'publish'
     uses: ./.github/workflows/analysis-php.yml
     with:
-      run_reporting: false
+      run_reporting: true
     secrets: inherit
 
   release:
