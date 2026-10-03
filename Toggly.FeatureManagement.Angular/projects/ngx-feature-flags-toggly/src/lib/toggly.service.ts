@@ -649,12 +649,8 @@ export class TogglyService implements ITogglyService, OnDestroy {
     }
   }
 
-  private _unquoteRevision(revision: string): string {
-    return revision.replace(/^"+|"+$/g, '')
-  }
-
   private _applyLoadedDefinitions(
-    loaded: Awaited<ReturnType<typeof fetchEvaluatedSignedDefinitions>>,
+    loaded: Extract<Awaited<ReturnType<typeof fetchEvaluatedSignedDefinitions>>, { notModified: false }>,
     useVariantResponse: boolean,
   ): boolean {
     this._lastFallbackRefresh = Date.now()
@@ -671,7 +667,9 @@ export class TogglyService implements ITogglyService, OnDestroy {
       if (this._features) this._writeCachedFlags(this._features)
     }
     // Persist the validator only after its response-mode bodies are present.
-    if (loaded.revision) this._cacheDefinitionsRevision(this._unquoteRevision(loaded.revision))
+    if (loaded.revision) {
+      this._cacheDefinitionsRevision(loaded.revision.replaceAll(/^"+|"+$/g, ''))
+    }
     return this._features !== null
   }
 
@@ -692,10 +690,10 @@ export class TogglyService implements ITogglyService, OnDestroy {
         this._applyVariantDefs(cachedVariants)
       } else if (this._features === null) {
         this._variants = null
-        this._features = this._readCachedFlags() ?? this._config.featureDefaults ?? {}
+        this._features ??= this._readCachedFlags() ?? this._config.featureDefaults ?? {}
       }
-    } else if (this._features === null) {
-      this._features = this._readCachedFlags() ?? this._config.featureDefaults ?? {}
+    } else {
+      this._features ??= this._readCachedFlags() ?? this._config.featureDefaults ?? {}
     }
     if (options?.strict) throw error
     console.warn(
@@ -730,7 +728,9 @@ export class TogglyService implements ITogglyService, OnDestroy {
       )
       if (!this._isCurrentGeneration(generation)) return this._features
       if (loaded.notModified) {
-        if (loaded.revision) this._cacheDefinitionsRevision(this._unquoteRevision(loaded.revision))
+        if (loaded.revision) {
+          this._cacheDefinitionsRevision(loaded.revision.replaceAll(/^"+|"+$/g, ''))
+        }
         this._lastFallbackRefresh = Date.now()
         return this._features
       }
