@@ -618,44 +618,13 @@ export class TogglyService implements ITogglyService, OnDestroy {
     return now - this._lastFallbackRefresh < this.FALLBACK_REFRESH_INTERVAL
   }
 
-  private _buildDefinitionsFetch(): { url: string; useVariantResponse: boolean; revision: string | null } {
-    const base = this._config.baseURI ?? 'https://definitions.toggly.io'
-    const env = this._config.environment ?? 'Production'
-    const appKey = this._config.appKey ?? ''
-    let url: string
-    let useVariantResponse: boolean
-    if (this._config.customDefinitionsUrl) {
-      useVariantResponse = this._enableVariants
-      const customUrl = new URL(this._config.customDefinitionsUrl)
-      this._appendContext(customUrl, useVariantResponse)
-      url = customUrl.toString()
-    } else if (this._enableVariants) {
-      useVariantResponse = true
-      const fetchUrl = new URL(`${base}/evaluated-variants-signed/${appKey}/${env}`)
-      this._appendContext(fetchUrl, true)
-      url = fetchUrl.toString()
-    } else {
-      useVariantResponse = false
-      const fetchUrl = new URL(`${base}/evaluated-signed/${appKey}/${env}`)
-      this._appendContext(fetchUrl, false)
-      url = fetchUrl.toString()
-    }
-    const pin = this._pendingDefinitionsPin
-    this._pendingDefinitionsPin = null
-    return {
-      url: appendDefinitionsRevisionParam(url, pin),
-      useVariantResponse,
-      revision: pin ? null : this._definitionsRevision,
-    }
-  }
-
   private _applyLoadedDefinitions(
     loaded: Extract<Awaited<ReturnType<typeof fetchEvaluatedSignedDefinitions>>, { notModified: false }>,
     useVariantResponse: boolean,
   ): boolean {
     this._lastFallbackRefresh = Date.now()
     if (useVariantResponse) {
-      const defs = loaded.defs as unknown as { [key: string]: EvaluatedVariantDef }
+      const defs = loaded.defs as { [key: string]: EvaluatedVariantDef }
       this._applyVariantDefs(defs)
       if (this._features) {
         this._writeCachedVariants(defs)
@@ -713,16 +682,39 @@ export class TogglyService implements ITogglyService, OnDestroy {
 
     this._loadingFeatures = true
     try {
-      const request = this._buildDefinitionsFetch()
+      const base = this._config.baseURI ?? 'https://definitions.toggly.io'
+      const env = this._config.environment ?? 'Production'
+      const appKey = this._config.appKey ?? ''
+      let url: string
+      let useVariantResponse: boolean
+      if (this._config.customDefinitionsUrl) {
+        useVariantResponse = this._enableVariants
+        const customUrl = new URL(this._config.customDefinitionsUrl)
+        this._appendContext(customUrl, useVariantResponse)
+        url = customUrl.toString()
+      } else if (this._enableVariants) {
+        useVariantResponse = true
+        const fetchUrl = new URL(`${base}/evaluated-variants-signed/${appKey}/${env}`)
+        this._appendContext(fetchUrl, true)
+        url = fetchUrl.toString()
+      } else {
+        useVariantResponse = false
+        const fetchUrl = new URL(`${base}/evaluated-signed/${appKey}/${env}`)
+        this._appendContext(fetchUrl, false)
+        url = fetchUrl.toString()
+      }
+      const pin = this._pendingDefinitionsPin
+      this._pendingDefinitionsPin = null
+      const pinnedUrl = appendDefinitionsRevisionParam(url, pin)
       const loaded = await fetchEvaluatedSignedDefinitions(
-        request.url,
+        pinnedUrl,
         this._jwks,
         {
           ...this._config,
           baseURI: this._config.baseURI ?? 'https://definitions.toggly.io',
         },
         {
-          revision: request.revision,
+          revision: pin ? null : this._definitionsRevision,
           headers: buildDefinitionFetchHeaders(),
         },
       )
@@ -734,7 +726,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
         this._lastFallbackRefresh = Date.now()
         return this._features
       }
-      if (this._applyLoadedDefinitions(loaded, request.useVariantResponse)) {
+      if (this._applyLoadedDefinitions(loaded, useVariantResponse)) {
         this._notifyAfterRefresh()
       }
     } catch (error) {

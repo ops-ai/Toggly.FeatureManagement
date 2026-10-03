@@ -793,6 +793,15 @@ jobs:
           echo "Open issues:"
           curl -sS -u "${SONAR_TOKEN}:" "$issues_url" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("total", d.get("total"));
           [print(i.get("rule"), i.get("severity"), i.get("component","").split(":")[-1], i.get("line"), (i.get("message") or "")[:120]) for i in d.get("issues",[])]'
+          if [ -n "$pr" ]; then
+            hotspots_url="${SONAR_HOST_URL}/api/hotspots/search?projectKey=toggly-sdks-javascript&pullRequest=${pr}&status=TO_REVIEW&ps=20"
+          else
+            hotspots_url="${SONAR_HOST_URL}/api/hotspots/search?projectKey=toggly-sdks-javascript&branch=${GITHUB_REF_NAME}&status=TO_REVIEW&ps=20"
+          fi
+          echo
+          echo "Open security hotspots:"
+          curl -sS -u "${SONAR_TOKEN}:" "$hotspots_url" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("total", d.get("paging",{}).get("total", len(d.get("hotspots",[]))));
+          [print(h.get("ruleKey"), h.get("vulnerabilityProbability"), h.get("component","").split(":")[-1], h.get("line"), (h.get("message") or "")[:120]) for h in d.get("hotspots",[])]'
 
   dependency-check:
     name: OWASP Dependency Check
