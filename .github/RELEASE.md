@@ -180,7 +180,7 @@ Bump the parent `pom.xml` version, child `<parent><version>`, `SdkIdentity.SDK_V
 README install snippets, and `CHANGELOG.md` in the same PR before running
 **Java SDK - Release** with `release_mode: publish`.
 
-**PHP monorepo workflow:** `sdk-php-release.yml` requires `Toggly.FeatureManagement.PHP/` in the checkout. If that directory is absent, use the release workflow in the standalone **Toggly.FeatureManagement.PHP** repository instead.
+**PHP monorepo workflow:** `sdk-php-release.yml` requires `Toggly.FeatureManagement.PHP/` in the checkout. If that directory is absent, validate exits successfully with `action=skip` (no gates/release). Use the release workflow in the standalone **Toggly.FeatureManagement.PHP** repository instead.
 
 See [package-versioning rule](../../../.cursor/rules/package-versioning.mdc) for semver and changelog conventions.
 

@@ -586,7 +586,7 @@ jobs:
     needs: [prepare, build-shared-js-deps, test, test-node-server, test-docusaurus-host, dependency-check]
     if: |
       always() &&
-      (github.event_name != 'workflow_call' || inputs.run_reporting) &&
+      toJSON(inputs.run_reporting) != 'false' &&
       (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork)
 
     steps:
@@ -759,7 +759,7 @@ jobs:
   dependency-check:
     name: OWASP Dependency Check
     needs: [prepare]
-    if: ${{ (github.event_name != 'workflow_call' || inputs.run_reporting) && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
+    if: ${{ toJSON(inputs.run_reporting) != 'false' && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
     runs-on: ubuntu-latest
 
     steps:
@@ -840,7 +840,7 @@ jobs:
         with:
           needs-json: ${{ toJSON(needs) }}
           required-jobs: ${{ needs.prepare.outputs.required_jobs }}
-          allow-skipped: ${{ github.event_name == 'workflow_call' && !inputs.run_reporting && 'dependency-check,sonar' || 'none' }}
+          allow-skipped: ${{ toJSON(inputs.run_reporting) == 'false' && 'dependency-check,sonar' || 'none' }}
 
       - name: Check test results
         run: |

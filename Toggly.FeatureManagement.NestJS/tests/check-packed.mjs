@@ -19,7 +19,7 @@ import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const packageRoot = fileURLToPath(new URL('..', import.meta.url));
 const require = createRequire(import.meta.url);
-const nestVersion = require('@nestjs/common/package.json').version;
+
 function validateNpmCli(candidate) {
   if (!isAbsolute(candidate)) throw new Error('npm CLI path must be absolute');
   let cli;
@@ -60,7 +60,31 @@ function resolveNpmCli() {
   if (!candidate) throw new Error(`npm CLI is unavailable for Node runtime: ${process.execPath}`);
   return validateNpmCli(candidate);
 }
+
+function resolveNestCommonVersion() {
+  // Nest 12 package exports reject require('@nestjs/common/package.json')
+  // (Node resolves it as package.json.js). Walk from the package entry instead.
+  let dir = dirname(require.resolve('@nestjs/common'));
+  for (;;) {
+    const manifest = join(dir, 'package.json');
+    if (existsSync(manifest)) {
+      const metadata = JSON.parse(readFileSync(manifest, 'utf8'));
+      if (metadata.name === '@nestjs/common' && typeof metadata.version === 'string') {
+        return metadata.version;
+      }
+    }
+    const parent = dirname(dir);
+    if (parent === dir) {
+      throw new Error('Unable to resolve @nestjs/common package.json');
+    }
+    dir = parent;
+  }
+}
+
+// Validate the npm CLI before reading Nest metadata so launcher tests that
+// inject a bad npm_execpath fail with CLI validation errors, not module errors.
 const npmCli = resolveNpmCli();
+const nestVersion = resolveNestCommonVersion();
 const temp = mkdtempSync(join(tmpdir(), 'toggly-nest-packed-'));
 function run(args, cwd) {
   const result = spawnSync(process.execPath, args, { cwd, env: process.env, encoding: 'utf8' });

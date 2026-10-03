@@ -528,7 +528,7 @@ jobs:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
     needs: [test-core, test-django, test-flask, test-fastapi, test-cache, dependency-check]
-    if: ${{ always() && (github.event_name != 'workflow_call' || inputs.run_reporting) }}
+    if: ${{ always() && toJSON(inputs.run_reporting) != 'false' }}
 
     steps:
       - name: Checkout code
@@ -605,7 +605,7 @@ jobs:
   dependency-check:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_call' || inputs.run_reporting }}
+    if: ${{ toJSON(inputs.run_reporting) != 'false' }}
 
     steps:
       - name: Checkout code
@@ -665,6 +665,7 @@ jobs:
         with:
           needs-json: ${{ toJSON(needs) }}
           required-jobs: contract,lint,type-check,test-core,test-django,test-flask,test-fastapi,test-cache,test-packed-host,integration,smoke-test,build,dependency-check
+          allow-skipped: ${{ toJSON(inputs.run_reporting) == 'false' && 'sonar,dependency-check' || 'none' }}
 
       - name: Generate summary
         working-directory: .

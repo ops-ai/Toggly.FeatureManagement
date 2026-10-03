@@ -229,7 +229,7 @@ jobs:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
     needs: [build-shared-js-deps, coverage, dependency-check]
-    if: ${{ always() && (github.event_name != 'workflow_call' || inputs.run_reporting) }}
+    if: ${{ always() && toJSON(inputs.run_reporting) != 'false' }}
 
     steps:
       - name: Checkout code
@@ -328,7 +328,7 @@ jobs:
   dependency-check:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_call' || inputs.run_reporting }}
+    if: ${{ toJSON(inputs.run_reporting) != 'false' }}
 
     steps:
       - name: Checkout code
@@ -392,6 +392,7 @@ jobs:
         with:
           needs-json: ${{ toJSON(needs) }}
           required-jobs: build-and-test,lint,coverage,smoke-test,dependency-check
+          allow-skipped: ${{ toJSON(inputs.run_reporting) == 'false' && 'sonar,dependency-check' || 'none' }}
 
       - name: Generate summary
         run: |
