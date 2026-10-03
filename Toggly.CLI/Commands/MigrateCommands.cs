@@ -39,7 +39,9 @@ public static class MigrateCommands
         var envOption = CommandOptions.CreateEnvOption(
             "Toggly environment to import into (also used to select Unleash environment slices when present)");
         var dryRunOption = new Option<bool>("--dry-run", "Parse and print a compatibility report without API mutations (default)");
-        var applyOption = new Option<bool>("--apply", "Create missing features and set environment filters via the Toggly API");
+        var applyOption = new Option<bool>(
+            "--apply",
+            "Create missing features and set environment filters via the Toggly API (does not require a prior dry-run)");
 
         command.AddOption(fileOption);
         command.AddOption(appOption);
@@ -81,7 +83,11 @@ public static class MigrateCommands
             {
                 parsed = UnleashExportParser.ParseFile(file.FullName, environment);
             }
-            catch (Exception ex) when (ex is InvalidOperationException or JsonException or IOException)
+            catch (Exception ex) when (
+                ex is InvalidOperationException
+                    or JsonException
+                    or IOException
+                    or ArgumentException)
             {
                 await cli.Output.WriteErrorAsync($"Failed to parse Unleash export: {ex.Message}");
                 context.ExitCode = 1;
@@ -90,6 +96,10 @@ public static class MigrateCommands
 
             var plan = BuildImportPlan(parsed.Features);
             var reportText = plan.Report.ToText();
+            var skippedImportWarnings = plan.Items
+                .Where(item => item.Status == UnleashMappingStatus.Skipped)
+                .Select(item => $"WARN: Skipped strategies for '{item.FeatureKey}': {item.Note}")
+                .ToArray();
 
             if (!isApply)
             {
@@ -97,7 +107,8 @@ public static class MigrateCommands
                     $"Dry-run import into app '{applicationId}' environment '{environment}'",
                     $"Accepted shape: {parsed.AcceptedShape}",
                     $"Features: {parsed.Features.Count}",
-                    reportText
+                    reportText,
+                    .. skippedImportWarnings
                 ]);
                 context.ExitCode = 0;
                 return;
@@ -116,13 +127,9 @@ public static class MigrateCommands
 
                 var created = 0;
                 var updated = 0;
-                var warnings = new List<string>();
 
                 foreach (var item in plan.Items)
                 {
-                    if (item.Status == UnleashMappingStatus.Skipped)
-                        warnings.Add($"Skipped strategies for '{item.FeatureKey}': {item.Note} (importing as off)");
-
                     var filtersForEnv = item.Filters;
 
                     if (!existingKeys.Contains(item.FeatureKey))
@@ -158,7 +165,7 @@ public static class MigrateCommands
                     $"Applied Unleash import into app '{applicationId}' environment '{environment}'",
                     $"Created: {created}  Updated: {updated}",
                     reportText,
-                    .. warnings.Select(w => $"WARN: {w}")
+                    .. skippedImportWarnings
                 ]);
             });
         });
@@ -191,8 +198,11 @@ public static class MigrateCommands
             }
             else if (status == UnleashMappingStatus.Skipped)
             {
-                // All strategies unsupported — still create as off.
+                // All strategies unsupported — still create/update as off (empty filters).
                 filters = [];
+                note = string.IsNullOrWhiteSpace(note)
+                    ? "will import as disabled/off"
+                    : $"{note}; will import as disabled/off";
             }
 
             report.Add(feature.Name, status, note);

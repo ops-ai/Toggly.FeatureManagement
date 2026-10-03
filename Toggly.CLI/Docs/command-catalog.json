@@ -612,7 +612,7 @@
         },
         {
           "name": "--apply",
-          "description": "Create missing features and set environment filters via the Toggly API"
+          "description": "Create missing features and set environment filters via the Toggly API (does not require a prior dry-run)"
         }
       ],
       "examples": [

@@ -16,7 +16,10 @@ public enum UnleashMappingStatus
     /// <summary>Imported with warnings / best-effort semantics.</summary>
     Partial,
 
-    /// <summary>Not imported; unsupported strategy or custom plugin.</summary>
+    /// <summary>
+    /// Unsupported strategies (or custom plugins). Feature is still created/updated as off
+    /// (empty filters) on <c>--apply</c>; dry-run reports this explicitly.
+    /// </summary>
     Skipped
 }
 

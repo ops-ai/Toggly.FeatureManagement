@@ -120,6 +120,39 @@ public class MigrateUnleashCommandTests
             Assert.Contains("welcome-banner", text);
             Assert.Contains("legacy-plugin-flag", text);
             Assert.Contains("Mapped:", text);
+            Assert.Contains("will import as disabled/off", text);
+            Assert.Contains("WARN: Skipped strategies for 'legacy-plugin-flag'", text);
+        }
+        finally
+        {
+            File.Delete(exportPath);
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   \n\t  ")]
+    public async Task EmptyOrWhitespaceExport_ReturnsNonZero(string content)
+    {
+        var exportPath = WriteTempExport(content);
+        try
+        {
+            using var handler = new RecordingHandler(_ => JsonResponse("[]"));
+            using var http = new HttpClient(handler);
+            var api = new TogglyApiClient(http, new AuthService(http), "https://api.example.test");
+            var stderr = new StringWriter();
+            var command = CliApplication.CreateRootCommand(_ => api, errorWriter: stderr);
+
+            var exitCode = await command.InvokeAsync([
+                "migrate", "unleash",
+                "--file", exportPath,
+                "--app", "app-1",
+                "--env", "Production"
+            ]);
+
+            Assert.NotEqual(0, exitCode);
+            Assert.Empty(handler.Requests);
+            Assert.Contains("Failed to parse Unleash export", stderr.ToString());
         }
         finally
         {
