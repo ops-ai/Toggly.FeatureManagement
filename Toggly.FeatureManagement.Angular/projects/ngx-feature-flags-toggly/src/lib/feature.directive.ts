@@ -135,6 +135,5 @@ export class FeatureFlagDirective implements OnInit, OnDestroy {
         }
         this._changeDetector.markForCheck()
       })
-      .catch(() => undefined)
   }
 }

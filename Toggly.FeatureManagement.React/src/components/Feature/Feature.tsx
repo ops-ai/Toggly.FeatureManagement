@@ -78,7 +78,6 @@ class Feature extends React.Component<FeatureProps, { shouldShow: boolean }> {
           this.setState({ shouldShow: this.applyVariantFilter(isEnabled) })
         }
       })
-      .catch(() => undefined)
   }
 
   private bindService() {

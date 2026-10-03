@@ -119,7 +119,6 @@ export class FeatureGateBuilderDirective implements OnInit, OnDestroy {
           if (generation !== this.evaluationGeneration) return
           this.renderEnabled(isEnabled)
         })
-        .catch(() => undefined)
     }
 
     evaluate()

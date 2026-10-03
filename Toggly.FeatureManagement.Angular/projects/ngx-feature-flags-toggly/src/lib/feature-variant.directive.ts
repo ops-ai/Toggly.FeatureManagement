@@ -100,6 +100,6 @@ export class FeatureVariantDirective implements OnInit, OnChanges, OnDestroy {
         this.isHidden = true
       }
       this._changeDetector.markForCheck()
-    }).catch(() => undefined)
+    })
   }
 }
