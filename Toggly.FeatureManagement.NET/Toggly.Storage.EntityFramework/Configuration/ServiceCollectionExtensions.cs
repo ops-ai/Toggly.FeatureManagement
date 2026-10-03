@@ -24,8 +24,8 @@ namespace Toggly.FeatureManagement.Storage.EntityFramework.Configuration
             this IServiceCollection services,
             Action<DbContextOptionsBuilder> configureDatabase)
         {
-            if (services == null) throw new ArgumentNullException(nameof(services));
-            if (configureDatabase == null) throw new ArgumentNullException(nameof(configureDatabase));
+            ArgumentNullException.ThrowIfNull(services);
+            ArgumentNullException.ThrowIfNull(configureDatabase);
 
             services.AddDbContextFactory<TogglyCatalogDbContext>(configureDatabase);
             services.TryAddEnumerable(ServiceDescriptor.Singleton<ITogglyCatalogStore, EntityFrameworkCatalogStore>());

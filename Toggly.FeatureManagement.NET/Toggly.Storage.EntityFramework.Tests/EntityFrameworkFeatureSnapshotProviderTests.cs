@@ -319,7 +319,7 @@ public class EntityFrameworkFeatureSnapshotProviderTests : IAsyncLifetime
         // Assert
         retrieved.Should().NotBeNull();
         retrieved!.Keys.Should().HaveCount(1);
-        retrieved.Keys[0].Kid.Should().Be("test-key-id");
+        retrieved!.Keys![0].Kid.Should().Be("test-key-id");
         timestamp.Should().Be(1700000004);
     }
 
