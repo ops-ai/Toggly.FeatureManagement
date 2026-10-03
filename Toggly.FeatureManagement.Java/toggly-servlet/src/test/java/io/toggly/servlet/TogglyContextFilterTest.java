@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -78,5 +79,49 @@ class TogglyContextFilterTest {
         TogglyContextFilter filter = new TogglyContextFilter();
         filter.init(mock(FilterConfig.class));
         filter.doFilter(mock(ServletRequest.class), mock(ServletResponse.class), chain);
+    }
+
+    @Test
+    void usesTheSecurityPrincipalWhenTheIdentityHeaderIsEmpty() throws Exception {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getHeader("X-User-Id")).thenReturn("");
+        when(request.getUserPrincipal()).thenReturn(() -> "principal-empty-header");
+
+        assertRequestIdentity(request, mock(FilterConfig.class), "principal-empty-header");
+    }
+
+    @Test
+    void leavesIdentityUnsetWhenNoPrincipalIsAvailable() throws Exception {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+
+        assertRequestIdentity(request, mock(FilterConfig.class), null);
+    }
+
+    @Test
+    void leavesIdentityUnsetWhenPrincipalFallbackIsDisabled() throws Exception {
+        FilterConfig config = mock(FilterConfig.class);
+        when(config.getInitParameter("useSecurityPrincipal")).thenReturn("false");
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getUserPrincipal()).thenReturn(() -> "ignored-principal");
+
+        assertRequestIdentity(request, config, null);
+
+        verify(request, never()).getUserPrincipal();
+    }
+
+    private void assertRequestIdentity(HttpServletRequest request, FilterConfig config,
+                                       String expectedIdentity) throws Exception {
+        FilterChain chain = mock(FilterChain.class);
+        doAnswer(invocation -> {
+            assertEquals(expectedIdentity, ContextHolder.getContext().getIdentity());
+            return null;
+        }).when(chain).doFilter(any(ServletRequest.class), any(ServletResponse.class));
+        TogglyContextFilter filter = new TogglyContextFilter();
+        filter.init(config);
+
+        filter.doFilter(request, mock(ServletResponse.class), chain);
+
+        verify(chain).doFilter(any(ServletRequest.class), any(ServletResponse.class));
+        assertNull(ContextHolder.getContext());
     }
 }
