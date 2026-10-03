@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { loadDotnetInventory, repoRoot, validateSources } from '../package-registry/dotnet-inventory.mjs';
+import { readCommonVersion } from '../package-registry/dotnet-version.mjs';
 
 const workflow = readFileSync(new URL('./analysis-dotnet.yml', import.meta.url), 'utf8');
 
@@ -146,7 +148,33 @@ test('both scanners and summary use one validated common package version', () =>
       encoding: 'utf8', env: { ...process.env, GITHUB_OUTPUT: output },
     });
     assert.equal(result.status, 0, result.stderr);
-    assert.match(readFileSync(output, 'utf8'), /^version=\d+\.\d+\.\d+\n$/);
+    const packages = validateSources(loadDotnetInventory());
+    const commonVersion = readCommonVersion(join(repoRoot, packages[0].manifest));
+    assert.equal(readFileSync(output, 'utf8'), `version=${commonVersion}\n`);
+    const fixture = join(directory, 'fixture');
+    const registry = join(fixture, '.github/package-registry');
+    mkdirSync(registry, { recursive: true });
+    for (const file of ['dotnet-ci.mjs', 'dotnet-inventory.mjs', 'dotnet-version.mjs', 'verify-nuget-metadata.mjs']) {
+      copyFileSync(new URL(`../package-registry/${file}`, import.meta.url), join(registry, file));
+    }
+    mkdirSync(join(fixture, 'Fixture'));
+    writeFileSync(join(registry, 'nuget-packages.json'), JSON.stringify({
+      sdkRoot: 'Fixture', changelog: 'Fixture/CHANGELOG.md',
+      packages: [{ id: 'Fixture', project: 'Fixture.csproj' }],
+    }));
+    writeFileSync(join(fixture, 'Fixture/Fixture.csproj'), '<Project />');
+    writeFileSync(join(fixture, 'Fixture/CHANGELOG.md'), '# Fixture');
+    const manifest = join(fixture, 'Fixture/Directory.Build.props');
+    for (const version of ['3.12.7', '3.12.7-rc.1', '3.12.7+build.01', '3.12.7-rc.1+build.01']) {
+      writeFileSync(manifest, `<Project><Version>${version}</Version></Project>`);
+      rmSync(output);
+      const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', runScript('Read common .NET package version')], {
+        cwd: fixture, encoding: 'utf8', env: { ...process.env, GITHUB_OUTPUT: output },
+      });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(readCommonVersion(manifest), version);
+      assert.equal(readFileSync(output, 'utf8'), `version=${readCommonVersion(manifest)}\n`);
+    }
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
