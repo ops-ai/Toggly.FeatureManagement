@@ -48,7 +48,11 @@ namespace Toggly.FeatureManagement
         }
 
         /// <summary>Normalizes raw version attribute text (testable).</summary>
-        internal static bool TryNormalize(string? raw, out string version)
+        internal static bool TryNormalize(string? raw, out string version) =>
+            TryNormalize(raw, out version, Regex.IsMatch);
+
+        internal static bool TryNormalize(string? raw, out string version,
+            Func<string, string, RegexOptions, TimeSpan, bool> matcher)
         {
             version = "";
             if (string.IsNullOrWhiteSpace(raw))
@@ -67,7 +71,7 @@ namespace Toggly.FeatureManagement
             // SemVer prerelease identifiers must also be safe in an HTTP product token.
             try
             {
-                if (!Regex.IsMatch(raw, @"\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:\.(0|[1-9][0-9]*)|-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?\z", RegexOptions.None, TimeSpan.FromMilliseconds(100)))
+                if (!matcher(raw, @"\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:\.(0|[1-9][0-9]*)|-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?\z", RegexOptions.None, TimeSpan.FromMilliseconds(100)))
                     return false;
             }
             catch (RegexMatchTimeoutException)

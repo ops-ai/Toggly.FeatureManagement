@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using FluentAssertions;
 using Xunit;
@@ -57,6 +58,34 @@ public class TogglySdkIdentityTests
         var success = TogglySdkIdentity.TryNormalize(raw, out var version);
         success.Should().Be(ok);
         version.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(true, "3.12.7")]
+    [InlineData(false, "")]
+    public void TryNormalize_UsesBoundedMatcherOutcome(bool matches, string expected)
+    {
+        var success = TogglySdkIdentity.TryNormalize("3.12.7+build.01", out var version,
+            (input, pattern, options, timeout) =>
+            {
+                input.Should().Be("3.12.7");
+                timeout.Should().BeGreaterThan(TimeSpan.Zero);
+                timeout.Should().BeLessThanOrEqualTo(TimeSpan.FromSeconds(1));
+                return matches;
+            });
+
+        success.Should().Be(matches);
+        version.Should().Be(expected);
+    }
+
+    [Fact]
+    public void TryNormalize_ReturnsFalseAndEmptyVersionWhenMatcherTimesOut()
+    {
+        var success = TogglySdkIdentity.TryNormalize("3.12.7", out var version,
+            (input, pattern, options, timeout) => throw new RegexMatchTimeoutException(input, pattern, timeout));
+
+        success.Should().BeFalse();
+        version.Should().BeEmpty();
     }
 
     [Fact]
