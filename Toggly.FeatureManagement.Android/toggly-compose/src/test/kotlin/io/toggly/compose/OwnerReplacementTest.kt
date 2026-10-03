@@ -78,7 +78,19 @@ class OwnerReplacementTest {
                     "initializedOwners=${owners.size}, requests=${server.requestCount}, " +
                     "recentObservations=${observations.takeLast(12)}", failure)
             }
-            rule.runOnIdle { if (configured) settings = newConfig else current = new }
+            if (configured) rule.waitUntil(5_000) { owners.size == 1 }
+            // Match TelemetryComposeTest: copy() triggers remember(config) without replacing the state slot oddly.
+            rule.runOnIdle {
+                if (configured) {
+                    settings = settings.copy(
+                        appKey = "new-app",
+                        environment = "New",
+                        featureDefaults = listOf("flag", "flow", "gate", "entity").associateWith { false },
+                    )
+                } else {
+                    current = new
+                }
+            }
             rule.waitForIdle()
             if (configured) {
                 try {
