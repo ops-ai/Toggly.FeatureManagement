@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace Toggly.FeatureManagement
 {
@@ -59,6 +60,11 @@ namespace Toggly.FeatureManagement
 
             raw = raw.Trim();
             if (raw.Length == 0 || raw == "0.0.0.0")
+                return false;
+
+            // Keep four-part numeric file versions available as the fallback identity.
+            // SemVer prerelease identifiers must also be safe in an HTTP product token.
+            if (!Regex.IsMatch(raw, @"\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:\.(0|[1-9][0-9]*)|-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?\z"))
                 return false;
 
             version = raw;

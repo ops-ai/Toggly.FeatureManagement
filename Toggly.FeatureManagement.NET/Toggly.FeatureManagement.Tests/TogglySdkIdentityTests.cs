@@ -1,5 +1,7 @@
+using System.Net.Http.Headers;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Xml.Linq;
 using FluentAssertions;
 using Xunit;
 
@@ -17,6 +19,20 @@ public class TogglySdkIdentityTests
     }
 
     [Fact]
+    public void InformationalVersion_UsesDeclaredPackageVersion()
+    {
+        var manifest = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../..", "Directory.Build.props"));
+        var packageVersion = XDocument.Load(manifest).Descendants("Version").Single().Value;
+        var assembly = typeof(TogglySdkIdentity).Assembly;
+
+        assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!
+            .InformationalVersion.Should().Be(packageVersion);
+        TogglySdkIdentity.Version.Should().Be(packageVersion.Split('+')[0]);
+        var header = new ProductInfoHeaderValue("toggly-dotnet", TogglySdkIdentity.Version);
+        header.ToString().Should().Be(TogglySdkIdentity.UserAgent);
+    }
+
+    [Fact]
     public void UserAgent_MatchesPlatformSdkUserAgentParserShape()
     {
         TogglySdkIdentity.UserAgent.Should().Be($"toggly-dotnet/{TogglySdkIdentity.Version}");
@@ -28,6 +44,11 @@ public class TogglySdkIdentityTests
     [InlineData("", false, "")]
     [InlineData("   ", false, "")]
     [InlineData("0.0.0.0", false, "")]
+    [InlineData("3.0.4-{BranchName}.1", false, "")]
+    [InlineData("1.2.3-01", false, "")]
+    [InlineData("1.2.3-beta..1", false, "")]
+    [InlineData("03.2.1", false, "")]
+    [InlineData("1.2.3/unsafe", false, "")]
     [InlineData("3.6.6", true, "3.6.6")]
     [InlineData("3.6.6+abc123", true, "3.6.6")]
     [InlineData(" 1.2.3-beta.1 ", true, "1.2.3-beta.1")]
@@ -91,6 +112,17 @@ public class TogglySdkIdentityTests
             nameVersion: new Version(0, 0, 0, 0));
 
         TogglySdkIdentity.ResolveVersion(asm).Should().Be("unknown");
+    }
+
+    [Fact]
+    public void ResolveVersion_FallsBackToFileWhenInformationalMalformed()
+    {
+        var asm = EmitAssembly(
+            informational: "3.0.4-{BranchName}.1",
+            file: "3.12.6.0",
+            nameVersion: new Version(2, 0, 0, 0));
+
+        TogglySdkIdentity.ResolveVersion(asm).Should().Be("3.12.6.0");
     }
 
     private static Assembly EmitAssembly(string? informational, string? file, Version nameVersion)

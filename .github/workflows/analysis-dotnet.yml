@@ -68,17 +68,31 @@ jobs:
           node .github/package-registry/dotnet-ci.mjs validate
           echo "sources=$(node .github/package-registry/dotnet-ci.mjs source-inclusions)" >> "$GITHUB_OUTPUT"
 
+      - name: Read common .NET package version
+        id: analysis_version
+        run: |
+          version=$(node .github/package-registry/dotnet-ci.mjs version)
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
       - name: Verify .NET analysis workflow contract
         run: node --test .github/workflows/analysis-dotnet.test.mjs
 
-      - name: Install GitVersion
-        uses: gittools/actions/gitversion/setup@7417b1089e2c7de93510f1901d656ddf60bb024f # v4
-        with:
-          versionSpec: '6.x'
-
-      - name: Determine version
-        id: gitversion
-        uses: gittools/actions/gitversion/execute@7417b1089e2c7de93510f1901d656ddf60bb024f # v4
+      - name: Validate Sonar credentials
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_SERVER_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          missing=0
+          for field in SONAR_TOKEN SONAR_SERVER_TOKEN SONAR_HOST_URL; do
+            if [[ -z "${!field}" ]]; then
+              echo "$field" >&2
+              missing=1
+            fi
+          done
+          if [[ "$missing" -ne 0 ]]; then
+            exit 1
+          fi
 
       - name: Cache NuGet packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
@@ -121,7 +135,7 @@ jobs:
             /k:"toggly-sdks-dotnet" \
             "/n:Toggly SDKs - .NET" \
             /o:"ops-ai" \
-            /v:"${{ steps.gitversion.outputs.semVer }}" \
+            /v:"${{ steps.analysis_version.outputs.version }}" \
             /d:sonar.host.url="https://sonarcloud.io" \
             /d:sonar.token="${SONAR_TOKEN}" \
             /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}" \
@@ -324,7 +338,7 @@ jobs:
             if dotnet sonarscanner begin \
               /k:"toggly-sdks-dotnet" \
               "/n:Toggly SDKs - .NET" \
-              /v:"${{ steps.gitversion.outputs.semVer }}" \
+              /v:"${{ steps.analysis_version.outputs.version }}" \
               /d:sonar.host.url="${SONAR_HOST_URL}" \
               /d:sonar.token="${SONAR_SERVER_TOKEN}" \
               /d:sonar.qualitygate.wait=true \
@@ -395,7 +409,7 @@ jobs:
         run: |
           echo "## .NET SDK Analysis Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ steps.gitversion.outputs.semVer }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.analysis_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           node .github/package-registry/dotnet-ci.mjs summary >> "$GITHUB_STEP_SUMMARY"
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -405,7 +419,7 @@ jobs:
   dependency-check:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_call' || inputs.run_reporting }}
+    if: ${{ toJSON(inputs.run_reporting) != 'false' }}
 
     steps:
       - name: Checkout code
@@ -655,3 +669,4 @@ jobs:
         with:
           needs-json: ${{ toJSON(needs) }}
           required-jobs: analyze,dependency-check,build-cli,pack-packages,embedded-consumer,smoke-test,blazor-runtime
+          allow-skipped: ${{ toJSON(inputs.run_reporting) == 'false' && 'dependency-check' || 'none' }}
