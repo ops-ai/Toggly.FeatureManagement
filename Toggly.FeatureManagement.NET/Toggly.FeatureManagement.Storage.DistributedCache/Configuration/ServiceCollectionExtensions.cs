@@ -21,8 +21,13 @@ namespace Toggly.FeatureManagement.Storage.DistributedCache.Configuration
             this IServiceCollection services,
             Action<TogglyDistributedCacheCatalogOptions> configure)
         {
+#if NET6_0_OR_GREATER
+            ArgumentNullException.ThrowIfNull(services);
+            ArgumentNullException.ThrowIfNull(configure);
+#else
             if (services == null) throw new ArgumentNullException(nameof(services));
             if (configure == null) throw new ArgumentNullException(nameof(configure));
+#endif
 
             services.AddOptions<TogglyDistributedCacheCatalogOptions>().Configure(configure);
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<TogglyDistributedCacheCatalogOptions>, TogglyDistributedCacheCatalogOptionsValidator>());

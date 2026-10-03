@@ -1,5 +1,15 @@
 # Changelog
 
+## All .NET SDK packages 3.12.9 - 2026-10-04
+
+### Changed
+- `Toggly.FeatureManagement.Storage.DistributedCache` now explicitly marks
+  optional snapshot fields and cache entry names as nullable, matching their
+  existing defaults, and documents its public snapshot and registration APIs.
+- Distributed-cache catalog storage uses the available validation and hashing
+  APIs on each supported framework while preserving catalog cache keys and
+  process-wide writer serialization.
+
 ## All .NET SDK packages 3.12.8 - 2026-10-04
 
 ### Fixed
@@ -15,7 +25,6 @@
 - The SDK User-Agent version now matches the NuGet package version even when
   CI injects a different assembly informational version. Malformed assembly
   informational versions fall back to a valid file or assembly version.
-
 ## All .NET SDK packages 3.12.6 - 2026-09-30
 
 ### Fixed
