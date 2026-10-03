@@ -12,8 +12,9 @@
       <_TogglyAsmVer Condition="'$(AssemblyVersion)' == ''">$(Version).0</_TogglyAsmVer>
       <_TogglyFileVer Condition="'$(FileVersion)' != ''">$(FileVersion)</_TogglyFileVer>
       <_TogglyFileVer Condition="'$(FileVersion)' == ''">$(Version).0</_TogglyFileVer>
-      <_TogglyInfoVer Condition="'$(InformationalVersion)' != ''">$(InformationalVersion)</_TogglyInfoVer>
-      <_TogglyInfoVer Condition="'$(InformationalVersion)' == ''">$(Version)</_TogglyInfoVer>
+      <!-- CI can export informationalVersion as an ambient MSBuild property.
+           Runtime identity must still come from the declared NuGet package version. -->
+      <_TogglyInfoVer>$(Version)</_TogglyInfoVer>
       <_TogglyVerContent>[assembly: System.Reflection.AssemblyVersion("$(_TogglyAsmVer)")]%0A[assembly: System.Reflection.AssemblyFileVersion("$(_TogglyFileVer)")]%0A[assembly: System.Reflection.AssemblyInformationalVersion("$(_TogglyInfoVer)")]%0A</_TogglyVerContent>
     </PropertyGroup>
     <MakeDir Directories="$(IntermediateOutputPath)" Condition="!Exists('$(IntermediateOutputPath)')" />

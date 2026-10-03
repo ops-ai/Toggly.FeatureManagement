@@ -1,4 +1,6 @@
+using System;
 using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace Toggly.FeatureManagement
 {
@@ -46,7 +48,11 @@ namespace Toggly.FeatureManagement
         }
 
         /// <summary>Normalizes raw version attribute text (testable).</summary>
-        internal static bool TryNormalize(string? raw, out string version)
+        internal static bool TryNormalize(string? raw, out string version) =>
+            TryNormalize(raw, out version, Regex.IsMatch);
+
+        internal static bool TryNormalize(string? raw, out string version,
+            Func<string, string, RegexOptions, TimeSpan, bool> matcher)
         {
             version = "";
             if (string.IsNullOrWhiteSpace(raw))
@@ -60,6 +66,18 @@ namespace Toggly.FeatureManagement
             raw = raw.Trim();
             if (raw.Length == 0 || raw == "0.0.0.0")
                 return false;
+
+            // Keep four-part numeric file versions available as the fallback identity.
+            // SemVer prerelease identifiers must also be safe in an HTTP product token.
+            try
+            {
+                if (!matcher(raw, @"\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:\.(0|[1-9][0-9]*)|-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?\z", RegexOptions.None, TimeSpan.FromMilliseconds(100)))
+                    return false;
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                return false;
+            }
 
             version = raw;
             return true;
