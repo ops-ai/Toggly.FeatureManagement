@@ -237,7 +237,7 @@ def render_root_page(catalog: dict[str, Any]) -> str:
     lines.extend(wrap_text(f"Full documentation: {roff_escape(catalog['docsUrl'])}"))
 
     cmd_lines: list[str] = ["Noun groups:"]
-    for name in ("auth", "app", "env", "feature", "release", "context"):
+    for name in ("auth", "app", "env", "feature", "release", "migrate", "context"):
         cmd_lines.append(".TP")
         cmd_lines.append(f".B {roff_escape(name)}")
         group = next(
@@ -266,6 +266,7 @@ def render_root_page(catalog: dict[str, Any]) -> str:
         f"{binary} context set --app <app-id> --env Production",
         f"{binary} app list",
         f"{binary} --json feature list",
+        f"{binary} migrate unleash --file export.json --app <app-id> --env Production",
     ]
     write_section(lines, "EXAMPLES", format_examples(root_examples))
     write_section(lines, "EXIT STATUS", format_exit_status(catalog["exitCodes"]))
@@ -279,6 +280,7 @@ def render_root_page(catalog: dict[str, Any]) -> str:
                 "toggly-env",
                 "toggly-feature",
                 "toggly-release",
+                "toggly-migrate",
                 "toggly-context",
             ]
         ),

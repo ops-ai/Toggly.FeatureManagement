@@ -21,6 +21,7 @@ public class CommandTreeAndOutputTests
         Assert.Contains("env", names);
         Assert.Contains("feature", names);
         Assert.Contains("release", names);
+        Assert.Contains("migrate", names);
         Assert.Contains("context", names);
         Assert.Contains("create-feature", names);
         Assert.Contains("update-feature", names);
