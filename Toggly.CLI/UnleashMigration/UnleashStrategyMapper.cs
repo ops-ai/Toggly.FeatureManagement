@@ -137,18 +137,13 @@ public static class UnleashStrategyMapper
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToList();
 
-        var filter = FilterBuilder.Targeting(users: users);
-
         if (users.Count == 0)
         {
-            return new UnleashStrategyMapResult(
-                [filter],
-                UnleashMappingStatus.Partial,
-                "userWithId with empty userIds → Targeting (empty audience)");
+            return Skip("userWithId with empty or missing userIds");
         }
 
         return new UnleashStrategyMapResult(
-            [filter],
+            [FilterBuilder.Targeting(users: users)],
             UnleashMappingStatus.Mapped,
             "userWithId → Targeting");
     }

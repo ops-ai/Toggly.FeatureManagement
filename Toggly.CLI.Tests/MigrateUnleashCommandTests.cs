@@ -263,6 +263,90 @@ public class MigrateUnleashCommandTests
     }
 
     [Fact]
+    public async Task MissingExportFile_ReturnsNonZero()
+    {
+        var missing = Path.Combine(Path.GetTempPath(), "unleash-missing-" + Guid.NewGuid().ToString("N") + ".json");
+        using var handler = new RecordingHandler(_ => JsonResponse("[]"));
+        using var http = new HttpClient(handler);
+        var api = new TogglyApiClient(http, new AuthService(http), "https://api.example.test");
+        var stderr = new StringWriter();
+        var command = CliApplication.CreateRootCommand(_ => api, errorWriter: stderr);
+
+        var exitCode = await command.InvokeAsync([
+            "migrate", "unleash",
+            "--file", missing,
+            "--app", "app-1",
+            "--env", "Production"
+        ]);
+
+        Assert.Equal(2, exitCode);
+        Assert.Empty(handler.Requests);
+        Assert.Contains("File not found", stderr.ToString());
+    }
+
+    [Fact]
+    public async Task Apply_EmptyUserWithId_CreatesFeatureWithNoFilters()
+    {
+        const string json = """
+            {
+              "features": [
+                {
+                  "name": "empty-audience",
+                  "enabled": true,
+                  "strategies": [
+                    {
+                      "name": "userWithId",
+                      "parameters": { "userIds": "" },
+                      "disabled": false
+                    }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var exportPath = WriteTempExport(json);
+        try
+        {
+            using var handler = new RecordingHandler(request =>
+            {
+                var path = request.RequestUri!.AbsolutePath;
+                if (request.Method == HttpMethod.Get && path == "/applications/app-1/features")
+                    return JsonResponse("[]");
+                if (request.Method == HttpMethod.Post && path == "/applications/app-1/features")
+                    return JsonResponse("""{"name":"empty-audience","featureKey":"empty-audience"}""");
+                return new HttpResponseMessage(HttpStatusCode.NotFound);
+            });
+            using var http = new HttpClient(handler);
+            var api = new TogglyApiClient(http, new AuthService(http), "https://api.example.test");
+            var stdout = new StringWriter();
+            var command = CliApplication.CreateRootCommand(_ => api, outputWriter: stdout);
+
+            var exitCode = await command.InvokeAsync([
+                "migrate", "unleash",
+                "--file", exportPath,
+                "--app", "app-1",
+                "--environment", "Production",
+                "--apply"
+            ]);
+
+            Assert.Equal(0, exitCode);
+            var post = Assert.Single(handler.Requests, r => r.Method == HttpMethod.Post);
+            var body = await post.Content!.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(body);
+            var envFilters = doc.RootElement.GetProperty("environmentFilters").GetProperty("Production");
+            Assert.Equal(JsonValueKind.Array, envFilters.ValueKind);
+            Assert.Equal(0, envFilters.GetArrayLength());
+            Assert.DoesNotContain("Targeting", body);
+            Assert.Contains("empty-audience", stdout.ToString());
+        }
+        finally
+        {
+            File.Delete(exportPath);
+        }
+    }
+
+    [Fact]
     public async Task ApplyAndDryRun_Together_Fails()
     {
         var exportPath = WriteTempExport(SampleExportJson);
