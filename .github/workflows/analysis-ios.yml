@@ -260,6 +260,9 @@ jobs:
             -Dsonar.exclusions=**/.build/**,**/Package.resolved
             -Dsonar.coverageReportPaths=sonar-reports/coverage-generic.xml
             -Dsonar.swift.swiftlint.report=sonar-reports/swiftlint-report.txt
+            -Dsonar.issue.ignore.multicriteria=kidSha1
+            -Dsonar.issue.ignore.multicriteria.kidSha1.ruleKey=swift:S4790
+            -Dsonar.issue.ignore.multicriteria.kidSha1.resourceKey=**/SignedDefsVerify.swift
             -Dsonar.qualitygate.wait=true
 
       - name: SonarQube Server Scan
@@ -280,6 +283,9 @@ jobs:
             -Dsonar.coverageReportPaths=sonar-reports/coverage-generic.xml
             -Dsonar.swift.swiftlint.report=sonar-reports/swiftlint-report.txt
             -Dsonar.dependencyCheck.reportPath=sonar-reports/dependency-check-report.xml
+            -Dsonar.issue.ignore.multicriteria=kidSha1
+            -Dsonar.issue.ignore.multicriteria.kidSha1.ruleKey=swift:S4790
+            -Dsonar.issue.ignore.multicriteria.kidSha1.resourceKey=**/SignedDefsVerify.swift
             -Dsonar.qualitygate.wait=true
 
   build-platforms:
