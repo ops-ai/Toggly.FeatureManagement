@@ -13,6 +13,20 @@ namespace Toggly.CLI.Commands;
 /// </summary>
 public static class MigrateCommands
 {
+    private sealed record UnleashCommandOptions(
+        FileInfo File,
+        bool Apply,
+        bool DryRun,
+        Option<string?> AppOption,
+        Option<string?> EnvOption);
+
+    private sealed record UnleashApplyContext(
+        string ApplicationId,
+        string Environment,
+        UnleashImportPlan Plan,
+        string ReportText,
+        string[] SkippedImportWarnings);
+
     /// <summary>
     /// Create the <c>migrate</c> noun group.
     /// </summary>
@@ -55,11 +69,12 @@ public static class MigrateCommands
                 context,
                 cli,
                 apiClientFactory,
-                context.ParseResult.GetValueForOption(fileOption)!,
-                context.ParseResult.GetValueForOption(applyOption),
-                context.ParseResult.GetValueForOption(dryRunOption),
-                appOption,
-                envOption);
+                new UnleashCommandOptions(
+                    context.ParseResult.GetValueForOption(fileOption)!,
+                    context.ParseResult.GetValueForOption(applyOption),
+                    context.ParseResult.GetValueForOption(dryRunOption),
+                    appOption,
+                    envOption));
         });
 
         return command;
@@ -69,33 +84,29 @@ public static class MigrateCommands
         InvocationContext context,
         CliCommandContext cli,
         Func<InvocationContext, TogglyApiClient?> apiClientFactory,
-        FileInfo file,
-        bool apply,
-        bool dryRun,
-        Option<string?> appOption,
-        Option<string?> envOption)
+        UnleashCommandOptions options)
     {
-        if (apply && dryRun)
+        if (options.Apply && options.DryRun)
         {
             await cli.Output.WriteErrorAsync("Specify either --apply or --dry-run, not both.");
             context.ExitCode = 2;
             return;
         }
 
-        if (!CommandOptions.TryResolveApp(context, cli, appOption, out var applicationId))
+        if (!CommandOptions.TryResolveApp(context, cli, options.AppOption, out var applicationId))
             return;
 
-        if (!CommandOptions.TryResolveEnv(context, cli, envOption, out var environment))
+        if (!CommandOptions.TryResolveEnv(context, cli, options.EnvOption, out var environment))
             return;
 
-        if (!file.Exists)
+        if (!options.File.Exists)
         {
-            await cli.Output.WriteErrorAsync($"File not found: {file.FullName}");
+            await cli.Output.WriteErrorAsync($"File not found: {options.File.FullName}");
             context.ExitCode = 2;
             return;
         }
 
-        if (!TryParseUnleashExport(file.FullName, environment, out var parsed, out var parseError))
+        if (!TryParseUnleashExport(options.File.FullName, environment, out var parsed, out var parseError))
         {
             await cli.Output.WriteErrorAsync($"Failed to parse Unleash export: {parseError}");
             context.ExitCode = 1;
@@ -109,7 +120,7 @@ public static class MigrateCommands
             .Select(item => $"WARN: Skipped strategies for '{item.FeatureKey}': {item.Note}")
             .ToArray();
 
-        if (!apply)
+        if (!options.Apply)
         {
             await cli.Output.WriteLinesAsync([
                 $"Dry-run import into app '{applicationId}' environment '{environment}'",
@@ -131,11 +142,12 @@ public static class MigrateCommands
                 context,
                 cli,
                 apiClient,
-                applicationId,
-                environment,
-                plan,
-                reportText,
-                skippedImportWarnings));
+                new UnleashApplyContext(
+                    applicationId,
+                    environment,
+                    plan,
+                    reportText,
+                    skippedImportWarnings)));
     }
 
     private static bool TryParseUnleashExport(
@@ -166,13 +178,9 @@ public static class MigrateCommands
         InvocationContext context,
         CliCommandContext cli,
         TogglyApiClient apiClient,
-        string applicationId,
-        string environment,
-        UnleashImportPlan plan,
-        string reportText,
-        string[] skippedImportWarnings)
+        UnleashApplyContext apply)
     {
-        var existing = await apiClient.ListFeaturesAsync(applicationId, context.GetCancellationToken());
+        var existing = await apiClient.ListFeaturesAsync(apply.ApplicationId, context.GetCancellationToken());
         var existingKeys = existing
             .Select(f => f.FeatureKey)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -180,13 +188,13 @@ public static class MigrateCommands
         var created = 0;
         var updated = 0;
 
-        foreach (var item in plan.Items)
+        foreach (var item in apply.Plan.Items)
         {
             if (existingKeys.Contains(item.FeatureKey))
             {
                 await apiClient.UpdateFeatureEnvironmentAsync(
-                    applicationId,
-                    environment,
+                    apply.ApplicationId,
+                    apply.Environment,
                     item.FeatureKey,
                     item.Filters,
                     context.GetCancellationToken());
@@ -201,20 +209,20 @@ public static class MigrateCommands
                 Description = item.Description,
                 EnvironmentFilters = new Dictionary<string, List<FeatureFilter>>
                 {
-                    [environment] = item.Filters
+                    [apply.Environment] = item.Filters
                 }
             };
 
-            await apiClient.CreateFeatureAsync(applicationId, model, context.GetCancellationToken());
+            await apiClient.CreateFeatureAsync(apply.ApplicationId, model, context.GetCancellationToken());
             existingKeys.Add(item.FeatureKey);
             created++;
         }
 
         await cli.Output.WriteLinesAsync([
-            $"Applied Unleash import into app '{applicationId}' environment '{environment}'",
+            $"Applied Unleash import into app '{apply.ApplicationId}' environment '{apply.Environment}'",
             $"Created: {created}  Updated: {updated}",
-            reportText,
-            .. skippedImportWarnings
+            apply.ReportText,
+            .. apply.SkippedImportWarnings
         ]);
     }
 
