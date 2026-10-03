@@ -1,6 +1,6 @@
 .\" Generated from Docs/command-catalog.json — do not edit by hand.
 .\" Regenerate: ./Toggly.CLI/scripts/generate-manpages.py
-.TH TOGGLY 1 "2026-09-29" "Toggly CLI" "User Commands"
+.TH TOGGLY 1 "2026-10-03" "Toggly CLI" "User Commands"
 .SH NAME
 toggly \- Command\-line interface for Toggly feature flag management
 .SH SYNOPSIS
@@ -29,6 +29,9 @@ List, inspect, and manage features
 .TP
 .B release
 List, inspect, and manage releases
+.TP
+.B migrate
+Import feature flags from other platforms into Toggly
 .TP
 .B context
 Manage non\-secret default application and environment prefs
@@ -62,6 +65,9 @@ Emit machine\-readable camelCase JSON instead of human text
 .B toggly\-cli app list
 .PP
 .B toggly\-cli \-\-json feature list
+.PP
+.B toggly\-cli migrate unleash \-\-file export\&.json \-\-app <app\-id>
+.B \-\-env Production
 .SH EXIT STATUS
 .TP
 .B 0
@@ -75,6 +81,6 @@ Usage, validation, missing auth, or missing \-\-app/\-\-env when no context
 default is set
 .SH SEE ALSO
 toggly\-auth(1), toggly\-app(1), toggly\-env(1), toggly\-feature(1),
-toggly\-release(1), toggly\-context(1).
+toggly\-release(1), toggly\-migrate(1), toggly\-context(1).
 .SH ONLINE DOCS
 https://docs\&.toggly\&.io/sdks/cli

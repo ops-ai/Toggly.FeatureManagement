@@ -1,7 +1,7 @@
 {
   "binary": "toggly-cli",
   "manName": "toggly",
-  "manDate": "2026-09-29",
+  "manDate": "2026-10-03",
   "docsUrl": "https://docs.toggly.io/sdks/cli",
   "description": "Command-line interface for Toggly feature flag management. Supports interactive device-code login and CI client credentials.",
   "exitCodes": [
@@ -582,6 +582,44 @@
       ],
       "seeAlso": ["release create", "associate-build"],
       "aliases": ["associate-build"]
+    },
+    {
+      "path": ["migrate"],
+      "description": "Import feature flags from other platforms into Toggly",
+      "synopsis": "toggly-cli migrate <command>",
+      "seeAlso": ["toggly-feature", "toggly-app"]
+    },
+    {
+      "path": ["migrate", "unleash"],
+      "description": "Import an Unleash export or Admin API feature list into a Toggly app and environment. Default is dry-run (compatibility report only); pass --apply to create missing features and set environment filters.",
+      "synopsis": "toggly-cli migrate unleash --file <path> --app <appId> --environment <env> [--dry-run] [--apply]",
+      "options": [
+        {
+          "name": "--file",
+          "description": "Path to Unleash export JSON (or Admin API features payload)"
+        },
+        {
+          "name": "--app, --application-id",
+          "description": "Application id (or set via 'toggly context set --app')"
+        },
+        {
+          "name": "--environment, --env",
+          "description": "Toggly environment to import into (also selects Unleash environment slices when present)"
+        },
+        {
+          "name": "--dry-run",
+          "description": "Parse and print a compatibility report without API mutations (default when --apply is omitted)"
+        },
+        {
+          "name": "--apply",
+          "description": "Create missing features and set environment filters via the Toggly API"
+        }
+      ],
+      "examples": [
+        "toggly-cli migrate unleash --file export.json --app <app-id> --env Production",
+        "toggly-cli migrate unleash --file export.json --app <app-id> --env Production --apply"
+      ],
+      "seeAlso": ["feature create", "feature update-environment", "migrate"]
     },
     {
       "path": ["context"],
