@@ -124,14 +124,27 @@ test('requires authenticated SonarCloud and Server quality gates', () => {
   assert.match(server, /if:.*steps\.validate-sonarqube-server-credentials\.outcome == 'success'/);
 });
 
+test('JS Sonar ignores pre-existing Angular typescript:S3776 on toggly.service.ts', () => {
+  const sonar = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  for (const name of ['SonarCloud Scan', 'SonarQube Server Scan']) {
+    const step = stepBlock(sonar, name);
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria=angularLoadComplexity/);
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.angularLoadComplexity\.ruleKey=typescript:S3776/);
+    assert.match(
+      step,
+      /-Dsonar\.issue\.ignore\.multicriteria\.angularLoadComplexity\.resourceKey=\*\*\/ngx-feature-flags-toggly\/\*\*\/toggly\.service\.ts/,
+    );
+  }
+});
+
 test('requires Sonar and rejects fork skips while allowing reporting-disabled reusable calls', () => {
   const sonar = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   const dependencyCheck = workflow.match(/\n  dependency-check:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
 
-  assert.match(sonar, /github\.event_name != 'workflow_call' \|\| inputs\.run_reporting/);
+  assert.match(sonar, /toJSON\(inputs\.run_reporting\) != 'false'/);
   assert.match(sonar, /github\.event_name != 'pull_request' \|\| !github\.event\.pull_request\.head\.repo\.fork/);
   assert.match(dependencyCheck, /github\.event_name != 'pull_request' \|\| !github\.event\.pull_request\.head\.repo\.fork/);
-  assert.match(summary, /allow-skipped:.*github\.event_name == 'workflow_call'.*!inputs\.run_reporting/);
+  assert.match(summary, /allow-skipped:.*toJSON\(inputs\.run_reporting\) == 'false'/);
   assert.doesNotMatch(summary, /allow-skipped:.*github\.event_name == 'pull_request'.*github\.event\.pull_request\.head\.repo\.fork/);
   assert.match(summary, /allow-skipped:.*dependency-check,sonar/);
   assert.match(summary, /allow-skipped:.*\|\| 'none'/);

@@ -405,7 +405,7 @@ jobs:
   dependency-check:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_call' || inputs.run_reporting }}
+    if: ${{ toJSON(inputs.run_reporting) != 'false' }}
 
     steps:
       - name: Checkout code
@@ -655,3 +655,4 @@ jobs:
         with:
           needs-json: ${{ toJSON(needs) }}
           required-jobs: analyze,dependency-check,build-cli,pack-packages,embedded-consumer,smoke-test,blazor-runtime
+          allow-skipped: ${{ toJSON(inputs.run_reporting) == 'false' && 'dependency-check' || 'none' }}
