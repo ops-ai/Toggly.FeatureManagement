@@ -27,8 +27,10 @@ public sealed class UnleashParseResult
 /// <para>
 /// Per-feature strategies may live on the feature itself or under <c>environments[]</c>.
 /// When <paramref name="environmentName"/> is supplied, the matching environment slice
-/// (case-insensitive) supplies <c>enabled</c> + <c>strategies</c>. If no match, feature-level
-/// fields are used when present; otherwise the first environment slice is used.
+/// (case-insensitive) supplies <c>enabled</c> + <c>strategies</c>. If Unleash environments
+/// exist but none match the requested name, the first slice is <b>not</b> used; the
+/// feature is marked unmatched so import can skip/partial it. When no environment is
+/// requested, feature-level strategies are preferred; otherwise the first slice is used.
 /// </para>
 /// </remarks>
 public static class UnleashExportParser
@@ -109,11 +111,43 @@ public static class UnleashExportParser
     {
         ArgumentNullException.ThrowIfNull(feature);
 
+        var environments = feature.Environments;
+        if (environments is { Count: > 0 } && !string.IsNullOrWhiteSpace(environmentName))
+        {
+            var match = environments.FirstOrDefault(e =>
+                string.Equals(e.Name, environmentName, StringComparison.OrdinalIgnoreCase));
+            if (match == null)
+            {
+                return new UnleashFeatureDto
+                {
+                    Name = feature.Name,
+                    Description = feature.Description,
+                    Type = feature.Type,
+                    Project = feature.Project,
+                    Variants = feature.Variants,
+                    Environments = feature.Environments,
+                    Enabled = false,
+                    Strategies = [],
+                    UnmatchedRequestedEnvironment = environmentName,
+                    PresentUnleashEnvironmentNames = environments
+                        .Select(e => e.Name)
+                        .Where(n => !string.IsNullOrWhiteSpace(n))
+                        .ToList()
+                };
+            }
+
+            return CloneWithSlice(feature, match);
+        }
+
         var envSlice = ResolveEnvironmentSlice(feature, environmentName);
         if (envSlice == null)
             return feature;
 
-        return new UnleashFeatureDto
+        return CloneWithSlice(feature, envSlice);
+    }
+
+    private static UnleashFeatureDto CloneWithSlice(UnleashFeatureDto feature, UnleashEnvironmentDto envSlice)
+        => new()
         {
             Name = feature.Name,
             Description = feature.Description,
@@ -124,7 +158,6 @@ public static class UnleashExportParser
             Enabled = envSlice.Enabled,
             Strategies = envSlice.Strategies ?? feature.Strategies
         };
-    }
 
     private static UnleashEnvironmentDto? ResolveEnvironmentSlice(UnleashFeatureDto feature, string? environmentName)
     {
@@ -139,9 +172,7 @@ public static class UnleashExportParser
             if (match != null)
                 return match;
 
-            // No Unleash env match — keep feature-level strategies when present.
-            if (feature.Strategies is { Count: > 0 })
-                return null;
+            return null;
         }
 
         // Prefer feature-level strategies when already present.

@@ -80,11 +80,23 @@ public static class UnleashStrategyMapper
     }
 
     /// <summary>
+    /// Note attached to every Percentage mapping: Toggly runtime hashing differs from Unleash.
+    /// </summary>
+    public const string PercentageHashParityNote =
+        "freeze rollout during cutover — Toggly Percentage uses SHA-256, Unleash uses murmur3";
+
+    /// <summary>
     /// Maps a single Unleash strategy.
     /// </summary>
     public static UnleashStrategyMapResult MapStrategy(UnleashStrategyDto strategy, string? featureKey = null)
     {
         ArgumentNullException.ThrowIfNull(strategy);
+
+        if (strategy.Segments is { Count: > 0 })
+        {
+            var ids = string.Join(", ", strategy.Segments);
+            return Skip($"segments not imported (ids: {ids})");
+        }
 
         var name = strategy.Name?.Trim() ?? string.Empty;
         var constraintNote = EvaluateConstraints(strategy.Constraints, out var constraintsPartial);
@@ -149,31 +161,30 @@ public static class UnleashStrategyMapper
         var filter = FilterBuilder.Percentage(percentage);
 
         var notes = new List<string>();
-        var partial = false;
 
         if (!UnleashStickiness.IsStickinessSupported(stickiness))
         {
-            partial = true;
             notes.Add(
-                $"flexibleRollout stickiness={stickiness} unsupported; mapped Percentage ({percentage}%) — freeze rollout during cutover if bucket parity matters");
+                $"flexibleRollout stickiness={stickiness} unsupported; mapped Percentage ({percentage}%)");
         }
         else
         {
             notes.Add($"flexibleRollout → Percentage ({percentage}%, stickiness={stickiness})");
         }
 
+        notes.Add(PercentageHashParityNote);
+
         if (!string.IsNullOrWhiteSpace(featureKey)
             && !string.IsNullOrWhiteSpace(groupId)
             && !string.Equals(groupId, featureKey, StringComparison.Ordinal))
         {
-            partial = true;
             notes.Add(
                 $"flexibleRollout groupId={groupId} differs from feature key {featureKey}; stickiness buckets may not match Unleash");
         }
 
         return new UnleashStrategyMapResult(
             [filter],
-            partial ? UnleashMappingStatus.Partial : UnleashMappingStatus.Mapped,
+            UnleashMappingStatus.Partial,
             string.Join("; ", notes));
     }
 
@@ -186,14 +197,14 @@ public static class UnleashStrategyMapper
         {
             return new UnleashStrategyMapResult(
                 [filter],
-                UnleashMappingStatus.Mapped,
-                $"gradualRolloutUserId → Percentage ({percentage}%)");
+                UnleashMappingStatus.Partial,
+                $"gradualRolloutUserId → Percentage ({percentage}%); {PercentageHashParityNote}");
         }
 
         return new UnleashStrategyMapResult(
             [filter],
             UnleashMappingStatus.Partial,
-            $"gradualRollout stickiness={stickinessHint} unsupported; mapped Percentage ({percentage}%)");
+            $"gradualRollout stickiness={stickinessHint} unsupported; mapped Percentage ({percentage}%); {PercentageHashParityNote}");
     }
 
     private static int ReadPercentage(UnleashStrategyDto strategy)

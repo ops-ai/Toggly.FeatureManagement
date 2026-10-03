@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Toggly.CLI;
+using Toggly.CLI.Commands;
 using Toggly.CLI.Services;
 using Toggly.CLI.UnleashMigration;
 using Xunit;
@@ -122,6 +123,10 @@ public class MigrateUnleashCommandTests
             Assert.Contains("Mapped:", text);
             Assert.Contains("will import as disabled/off", text);
             Assert.Contains("WARN: Skipped strategies for 'legacy-plugin-flag'", text);
+            Assert.Contains("Partial", text);
+            Assert.Contains("gradual-checkout", text);
+            Assert.Contains(UnleashStrategyMapper.PercentageHashParityNote, text);
+            Assert.DoesNotContain("Mapped   gradual-checkout", text);
         }
         finally
         {
@@ -281,6 +286,250 @@ public class MigrateUnleashCommandTests
             Assert.Equal(2, exitCode);
             Assert.Empty(handler.Requests);
             Assert.Contains("either --apply or --dry-run", stderr.ToString());
+        }
+        finally
+        {
+            File.Delete(exportPath);
+        }
+    }
+
+    [Fact]
+    public void Parser_UnmatchedRequestedEnvironment_DoesNotFallBackToFirstSlice()
+    {
+        var json = """
+            {
+              "features": [
+                {
+                  "name": "env-scoped",
+                  "enabled": true,
+                  "environments": [
+                    {
+                      "name": "development",
+                      "enabled": true,
+                      "strategies": [
+                        { "name": "default", "parameters": {}, "disabled": false }
+                      ]
+                    },
+                    {
+                      "name": "production",
+                      "enabled": true,
+                      "strategies": [
+                        {
+                          "name": "userWithId",
+                          "parameters": { "userIds": "alice" },
+                          "disabled": false
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var parsed = UnleashExportParser.Parse(json, "staging");
+        var feature = Assert.Single(parsed.Features);
+        Assert.Equal("staging", feature.UnmatchedRequestedEnvironment);
+        Assert.Equal(["development", "production"], feature.PresentUnleashEnvironmentNames);
+        Assert.Empty(feature.Strategies ?? []);
+
+        var plan = MigrateCommands.BuildImportPlan(parsed.Features);
+        var item = Assert.Single(plan.Items);
+        Assert.Equal(UnleashMappingStatus.Skipped, item.Status);
+        Assert.Empty(item.Filters);
+        Assert.Contains("staging", item.Note);
+        Assert.Contains("development", item.Note);
+        Assert.Contains("production", item.Note);
+        Assert.DoesNotContain("AlwaysOn", item.Note);
+        Assert.DoesNotContain("Targeting", item.Note);
+    }
+
+    [Fact]
+    public async Task DryRun_UnmatchedEnvironment_NamesPresentUnleashEnvs()
+    {
+        const string json = """
+            {
+              "features": [
+                {
+                  "name": "env-scoped",
+                  "enabled": true,
+                  "environments": [
+                    {
+                      "name": "development",
+                      "enabled": true,
+                      "strategies": [
+                        { "name": "default", "parameters": {}, "disabled": false }
+                      ]
+                    },
+                    {
+                      "name": "production",
+                      "enabled": true,
+                      "strategies": [
+                        {
+                          "name": "userWithId",
+                          "parameters": { "userIds": "alice" },
+                          "disabled": false
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var exportPath = WriteTempExport(json);
+        try
+        {
+            using var handler = new RecordingHandler(_ => JsonResponse("[]"));
+            using var http = new HttpClient(handler);
+            var api = new TogglyApiClient(http, new AuthService(http), "https://api.example.test");
+            var stdout = new StringWriter();
+            var command = CliApplication.CreateRootCommand(_ => api, outputWriter: stdout);
+
+            var exitCode = await command.InvokeAsync([
+                "migrate", "unleash",
+                "--file", exportPath,
+                "--app", "app-1",
+                "--env", "staging"
+            ]);
+
+            Assert.Equal(0, exitCode);
+            var text = stdout.ToString();
+            Assert.Contains("env-scoped", text);
+            Assert.Contains("Skipped", text);
+            Assert.Contains("development", text);
+            Assert.Contains("production", text);
+            Assert.Contains("will import as disabled/off", text);
+            Assert.DoesNotContain("alice", text);
+            Assert.DoesNotContain("AlwaysOn", text);
+        }
+        finally
+        {
+            File.Delete(exportPath);
+        }
+    }
+
+    [Fact]
+    public void Mapper_DefaultStrategyWithSegments_DoesNotEmitUnrestrictedFilter()
+    {
+        var strategy = new UnleashStrategyDto
+        {
+            Name = "default",
+            Segments = [12, 34]
+        };
+
+        var result = UnleashStrategyMapper.Map([strategy]);
+
+        Assert.Equal(UnleashMappingStatus.Skipped, result.Status);
+        Assert.Empty(result.Filters);
+        Assert.Contains("segments not imported", result.Note);
+        Assert.Contains("12", result.Note);
+        Assert.Contains("34", result.Note);
+    }
+
+    [Fact]
+    public async Task DryRun_DefaultStrategyWithSegments_ImportsAsOff()
+    {
+        const string json = """
+            {
+              "features": [
+                {
+                  "name": "segmented-default",
+                  "enabled": true,
+                  "strategies": [
+                    {
+                      "name": "default",
+                      "parameters": {},
+                      "segments": [12],
+                      "disabled": false
+                    }
+                  ]
+                }
+              ]
+            }
+            """;
+
+        var exportPath = WriteTempExport(json);
+        try
+        {
+            using var handler = new RecordingHandler(_ => JsonResponse("[]"));
+            using var http = new HttpClient(handler);
+            var api = new TogglyApiClient(http, new AuthService(http), "https://api.example.test");
+            var stdout = new StringWriter();
+            var command = CliApplication.CreateRootCommand(_ => api, outputWriter: stdout);
+
+            var exitCode = await command.InvokeAsync([
+                "migrate", "unleash",
+                "--file", exportPath,
+                "--app", "app-1",
+                "--environment", "Production"
+            ]);
+
+            Assert.Equal(0, exitCode);
+            var text = stdout.ToString();
+            Assert.Contains("segmented-default", text);
+            Assert.Contains("segments not imported", text);
+            Assert.Contains("will import as disabled/off", text);
+            Assert.DoesNotContain("AlwaysOn", text);
+        }
+        finally
+        {
+            File.Delete(exportPath);
+        }
+    }
+
+    [Theory]
+    [InlineData("flexibleRollout", "userId")]
+    [InlineData("flexibleRollout", "default")]
+    [InlineData("gradualRolloutUserId", "userId")]
+    public void Mapper_PercentageStickiness_IsAlwaysPartialWithHashNote(string strategyName, string stickiness)
+    {
+        var strategy = new UnleashStrategyDto
+        {
+            Name = strategyName,
+            Parameters = new Dictionary<string, string>
+            {
+                ["rollout"] = "35",
+                ["stickiness"] = stickiness,
+                ["groupId"] = "gradual-checkout"
+            }
+        };
+
+        var result = UnleashStrategyMapper.Map([strategy], "gradual-checkout");
+
+        Assert.Equal(UnleashMappingStatus.Partial, result.Status);
+        Assert.Contains(UnleashStrategyMapper.PercentageHashParityNote, result.Note);
+        var filter = Assert.Single(result.Filters);
+        Assert.Equal("Percentage", filter.Name);
+    }
+
+    [Fact]
+    public async Task DryRun_Percentage_IsPartialWithFreezeNote()
+    {
+        var exportPath = WriteTempExport(SampleExportJson);
+        try
+        {
+            using var handler = new RecordingHandler(_ => JsonResponse("[]"));
+            using var http = new HttpClient(handler);
+            var api = new TogglyApiClient(http, new AuthService(http), "https://api.example.test");
+            var stdout = new StringWriter();
+            var command = CliApplication.CreateRootCommand(_ => api, outputWriter: stdout);
+
+            var exitCode = await command.InvokeAsync([
+                "migrate", "unleash",
+                "--file", exportPath,
+                "--app", "app-1",
+                "--environment", "Production"
+            ]);
+
+            Assert.Equal(0, exitCode);
+            var text = stdout.ToString();
+            Assert.Contains("Partial  gradual-checkout", text);
+            Assert.Contains(UnleashStrategyMapper.PercentageHashParityNote, text);
+            Assert.Contains("SHA-256", text);
+            Assert.Contains("murmur3", text);
+            Assert.DoesNotContain("Mapped   gradual-checkout", text);
         }
         finally
         {

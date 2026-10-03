@@ -183,26 +183,53 @@ public static class MigrateCommands
             if (string.IsNullOrWhiteSpace(feature.Name))
                 continue;
 
-            var mapped = UnleashStrategyMapper.Map(feature.Strategies, feature.Name);
-            var status = mapped.Status;
-            var note = mapped.Note;
-            var filters = mapped.Filters;
+            UnleashMappingStatus status;
+            string note;
+            List<FeatureFilter> filters;
             var enabled = feature.Enabled;
 
-            if (!enabled)
+            if (feature.UnmatchedRequestedEnvironment is { } requestedEnv)
             {
+                var present = feature.PresentUnleashEnvironmentNames is { Count: > 0 }
+                    ? string.Join(", ", feature.PresentUnleashEnvironmentNames)
+                    : "(none)";
+                status = UnleashMappingStatus.Skipped;
                 filters = [];
-                note = string.IsNullOrWhiteSpace(note)
-                    ? "disabled in Unleash; import as off"
-                    : $"{note}; disabled in Unleash; import as off";
+                note =
+                    $"requested environment '{requestedEnv}' did not match Unleash environments: {present}; will import as disabled/off";
+                enabled = false;
             }
-            else if (status == UnleashMappingStatus.Skipped)
+            else
             {
-                // All strategies unsupported — still create/update as off (empty filters).
-                filters = [];
-                note = string.IsNullOrWhiteSpace(note)
-                    ? "will import as disabled/off"
-                    : $"{note}; will import as disabled/off";
+                var mapped = UnleashStrategyMapper.Map(feature.Strategies, feature.Name);
+                status = mapped.Status;
+                note = mapped.Note;
+                filters = mapped.Filters;
+
+                if (feature.Variants is { Count: > 0 })
+                {
+                    if (status != UnleashMappingStatus.Skipped)
+                        status = UnleashMappingStatus.Partial;
+                    note = string.IsNullOrWhiteSpace(note)
+                        ? "variants not imported"
+                        : $"{note}; variants not imported";
+                }
+
+                if (!enabled)
+                {
+                    filters = [];
+                    note = string.IsNullOrWhiteSpace(note)
+                        ? "disabled in Unleash; import as off"
+                        : $"{note}; disabled in Unleash; import as off";
+                }
+                else if (status == UnleashMappingStatus.Skipped)
+                {
+                    // All strategies unsupported — still create/update as off (empty filters).
+                    filters = [];
+                    note = string.IsNullOrWhiteSpace(note)
+                        ? "will import as disabled/off"
+                        : $"{note}; will import as disabled/off";
+                }
             }
 
             report.Add(feature.Name, status, note);

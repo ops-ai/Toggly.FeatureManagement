@@ -48,6 +48,20 @@ public class UnleashFeatureDto
     /// <summary>Per-environment payloads from Admin API style exports.</summary>
     [JsonPropertyName("environments")]
     public List<UnleashEnvironmentDto>? Environments { get; set; }
+
+    /// <summary>
+    /// Set when <c>--environment</c> was requested and no Unleash environment name matched.
+    /// Not part of the Unleash JSON payload.
+    /// </summary>
+    [JsonIgnore]
+    public string? UnmatchedRequestedEnvironment { get; set; }
+
+    /// <summary>
+    /// Unleash environment names present on the feature when a requested environment did not match.
+    /// Not part of the Unleash JSON payload.
+    /// </summary>
+    [JsonIgnore]
+    public IReadOnlyList<string>? PresentUnleashEnvironmentNames { get; set; }
 }
 
 /// <summary>
@@ -84,6 +98,12 @@ public class UnleashStrategyDto
     /// <summary>Optional constraints evaluated against Unleash context.</summary>
     [JsonPropertyName("constraints")]
     public List<UnleashConstraintDto>? Constraints { get; set; }
+
+    /// <summary>
+    /// Unleash segment ids attached to the strategy. v1 does not map segments.
+    /// </summary>
+    [JsonPropertyName("segments")]
+    public List<int>? Segments { get; set; }
 
     /// <summary>When true, Unleash ignores the strategy.</summary>
     [JsonPropertyName("disabled")]
