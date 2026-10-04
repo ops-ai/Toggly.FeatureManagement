@@ -59,6 +59,7 @@ runs:
         overlay toggly-hooks-types @ops-ai/toggly-hooks-types
         overlay toggly-signed-defs @ops-ai/toggly-signed-defs
         overlay toggly-eval @ops-ai/toggly-eval
+        overlay toggly-segments @ops-ai/toggly-segments
 
     - name: Overlay built shared packages (pnpm virtual store)
       if: inputs.pnpm-store-dir != ''
@@ -93,3 +94,4 @@ runs:
         overlay toggly-hooks-types @ops-ai/toggly-hooks-types
         overlay toggly-signed-defs @ops-ai/toggly-signed-defs
         overlay toggly-eval @ops-ai/toggly-eval
+        overlay toggly-segments @ops-ai/toggly-segments

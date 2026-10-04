@@ -48,7 +48,13 @@ module Toggly
         req.body = JSON.generate(body)
       end
       response = http.request(req)
-      raise Toggly::NetworkError.new("Segment membership failed", status_code: response.code.to_i, response_body: response.body) unless response.is_a?(Net::HTTPSuccess)
+      unless response.is_a?(Net::HTTPSuccess)
+        raise Toggly::NetworkError.new(
+          "Segment membership failed",
+          status_code: response.code.to_i,
+          response_body: response.body
+        )
+      end
 
       JSON.parse(response.body)
     end

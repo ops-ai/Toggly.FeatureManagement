@@ -21,6 +21,7 @@ on:
       - 'Toggly.FeatureManagement.Node/**'
       - 'Toggly.FeatureManagement.NestJS/**'
       - 'toggly-eval/**'
+      - 'toggly-segments/**'
       - 'toggly-local-gates/**'
       - 'toggly-hooks-types/**'
       - 'toggly-client-telemetry/**'
@@ -92,7 +93,7 @@ jobs:
       - name: Build shared packages
         uses: ./.github/actions/build-shared-js-deps
         with:
-          packages: hooks-types,signed-defs,eval
+          packages: hooks-types,signed-defs,eval,segments
 
       - name: Verify shared signed definitions and consumers
         working-directory: toggly-signed-defs
@@ -177,15 +178,19 @@ jobs:
         run: |
           set -euo pipefail
           EVAL_DIR="$GITHUB_WORKSPACE/toggly-eval"
+          SEGMENTS_DIR="$GITHUB_WORKSPACE/toggly-segments"
           CORE_DIR="$GITHUB_WORKSPACE/Toggly.FeatureManagement.Node/toggly-node-core"
           (cd "$EVAL_DIR" && (npm ci || npm install) && npm run build)
-          (cd "$CORE_DIR" && (npm ci || npm install) && npm install --no-save "file:$EVAL_DIR" && npm run build)
+          (cd "$SEGMENTS_DIR" && (npm ci || npm install) && npm run build)
+          (cd "$CORE_DIR" && (npm ci || npm install) && npm install --no-save "file:$EVAL_DIR" "file:$SEGMENTS_DIR" && npm run build)
           CORE_TGZ="$(cd "$CORE_DIR" && npm pack --pack-destination "$RUNNER_TEMP")"
           echo "TOGGLY_TEST_CORE_TARBALL=$RUNNER_TEMP/$CORE_TGZ" >> "$GITHUB_ENV"
           EVAL_TGZ="$(cd "$EVAL_DIR" && npm pack --pack-destination "$RUNNER_TEMP")"
           echo "TOGGLY_TEST_EVAL_TARBALL=$RUNNER_TEMP/$EVAL_TGZ" >> "$GITHUB_ENV"
+          SEGMENTS_TGZ="$(cd "$SEGMENTS_DIR" && npm pack --pack-destination "$RUNNER_TEMP")"
+          echo "TOGGLY_TEST_SEGMENTS_TARBALL=$RUNNER_TEMP/$SEGMENTS_TGZ" >> "$GITHUB_ENV"
           cd Toggly.FeatureManagement.NestJS
-          npm install "file:$CORE_DIR" "file:$EVAL_DIR"
+          npm install "file:$CORE_DIR" "file:$EVAL_DIR" "file:$SEGMENTS_DIR"
 
       - name: Overlay shared JS deps into node_modules
         if: >

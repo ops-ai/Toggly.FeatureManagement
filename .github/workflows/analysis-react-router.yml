@@ -8,6 +8,7 @@ on:
     paths:
       - 'Toggly.FeatureManagement.ReactRouter/**'
       - 'toggly-eval/**'
+      - 'toggly-segments/**'
       - 'toggly-signed-defs/**'
       - 'toggly-hooks-types/**'
       - 'toggly-local-gates/**'
@@ -43,7 +44,7 @@ jobs:
       - name: Build shared packages
         uses: ./.github/actions/build-shared-js-deps
         with:
-          packages: signed-defs,eval,hooks-types,local-gates
+          packages: signed-defs,eval,hooks-types,local-gates,segments
           node-version: '20.x'
 
       - name: Upload shared package dist artifacts

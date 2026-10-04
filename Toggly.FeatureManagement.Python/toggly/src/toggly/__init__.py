@@ -63,8 +63,8 @@ from toggly.providers import (
     MemorySnapshotProvider,
     SnapshotProvider,
 )
-from toggly.variants import VariantAssignment, assign_variant
 from toggly.segments import SegmentMembershipClient
+from toggly.variants import VariantAssignment, assign_variant
 from toggly.version import __version__
 
 __all__ = [
