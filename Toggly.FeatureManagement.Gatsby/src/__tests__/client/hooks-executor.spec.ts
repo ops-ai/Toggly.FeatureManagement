@@ -146,7 +146,7 @@ describe('HookExecutor', () => {
       executor.addHook({
         getMetadata: () => ({ name: 'NoAfterHook', version: '1.0.0' }),
       });
-      await executor.executeAfterEvaluation('flag1', new Map(), true);
+      await expect(executor.executeAfterEvaluation('flag1', new Map(), true)).resolves.toBeUndefined();
     });
 
     it('should handle errors without failing', async () => {
@@ -214,7 +214,7 @@ describe('HookExecutor', () => {
       executor.addHook({
         getMetadata: () => ({ name: 'NoAfterIdHook', version: '1.0.0' }),
       });
-      await executor.executeAfterIdentify('user-123', new Map());
+      await expect(executor.executeAfterIdentify('user-123', new Map())).resolves.toBeUndefined();
     });
 
     it('should handle errors without failing', async () => {
@@ -244,7 +244,7 @@ describe('HookExecutor', () => {
       executor.addHook({
         getMetadata: () => ({ name: 'NoRefreshHook', version: '1.0.0' }),
       });
-      await executor.executeAfterRefresh({ F1: true });
+      await expect(executor.executeAfterRefresh({ F1: true })).resolves.toBeUndefined();
     });
 
     it('should handle errors without failing', async () => {

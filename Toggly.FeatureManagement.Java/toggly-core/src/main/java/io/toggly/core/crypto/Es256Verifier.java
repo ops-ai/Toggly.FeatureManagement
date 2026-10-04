@@ -128,6 +128,7 @@ public final class Es256Verifier {
 
     static String computeKid(byte[] xBytes, byte[] yBytes) {
         try {
+            // Protocol-defined JWK kid (RFC 7638-incompatible SHA-1 + "ES256"), not a digest for integrity.
             MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
             sha1.update(xBytes);
             sha1.update(yBytes);

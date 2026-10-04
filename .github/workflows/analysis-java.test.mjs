@@ -19,6 +19,16 @@ function step(source, name) {
   return next === -1 ? source.slice(start) : source.slice(start, next);
 }
 
+test('Java Sonar ignores protocol SHA-1 kid on Es256Verifier (java:S4790)', () => {
+  const sonar = job('sonar');
+  for (const name of ['Build and run SonarCloud analysis', 'Run SonarQube Server analysis']) {
+    const scan = step(sonar, name);
+    assert.match(scan, /-Dsonar\.issue\.ignore\.multicriteria=kidSha1/);
+    assert.match(scan, /-Dsonar\.issue\.ignore\.multicriteria\.kidSha1\.ruleKey=java:S4790/);
+    assert.match(scan, /-Dsonar\.issue\.ignore\.multicriteria\.kidSha1\.resourceKey=\*\*\/Es256Verifier\.java/);
+  }
+});
+
 test('both Java scans use the pinned Maven scanner and await quality gates', () => {
   const sonar = job('sonar');
   for (const name of ['Build and run SonarCloud analysis', 'Run SonarQube Server analysis']) {

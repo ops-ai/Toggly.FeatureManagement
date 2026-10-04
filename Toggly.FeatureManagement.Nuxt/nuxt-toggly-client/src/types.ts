@@ -1,5 +1,13 @@
-import type { TogglyConfig, TogglyClient, FeatureRequirement, VariantResult } from '@ops-ai/nuxt-toggly-core/browser'
+import type {
+  TogglyConfig,
+  TogglyClient,
+  FeatureRequirement,
+  VariantResult,
+  TogglyEntityContext,
+} from '@ops-ai/nuxt-toggly-core/browser'
 import type { ComputedRef, Ref, InjectionKey } from 'vue'
+
+export type FeatureEvalContext = TogglyEntityContext | Record<string, unknown> | null
 
 export interface BrowserTelemetry {
   recordUsage(featureKey: string, variant?: string): void
@@ -51,13 +59,13 @@ export interface UseTogglyReturn {
   /** Check if a feature is enabled */
   isFeatureOn: (
     featureKey: string,
-    context?: import('@ops-ai/nuxt-toggly-core/browser').TogglyEntityContext | Record<string, unknown> | null,
+    context?: FeatureEvalContext,
     kind?: string,
   ) => Promise<boolean>
   /** Check if a feature is disabled */
   isFeatureOff: (
     featureKey: string,
-    context?: import('@ops-ai/nuxt-toggly-core/browser').TogglyEntityContext | Record<string, unknown> | null,
+    context?: FeatureEvalContext,
     kind?: string,
   ) => Promise<boolean>
   /** Evaluate a feature gate */
@@ -65,7 +73,7 @@ export interface UseTogglyReturn {
     featureKeys: string[],
     requirement?: FeatureRequirement,
     negate?: boolean,
-    context?: import('@ops-ai/nuxt-toggly-core/browser').TogglyEntityContext | Record<string, unknown> | null,
+    context?: FeatureEvalContext,
     kind?: string,
   ) => Promise<boolean>
   /** Current variant assignment for a feature (requires `enableVariants`) */
@@ -87,7 +95,7 @@ export interface UseVariantReturn {
   /** Current variant assignment for the feature, or null when disabled/unassigned */
   variant: Ref<VariantResult | null>
   /** Configuration payload for the assigned variant, if any */
-  variantValue: Ref<unknown | null>
+  variantValue: Ref<unknown>
   /** Whether the variant assignment is loading */
   isLoading: Ref<boolean>
   /** Refresh the variant assignment */

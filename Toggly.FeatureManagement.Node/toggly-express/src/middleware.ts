@@ -230,7 +230,7 @@ export function featureGate(options: FeatureGateOptions): RequestHandler {
  * Create middleware that applies feature gates based on route patterns
  */
 export function featureRoutes(routes: FeatureRouteOptions[]): RequestHandler {
-  return async (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction) => {
     for (const route of routes) {
       // Check if route matches
       const pathMatches =
@@ -267,7 +267,7 @@ export function withFeature(
 ): RequestHandler {
   const gate = featureGate({ featureKey, ...options })
 
-  return async (req: Request, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction) => {
     return gate(req, res, (err?: unknown) => {
       if (err) {
         return next(err)

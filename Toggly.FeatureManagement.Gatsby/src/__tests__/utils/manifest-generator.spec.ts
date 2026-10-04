@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import {
   generatePageFeaturesManifest,
   generateConfigManifest,
   generateManifests,
 } from '../../utils/manifest-generator.js';
 
-vi.mock('fs', () => ({
+vi.mock('node:fs', () => ({
   promises: {
     writeFile: vi.fn().mockResolvedValue(undefined),
   },

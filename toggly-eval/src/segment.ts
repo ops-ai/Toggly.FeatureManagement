@@ -29,6 +29,7 @@ export function passesSegmentPercentageGate(
   if (identity) {
     return computePercentile(identity, featureKey) < percentage
   }
+  // Anonymous visitors have no sticky identity; a one-shot draw is the documented gate.
   return Math.random() * 100 < percentage
 }
 

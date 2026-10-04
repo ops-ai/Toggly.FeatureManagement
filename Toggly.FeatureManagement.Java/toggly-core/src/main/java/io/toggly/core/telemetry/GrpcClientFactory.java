@@ -100,7 +100,8 @@ public final class GrpcClientFactory {
         MetricsGrpc.MetricsBlockingStub metricsStub = MetricsGrpc.newBlockingStub(channel)
                 .withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata));
 
-        UsageGrpcClient usage = new UsageGrpcClient() {
+        // Stubs share the channel. GrpcClients.close() shuts it down (java:S2095).
+        UsageGrpcClient usage = new UsageGrpcClient() { // NOSONAR java:S2095
             @Override
             public void sendStats(FeatureStatPayload payload) {
                 usageStub.withDeadlineAfter(5, TimeUnit.SECONDS).sendStats(toProto(payload));
@@ -112,7 +113,7 @@ public final class GrpcClientFactory {
             }
         };
 
-        MetricsGrpcClient metrics = new MetricsGrpcClient() {
+        MetricsGrpcClient metrics = new MetricsGrpcClient() { // NOSONAR java:S2095
             @Override
             public void sendMetrics(MetricStatPayload payload) {
                 metricsStub.withDeadlineAfter(5, TimeUnit.SECONDS).sendMetrics(toProto(payload));

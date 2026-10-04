@@ -218,6 +218,9 @@ jobs:
             -Dsonar.qualitygate.wait=true \
             -Dsonar.exclusions="**/target/**,**/test/**,**/host-fixtures/**" \
             -Dsonar.test.inclusions="**/test/**" \
+            -Dsonar.issue.ignore.multicriteria=kidSha1 \
+            -Dsonar.issue.ignore.multicriteria.kidSha1.ruleKey=java:S4790 \
+            -Dsonar.issue.ignore.multicriteria.kidSha1.resourceKey=**/Es256Verifier.java \
             --file pom.xml
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -243,6 +246,9 @@ jobs:
             -Dsonar.qualitygate.wait=true \
             -Dsonar.exclusions="**/target/**,**/test/**,**/host-fixtures/**" \
             -Dsonar.test.inclusions="**/test/**" \
+            -Dsonar.issue.ignore.multicriteria=kidSha1 \
+            -Dsonar.issue.ignore.multicriteria.kidSha1.ruleKey=java:S4790 \
+            -Dsonar.issue.ignore.multicriteria.kidSha1.resourceKey=**/Es256Verifier.java \
             -Dsonar.dependencyCheck.reportPath="${GITHUB_WORKSPACE}/dependency-check-reports/dependency-check-report.xml" \
             --file pom.xml
 

@@ -11,6 +11,7 @@ on:
       - '.github/workflows/npm-package-registry-contracts.yml'
       - '.github/workflows/analysis-*.yml'
       - '.github/workflows/analysis-javascript.test.mjs'
+      - '.github/scripts/organize-js-coverage*.mjs'
       - '.github/workflows/analysis-python.test.mjs'
       - '.github/workflows/analysis-rust.test.mjs'
       - '.github/workflows/analysis-security-events.test.mjs'
@@ -31,6 +32,7 @@ on:
       - '.github/workflows/npm-package-registry-contracts.yml'
       - '.github/workflows/analysis-*.yml'
       - '.github/workflows/analysis-javascript.test.mjs'
+      - '.github/scripts/organize-js-coverage*.mjs'
       - '.github/workflows/analysis-python.test.mjs'
       - '.github/workflows/analysis-rust.test.mjs'
       - '.github/workflows/analysis-security-events.test.mjs'
@@ -96,7 +98,7 @@ jobs:
         run: node --test .github/workflows/analysis-rust.test.mjs
 
       - name: Verify fail-closed JavaScript analysis quality gates
-        run: node --test .github/workflows/analysis-javascript.test.mjs
+        run: node --test .github/workflows/analysis-javascript.test.mjs .github/scripts/organize-js-coverage.test.mjs
 
       - name: Verify Python Sonar test inclusions stay path-scoped
         run: node --test .github/workflows/analysis-python.test.mjs
