@@ -129,6 +129,7 @@ pub mod eval;
 pub mod provider;
 mod sdk_identity;
 pub mod telemetry;
+mod segment_membership;
 
 pub use client::TogglyClient;
 pub use config::{OnErrorCallback, TogglyConfig, TogglyConfigBuilder};
@@ -142,6 +143,7 @@ pub use entity_context::{
 };
 pub use error::Error;
 pub use eval::{AssignmentReason, VariantAssignment};
+pub use segment_membership::SegmentMembershipClient;
 pub use telemetry::{
     hash_identity, MetricsFeatureOptions, TelemetryRuntime, TelemetryRuntimeConfig,
     TelemetrySenders,

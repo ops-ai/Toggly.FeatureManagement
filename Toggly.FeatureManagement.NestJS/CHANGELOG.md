@@ -1,3 +1,10 @@
+## 0.5.0
+
+2026-10-04
+
+### Added
+- Re-export `createSegmentMembershipClient` from `@ops-ai/toggly-segments`.
+
 ## 0.4.0
 
 2026-09-28

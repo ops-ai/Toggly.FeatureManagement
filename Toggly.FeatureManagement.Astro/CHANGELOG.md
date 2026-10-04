@@ -1,4 +1,11 @@
-## 1.18.0
+## 1.19.0
+
+2026-10-04
+
+### Added
+- Re-export `createSegmentMembershipClient` from `@ops-ai/toggly-segments` for server-side targeting-list updates.
+
+
 
 2026-09-24
 

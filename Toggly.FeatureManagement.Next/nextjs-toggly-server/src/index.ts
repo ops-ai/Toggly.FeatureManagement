@@ -79,3 +79,12 @@ export type {
 } from '@ops-ai/nextjs-toggly-core'
 
 export { fromHttpRequest } from '@ops-ai/nextjs-toggly-core'
+export {
+  createSegmentMembershipClient,
+  SegmentMembershipError,
+} from '@ops-ai/toggly-segments'
+export type {
+  SegmentMembershipClient,
+  SegmentSummary,
+  SegmentMember,
+} from '@ops-ai/toggly-segments'

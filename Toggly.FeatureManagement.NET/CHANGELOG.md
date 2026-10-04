@@ -1,5 +1,12 @@
 # Changelog
 
+## All .NET SDK packages 3.13.0 - 2026-10-04
+
+### Added
+- `ITogglySegmentMembershipClient` updates targeting-list membership with the
+  configured Backend application key (`GET/POST/DELETE/PUT /api/v2/segments`).
+  Evaluation still waits for definition republish.
+
 ## All .NET SDK packages 3.12.9 - 2026-10-04
 
 ### Changed

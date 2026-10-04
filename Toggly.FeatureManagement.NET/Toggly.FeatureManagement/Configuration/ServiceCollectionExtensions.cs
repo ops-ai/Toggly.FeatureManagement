@@ -148,6 +148,8 @@ namespace Toggly.FeatureManagement.Configuration
             .SetHandlerLifetime(TimeSpan.FromMinutes(60))
             .AddPolicyHandler(GetAppRetryPolicy());
 
+            services.TryAddSingleton<ITogglySegmentMembershipClient, TogglySegmentMembershipClient>();
+
             services.AddOptions<EntityContextRegistryOptions>();
             services.TryAddSingleton<EntityContextRegistry>(EntityContextServiceCollectionExtensions.CreateRegistry);
             services.TryAddSingleton<ITogglyEntityContextResolver, TogglyEntityContextResolver>();

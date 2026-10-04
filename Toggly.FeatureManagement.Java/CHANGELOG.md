@@ -1,14 +1,14 @@
 # Changelog
 
-## 2.1.5
+## 2.2.0
 
-2026-10-02
+2026-10-04
+
+### Added
+- `SegmentMembershipClient` updates targeting-list members with a Backend application key.
 
 ### Changed
-
-- `toggly-servlet` Maven metadata now declares Mockito as a test-scoped
-  dependency for adapter verification.
-- User-Agent and live-update `sdkVersion` report `toggly-java/2.1.5`.
+- User-Agent and live-update `sdkVersion` report `toggly-java/2.2.0`.
 
 ## 2.1.4
 

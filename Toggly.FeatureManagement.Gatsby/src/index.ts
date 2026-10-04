@@ -55,3 +55,7 @@ export { decodeVariantValue } from './decode-variant-value.js';
 
 // Export server client (for SSR/SSG use cases)
 export { createTogglyServerClient, TogglyServer } from './server/toggly-server.js';
+export {
+  createSegmentMembershipClient,
+  SegmentMembershipError,
+} from '@ops-ai/toggly-segments';
