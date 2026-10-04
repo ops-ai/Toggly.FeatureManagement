@@ -185,14 +185,22 @@ test('uploads signed definitions coverage and includes its source in both Sonar 
   const sharedJob = workflow.match(/\n  build-shared-js-deps:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   assert.match(sharedJob, /working-directory: toggly-signed-defs\s+run: \|\s+npm run test:coverage/);
   assert.match(sharedJob, /name: coverage-Signed-Defs/);
-  assert.match(sharedJob, /path: toggly-signed-defs\/coverage\/lcov\.info/);
+  assert.match(sharedJob, /'coverage-Signed-Defs' > coverage\/artifact-name\.txt/);
+  assert.match(sharedJob, /path: toggly-signed-defs\/coverage\//);
   assert.match(sharedJob, /if-no-files-found: error/);
+
+  const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  assert.match(testJob, /'coverage-\$\{\{ matrix\.sdk \}\}' > coverage\/artifact-name\.txt/);
+  const docusaurusJob = workflow.match(/\n  test-docusaurus-host:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  assert.match(docusaurusJob, /'coverage-Docusaurus-Pages' > coverage\/artifact-name\.txt/);
+  const nodeJob = workflow.match(/\n  test-node-server:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  assert.match(nodeJob, /'coverage-Node-\$\{\{ matrix\.config\.package \}\}' > coverage\/artifact-name\.txt/);
 
   const sonarJob = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   assert.match(sonarJob, /pattern: coverage-\*/);
   const organizer = stepBlock(sonarJob, 'Organize coverage files');
-  assert.match(workflow, /permissions:\s+actions: read/);
-  assert.match(organizer, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.doesNotMatch(workflow, /permissions:\s+actions: read/);
+  assert.doesNotMatch(organizer, /GITHUB_TOKEN/);
   assert.match(organizer, /run: node \.github\/scripts\/organize-js-coverage\.mjs/);
   assert.doesNotMatch(organizer, /continue-on-error/);
 
@@ -322,7 +330,7 @@ test('runs Pages Function coverage in the Docusaurus gate and maps it into both 
   assert.match(hostJob, new RegExp(`working-directory: ${pagesPath}\\s+run: npm ci`));
   assert.match(hostJob, /run: npm run typecheck && npm run lint && npm run test:coverage/);
   assert.match(hostJob, /name: coverage-Docusaurus-Pages/);
-  assert.match(hostJob, new RegExp(`${pagesPath}/coverage/lcov\\.info`));
+  assert.match(hostJob, new RegExp(`${pagesPath}/coverage/`));
   assert.match(sonarJob, /needs: \[prepare, build-shared-js-deps, test, test-node-server, test-docusaurus-host, dependency-check\]/);
 
   const testInclusions = [...workflow.matchAll(/-Dsonar\.test\.inclusions=([^\n]+)/g)].map((match) => match[1]);

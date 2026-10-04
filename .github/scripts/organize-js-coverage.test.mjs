@@ -27,13 +27,12 @@ async function withFixture(files, run) {
 
 const lcov = source => `TN:\nSF:${source}\nDA:1,1\nend_of_record\n`;
 
-test('maps a flattened single artifact using its run artifact name', async () => {
-  await withFixture({ 'lcov.info': lcov('functions/_middleware.ts') }, async ({ organizeCoverage, downloadDir, outputDir }) => {
-    await organizeCoverage({
-      downloadDir,
-      outputDir,
-      artifactNamesForRun: async () => ['coverage-Docusaurus-Pages'],
-    });
+test('maps a flattened single artifact using its bundled name', async () => {
+  await withFixture({
+    'artifact-name.txt': 'coverage-Docusaurus-Pages\n',
+    'lcov.info': lcov('functions/_middleware.ts'),
+  }, async ({ organizeCoverage, downloadDir, outputDir }) => {
+    await organizeCoverage({ downloadDir, outputDir });
     assert.match(
       readFileSync(join(outputDir, 'Docusaurus-Pages-lcov.info'), 'utf8'),
       /^SF:toggly-docusaurus-edge-sdk\/cloudflare\/pages-function\/functions\/_middleware\.ts$/m,
@@ -41,17 +40,16 @@ test('maps a flattened single artifact using its run artifact name', async () =>
   });
 });
 
-test('preserves separate named artifacts without a run metadata lookup', async () => {
+test('preserves separate named artifacts with matching bundled names', async () => {
   await withFixture({
+    'coverage-Evaluator/artifact-name.txt': 'coverage-Evaluator\n',
     'coverage-Evaluator/lcov.info': lcov('src/engine.ts'),
+    'coverage-Node-Core/artifact-name.txt': 'coverage-Node-Core\n',
     'coverage-Node-Core/lcov.info': lcov('src/client.ts'),
+    'coverage-Client-Core/artifact-name.txt': 'coverage-Client-Core\n',
     'coverage-Client-Core/lcov.info': lcov('src/index.ts'),
   }, async ({ organizeCoverage, downloadDir, outputDir }) => {
-    await organizeCoverage({
-      downloadDir,
-      outputDir,
-      artifactNamesForRun: async () => { throw new Error('should not query artifact metadata'); },
-    });
+    await organizeCoverage({ downloadDir, outputDir });
     assert.match(readFileSync(join(outputDir, 'Evaluator-lcov.info'), 'utf8'), /^SF:toggly-eval\/src\/engine\.ts$/m);
     assert.match(readFileSync(join(outputDir, 'Node-Core-lcov.info'), 'utf8'), /^SF:Toggly\.FeatureManagement\.Node\/toggly-node-core\/src\/client\.ts$/m);
     assert.match(readFileSync(join(outputDir, 'Client-Core-lcov.info'), 'utf8'), /^SF:toggly-docusaurus-edge-sdk\/libs\/core\/src\/index\.ts$/m);
@@ -65,23 +63,36 @@ test('fails when no LCOV reports were downloaded', async () => {
 });
 
 test('fails rather than importing an unmapped or empty LCOV report', async () => {
-  await withFixture({ 'coverage-Unknown/lcov.info': lcov('src/index.ts') }, async ({ organizeCoverage, downloadDir, outputDir }) => {
+  await withFixture({ 'coverage-Unknown/artifact-name.txt': 'coverage-Unknown\n', 'coverage-Unknown/lcov.info': lcov('src/index.ts') }, async ({ organizeCoverage, downloadDir, outputDir }) => {
     await assert.rejects(organizeCoverage({ downloadDir, outputDir }), /Unknown coverage artifact/);
   });
-  await withFixture({ 'coverage-constructor/lcov.info': lcov('src/index.ts') }, async ({ organizeCoverage, downloadDir, outputDir }) => {
+  await withFixture({ 'coverage-constructor/artifact-name.txt': 'coverage-constructor\n', 'coverage-constructor/lcov.info': lcov('src/index.ts') }, async ({ organizeCoverage, downloadDir, outputDir }) => {
     await assert.rejects(organizeCoverage({ downloadDir, outputDir }), /Unknown coverage artifact/);
   });
-  await withFixture({ 'coverage-Evaluator/lcov.info': '' }, async ({ organizeCoverage, downloadDir, outputDir }) => {
+  await withFixture({ 'coverage-Evaluator/artifact-name.txt': 'coverage-Evaluator\n', 'coverage-Evaluator/lcov.info': '' }, async ({ organizeCoverage, downloadDir, outputDir }) => {
     await assert.rejects(organizeCoverage({ downloadDir, outputDir }), /no source files/);
   });
 });
 
-test('fails when flattened coverage cannot be tied to one artifact', async () => {
+test('fails when flattened coverage lacks a bundled artifact name', async () => {
   await withFixture({ 'lcov.info': lcov('src/index.ts') }, async ({ organizeCoverage, downloadDir, outputDir }) => {
-    await assert.rejects(organizeCoverage({
-      downloadDir,
-      outputDir,
-      artifactNamesForRun: async () => ['coverage-Evaluator', 'coverage-Client-Core'],
-    }), /exactly one coverage artifact/);
+    await assert.rejects(organizeCoverage({ downloadDir, outputDir }), /artifact name/i);
+  });
+});
+
+test('fails when a named artifact has a mismatched bundled name', async () => {
+  await withFixture({
+    'coverage-Evaluator/artifact-name.txt': 'coverage-Client-Core\n',
+    'coverage-Evaluator/lcov.info': lcov('src/engine.ts'),
+  }, async ({ organizeCoverage, downloadDir, outputDir }) => {
+    await assert.rejects(organizeCoverage({ downloadDir, outputDir }), /does not match/i);
+  });
+});
+
+test('fails when an artifact name has no LCOV report', async () => {
+  await withFixture({
+    'artifact-name.txt': 'coverage-Evaluator\n',
+  }, async ({ organizeCoverage, downloadDir, outputDir }) => {
+    await assert.rejects(organizeCoverage({ downloadDir, outputDir }), /No LCOV reports/);
   });
 });

@@ -49,7 +49,6 @@ on:
         default: true
 
 permissions:
-  actions: read
   contents: read
   security-events: write
 
@@ -101,12 +100,13 @@ jobs:
           npm run test:coverage
           npm run typecheck
           npm run test:consumer
+          printf '%s\n' 'coverage-Signed-Defs' > coverage/artifact-name.txt
 
       - name: Upload signed definitions coverage
         uses: actions/upload-artifact@v7
         with:
           name: coverage-Signed-Defs
-          path: toggly-signed-defs/coverage/lcov.info
+          path: toggly-signed-defs/coverage/
           retention-days: 7
           if-no-files-found: error
 
@@ -251,14 +251,20 @@ jobs:
         working-directory: ${{ matrix.path }}
         run: npm run test:host
 
+      - name: Label coverage artifact
+        if: always()
+        working-directory: ${{ matrix.path }}
+        run: |
+          if [ -f coverage/lcov.info ]; then
+            printf '%s\n' 'coverage-${{ matrix.sdk }}' > coverage/artifact-name.txt
+          fi
+
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage-${{ matrix.sdk }}
-          path: |
-            ${{ matrix.path }}/coverage/
-            ${{ matrix.path }}/coverage/lcov.info
+          path: ${{ matrix.path }}/coverage/
           retention-days: 7
           if-no-files-found: ignore
 
@@ -291,12 +297,19 @@ jobs:
       - name: Verify Pages Function types, lint, and runtime coverage
         working-directory: toggly-docusaurus-edge-sdk/cloudflare/pages-function
         run: npm run typecheck && npm run lint && npm run test:coverage
+      - name: Label Pages Function coverage artifact
+        if: always()
+        working-directory: toggly-docusaurus-edge-sdk/cloudflare/pages-function
+        run: |
+          if [ -f coverage/lcov.info ]; then
+            printf '%s\n' 'coverage-Docusaurus-Pages' > coverage/artifact-name.txt
+          fi
       - name: Upload Pages Function coverage artifact
         uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage-Docusaurus-Pages
-          path: toggly-docusaurus-edge-sdk/cloudflare/pages-function/coverage/lcov.info
+          path: toggly-docusaurus-edge-sdk/cloudflare/pages-function/coverage/
           retention-days: 7
           if-no-files-found: error
       - name: Verify packed Docusaurus production and browser gates
@@ -456,14 +469,20 @@ jobs:
         working-directory: Toggly.FeatureManagement.Node/${{ matrix.config.dir }}
         run: pnpm test:hosts
 
+      - name: Label coverage artifact
+        if: always() && matrix.node-version == '20.x'
+        working-directory: Toggly.FeatureManagement.Node/${{ matrix.config.dir }}
+        run: |
+          if [ -f coverage/lcov.info ]; then
+            printf '%s\n' 'coverage-Node-${{ matrix.config.package }}' > coverage/artifact-name.txt
+          fi
+
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
         if: always() && matrix.node-version == '20.x'
         with:
           name: coverage-Node-${{ matrix.config.package }}
-          path: |
-            Toggly.FeatureManagement.Node/${{ matrix.config.dir }}/coverage/
-            Toggly.FeatureManagement.Node/${{ matrix.config.dir }}/coverage/lcov.info
+          path: Toggly.FeatureManagement.Node/${{ matrix.config.dir }}/coverage/
           retention-days: 7
           if-no-files-found: ignore
 
@@ -648,8 +667,6 @@ jobs:
           path: coverage-artifacts/
 
       - name: Organize coverage files
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
         run: node .github/scripts/organize-js-coverage.mjs
 
       - name: Validate SonarCloud credentials
