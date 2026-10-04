@@ -375,7 +375,7 @@ describe('Angular frontend telemetry', () => {
     await service.setContext({});
     expect(await service.isFeatureOn('On')).toBeTrue();
     await service.setContext({});
-    expect(revisions.length).toBe(3);
+    expect(revisions).toHaveSize(3);
     expect(revisions[0]).toBeNull();
     expect(revisions[1] === interior).toBeTrue();
     expect(revisions[2]).toBe('next');
