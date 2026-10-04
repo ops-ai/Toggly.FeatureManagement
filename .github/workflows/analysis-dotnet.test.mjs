@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { loadDotnetInventory, repoRoot, validateSources } from '../package-registry/dotnet-inventory.mjs';
+import { readCommonVersion } from '../package-registry/dotnet-version.mjs';
 
 const workflow = readFileSync(new URL('./analysis-dotnet.yml', import.meta.url), 'utf8');
 
@@ -25,7 +27,7 @@ function runScript(name) {
     .replaceAll(/\$\{\{[^}]+\}\}/g, 'fixture');
 }
 
-function scan(overrides = {}) {
+function scan(overrides = {}, withCredentialGuard = false) {
   const directory = mkdtempSync(join(tmpdir(), 'dotnet-sonar-gate-'));
   const log = join(directory, 'scan.log');
   writeFileSync(log, '');
@@ -36,7 +38,7 @@ if [[ "$SCAN_FAIL" = 1 ]]; then exit 42; fi
 `, { mode: 0o755 });
   writeFileSync(join(directory, 'sleep'), '#!/usr/bin/env bash\nexit 0\n', { mode: 0o755 });
   try {
-    const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', runScript('Begin SonarQube Server Scan')], {
+    const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', (withCredentialGuard ? `${runScript('Validate Sonar credentials')}\n${runScript('Begin SonarCloud Scan')}\n` : '') + runScript('Begin SonarQube Server Scan')], {
       encoding: 'utf8',
       env: {
         ...process.env,
@@ -47,6 +49,7 @@ if [[ "$SCAN_FAIL" = 1 ]]; then exit 42; fi
         PR_SOURCE_BRANCH: 'catalog-updates',
         PR_BASE_BRANCH: 'develop',
         PR_HEAD_SHA: 'example-pr-head',
+        SONAR_TOKEN: 'cloud-test-token',
         SONAR_SERVER_TOKEN: 'test-token',
         SONAR_HOST_URL: 'https://sonar.example.test',
         GITHUB_WORKSPACE: '/tmp/sdk-fixture',
@@ -131,4 +134,126 @@ test('.NET analysis scans and covers the CLI executable', () => {
     workflow,
     /name: Verify \.NET analysis workflow contract\s+run: node --test \.github\/workflows\/analysis-dotnet\.test\.mjs/,
   );
+});
+
+test('coverage merge preserves full Cobertura and imports only non-C# generic coverage', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'dotnet-coverage-merge-'));
+  const log = join(directory, 'reports.log');
+  writeFileSync(log, '');
+  writeFileSync(join(directory, 'reportgenerator'), `#!/usr/bin/env bash
+printf 'CALL\\n' >> "$REPORT_LOG"
+printf '%s\\n' "$@" >> "$REPORT_LOG"
+`, { mode: 0o755 });
+  try {
+    const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', runScript('Merge coverage reports')], {
+      encoding: 'utf8',
+      env: { ...process.env, PATH: `${directory}:${process.env.PATH}`, REPORT_LOG: log },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const calls = readFileSync(log, 'utf8').split('CALL\n').filter(Boolean).map(value => value.trim().split('\n'));
+    assert.equal(calls.length, 2);
+    for (const call of calls) {
+      assert.ok(call.includes('-reports:**/TestResults/**/coverage.opencover.xml'));
+      assert.ok(call.includes('-targetdir:coverage-report'));
+      assert.ok(call.includes('-assemblyfilters:-*Tests*'));
+    }
+    assert.ok(calls[0].includes('-reporttypes:Cobertura'));
+    assert.ok(calls[0].every(argument => !argument.startsWith('-filefilters:')));
+    assert.ok(calls[1].includes('-reporttypes:SonarQube'));
+    assert.ok(calls[1].includes('-filefilters:-*.cs'));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+  for (const name of ['Begin SonarCloud Scan', 'Begin SonarQube Server Scan']) {
+    assert.match(step(name), /sonar\.cs\.opencover\.reportsPaths=.*TestResults\/\*\*\/coverage\.opencover\.xml/);
+    assert.match(step(name), /sonar\.javascript\.lcov\.reportPaths=/);
+    assert.match(step(name), /sonar\.coverageReportPaths=.*coverage-report\/SonarQube\.xml/);
+  }
+});
+
+test('both scanners and summary use one validated common package version', () => {
+  const versionStep = step('Read common .NET package version');
+  assert.match(versionStep, /id: analysis_version/);
+  assert.equal(workflow.split('- name: Read common .NET package version').length - 1, 1);
+  assert.doesNotMatch(workflow, /gittools\/actions\/gitversion|steps\.gitversion/);
+  const directory = mkdtempSync(join(tmpdir(), 'dotnet-analysis-output-'));
+  try {
+    const output = join(directory, 'output');
+    const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', runScript('Read common .NET package version')], {
+      encoding: 'utf8', env: { ...process.env, GITHUB_OUTPUT: output },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const packages = validateSources(loadDotnetInventory());
+    const commonVersion = readCommonVersion(join(repoRoot, packages[0].manifest));
+    assert.equal(readFileSync(output, 'utf8'), `version=${commonVersion}\n`);
+    const fixture = join(directory, 'fixture');
+    const registry = join(fixture, '.github/package-registry');
+    mkdirSync(registry, { recursive: true });
+    for (const file of ['dotnet-ci.mjs', 'dotnet-inventory.mjs', 'dotnet-version.mjs', 'verify-nuget-metadata.mjs']) {
+      copyFileSync(new URL(`../package-registry/${file}`, import.meta.url), join(registry, file));
+    }
+    mkdirSync(join(fixture, 'Fixture'));
+    writeFileSync(join(registry, 'nuget-packages.json'), JSON.stringify({
+      sdkRoot: 'Fixture', changelog: 'Fixture/CHANGELOG.md',
+      packages: [{ id: 'Fixture', project: 'Fixture.csproj' }],
+    }));
+    writeFileSync(join(fixture, 'Fixture/Fixture.csproj'), '<Project />');
+    writeFileSync(join(fixture, 'Fixture/CHANGELOG.md'), '# Fixture');
+    const manifest = join(fixture, 'Fixture/Directory.Build.props');
+    for (const version of ['3.12.7', '3.12.7-rc.1', '3.12.7+build.01', '3.12.7-rc.1+build.01']) {
+      writeFileSync(manifest, `<Project><Version>${version}</Version></Project>`);
+      rmSync(output);
+      const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', runScript('Read common .NET package version')], {
+        cwd: fixture, encoding: 'utf8', env: { ...process.env, GITHUB_OUTPUT: output },
+      });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(readCommonVersion(manifest), version);
+      assert.equal(readFileSync(output, 'utf8'), `version=${readCommonVersion(manifest)}\n`);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+  for (const name of ['Begin SonarCloud Scan', 'Begin SonarQube Server Scan']) {
+    assert.match(step(name), /\/v:"\$\{\{ steps\.analysis_version\.outputs\.version \}\}"/);
+  }
+  assert.match(step('Test Summary'), /Version:\*\* \$\{\{ steps\.analysis_version\.outputs\.version \}\}/);
+});
+
+test('credential preflight fails without leaking values or starting either scanner', () => {
+  const guard = step('Validate Sonar credentials');
+  assert.doesNotMatch(guard, /if:|continue-on-error:/);
+  assert.ok(workflow.indexOf('- name: Validate Sonar credentials') < workflow.indexOf('- name: Begin SonarCloud Scan'));
+  for (const field of ['SONAR_TOKEN', 'SONAR_SERVER_TOKEN', 'SONAR_HOST_URL']) {
+    assert.ok(guard.includes(`${field}: \${{ secrets.${field} }}`));
+    const { result, calls } = scan({ [field]: '' }, true);
+    assert.notEqual(result.status, 0, `${field} was accepted`);
+    assert.equal(calls.length, 0);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr.trim(), field);
+  }
+  const { result, calls } = scan({ GITHUB_EVENT_NAME: 'workflow_call' }, true);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(calls.length, 2);
+  assert.equal(result.stdout, '');
+});
+
+test('core test failures prevent scanner uploads and Server analysis', () => {
+  const core = step('Run core tests');
+  assert.doesNotMatch(core, /continue-on-error:|if:|\|\| true/);
+  for (const name of ['End SonarCloud Scan', 'Begin SonarQube Server Scan', 'End SonarQube Server Scan']) {
+    assert.ok(workflow.indexOf(`- name: ${name}`) > workflow.indexOf('- name: Run core tests'));
+    assert.doesNotMatch(step(name), /continue-on-error:|if: always\(\)|\|\| true/);
+  }
+});
+
+test('reporting false skips only dependency reporting and allows that exact summary skip', () => {
+  const analyze = workflow.slice(workflow.indexOf('  analyze:'), workflow.indexOf('  dependency-check:'));
+  assert.doesNotMatch(analyze, /if:.*run_reporting/);
+  const dependency = workflow.slice(workflow.indexOf('  dependency-check:'), workflow.indexOf('  build-cli:'));
+  assert.match(dependency, /if: \$\{\{ toJSON\(inputs\.run_reporting\) != 'false' \}\}/);
+  assert.match(workflow.slice(workflow.indexOf('  summary:')), /allow-skipped: \$\{\{ toJSON\(inputs\.run_reporting\) == 'false' && 'dependency-check' \|\| 'none' \}\}/);
+  const { result, calls } = scan({ GITHUB_EVENT_NAME: 'workflow_call', SONAR_TOKEN: '' }, true);
+  assert.notEqual(result.status, 0);
+  assert.equal(calls.length, 0);
+  assert.equal(result.stderr.trim(), 'SONAR_TOKEN');
 });

@@ -27,6 +27,8 @@ const run = (binary, args) =>
   execFileSync(binary, args, { cwd: repoRoot, stdio: "inherit" });
 if (command === "validate") {
   console.log(`Validated ${packages.length} NuGet projects.`);
+} else if (command === "version") {
+  console.log(readCommonVersion(path.join(repoRoot, packages[0].manifest)));
 } else if (command === "summary") {
   console.log(`### Packages Analyzed (${packages.length})\n`);
   for (const family of families(inventory)) {

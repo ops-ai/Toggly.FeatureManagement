@@ -1,5 +1,8 @@
+using System.Net.Http.Headers;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using FluentAssertions;
 using Xunit;
 
@@ -17,6 +20,20 @@ public class TogglySdkIdentityTests
     }
 
     [Fact]
+    public void InformationalVersion_UsesDeclaredPackageVersion()
+    {
+        var manifest = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../..", "Directory.Build.props"));
+        var packageVersion = XDocument.Load(manifest).Descendants("Version").Single().Value;
+        var assembly = typeof(TogglySdkIdentity).Assembly;
+
+        assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!
+            .InformationalVersion.Should().Be(packageVersion);
+        TogglySdkIdentity.Version.Should().Be(packageVersion.Split('+')[0]);
+        var header = new ProductInfoHeaderValue("toggly-dotnet", TogglySdkIdentity.Version);
+        header.ToString().Should().Be(TogglySdkIdentity.UserAgent);
+    }
+
+    [Fact]
     public void UserAgent_MatchesPlatformSdkUserAgentParserShape()
     {
         TogglySdkIdentity.UserAgent.Should().Be($"toggly-dotnet/{TogglySdkIdentity.Version}");
@@ -28,6 +45,11 @@ public class TogglySdkIdentityTests
     [InlineData("", false, "")]
     [InlineData("   ", false, "")]
     [InlineData("0.0.0.0", false, "")]
+    [InlineData("3.0.4-{BranchName}.1", false, "")]
+    [InlineData("1.2.3-01", false, "")]
+    [InlineData("1.2.3-beta..1", false, "")]
+    [InlineData("03.2.1", false, "")]
+    [InlineData("1.2.3/unsafe", false, "")]
     [InlineData("3.6.6", true, "3.6.6")]
     [InlineData("3.6.6+abc123", true, "3.6.6")]
     [InlineData(" 1.2.3-beta.1 ", true, "1.2.3-beta.1")]
@@ -36,6 +58,34 @@ public class TogglySdkIdentityTests
         var success = TogglySdkIdentity.TryNormalize(raw, out var version);
         success.Should().Be(ok);
         version.Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(true, "3.12.7")]
+    [InlineData(false, "")]
+    public void TryNormalize_UsesBoundedMatcherOutcome(bool matches, string expected)
+    {
+        var success = TogglySdkIdentity.TryNormalize("3.12.7+build.01", out var version,
+            (input, pattern, options, timeout) =>
+            {
+                input.Should().Be("3.12.7");
+                timeout.Should().BeGreaterThan(TimeSpan.Zero);
+                timeout.Should().BeLessThanOrEqualTo(TimeSpan.FromSeconds(1));
+                return matches;
+            });
+
+        success.Should().Be(matches);
+        version.Should().Be(expected);
+    }
+
+    [Fact]
+    public void TryNormalize_ReturnsFalseAndEmptyVersionWhenMatcherTimesOut()
+    {
+        var success = TogglySdkIdentity.TryNormalize("3.12.7", out var version,
+            (input, pattern, options, timeout) => throw new RegexMatchTimeoutException(input, pattern, timeout));
+
+        success.Should().BeFalse();
+        version.Should().BeEmpty();
     }
 
     [Fact]
@@ -91,6 +141,17 @@ public class TogglySdkIdentityTests
             nameVersion: new Version(0, 0, 0, 0));
 
         TogglySdkIdentity.ResolveVersion(asm).Should().Be("unknown");
+    }
+
+    [Fact]
+    public void ResolveVersion_FallsBackToFileWhenInformationalMalformed()
+    {
+        var asm = EmitAssembly(
+            informational: "3.0.4-{BranchName}.1",
+            file: "3.12.6.0",
+            nameVersion: new Version(2, 0, 0, 0));
+
+        TogglySdkIdentity.ResolveVersion(asm).Should().Be("3.12.6.0");
     }
 
     private static Assembly EmitAssembly(string? informational, string? file, Version nameVersion)

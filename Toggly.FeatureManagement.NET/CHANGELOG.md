@@ -1,5 +1,12 @@
 # Changelog
 
+## All .NET SDK packages 3.12.7 - 2026-10-03
+
+### Fixed
+- The SDK User-Agent version now matches the NuGet package version even when
+  CI injects a different assembly informational version. Malformed assembly
+  informational versions fall back to a valid file or assembly version.
+
 ## All .NET SDK packages 3.12.6 - 2026-09-30
 
 ### Fixed
