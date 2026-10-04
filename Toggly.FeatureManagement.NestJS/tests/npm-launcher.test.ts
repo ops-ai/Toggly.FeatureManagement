@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 const script = fileURLToPath(new URL('./check-packed.mjs', import.meta.url));
 function launch(npmCli: string) {
   return spawnSync(process.execPath, [script], {
@@ -14,6 +14,12 @@ function launch(npmCli: string) {
   });
 }
 describe('packed consumer npm CLI validation', () => {
+  it('declares the Node 20.19 minimum required for Nest 12 CommonJS consumers', () => {
+    const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+
+    expect(manifest.engines.node).toBe('>=20.19.0');
+  });
+
   it('rejects a relative npm CLI path before invoking a package manager', () => {
     const result = launch('npm-cli.js');
     expect(result.status).not.toBe(0);
