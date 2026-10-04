@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, vi } from 'vitest';
 beforeEach(() => {
   if (typeof window === 'undefined') return;
-  vi.stubGlobal('fetch', async (input: unknown) => {
+  vi.stubGlobal('fetch', (input: unknown) => {
     if (String(input).includes('/api/frontend/telemetry'))
-      return new Response(null, { status: 202 });
-    throw new Error('Unexpected unit-test network request');
+      return Promise.resolve(new Response(null, { status: 202 }));
+    return Promise.reject(new Error('Unexpected unit-test network request'));
   });
 });
 afterEach(() => {

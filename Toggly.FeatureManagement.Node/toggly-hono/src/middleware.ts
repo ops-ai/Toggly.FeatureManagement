@@ -294,7 +294,7 @@ export function withFeature(
 /**
  * Get features handler for Hono
  */
-export const featuresHandler: Handler = async (c: Context) => {
+export const featuresHandler: Handler = (c: Context) => {
   const toggly = c.get('toggly')
 
   if (!toggly) {

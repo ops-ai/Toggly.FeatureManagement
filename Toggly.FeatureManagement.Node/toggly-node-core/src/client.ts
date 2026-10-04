@@ -941,7 +941,7 @@ export function createTogglyClient(
    * recording here — matches the rest of the JS ecosystem's synchronous
    * `getVariant` contract (see `VariantResult` for the null cases).
    */
-  async function getVariant(
+  function getVariant(
     featureKey: string,
     context?: EvaluationContext,
     entity?: EvaluationEntityContext,
@@ -949,7 +949,7 @@ export function createTogglyClient(
   ): Promise<VariantResult | null> {
     const def = state.definitions.get(featureKey)
     if (!def) {
-      return null
+      return Promise.resolve(null)
     }
 
     const evalContext = buildEvalContext(context, entity, kind)
@@ -958,10 +958,10 @@ export function createTogglyClient(
     })
 
     if (!result.enabled || !result.variantName) {
-      return null
+      return Promise.resolve(null)
     }
 
-    return { name: result.variantName, configurationValue: result.configurationValue }
+    return Promise.resolve({ name: result.variantName, configurationValue: result.configurationValue })
   }
 
   async function getVariantValue<T = unknown>(

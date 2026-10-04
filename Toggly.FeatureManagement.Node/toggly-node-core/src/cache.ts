@@ -11,30 +11,32 @@ import { CACHE_KEYS } from './constants.js'
 export class MemoryCacheProvider implements CacheProvider {
   private readonly cache = new Map<string, { value: string; expires: number | null }>()
 
-  async get(key: string): Promise<string | null> {
+  get(key: string): Promise<string | null> {
     const entry = this.cache.get(key)
 
     if (!entry) {
-      return null
+      return Promise.resolve(null)
     }
 
     if (entry.expires !== null && Date.now() > entry.expires) {
       this.cache.delete(key)
-      return null
+      return Promise.resolve(null)
     }
 
-    return entry.value
+    return Promise.resolve(entry.value)
   }
 
-  async set(key: string, value: string, ttl?: number): Promise<void> {
+  set(key: string, value: string, ttl?: number): Promise<void> {
     this.cache.set(key, {
       value,
       expires: ttl ? Date.now() + ttl : null,
     })
+    return Promise.resolve()
   }
 
-  async delete(key: string): Promise<void> {
+  delete(key: string): Promise<void> {
     this.cache.delete(key)
+    return Promise.resolve()
   }
 
   async has(key: string): Promise<boolean> {

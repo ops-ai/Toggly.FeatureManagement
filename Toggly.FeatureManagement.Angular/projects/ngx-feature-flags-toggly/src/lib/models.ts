@@ -1,5 +1,4 @@
 import type { Hook, TogglyEntityContext, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
-import { appendEvaluationContext, evaluationContextCacheKey } from '@ops-ai/toggly-hooks-types';
 import type { LocalGate } from '@ops-ai/toggly-local-gates';
 
 /** Assigned variant for a feature (from evaluated-variants-signed). */

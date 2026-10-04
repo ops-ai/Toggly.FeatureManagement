@@ -245,7 +245,7 @@ export function withFeature(
  * Get features handler for Koa
  */
 export function featuresHandler(): Middleware {
-  return async (ctx: Context) => {
+  return (ctx: Context) => {
     const toggly = ctx.state.toggly
 
     if (!toggly) {

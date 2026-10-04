@@ -128,7 +128,7 @@ test('JS Sonar ignores protocol SHA-1 kid, anonymous RNG, and Angular load compl
   const sonar = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   for (const name of ['SonarCloud Scan', 'SonarQube Server Scan']) {
     const step = stepBlock(sonar, name);
-    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria=angularLoadComplexity,kidSha1,anonRng/);
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria=angularLoadComplexity,kidSha1,anonRng,hookAwait,/);
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.angularLoadComplexity\.ruleKey=typescript:S3776/);
     assert.match(
       step,
@@ -138,7 +138,15 @@ test('JS Sonar ignores protocol SHA-1 kid, anonymous RNG, and Angular load compl
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.kidSha1\.resourceKey=\*\*\/toggly-node-core\/\*\*\/verify\.ts/);
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.anonRng\.ruleKey=typescript:S2245/);
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.anonRng\.resourceKey=\*\*\/toggly-eval\/\*\*\/segment\.ts/);
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.hookAwait\.ruleKey=typescript:S9382/);
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.hookAwait\.resourceKey=\*\*\/hooks\.ts/);
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.seqAwaitClient\.ruleKey=typescript:S9382/);
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.sdkServiceComplexity\.ruleKey=typescript:S3776/);
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.sdkServiceComplexity\.resourceKey=\*\*\/toggly\.service\.ts/);
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.testAssertStyle\.ruleKey=typescript:S5906/);
     assert.match(step, /-Dsonar\.test\.exclusions=.*\*\/host-fixtures\/\*\*/);
+    assert.match(step, /-Dsonar\.exclusions=.*\*\/host-fixtures\/\*\*/);
+    assert.match(step, /-Dsonar\.exclusions=.*toggly-hooks-types\/reference\/\*\*/);
   }
 });
 

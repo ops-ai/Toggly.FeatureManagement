@@ -226,34 +226,38 @@ export function createLoggingHook(name = 'logging-hook'): Hook {
   return {
     getMetadata: () => ({ name, version: '1.0.0' }),
 
-    beforeEvaluation: async (flagKey, context) => {
+    beforeEvaluation: (flagKey, context) => {
       console.log(`[Toggly] Evaluating flag "${flagKey}"`, { context })
-      return { startTime: Date.now() }
+      return Promise.resolve({ startTime: Date.now() })
     },
 
-    afterEvaluation: async (flagKey, _context, data, result) => {
+    afterEvaluation: (flagKey, _context, data, result) => {
       const startTime = (data as { startTime?: number })?.startTime
       const duration = startTime ? Date.now() - startTime : 0
       console.log(`[Toggly] Flag "${flagKey}" = ${result} (${duration}ms)`)
+      return Promise.resolve()
     },
 
-    beforeIdentify: async (identity) => {
+    beforeIdentify: (identity) => {
       console.log(`[Toggly] Setting identity: ${identity}`)
-      return { startTime: Date.now() }
+      return Promise.resolve({ startTime: Date.now() })
     },
 
-    afterIdentify: async (identity, data) => {
+    afterIdentify: (identity, data) => {
       const startTime = (data as { startTime?: number })?.startTime
       const duration = startTime ? Date.now() - startTime : 0
       console.log(`[Toggly] Identity set: ${identity} (${duration}ms)`)
+      return Promise.resolve()
     },
 
-    afterRefresh: async (features) => {
+    afterRefresh: (features) => {
       console.log(`[Toggly] Features refreshed:`, Object.keys(features).length, 'flags')
+      return Promise.resolve()
     },
 
-    onError: async (error, context) => {
+    onError: (error, context) => {
       console.error(`[Toggly] Error in ${context}:`, error.message)
+      return Promise.resolve()
     },
   }
 }

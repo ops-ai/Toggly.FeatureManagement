@@ -31,9 +31,7 @@ export const alwaysOff: FilterEvaluator = () => false
 
 export const percentage: FilterEvaluator = (featureKey, params, ctx) => {
   let pct = asFloat(params, 'Value')
-  if (pct === undefined) {
-    pct = asFloat(params, 'Percentage')
-  }
+  pct ??= asFloat(params, 'Percentage')
   if (pct === undefined || pct <= 0) {
     return false
   }
@@ -125,9 +123,7 @@ export const targeting: FilterEvaluator = (featureKey, params, ctx) => {
   }
 
   let pct = asFloat(params, 'Audience.DefaultRolloutPercentage')
-  if (pct === undefined) {
-    pct = asFloat(params, 'Percentage')
-  }
+  pct ??= asFloat(params, 'Percentage')
   if (pct === undefined || pct <= 0) {
     return false
   }

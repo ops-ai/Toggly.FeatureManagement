@@ -15,7 +15,7 @@ function entityAttr(
   if (!attrs) {
     return { found: false }
   }
-  if (Object.prototype.hasOwnProperty.call(attrs, name)) {
+  if (Object.hasOwn(attrs, name)) {
     return { found: true, value: attrs[name] }
   }
   const lower = name.toLowerCase()
@@ -54,7 +54,7 @@ function paramString(
   if (!params) {
     return undefined
   }
-  if (Object.prototype.hasOwnProperty.call(params, key) && params[key] != null) {
+  if (Object.hasOwn(params, key) && params[key] != null) {
     return String(params[key])
   }
   const lower = key.toLowerCase()

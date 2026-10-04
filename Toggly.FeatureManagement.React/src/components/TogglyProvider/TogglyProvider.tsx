@@ -2,7 +2,7 @@ import React, { ReactNode, useEffect, useState } from 'react'
 import { Toggly, TogglyOptions } from '../../services'
 import { Provider } from '../../contexts/toggly.context'
 
-export default async function createTogglyProvider(config: TogglyOptions) {
+export default function createTogglyProvider(config: TogglyOptions) {
   let owner: Toggly | undefined = new Toggly(config)
   let mounts = 0
   let generation = 0
