@@ -16,7 +16,7 @@ module Toggly
   # `enabled` boolean (the same value `Client#enabled?` would return for
   # this feature/context) and this module does the rest locally.
   module VariantAllocator
-    extend self
+    module_function
 
     # Assignment reasons (mirrors MF `AssignmentReason`).
     REASON_NONE = "None"
