@@ -229,7 +229,7 @@ public sealed partial class DashboardMappingTests
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
         var html = await response.Content.ReadAsStringAsync();
         html.Should().Contain("My unsaved name").And.Contain("My unsaved description");
-        var reloadLink = Regex.Match(html, "href=\"(?<url>[^\"]+)\"[^>]*>Reload current version</a>");
+        var reloadLink = ReloadCurrentVersionLinkRegex().Match(html);
         reloadLink.Success.Should().BeTrue();
         (await host.Client.GetAsync(WebUtility.HtmlDecode(reloadLink.Groups["url"].Value)))
             .StatusCode.Should().Be(HttpStatusCode.OK);
@@ -718,6 +718,9 @@ public sealed partial class DashboardMappingTests
 
     [GeneratedRegex("name=\"ExpectedRevision\" value=\"([^\"]+)\"")]
     private static partial Regex ExpectedRevisionRegex();
+
+    [GeneratedRegex("href=\"(?<url>[^\"]+)\"[^>]*>Reload current version</a>")]
+    private static partial Regex ReloadCurrentVersionLinkRegex();
 
     [GeneratedRegex(@"public enum FeatureFlags\s*\{(?<body>.*?)\}", RegexOptions.Singleline)]
     private static partial Regex FeatureFlagsEnumRegex();
