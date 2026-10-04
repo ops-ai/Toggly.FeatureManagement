@@ -55,7 +55,7 @@
   "homepage": "https://docs.toggly.io/sdks/nextjs/server",
   "dependencies": {
     "@ops-ai/nextjs-toggly-core": "workspace:^",
-    "@ops-ai/toggly-segments": "^0.1.0",
+    "@ops-ai/toggly-segments": "workspace:^",
     "ws": "^8.18.0"
   },
   "optionalDependencies": {

@@ -33,7 +33,7 @@ module Toggly
     private
 
     def items_path(segment)
-      "/api/v2/segments/#{URI.encode_www_form_component(segment)}/items"
+      "/api/v2/segments/#{URI.encode_www_form_component(segment).gsub("+", "%20")}/items"
     end
 
     def request(klass, path, body = nil)
