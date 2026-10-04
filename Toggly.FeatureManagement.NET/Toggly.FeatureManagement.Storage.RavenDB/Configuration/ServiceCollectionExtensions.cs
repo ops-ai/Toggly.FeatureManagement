@@ -17,7 +17,11 @@ namespace Toggly.FeatureManagement.Storage.RavenDB.Configuration
         /// <returns>The service collection for chaining.</returns>
         public static IServiceCollection AddTogglyRavenDbCatalogStore(this IServiceCollection services)
         {
+#if NET6_0_OR_GREATER
+            ArgumentNullException.ThrowIfNull(services);
+#else
             if (services == null) throw new ArgumentNullException(nameof(services));
+#endif
 
             services.TryAddEnumerable(ServiceDescriptor.Singleton<ITogglyCatalogStore, RavenDbCatalogStore>());
             return services;
