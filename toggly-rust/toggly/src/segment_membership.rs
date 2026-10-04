@@ -116,3 +116,13 @@ fn encode_path_segment(value: &str) -> String {
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encodes_spaces_in_segment_names() {
+        assert_eq!(encode_path_segment("Beta Testers"), "Beta%20Testers");
+    }
+}
