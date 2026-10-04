@@ -556,6 +556,13 @@ jobs:
           ls -la coverage/ || echo "No coverage files found"
         continue-on-error: true
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: Toggly.FeatureManagement.Python/toggly/pyproject.toml
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
@@ -565,6 +572,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-python
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Python"
             -Dsonar.sources=${{ env.SDK_ROOT }}/toggly/src,${{ env.SDK_ROOT }}/toggly-django/src,${{ env.SDK_ROOT }}/toggly-flask/src,${{ env.SDK_ROOT }}/toggly-fastapi/src,${{ env.SDK_ROOT }}/toggly-cache/src
@@ -591,6 +599,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-python
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - Python"
             -Dsonar.sources=${{ env.SDK_ROOT }}/toggly/src,${{ env.SDK_ROOT }}/toggly-django/src,${{ env.SDK_ROOT }}/toggly-flask/src,${{ env.SDK_ROOT }}/toggly-fastapi/src,${{ env.SDK_ROOT }}/toggly-cache/src
             -Dsonar.exclusions=**/venv/**,**/.venv/**,**/dist/**,**/build/**,**/*.egg-info/**,**/tests/**,**/__pycache__/**,**/.pytest_cache/**,**/telemetry/pb/**

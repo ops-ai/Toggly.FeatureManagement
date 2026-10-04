@@ -136,6 +136,13 @@ jobs:
             echo "Coverage file not found"
           fi
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: Toggly.FeatureManagement.Flutter/toggly/pubspec.yaml
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
@@ -146,6 +153,7 @@ jobs:
           projectBaseDir: Toggly.FeatureManagement.Flutter/toggly
           args: >
             -Dsonar.projectKey=toggly-sdks-flutter
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Flutter/Dart"
             -Dsonar.sources=lib
@@ -170,6 +178,7 @@ jobs:
           projectBaseDir: Toggly.FeatureManagement.Flutter/toggly
           args: >
             -Dsonar.projectKey=toggly-sdks-flutter
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - Flutter/Dart"
             -Dsonar.sources=lib
             -Dsonar.tests=test
@@ -404,6 +413,13 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: Toggly.FeatureManagement.Flutter/${{ matrix.dir }}/pubspec.yaml
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
@@ -414,6 +430,7 @@ jobs:
           projectBaseDir: Toggly.FeatureManagement.Flutter/${{ matrix.dir }}
           args: >
             -Dsonar.projectKey=${{ matrix.sonarKey }}
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="${{ matrix.sonarName }}"
             -Dsonar.sources=lib
@@ -430,6 +447,7 @@ jobs:
           projectBaseDir: Toggly.FeatureManagement.Flutter/${{ matrix.dir }}
           args: >
             -Dsonar.projectKey=${{ matrix.sonarKey }}
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="${{ matrix.sonarName }}"
             -Dsonar.sources=lib
             -Dsonar.tests=test
@@ -597,6 +615,13 @@ jobs:
           flutter test --coverage --test-randomize-ordering-seed random
           test -s coverage/lcov.info
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: Toggly.FeatureManagement.Flutter/${{ matrix.dir }}/pubspec.yaml
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: SonarQube Server main analysis
         uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
@@ -609,6 +634,7 @@ jobs:
           # expect a main baseline before accepting PR analysis.
           args: >
             -Dsonar.projectKey=${{ matrix.sonarKey }}
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="${{ matrix.sonarName }}"
             -Dsonar.sources=lib
             -Dsonar.tests=test

@@ -342,6 +342,13 @@ jobs:
           echo "Coverage files:"
           ls -la coverage/
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: toggly-ruby/toggly/lib/toggly/version.rb
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
@@ -351,6 +358,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-ruby
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Ruby"
             -Dsonar.sources=${{ env.SDK_ROOT }}
@@ -375,6 +383,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-ruby
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - Ruby"
             -Dsonar.sources=${{ env.SDK_ROOT }}
             -Dsonar.exclusions=**/vendor/**,**/spec/**,**/test/**,**/coverage/**,**/*.gemspec

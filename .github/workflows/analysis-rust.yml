@@ -269,6 +269,13 @@ jobs:
           print(f'Converted {len(files)} files to SonarQube generic coverage format')
           "
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: toggly-rust/Cargo.toml
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: Validate SonarCloud credentials
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -284,6 +291,7 @@ jobs:
           projectBaseDir: ${{ env.SDK_ROOT }}
           args: >
             -Dsonar.projectKey=toggly-sdks-rust
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Rust"
             -Dsonar.sources=.
@@ -319,6 +327,7 @@ jobs:
           projectBaseDir: ${{ env.SDK_ROOT }}
           args: >
             -Dsonar.projectKey=toggly-sdks-rust
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - Rust"
             -Dsonar.sources=.
             -Dsonar.exclusions=**/target/**,**/examples/**,**/*_test.rs

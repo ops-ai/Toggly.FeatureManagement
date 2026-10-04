@@ -403,6 +403,13 @@ jobs:
         continue-on-error: true
 
       # Generated protobuf/grpc bindings are never hand-edited; analyze authored Go.
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: toggly-go/VERSION
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
@@ -413,6 +420,7 @@ jobs:
           projectBaseDir: toggly-go
           args: >
             -Dsonar.projectKey=toggly-sdks-go
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Go"
             -Dsonar.sources=.
@@ -438,6 +446,7 @@ jobs:
           projectBaseDir: toggly-go
           args: >
             -Dsonar.projectKey=toggly-sdks-go
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - Go"
             -Dsonar.sources=.
             -Dsonar.exclusions=**/*_test.go,**/vendor/**,**/examples/**,**/*.pb.go
@@ -465,6 +474,13 @@ jobs:
           name: go-mongodb-v2-coverage
           path: toggly-go-mongodb-v2/
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: toggly-go-mongodb-v2/VERSION
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: SonarCloud Scan - MongoDB Driver v2
         uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
@@ -475,6 +491,7 @@ jobs:
           projectBaseDir: toggly-go-mongodb-v2
           args: >
             -Dsonar.projectKey=toggly-sdks-go-mongodb-v2
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Go MongoDB Driver v2"
             -Dsonar.sources=.
@@ -493,6 +510,7 @@ jobs:
           projectBaseDir: toggly-go-mongodb-v2
           args: >
             -Dsonar.projectKey=toggly-sdks-go-mongodb-v2
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - Go MongoDB Driver v2"
             -Dsonar.sources=.
             -Dsonar.exclusions=**/*_test.go,**/examples/**
@@ -551,6 +569,13 @@ jobs:
           test -s coverage.out
           go tool cover -func=coverage.out | tail -1
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: toggly-go-mongodb-v2/VERSION
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: SonarCloud main analysis
         if: ${{ always() && steps.coverage.outcome == 'success' }}
         uses: SonarSource/sonarqube-scan-action@v8.2.2
@@ -562,6 +587,7 @@ jobs:
           projectBaseDir: toggly-go-mongodb-v2
           args: >
             -Dsonar.projectKey=toggly-sdks-go-mongodb-v2
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Go MongoDB Driver v2"
             -Dsonar.sources=.
@@ -583,6 +609,7 @@ jobs:
           projectBaseDir: toggly-go-mongodb-v2
           args: >
             -Dsonar.projectKey=toggly-sdks-go-mongodb-v2
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - Go MongoDB Driver v2"
             -Dsonar.sources=.
             -Dsonar.exclusions=**/*_test.go,**/examples/**

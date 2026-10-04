@@ -335,6 +335,13 @@ jobs:
           path: dependency-check-reports/
         continue-on-error: true
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: Toggly.FeatureManagement.Android/build.gradle.kts
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
@@ -344,6 +351,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-android
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Android"
             -Dsonar.sources=${{ env.SDK_ROOT }}
@@ -361,6 +369,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-android
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - Android"
             -Dsonar.sources=${{ env.SDK_ROOT }}
             -Dsonar.exclusions=**/build/**,**/test/**,**/androidTest/**,**/*.bak

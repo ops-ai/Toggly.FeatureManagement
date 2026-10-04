@@ -156,6 +156,13 @@ jobs:
           ls -la coverage/ || echo "No coverage files found"
         continue-on-error: true
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: Toggly.FeatureManagement.ReactNative/libs/core/package.json
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
@@ -165,6 +172,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-react-native
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - React Native"
             -Dsonar.sources=Toggly.FeatureManagement.ReactNative/libs
@@ -191,6 +199,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-react-native
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - React Native"
             -Dsonar.sources=Toggly.FeatureManagement.ReactNative/libs
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/example-expo/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/tests/fixtures/packed-host/verify.test.js,**/coverage/**,**/*.config.js
