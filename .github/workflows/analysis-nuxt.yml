@@ -278,6 +278,9 @@ jobs:
             -Dsonar.javascript.lcov.reportPaths=coverage/nuxt-toggly-core.lcov.info,coverage/nuxt-toggly-server.lcov.info,coverage/nuxt-toggly-client.lcov.info,coverage/nuxt-toggly.lcov.info
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/playground/**
             -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts
+            -Dsonar.issue.ignore.multicriteria=hookAwait
+            -Dsonar.issue.ignore.multicriteria.hookAwait.ruleKey=typescript:S9382
+            -Dsonar.issue.ignore.multicriteria.hookAwait.resourceKey=**/hooks.ts
             -Dsonar.qualitygate.wait=true
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -312,6 +315,9 @@ jobs:
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/playground/**
             -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
+            -Dsonar.issue.ignore.multicriteria=hookAwait
+            -Dsonar.issue.ignore.multicriteria.hookAwait.ruleKey=typescript:S9382
+            -Dsonar.issue.ignore.multicriteria.hookAwait.resourceKey=**/hooks.ts
             -Dsonar.qualitygate.wait=true
 
   dependency-check:

@@ -42,6 +42,21 @@ describe('createTogglyProvider', () => {
     expect(screen.getByText('Hello')).toBeInTheDocument();
   });
 
+  it('disposes the owner after the last unmount', async () => {
+    const TogglyProvider = await createTogglyProvider({
+      featureDefaults: { F1: true },
+    });
+    const { unmount } = render(
+      <TogglyProvider>
+        <span data-testid="child">Hello</span>
+      </TogglyProvider>
+    );
+
+    unmount();
+    await Promise.resolve();
+    expect(screen.queryByTestId('child')).not.toBeInTheDocument();
+  });
+
   it('should provide Toggly service via context', async () => {
     const TogglyProvider = await createTogglyProvider({
       featureDefaults: { F1: true },

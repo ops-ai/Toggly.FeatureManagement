@@ -1,6 +1,14 @@
 import { isEntityGate } from '@ops-ai/toggly-hooks-types'
 import type { EvaluatedVariantDef, FeatureDefinitions, TogglyConfig } from './types'
 import type { FeatureDefinitionModel } from '@ops-ai/toggly-eval'
+
+/** Binary string order used by persisted snapshot scopes. Do not switch to localeCompare. */
+export function compareCacheKeyParts(a: string, b: string): number {
+  if (a < b) return -1
+  if (a > b) return 1
+  return 0
+}
+
 export interface BrowserSnapshot {
   features: FeatureDefinitions
   definitions: FeatureDefinitionModel[]
@@ -15,8 +23,8 @@ export function createBrowserSnapshots(config: TogglyConfig) {
     if (config.instanceId?.trim()) {
       return ['i', config.instanceId.trim()]
     }
-    const groups = [...(config.groups ?? [])].sort((a, b) => a.localeCompare(b))
-    const claims = Object.entries(config.claims ?? {}).sort(([a], [b]) => a.localeCompare(b))
+    const groups = [...(config.groups ?? [])].sort(compareCacheKeyParts)
+    const claims = Object.entries(config.claims ?? {}).sort(([a], [b]) => compareCacheKeyParts(a, b))
     return ['u', config.identity ?? '', groups, claims]
   }
   const scope = () => JSON.stringify([route(), targetingOwner()])

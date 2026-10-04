@@ -30,6 +30,11 @@ test('Nuxt Sonar scans fail closed on missing credentials, scanner errors, and f
     const scan = step(sonar, name);
     assert.match(scan, /-Dsonar\.qualitygate\.wait=true/);
     assert.doesNotMatch(scan, /continue-on-error: true|\|\| true/);
+    assert.match(scan, /-Dsonar\.issue\.ignore\.multicriteria=hookAwait/);
+    assert.match(scan, /-Dsonar\.issue\.ignore\.multicriteria\.hookAwait\.ruleKey=typescript:S9382/);
+    assert.match(scan, /-Dsonar\.issue\.ignore\.multicriteria\.hookAwait\.resourceKey=\*\*\/hooks\.ts/);
+    assert.equal([...scan.matchAll(/-Dsonar\.issue\.ignore\.multicriteria\.[a-zA-Z0-9]+\.ruleKey=/g)].length, 1);
+    assert.doesNotMatch(scan, /resourceKey=\*\*\/\*/);
   }
 
   assert.match(

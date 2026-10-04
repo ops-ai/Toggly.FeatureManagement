@@ -1,4 +1,4 @@
-import { createBrowserSnapshots } from './browser-snapshots'
+import { compareCacheKeyParts, createBrowserSnapshots } from './browser-snapshots'
 import type {
   TogglyConfig,
   TogglyClient,
@@ -835,7 +835,7 @@ export function createTogglyClient(
   type ContextUpdate = Parameters<TogglyClient['setContext']>[0]
 
   function hasTargetingChanges(update: ContextUpdate): boolean {
-    const groupKey = (groups?: string[]) => JSON.stringify([...(groups ?? [])].sort((a, b) => a.localeCompare(b)))
+    const groupKey = (groups?: string[]) => JSON.stringify([...(groups ?? [])].sort(compareCacheKeyParts))
     const groupsChanged = update.groups !== undefined && groupKey(update.groups) !== groupKey(config.groups)
     const claimsChanged = update.claims !== undefined && (
       Object.keys(update.claims).length !== Object.keys(config.claims ?? {}).length ||

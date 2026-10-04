@@ -53,6 +53,14 @@ it('keeps canonical Unicode groups stable without mutating caller inputs',()=>{
  const groups=['é','Z','😀','a','10','2','Z'];const config:TogglyConfig={...options,instanceId:'',groups,claims:{z:'a',A:'b'}}
  const cache=createBrowserSnapshots(config);const scope=cache.scope();config.groups=[...groups].reverse();expect(cache.scope()).toBe(scope);expect(groups).toEqual(['é','Z','😀','a','10','2','Z'])
 })
+it('keeps persisted group scopes on binary string order, not localeCompare',()=>{
+ const groups=['Beta','alpha']
+ const binary=[...groups].sort((a,b)=>a<b?-1:a>b?1:0)
+ const collated=[...groups].sort((a,b)=>a.localeCompare(b))
+ expect(binary).not.toEqual(collated)
+ const cache=createBrowserSnapshots({...options,instanceId:'',groups,persistFeatures:false})
+ expect(JSON.parse(cache.scope())[1][2]).toEqual(binary)
+})
 it.each([null,'broken','{}','[null,[1,{}],["x",{"features":[],"definitions":[],"revision":null}]]'])('ignores corrupt storage %s',value=>{
  const config:TogglyConfig={...options};const cache=createBrowserSnapshots(config);cache.save({features:{Flag:true},definitions:[],revision:'a'});storage.set([...storage.keys()][0],value as any)
  expect(createBrowserSnapshots(config).restore()).toBeUndefined()
