@@ -78,7 +78,7 @@ func (c *SegmentMembershipClient) send(method, path string, body any, dest any) 
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err

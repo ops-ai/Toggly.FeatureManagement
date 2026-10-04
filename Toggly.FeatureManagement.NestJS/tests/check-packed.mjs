@@ -124,6 +124,10 @@ try {
     )}`;
   if (process.env.TOGGLY_TEST_EVAL_TARBALL)
     dependencies['@ops-ai/toggly-eval'] = `file:${resolve(process.env.TOGGLY_TEST_EVAL_TARBALL)}`;
+  if (process.env.TOGGLY_TEST_SEGMENTS_TARBALL)
+    dependencies['@ops-ai/toggly-segments'] = `file:${resolve(
+      process.env.TOGGLY_TEST_SEGMENTS_TARBALL,
+    )}`;
   writeFileSync(
     join(consumer, 'package.json'),
     JSON.stringify({ private: true, type: 'module', dependencies }),

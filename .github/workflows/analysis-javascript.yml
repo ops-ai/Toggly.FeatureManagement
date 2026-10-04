@@ -343,6 +343,11 @@ jobs:
           cache: npm
           cache-dependency-path: Toggly.FeatureManagement.Astro/package-lock.json
 
+      - name: Build toggly-segments
+        run: |
+          set -euo pipefail
+          (cd toggly-segments && (npm ci || npm install) && npm run build)
+
       - name: Install locked Astro SDK dependencies
         working-directory: Toggly.FeatureManagement.Astro
         run: npm ci
@@ -380,6 +385,14 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
           cache-dependency-path: ${{ matrix.host.path }}/package-lock.json
+
+      - name: Build unpublished Node server deps
+        if: matrix.host.sdk == 'SvelteKit'
+        run: |
+          set -euo pipefail
+          (cd toggly-segments && (npm ci || npm install) && npm run build)
+          (cd toggly-eval && (npm ci || npm install) && npm run build)
+          (cd Toggly.FeatureManagement.Node/toggly-node-core && (npm ci || npm install) && npm install --no-save "file:$GITHUB_WORKSPACE/toggly-eval" "file:$GITHUB_WORKSPACE/toggly-segments" && npm run build)
 
       - name: Install locked dependencies
         working-directory: ${{ matrix.host.path }}

@@ -33,7 +33,8 @@ impl SegmentMembershipClient {
 
     /// List segments this Backend key may update.
     pub async fn list_segments(&self) -> Result<Value, Error> {
-        self.send(reqwest::Method::GET, "/api/v2/segments", None).await
+        self.send(reqwest::Method::GET, "/api/v2/segments", None)
+            .await
     }
 
     /// Add identifiers to a segment.

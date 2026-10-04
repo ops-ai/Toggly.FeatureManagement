@@ -128,8 +128,8 @@ pub mod entity_context;
 pub mod eval;
 pub mod provider;
 mod sdk_identity;
-pub mod telemetry;
 mod segment_membership;
+pub mod telemetry;
 
 pub use client::TogglyClient;
 pub use config::{OnErrorCallback, TogglyConfig, TogglyConfigBuilder};
