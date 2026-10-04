@@ -144,6 +144,8 @@ test('JS Sonar ignores protocol SHA-1 kid, anonymous RNG, and Angular load compl
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.sdkServiceComplexity\.ruleKey=typescript:S3776/);
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.sdkServiceComplexity\.resourceKey=\*\*\/toggly\.service\.ts/);
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.testAssertStyle\.ruleKey=typescript:S5906/);
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.asyncApiSurface\.ruleKey=typescript:S7503/);
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.styleReadonly\.ruleKey=typescript:S2933/);
     assert.match(step, /-Dsonar\.test\.exclusions=.*\*\/host-fixtures\/\*\*/);
     assert.match(step, /-Dsonar\.exclusions=.*\*\/host-fixtures\/\*\*/);
     assert.match(step, /-Dsonar\.exclusions=.*toggly-hooks-types\/reference\/\*\*/);
