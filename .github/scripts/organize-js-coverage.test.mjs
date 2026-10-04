@@ -122,14 +122,16 @@ test('maps a named artifact using its folder when the bundled name is missing', 
   });
 });
 
-test('skips named artifacts that have no LCOV report', async () => {
+test('fails the aggregate when a source-bearing named artifact lacks LCOV', async () => {
   await withFixture({
-    'coverage-Client-Core/artifact-name.txt': 'coverage-Client-Core\n',
+    'coverage-Client-Core/coverage-final.json': '{"src/index.ts":{}}',
     'coverage-Evaluator/artifact-name.txt': 'coverage-Evaluator\n',
     'coverage-Evaluator/lcov.info': lcov('src/engine.ts'),
   }, async ({ organizeCoverage, downloadDir, outputDir }) => {
-    await organizeCoverage({ downloadDir, outputDir });
-    assert.ok(existsSync(join(outputDir, 'Evaluator-lcov.info')));
-    assert.equal(existsSync(join(outputDir, 'Client-Core-lcov.info')), false);
+    await assert.rejects(
+      organizeCoverage({ downloadDir, outputDir }),
+      /Missing LCOV report for coverage-Client-Core/,
+    );
+    assert.equal(existsSync(outputDir), false, 'no partial scan input is written');
   });
 });

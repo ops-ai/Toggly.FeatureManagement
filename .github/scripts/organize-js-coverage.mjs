@@ -83,10 +83,7 @@ export async function organizeCoverage({
     if (reports.has(sdkName)) throw new Error(`Duplicate LCOV report for ${sdkName}`);
 
     const file = preferredLcov(directory);
-    if (!file) {
-      console.warn(`Skipping ${artifactName}: no LCOV report`);
-      continue;
-    }
+    if (!file) throw new Error(`Missing LCOV report for ${artifactName}`);
     const content = readFileSync(file, 'utf8');
     if (!content.split('\n').some(line => line.startsWith('SF:') && line.slice(3).trim())) {
       throw new Error(`LCOV report for ${sdkName} has no source files`);
