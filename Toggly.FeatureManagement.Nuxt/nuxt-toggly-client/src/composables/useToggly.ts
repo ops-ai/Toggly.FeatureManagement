@@ -5,7 +5,7 @@ import {
   type TogglyConfig,
   type FeatureRequirement,
 } from '@ops-ai/nuxt-toggly-core/browser'
-import type { TogglyClientConfig, UseTogglyReturn } from '../types'
+import type { FeatureEvalContext, TogglyClientConfig, UseTogglyReturn } from '../types'
 import { TOGGLY_INJECTION_KEY } from '../types'
 import { createBrowserTelemetry } from '../frontend-telemetry'
 
@@ -140,7 +140,7 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
       }
     },
 
-    async setIdentity(newIdentity: string) {
+    setIdentity(newIdentity: string) {
       return toggly.setContext({identity: newIdentity})
     },
 
@@ -157,27 +157,27 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
       }
     },
 
-    async isFeatureOn(
+    isFeatureOn(
       featureKey: string,
-      context?: import('@ops-ai/nuxt-toggly-core/browser').TogglyEntityContext | Record<string, unknown> | null,
+      context?: FeatureEvalContext,
       kind?: string,
     ) {
       return client.isFeatureOn(featureKey, context, kind)
     },
 
-    async isFeatureOff(
+    isFeatureOff(
       featureKey: string,
-      context?: import('@ops-ai/nuxt-toggly-core/browser').TogglyEntityContext | Record<string, unknown> | null,
+      context?: FeatureEvalContext,
       kind?: string,
     ) {
       return client.isFeatureOff(featureKey, context, kind)
     },
 
-    async evaluateFeatureGate(
+    evaluateFeatureGate(
       featureKeys: string[],
       requirement: FeatureRequirement = 'all',
       negate: boolean = false,
-      context?: import('@ops-ai/nuxt-toggly-core/browser').TogglyEntityContext | Record<string, unknown> | null,
+      context?: FeatureEvalContext,
       kind?: string,
     ) {
       return client.evaluateFeatureGate(featureKeys, requirement, negate, context, kind)
@@ -245,7 +245,7 @@ export function createTogglyPlugin(config: TogglyClientConfig) {
 
       // Auto-initialize if appKey is provided
       if (config.appKey) {
-        toggly.init()
+        void toggly.init()
       }
     },
   }

@@ -11,8 +11,15 @@ export interface BrowserSnapshot {
 export function createBrowserSnapshots(config: TogglyConfig) {
   const memory = new Map<string, BrowserSnapshot>()
   const route = () => JSON.stringify([config.baseUri, config.appKey, config.environment, config.evaluationMode ?? 'remote', config.enableVariants ?? false])
-  const scope = () => JSON.stringify([route(), config.instanceId?.trim() ? ['i', config.instanceId.trim()]
-    : ['u', config.identity ?? '', [...(config.groups ?? [])].sort((a,b)=>a<b?-1:a>b?1:0), Object.entries(config.claims ?? {}).sort(([a],[b])=>a.localeCompare(b))]])
+  const targetingOwner = () => {
+    if (config.instanceId?.trim()) {
+      return ['i', config.instanceId.trim()]
+    }
+    const groups = [...(config.groups ?? [])].sort((a, b) => a.localeCompare(b))
+    const claims = Object.entries(config.claims ?? {}).sort(([a], [b]) => a.localeCompare(b))
+    return ['u', config.identity ?? '', groups, claims]
+  }
+  const scope = () => JSON.stringify([route(), targetingOwner()])
   const key = () => `${config.featuresStorageKey ?? 'toggly:features'}:v2:${encodeURIComponent(route())}`
   function persisted() {
     const entries = new Map<string, BrowserSnapshot>()

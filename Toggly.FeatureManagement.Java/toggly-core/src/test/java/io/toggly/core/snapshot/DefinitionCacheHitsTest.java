@@ -106,6 +106,7 @@ class DefinitionCacheHitsTest {
 
             @Override
             public void close() {
+                // Test double: no gRPC channel to shut down.
             }
         };
         TelemetryRuntime runtime = TelemetryRuntime.builder()

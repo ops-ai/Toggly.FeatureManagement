@@ -24,7 +24,7 @@ import type { UseVariantReturn } from '../types'
 export function useVariant(featureKey: MaybeRef<string>): UseVariantReturn {
   const toggly = useToggly()
   const variant = ref<VariantResult | null>(null) as Ref<VariantResult | null>
-  const variantValue = ref<unknown | null>(null) as Ref<unknown | null>
+  const variantValue = ref<unknown>(null)
   const isLoading = ref(true)
   let active = true
   let request = 0
@@ -32,24 +32,25 @@ export function useVariant(featureKey: MaybeRef<string>): UseVariantReturn {
 
   const key = computed(() => toValue(featureKey))
 
-  const refresh = async () => {
-    if (!active) return
+  const refresh = (): Promise<void> => {
+    if (!active) return Promise.resolve()
     const current = ++request
     if (!toggly.isReady.value || !toggly.client.state.initialized) {
       // Variant assignment requires loaded remote data; nothing to derive locally.
       isLoading.value = true
-      return
+      return Promise.resolve()
     }
 
     isLoading.value = true
     try {
       const next = toggly.getVariant(key.value)
-      if (!active || current !== request) return
+      if (!active || current !== request) return Promise.resolve()
       variant.value = next
       variantValue.value = next?.configurationValue ?? null
     } finally {
       if (active && current === request) isLoading.value = false
     }
+    return Promise.resolve()
   }
 
   // Vue batches readiness and definitions publication into one effective UI check.

@@ -110,25 +110,26 @@ function resolveGrpcClients(config: TogglyServerConfig): {
 class MemoryStorage implements TogglyStorage {
   private store = new Map<string, { value: unknown; expires: number | null }>()
 
-  async getItem<T>(key: string): Promise<T | null> {
+  getItem<T>(key: string): Promise<T | null> {
     const item = this.store.get(key)
-    if (!item) return null
+    if (!item) return Promise.resolve(null)
 
     if (item.expires && Date.now() > item.expires) {
       this.store.delete(key)
-      return null
+      return Promise.resolve(null)
     }
 
-    return item.value as T
+    return Promise.resolve(item.value as T)
   }
 
-  async setItem<T>(
+  setItem<T>(
     key: string,
     value: T,
     options?: { ttl?: number }
   ): Promise<void> {
     const expires = options?.ttl ? Date.now() + options.ttl : null
     this.store.set(key, { value, expires })
+    return Promise.resolve()
   }
 
   async removeItem(key: string): Promise<void> {

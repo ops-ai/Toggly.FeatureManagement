@@ -59,6 +59,7 @@ class TogglyClientTelemetryTest {
 
                     @Override
                     public void close() {
+                        // Test double: no gRPC channel to shut down.
                     }
                 })
                 .metricsClient(new MetricsGrpcClient() {
@@ -69,6 +70,7 @@ class TogglyClientTelemetryTest {
 
                     @Override
                     public void close() {
+                        // Test double: no gRPC channel to shut down.
                     }
                 })
                 .build();

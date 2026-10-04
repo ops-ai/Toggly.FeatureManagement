@@ -317,11 +317,11 @@ private func parseDateTime(_ value: Any?) -> Double? {
     if text.isEmpty {
         return nil
     }
-    if let millis = Double(text), text.allSatisfy({ $0.isNumber || $0 == "." || $0 == "-" }) {
+    let isNumericString = text.allSatisfy({ $0.isNumber || $0 == "." || $0 == "-" })
+    let isPlainNumber = !text.contains("-") || (text.hasPrefix("-") && !text.dropFirst().contains("-"))
+    if isNumericString, isPlainNumber, let millis = Double(text) {
         // ISO dates are not plain numbers; only treat numeric strings as epoch millis.
-        if !text.contains("-") || text.hasPrefix("-") && !text.dropFirst().contains("-") {
-            return millis
-        }
+        return millis
     }
     let isoWithFraction = ISO8601DateFormatter()
     isoWithFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

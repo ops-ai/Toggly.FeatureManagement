@@ -6,10 +6,8 @@ import type {
   FeatureDefinitions,
   FeatureRequirement,
   Hook,
-  EvaluationSeriesData,
   EvalContextArg,
   EvalContextOverrides,
-  EvaluatedVariantDef,
   VariantResult,
   FrontendTelemetryRuntime,
   TrustedTelemetryRuntime,
@@ -84,6 +82,28 @@ function revisionsMatch(
     return false
   }
   return a === b
+}
+
+function signedDefinitionsPath(local: boolean, useVariants: boolean): string {
+  if (local) return 'definitions-signed'
+  if (useVariants) return 'evaluated-variants-signed'
+  return 'evaluated-signed'
+}
+
+function signedDefinitionsEndpoint(local: boolean, useVariants: boolean) {
+  if (local) return API_ENDPOINTS.definitionsSigned
+  if (useVariants) return API_ENDPOINTS.evaluatedVariantsSigned
+  return API_ENDPOINTS.evaluatedSigned
+}
+
+function combineGateChecks(
+  featureKeys: string[],
+  requirement: FeatureRequirement,
+  checks: boolean[],
+): boolean {
+  if (featureKeys.length === 0) return true
+  if (requirement === 'any') return checks.some(Boolean)
+  return checks.every(Boolean)
 }
 
 /**
@@ -205,7 +225,7 @@ export function createTogglyClient(
     notifyFeaturesRefresh()
   }
   function assertCurrent(expected: number) {
-    if (frontend && (destroyed || expected !== generation)) throw Error('[Toggly] Superseded browser operation')
+    if (frontend && (destroyed || expected !== generation)) throw new Error('[Toggly] Superseded browser operation')
   }
   if (frontend) restoreSnapshot()
 
@@ -348,8 +368,8 @@ export function createTogglyClient(
     const runtime = frontendTelemetry
     return {
       // Response data is JSON; copy selected nested gates/filters before callbacks.
-      features: JSON.parse(JSON.stringify(Object.fromEntries(keys.map(key => [key,state.features[key]])))) as FeatureDefinitions,
-      definitions: new Map(JSON.parse(JSON.stringify(keys.filter(key => state.definitions.has(key)).map(key => [key,state.definitions.get(key)]))) as [string,FeatureDefinitionModel][]),
+      features: structuredClone(Object.fromEntries(keys.map(key => [key,state.features[key]]))) as FeatureDefinitions,
+      definitions: new Map(structuredClone(keys.filter(key => state.definitions.has(key)).map(key => [key,state.definitions.get(key)])) as [string,FeatureDefinitionModel][]),
       local: isLocalEvaluation(), owner: {...config, groups: config.groups ? [...config.groups] : undefined, claims: {...config.claims}},
       gates: localGates.map(gate => ({...gate, flagKeys: [...gate.flagKeys]})), index: new Map(localGateIndex),
       record: runtime?.captureCheck?.() ?? (runtime?.usageEnabled ? runtime.recordCheck.bind(runtime) : undefined),
@@ -486,11 +506,7 @@ export function createTogglyClient(
 
     const local = isLocalEvaluation()
     const useVariants = !local && config.enableVariants === true
-    const endpoint = local
-      ? API_ENDPOINTS.definitionsSigned
-      : useVariants
-        ? API_ENDPOINTS.evaluatedVariantsSigned
-        : API_ENDPOINTS.evaluatedSigned
+    const endpoint = signedDefinitionsEndpoint(local, useVariants)
     // Frontend base queries are independent of the definitions pathname.
     // Keep trusted endpoint construction on its existing compatibility path.
     const fetchUrl = frontend ? new URL(config.baseUri) : new URL(
@@ -499,11 +515,11 @@ export function createTogglyClient(
     if (frontend) {
       // Only the current context owns the token; a configured URL cannot revive it.
       fetchUrl.searchParams.delete('i')
-      const path = local ? 'definitions-signed' : useVariants ? 'evaluated-variants-signed' : 'evaluated-signed'
-      fetchUrl.pathname = `${fetchUrl.pathname.replace(/\/$/, '')}/${path}/${config.appKey}/${config.environment}`
+      fetchUrl.pathname = `${fetchUrl.pathname.replace(/\/$/, '')}/${signedDefinitionsPath(local, useVariants)}/${config.appKey}/${config.environment}`
     }
     if (frontend && config.instanceId?.trim()) {
-      for (const key of [...fetchUrl.searchParams.keys()]) {
+      const targetingKeys = Array.from(fetchUrl.searchParams.keys())
+      for (const key of targetingKeys) {
         if (['i', 'u', 'userId', 'g'].includes(key) || key.startsWith('claim.')) fetchUrl.searchParams.delete(key)
       }
       fetchUrl.searchParams.set('i', config.instanceId.trim())
@@ -544,7 +560,7 @@ export function createTogglyClient(
       const responseRevision = normalizeRevision(extractDefinitionsRevision(response))
 
       if (response.status === 304) {
-        if (frontend && !hasSnapshot) throw Error('[Toggly] 304 without a matching snapshot')
+        if (frontend && !hasSnapshot) throw new Error('[Toggly] 304 without a matching snapshot')
         if (responseRevision) {
           cacheDefinitionsRevision(responseRevision)
         }
@@ -819,7 +835,7 @@ export function createTogglyClient(
   type ContextUpdate = Parameters<TogglyClient['setContext']>[0]
 
   function hasTargetingChanges(update: ContextUpdate): boolean {
-    const groupKey = (groups?: string[]) => JSON.stringify([...(groups ?? [])].sort((a, b) => a < b ? -1 : a > b ? 1 : 0))
+    const groupKey = (groups?: string[]) => JSON.stringify([...(groups ?? [])].sort((a, b) => a.localeCompare(b)))
     const groupsChanged = update.groups !== undefined && groupKey(update.groups) !== groupKey(config.groups)
     const claimsChanged = update.claims !== undefined && (
       Object.keys(update.claims).length !== Object.keys(config.claims ?? {}).length ||
@@ -1048,10 +1064,10 @@ export function createTogglyClient(
       if (!frontend) {
         const dataMaps = []
         for (const key of featureKeys) {
-          dataMaps.push({key, dataMap: await hookExecutor.executeBeforeEvaluation(key, config.featureDefaults?.[key])})
+          dataMaps.push({key, dataMap: await hookExecutor.executeBeforeEvaluation(key, config.featureDefaults?.[key])}) // NOSONAR typescript:S9382 sequential hooks
         }
         const checks = featureKeys.map(key => evaluateAndRecordCheck(key, entityContext, overrides))
-        const result = featureKeys.length === 0 ? true : requirement === 'any' ? checks.some(Boolean) : checks.every(Boolean)
+        const result = combineGateChecks(featureKeys, requirement, checks)
         for (const {key, dataMap} of dataMaps) {
           const keyResult = getEffectiveFlag(key, entityContext, overrides)
           hookExecutor.executeAfterEvaluation(key, dataMap, keyResult).catch(() => {})
@@ -1061,13 +1077,14 @@ export function createTogglyClient(
       if (selectedKeys.length === 0) return !negate
       let result = requirement !== 'any'
       for (const key of selectedKeys) {
-        const dataMap = await hookExecutor.executeBeforeEvaluation(
+        const dataMap = await hookExecutor.executeBeforeEvaluation( // NOSONAR typescript:S9382 sequential hooks
           key,
           (captured?.owner ?? config).featureDefaults?.[key],
         )
         const keyResult = evaluateAndRecordCheck(key, entityContext, overrides, captured)
         hookExecutor.executeAfterEvaluation(key, dataMap, keyResult).catch(() => {})
-        if (requirement === 'any' ? keyResult : !keyResult) {
+        const shouldStop = requirement === 'any' ? keyResult : !keyResult
+        if (shouldStop) {
           result = requirement === 'any'
           break
         }

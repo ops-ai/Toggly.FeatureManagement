@@ -2,8 +2,7 @@ import { getCurrentScope, onScopeDispose, ref, computed, watch, type Ref, type M
 import { useToggly } from './useToggly'
 import { evaluateGate, normalizeFeatureKeys } from '@ops-ai/nuxt-toggly-core/browser'
 import type { UseFeatureGateReturn, FeatureProps } from '../types'
-import type { FeatureRequirement } from '@ops-ai/nuxt-toggly-core/browser'
-import type { TogglyEntityContext } from '@ops-ai/nuxt-toggly-core/browser'
+import type { FeatureRequirement, TogglyEntityContext } from '@ops-ai/nuxt-toggly-core/browser'
 
 /**
  * Composable for evaluating multiple feature flags as a gate

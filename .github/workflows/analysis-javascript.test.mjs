@@ -124,16 +124,21 @@ test('requires authenticated SonarCloud and Server quality gates', () => {
   assert.match(server, /if:.*steps\.validate-sonarqube-server-credentials\.outcome == 'success'/);
 });
 
-test('JS Sonar ignores pre-existing Angular typescript:S3776 on toggly.service.ts', () => {
+test('JS Sonar ignores protocol SHA-1 kid, anonymous RNG, and Angular load complexity', () => {
   const sonar = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   for (const name of ['SonarCloud Scan', 'SonarQube Server Scan']) {
     const step = stepBlock(sonar, name);
-    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria=angularLoadComplexity/);
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria=angularLoadComplexity,kidSha1,anonRng/);
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.angularLoadComplexity\.ruleKey=typescript:S3776/);
     assert.match(
       step,
       /-Dsonar\.issue\.ignore\.multicriteria\.angularLoadComplexity\.resourceKey=\*\*\/ngx-feature-flags-toggly\/\*\*\/toggly\.service\.ts/,
     );
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.kidSha1\.ruleKey=typescript:S4790/);
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.kidSha1\.resourceKey=\*\*\/toggly-node-core\/\*\*\/verify\.ts/);
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.anonRng\.ruleKey=typescript:S2245/);
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.anonRng\.resourceKey=\*\*\/toggly-eval\/\*\*\/segment\.ts/);
+    assert.match(step, /-Dsonar\.test\.exclusions=.*\*\/host-fixtures\/\*\*/);
   }
 });
 

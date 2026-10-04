@@ -717,9 +717,14 @@ jobs:
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.SvelteKit,Toggly.FeatureManagement.Solid,Toggly.FeatureManagement.Astro,Toggly.FeatureManagement.Gatsby,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,Toggly.FeatureManagement.NestJS,toggly-eval,toggly-local-gates/src,toggly-hooks-types,toggly-signed-defs/src,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook,toggly-client-telemetry,tests
             -Dsonar.test.inclusions=Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs,toggly-client-telemetry/tests/**,toggly-docusaurus-edge-sdk/cloudflare/pages-function/tests/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/tests/**/*.cjs,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-express/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-hono/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-fastify/tests/packed-hosts.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-check.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-cleanup.test.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/host-resources.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-browser-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Astro/tests/**,Toggly.FeatureManagement.Gatsby/tests/**,tests/react-consumer-fixtures/**
-            -Dsonar.issue.ignore.multicriteria=angularLoadComplexity
+            -Dsonar.test.exclusions=**/host-fixtures/**,Toggly.FeatureManagement.Node/toggly-koa/tests/compat/fixtures/**,Toggly.FeatureManagement.Angular/scripts/**
+            -Dsonar.issue.ignore.multicriteria=angularLoadComplexity,kidSha1,anonRng
             -Dsonar.issue.ignore.multicriteria.angularLoadComplexity.ruleKey=typescript:S3776
             -Dsonar.issue.ignore.multicriteria.angularLoadComplexity.resourceKey=**/ngx-feature-flags-toggly/**/toggly.service.ts
+            -Dsonar.issue.ignore.multicriteria.kidSha1.ruleKey=typescript:S4790
+            -Dsonar.issue.ignore.multicriteria.kidSha1.resourceKey=**/toggly-node-core/**/verify.ts
+            -Dsonar.issue.ignore.multicriteria.anonRng.ruleKey=typescript:S2245
+            -Dsonar.issue.ignore.multicriteria.anonRng.resourceKey=**/toggly-eval/**/segment.ts
             -Dsonar.qualitygate.wait=true
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -756,10 +761,15 @@ jobs:
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.SvelteKit,Toggly.FeatureManagement.Solid,Toggly.FeatureManagement.Astro,Toggly.FeatureManagement.Gatsby,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,Toggly.FeatureManagement.NestJS,toggly-eval,toggly-local-gates/src,toggly-hooks-types,toggly-signed-defs/src,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook,toggly-client-telemetry,tests
             -Dsonar.test.inclusions=Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs,toggly-client-telemetry/tests/**,toggly-docusaurus-edge-sdk/cloudflare/pages-function/tests/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/tests/**/*.cjs,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-express/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-hono/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-fastify/tests/packed-hosts.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-check.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-cleanup.test.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/host-resources.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-browser-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Astro/tests/**,Toggly.FeatureManagement.Gatsby/tests/**,tests/react-consumer-fixtures/**
+            -Dsonar.test.exclusions=**/host-fixtures/**,Toggly.FeatureManagement.Node/toggly-koa/tests/compat/fixtures/**,Toggly.FeatureManagement.Angular/scripts/**
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
-            -Dsonar.issue.ignore.multicriteria=angularLoadComplexity
+            -Dsonar.issue.ignore.multicriteria=angularLoadComplexity,kidSha1,anonRng
             -Dsonar.issue.ignore.multicriteria.angularLoadComplexity.ruleKey=typescript:S3776
             -Dsonar.issue.ignore.multicriteria.angularLoadComplexity.resourceKey=**/ngx-feature-flags-toggly/**/toggly.service.ts
+            -Dsonar.issue.ignore.multicriteria.kidSha1.ruleKey=typescript:S4790
+            -Dsonar.issue.ignore.multicriteria.kidSha1.resourceKey=**/toggly-node-core/**/verify.ts
+            -Dsonar.issue.ignore.multicriteria.anonRng.ruleKey=typescript:S2245
+            -Dsonar.issue.ignore.multicriteria.anonRng.resourceKey=**/toggly-eval/**/segment.ts
             -Dsonar.qualitygate.wait=true
 
       - name: Report SonarQube Server quality gate
