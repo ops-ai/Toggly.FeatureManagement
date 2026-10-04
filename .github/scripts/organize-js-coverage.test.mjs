@@ -121,3 +121,15 @@ test('maps a named artifact using its folder when the bundled name is missing', 
     );
   });
 });
+
+test('skips named artifacts that have no LCOV report', async () => {
+  await withFixture({
+    'coverage-Client-Core/artifact-name.txt': 'coverage-Client-Core\n',
+    'coverage-Evaluator/artifact-name.txt': 'coverage-Evaluator\n',
+    'coverage-Evaluator/lcov.info': lcov('src/engine.ts'),
+  }, async ({ organizeCoverage, downloadDir, outputDir }) => {
+    await organizeCoverage({ downloadDir, outputDir });
+    assert.ok(existsSync(join(outputDir, 'Evaluator-lcov.info')));
+    assert.equal(existsSync(join(outputDir, 'Client-Core-lcov.info')), false);
+  });
+});

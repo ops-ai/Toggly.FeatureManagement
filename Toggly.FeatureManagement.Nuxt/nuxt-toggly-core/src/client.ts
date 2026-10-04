@@ -106,6 +106,13 @@ function combineGateChecks(
   return checks.every(Boolean)
 }
 
+function scrubTargetingQuery(fetchUrl: URL): void {
+  const targetingKeys = Array.from(fetchUrl.searchParams.keys())
+  for (const key of targetingKeys) {
+    if (['i', 'u', 'userId', 'g'].includes(key) || key.startsWith('claim.')) fetchUrl.searchParams.delete(key)
+  }
+}
+
 /**
  * Create a new Toggly client instance
  */
@@ -493,13 +500,6 @@ export function createTogglyClient(
     telemetry?.start()
   }
 
-  function scrubTargetingQuery(fetchUrl: URL): void {
-    const targetingKeys = Array.from(fetchUrl.searchParams.keys())
-    for (const key of targetingKeys) {
-      if (['i', 'u', 'userId', 'g'].includes(key) || key.startsWith('claim.')) fetchUrl.searchParams.delete(key)
-    }
-  }
-
   function buildDefinitionsUrl(local: boolean, useVariants: boolean, appKey: string): URL {
     const endpoint = signedDefinitionsEndpoint(local, useVariants)
     const fetchUrl = frontend ? new URL(config.baseUri) : new URL(
@@ -524,6 +524,18 @@ export function createTogglyClient(
       )
     }
     return fetchUrl
+  }
+
+  function rememberDefinitionsRevision(responseRevision: string | null): void {
+    if (frontend) cachedDefinitionsRevision = responseRevision
+    else if (responseRevision) cacheDefinitionsRevision(responseRevision)
+  }
+
+  function applyNotModifiedDefinitions(responseRevision: string | null): 'hit' {
+    if (frontend && !hasSnapshot) throw new Error('[Toggly] 304 without a matching snapshot')
+    if (responseRevision) cacheDefinitionsRevision(responseRevision)
+    saveSnapshot()
+    return 'hit'
   }
 
   function applyParsedDefinitions(local: boolean, useVariants: boolean, parsed: unknown): void {
@@ -585,12 +597,7 @@ export function createTogglyClient(
       const responseRevision = normalizeRevision(extractDefinitionsRevision(response))
 
       if (response.status === 304) {
-        if (frontend && !hasSnapshot) throw new Error('[Toggly] 304 without a matching snapshot')
-        if (responseRevision) {
-          cacheDefinitionsRevision(responseRevision)
-        }
-        saveSnapshot()
-        return 'hit'
+        return applyNotModifiedDefinitions(responseRevision)
       }
 
       if (!response.ok) {
@@ -610,9 +617,7 @@ export function createTogglyClient(
 
       assertCurrent(expected)
       applyParsedDefinitions(local, useVariants, parsed)
-
-      if (frontend) cachedDefinitionsRevision = responseRevision
-      else if (responseRevision) cacheDefinitionsRevision(responseRevision)
+      rememberDefinitionsRevision(responseRevision)
       saveSnapshot()
       return revisionsMatch(previousRevision, responseRevision) ? 'hit' : 'miss'
     } catch (error) {
