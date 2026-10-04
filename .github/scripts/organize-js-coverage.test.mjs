@@ -96,3 +96,16 @@ test('fails when an artifact name has no LCOV report', async () => {
     await assert.rejects(organizeCoverage({ downloadDir, outputDir }), /No LCOV reports/);
   });
 });
+
+test('uses the top-level LCOV when an artifact also has nested reports', async () => {
+  await withFixture({
+    'coverage-Gatsby/artifact-name.txt': 'coverage-Gatsby\n',
+    'coverage-Gatsby/lcov.info': lcov('src/utils/manifest-generator.ts'),
+    'coverage-Gatsby/tmp/lcov.info': lcov('src/ignored.ts'),
+  }, async ({ organizeCoverage, downloadDir, outputDir }) => {
+    await organizeCoverage({ downloadDir, outputDir });
+    const mapped = readFileSync(join(outputDir, 'Gatsby-lcov.info'), 'utf8');
+    assert.match(mapped, /^SF:Toggly\.FeatureManagement\.Gatsby\/src\/utils\/manifest-generator\.ts$/m);
+    assert.doesNotMatch(mapped, /ignored\.ts/);
+  });
+});

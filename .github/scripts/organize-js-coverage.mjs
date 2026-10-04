@@ -42,6 +42,16 @@ function lcovFiles(directory) {
   });
 }
 
+function preferredLcov(directory) {
+  const direct = join(directory, 'lcov.info');
+  if (existsSync(direct)) return direct;
+  const files = lcovFiles(directory);
+  if (files.length > 1) {
+    throw new Error(`Multiple LCOV reports in ${directory}`);
+  }
+  return files[0] ?? null;
+}
+
 export async function organizeCoverage({
   downloadDir = 'coverage-artifacts',
   outputDir = 'coverage',
@@ -50,17 +60,13 @@ export async function organizeCoverage({
   if (files.length === 0) throw new Error('No LCOV reports were downloaded');
 
   const flatFile = files.find(file => relative(downloadDir, file) === 'lcov.info');
-  if (flatFile && files.length !== 1) {
+  const namedDirs = readdirSync(downloadDir, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => join(downloadDir, entry.name));
+  if (flatFile && namedDirs.length > 0) {
     throw new Error('Flattened and named coverage artifacts cannot be combined');
   }
-  const artifactDirs = flatFile
-    ? [downloadDir]
-    : readdirSync(downloadDir, { withFileTypes: true })
-      .filter(entry => entry.isDirectory())
-      .map(entry => join(downloadDir, entry.name));
-  if (artifactDirs.length !== files.length) {
-    throw new Error('Each coverage artifact must contain exactly one LCOV report');
-  }
+  const artifactDirs = flatFile ? [downloadDir] : namedDirs;
 
   const reports = new Map();
   for (const directory of artifactDirs) {
@@ -75,7 +81,7 @@ export async function organizeCoverage({
     const prefix = SDK_PATHS[sdkName];
     if (reports.has(sdkName)) throw new Error(`Duplicate LCOV report for ${sdkName}`);
 
-    const [file] = lcovFiles(directory);
+    const file = preferredLcov(directory);
     if (!file) throw new Error(`Missing LCOV report for ${artifactName}`);
     const content = readFileSync(file, 'utf8');
     if (!content.split('\n').some(line => line.startsWith('SF:') && line.slice(3).trim())) {

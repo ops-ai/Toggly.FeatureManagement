@@ -41,6 +41,9 @@ test('Nuxt Sonar scans fail closed on missing credentials, scanner errors, and f
     step(sonar, 'SonarQube Server Scan'),
     /if: \$\{\{ \(success\(\) \|\| failure\(\)\) && steps\.validate-sonarqube-server-credentials\.outcome == 'success' \}\}/,
   );
+  const report = step(sonar, 'Report SonarQube Server quality gate');
+  assert.match(report, /projectKey=toggly-sdks-nuxt/);
+  assert.match(report, /Open issues:/);
 });
 
 function reportingIsSkipped(serializedRunReportingInput) {
