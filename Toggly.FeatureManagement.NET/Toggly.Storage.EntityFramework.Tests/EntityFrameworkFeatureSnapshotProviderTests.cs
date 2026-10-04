@@ -10,6 +10,9 @@ namespace Toggly.Storage.EntityFramework.Tests;
 
 public class EntityFrameworkFeatureSnapshotProviderTests : IAsyncLifetime
 {
+    private static readonly IReadOnlyList<string> ExpectedMetrics =
+        Array.AsReadOnly(new[] { "metric1", "metric2" });
+
     private TogglyEntities _context = null!;
     private EntityFrameworkFeatureSnapshotProvider _provider = null!;
     private IOptions<TogglySnapshotSettings> _settings = null!;
@@ -238,7 +241,7 @@ public class EntityFrameworkFeatureSnapshotProviderTests : IAsyncLifetime
         retrieved![0].FeatureKey.Should().Be("complex-feature");
         retrieved[0].SecuredFeature.Should().BeTrue();
         retrieved[0].RequirementType.Should().Be(Microsoft.FeatureManagement.RequirementType.All);
-        retrieved[0].Metrics.Should().BeEquivalentTo(new[] { "metric1", "metric2" });
+        retrieved[0].Metrics.Should().BeEquivalentTo(ExpectedMetrics);
         retrieved[0].Filters.Should().HaveCount(1);
         retrieved[0].Filters[0].Name.Should().Be("Percentage");
     }
