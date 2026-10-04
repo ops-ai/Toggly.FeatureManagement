@@ -1,0 +1,76 @@
+.\" Generated from Docs/command-catalog.json — do not edit by hand.
+.\" Regenerate: ./Toggly.CLI/scripts/generate-manpages.py
+.TH TOGGLY-MIGRATE 1 "2026-10-03" "Toggly CLI" "User Commands"
+.SH NAME
+toggly-migrate \- Import feature flags from other platforms into Toggly
+.SH SYNOPSIS
+toggly\-cli migrate <command>
+.SH DESCRIPTION
+Import feature flags from other platforms into Toggly
+.SS unleash
+Import an Unleash export or Admin API feature list into a Toggly app and
+environment\&. Default is dry\-run (compatibility report only); pass \-\-apply
+to create missing features and set environment filters\&.
+.PP
+.B toggly\-cli migrate unleash \-\-file <path> \-\-app <appId> \-\-environment <env> [\-\-dry\-run] [\-\-apply]
+.SH OPTIONS
+Options for migrate unleash:
+.TP
+.B \-\-file
+Path to Unleash export JSON (or Admin API features payload)
+.TP
+.B \-\-app, \-\-application\-id
+Application id (or set via 'toggly context set \-\-app')
+.TP
+.B \-\-environment, \-\-env
+Toggly environment to import into (also selects Unleash environment slices
+when present)
+.TP
+.B \-\-dry\-run
+Parse and print a compatibility report without API mutations (default when
+\-\-apply is omitted)
+.TP
+.B \-\-apply
+Create missing features and set environment filters via the Toggly API (does
+not require a prior dry\-run)
+.PP
+Global options (all commands):
+.TP
+.B \-\-client\-id
+OAuth2 client ID (or set TOGGLY_CLIENT_ID)
+.TP
+.B \-\-client\-secret
+OAuth2 client secret (or set TOGGLY_CLIENT_SECRET)
+.TP
+.B \-\-authority
+OAuth2 authority URL (defaults to https://auth\&.toggly\&.io)
+.TP
+.B \-\-base\-url
+Base URL for Toggly API (defaults to https://app\&.toggly\&.io/api)
+.TP
+.B \-\-verbose
+Enable verbose output
+.TP
+.B \-\-json
+Emit machine\-readable camelCase JSON instead of human text
+.SH EXAMPLES
+.B toggly\-cli migrate unleash \-\-file export\&.json \-\-app <app\-id>
+.B \-\-env Production
+.PP
+.B toggly\-cli migrate unleash \-\-file export\&.json \-\-app <app\-id>
+.B \-\-env Production \-\-apply
+.SH EXIT STATUS
+.TP
+.B 0
+Success
+.TP
+.B 1
+Runtime or API error (including HTTP 404)
+.TP
+.B 2
+Usage, validation, missing auth, or missing \-\-app/\-\-env when no context
+default is set
+.SH SEE ALSO
+toggly\-feature(1), toggly\-app(1), toggly(1).
+.SH ONLINE DOCS
+https://docs\&.toggly\&.io/sdks/cli

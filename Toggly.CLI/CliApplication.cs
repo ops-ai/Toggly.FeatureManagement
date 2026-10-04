@@ -76,6 +76,7 @@ public static class CliApplication
         rootCommand.AddCommand(EnvCommands.Create(apiClientFactory, cli));
         rootCommand.AddCommand(FeatureCommands.CreateNoun(apiClientFactory, cli));
         rootCommand.AddCommand(ReleaseCommands.CreateNoun(apiClientFactory, cli));
+        rootCommand.AddCommand(MigrateCommands.Create(apiClientFactory, cli));
         rootCommand.AddCommand(ContextCommands.Create(cli));
 
         // Flat write aliases (deprecation window)
