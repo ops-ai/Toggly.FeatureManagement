@@ -6,6 +6,8 @@
 - Dashboard conflict pages now generate reload links from the configured
   routes, so nested mounts, host path bases, and encoded feature keys open
   the current catalog or feature correctly.
+- Dashboard packages no longer include generated development reports as
+  application content.
 
 ## All .NET SDK packages 3.12.7 - 2026-10-03
 
