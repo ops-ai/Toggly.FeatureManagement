@@ -11,6 +11,7 @@
     <PackageId>Toggly.FeatureManagement.Dashboard</PackageId>
     <Description>Offline embedded feature-management dashboard for Toggly.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <DefaultItemExcludes>$(DefaultItemExcludes);coverage/**</DefaultItemExcludes>
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
