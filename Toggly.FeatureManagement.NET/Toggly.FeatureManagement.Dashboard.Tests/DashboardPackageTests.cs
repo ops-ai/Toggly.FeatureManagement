@@ -26,6 +26,7 @@ public sealed class DashboardPackageTests
                 UseShellExecute = false,
                 WorkingDirectory = sdkRoot
             };
+            start.Environment["MSBUILDDISABLENODEREUSE"] = "1";
             foreach (var argument in new[] { "pack", Path.Combine(project, "Toggly.FeatureManagement.Dashboard.csproj"),
                          "-c", "Release", "--no-build", "--no-restore", "-o", output })
                 start.ArgumentList.Add(argument);
