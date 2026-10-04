@@ -357,6 +357,29 @@ describe('Angular frontend telemetry', () => {
     localStorage.setItem((variants as any)._flagsCacheKey,JSON.stringify({On:true}));
     expect((variants as any)._definitionsRevision).toBeNull();
   });
+  it('normalizes revision headers on 200 and 304 in bounded time', async () => {
+    const interior = `x${'"'.repeat(80_000)}x`;
+    const revisions: Array<string | null> = [];
+    (globalThis.fetch as jasmine.Spy).and.callFake(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      revisions.push(new Headers(init?.headers).get('If-None-Match'));
+      return revisions.length === 1
+        ? new Response(JSON.stringify({ On: true }), { status: 200, headers: { ETag: `""${interior}""` } })
+        : new Response(null, { status: 304, headers: { ETag: revisions.length === 2 ? '"""next"""' : 'next' } });
+    });
+    const service = create({ persistCache: true, enableTelemetry: false });
+
+    const started = performance.now();
+    expect(await service.isFeatureOn('On')).toBeTrue();
+    expect(performance.now() - started).toBeLessThan(750);
+
+    await service.setContext({});
+    expect(await service.isFeatureOn('On')).toBeTrue();
+    await service.setContext({});
+    expect(revisions).toHaveSize(3);
+    expect(revisions[0]).toBeNull();
+    expect(revisions[1] === interior).toBeTrue();
+    expect(revisions[2]).toBe('next');
+  });
   for (const context of [{instanceId:'mint-a'}, {identity:'legacy-user'}]) {
     it(`keeps both response-mode bodies paired with their revisions across reload and 304 (${Object.keys(context)[0]})`, async () => {
       const requests: Array<{mode:string,revision:string|null}> = [];
