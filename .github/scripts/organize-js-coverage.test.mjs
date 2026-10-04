@@ -109,3 +109,15 @@ test('uses the top-level LCOV when an artifact also has nested reports', async (
     assert.doesNotMatch(mapped, /ignored\.ts/);
   });
 });
+
+test('maps a named artifact using its folder when the bundled name is missing', async () => {
+  await withFixture({
+    'coverage-Angular/lcov.info': lcov('src/lib/toggly.service.ts'),
+  }, async ({ organizeCoverage, downloadDir, outputDir }) => {
+    await organizeCoverage({ downloadDir, outputDir });
+    assert.match(
+      readFileSync(join(outputDir, 'Angular-lcov.info'), 'utf8'),
+      /^SF:Toggly\.FeatureManagement\.Angular\/src\/lib\/toggly\.service\.ts$/m,
+    );
+  });
+});

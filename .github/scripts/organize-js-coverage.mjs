@@ -71,10 +71,11 @@ export async function organizeCoverage({
   const reports = new Map();
   for (const directory of artifactDirs) {
     const marker = join(directory, 'artifact-name.txt');
-    if (!existsSync(marker)) throw new Error(`Missing artifact name in ${directory}`);
-    const artifactName = readFileSync(marker, 'utf8').trim();
-    if (!flatFile && artifactName !== relative(downloadDir, directory)) {
-      throw new Error(`Artifact name ${artifactName} does not match ${relative(downloadDir, directory)}`);
+    const fallbackName = relative(downloadDir, directory);
+    if (flatFile && !existsSync(marker)) throw new Error(`Missing artifact name in ${directory}`);
+    const artifactName = existsSync(marker) ? readFileSync(marker, 'utf8').trim() : fallbackName;
+    if (!flatFile && artifactName !== fallbackName) {
+      throw new Error(`Artifact name ${artifactName} does not match ${fallbackName}`);
     }
     const sdkName = artifactName.startsWith('coverage-') ? artifactName.slice('coverage-'.length) : '';
     if (!Object.hasOwn(SDK_PATHS, sdkName)) throw new Error(`Unknown coverage artifact: ${artifactName}`);

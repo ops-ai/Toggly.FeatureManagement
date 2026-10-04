@@ -493,6 +493,64 @@ export function createTogglyClient(
     telemetry?.start()
   }
 
+  function scrubTargetingQuery(fetchUrl: URL): void {
+    const targetingKeys = Array.from(fetchUrl.searchParams.keys())
+    for (const key of targetingKeys) {
+      if (['i', 'u', 'userId', 'g'].includes(key) || key.startsWith('claim.')) fetchUrl.searchParams.delete(key)
+    }
+  }
+
+  function buildDefinitionsUrl(local: boolean, useVariants: boolean, appKey: string): URL {
+    const endpoint = signedDefinitionsEndpoint(local, useVariants)
+    const fetchUrl = frontend ? new URL(config.baseUri) : new URL(
+      endpoint(config.baseUri, appKey, config.environment)
+    )
+    if (frontend) {
+      fetchUrl.searchParams.delete('i')
+      fetchUrl.pathname = `${fetchUrl.pathname.replace(/\/$/, '')}/${signedDefinitionsPath(local, useVariants)}/${appKey}/${config.environment}`
+    }
+    if (frontend && config.instanceId?.trim()) {
+      scrubTargetingQuery(fetchUrl)
+      fetchUrl.searchParams.set('i', config.instanceId.trim())
+    } else if (!local) {
+      appendEvaluationContext(
+        fetchUrl,
+        {
+          identity: config.identity,
+          groups: config.groups,
+          claims: config.claims,
+        },
+        useVariants ? 'variants' : 'evaluated',
+      )
+    }
+    return fetchUrl
+  }
+
+  function applyParsedDefinitions(local: boolean, useVariants: boolean, parsed: unknown): void {
+    if (local) {
+      state.variants = null
+      applyLocalDefinitions(parseDefinitionsPayload(parsed))
+      return
+    }
+    state.definitions = new Map()
+    if (useVariants) {
+      const variantDefs = parseVariantDefsPayload(parsed)
+      state.variants = variantDefs
+      state.features = {
+        ...config.featureDefaults,
+        ...variantDefsToFlags(variantDefs),
+      }
+      return
+    }
+    state.variants = null
+    state.features = {
+      ...config.featureDefaults,
+      ...parseRemoteEvaluatedPayload(parsed, {
+        verifySignatures: config.verifySignatures,
+      }),
+    }
+  }
+
   /**
    * Fetch feature definitions from the API.
    * Returns whether this attempt applied a new revision (miss) or reused cache (hit).
@@ -506,40 +564,9 @@ export function createTogglyClient(
 
     const local = isLocalEvaluation()
     const useVariants = !local && config.enableVariants === true
-    const endpoint = signedDefinitionsEndpoint(local, useVariants)
-    // Frontend base queries are independent of the definitions pathname.
-    // Keep trusted endpoint construction on its existing compatibility path.
-    const fetchUrl = frontend ? new URL(config.baseUri) : new URL(
-      endpoint(config.baseUri, config.appKey, config.environment)
-    )
-    if (frontend) {
-      // Only the current context owns the token; a configured URL cannot revive it.
-      fetchUrl.searchParams.delete('i')
-      fetchUrl.pathname = `${fetchUrl.pathname.replace(/\/$/, '')}/${signedDefinitionsPath(local, useVariants)}/${config.appKey}/${config.environment}`
-    }
-    if (frontend && config.instanceId?.trim()) {
-      const targetingKeys = Array.from(fetchUrl.searchParams.keys())
-      for (const key of targetingKeys) {
-        if (['i', 'u', 'userId', 'g'].includes(key) || key.startsWith('claim.')) fetchUrl.searchParams.delete(key)
-      }
-      fetchUrl.searchParams.set('i', config.instanceId.trim())
-    }
-    else if (!local) {
-      appendEvaluationContext(
-        fetchUrl,
-        {
-          identity: config.identity,
-          groups: config.groups,
-          claims: config.claims,
-        },
-        useVariants ? 'variants' : 'evaluated',
-      )
-    }
     const pin = pendingDefinitionsPin
     pendingDefinitionsPin = null
-    const url = appendDefinitionsRevisionParam(fetchUrl.toString(), pin)
-
-    // Pin forces a cache-proof GET; do not treat prior etag as still current.
+    const url = appendDefinitionsRevisionParam(buildDefinitionsUrl(local, useVariants, config.appKey).toString(), pin)
     const previousRevision = pin ? null : getDefinitionsRevision()
     const headers = buildDefinitionFetchHeaders({
       'Content-Type': 'application/json',
@@ -548,8 +575,6 @@ export function createTogglyClient(
     })
 
     try {
-      // Bypass HTTP caches: evaluated bodies can change under the same storage
-      // revision (identity / groups / claims).
       const response = await fetch(url, {
         method: 'GET',
         headers,
@@ -572,10 +597,6 @@ export function createTogglyClient(
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
 
-      // Always parse/apply the body on HTTP 200. Equal revision is still a cache
-      // hit (definition revision unchanged), but remote evaluated payloads can
-      // differ by identity for the same revision — skipping the body would leave
-      // defaults / stale evaluated flags.
       const bodyText = await readResponseBody(response)
       const parsed = await parseEvaluatedResponseBody(bodyText, {
         verifySignatures: config.verifySignatures,
@@ -588,32 +609,11 @@ export function createTogglyClient(
       })
 
       assertCurrent(expected)
-      if (local) {
-        state.variants = null
-        applyLocalDefinitions(parseDefinitionsPayload(parsed))
-      } else if (useVariants) {
-        state.definitions = new Map()
-        const variantDefs = parseVariantDefsPayload(parsed)
-        state.variants = variantDefs
-        state.features = {
-          ...config.featureDefaults,
-          ...variantDefsToFlags(variantDefs),
-        }
-      } else {
-        state.definitions = new Map()
-        state.variants = null
-        state.features = {
-          ...config.featureDefaults,
-          ...parseRemoteEvaluatedPayload(parsed, {
-            verifySignatures: config.verifySignatures,
-          }),
-        }
-      }
+      applyParsedDefinitions(local, useVariants, parsed)
 
       if (frontend) cachedDefinitionsRevision = responseRevision
       else if (responseRevision) cacheDefinitionsRevision(responseRevision)
       saveSnapshot()
-      // Same revision → hit (CDN replay / identity-scoped re-eval); new → miss.
       return revisionsMatch(previousRevision, responseRevision) ? 'hit' : 'miss'
     } catch (error) {
       assertCurrent(expected)
@@ -861,6 +861,50 @@ export function createTogglyClient(
     notifyFeaturesRefresh()
   }
 
+  async function evaluateTrustedFeatureGate(
+    featureKeys: string[],
+    requirement: FeatureRequirement,
+    entityContext: ReturnType<typeof normalizeEntityContext>,
+    overrides?: EvalContextArg,
+  ): Promise<boolean> {
+    const dataMaps = []
+    for (const key of featureKeys) {
+      dataMaps.push({key, dataMap: await hookExecutor.executeBeforeEvaluation(key, config.featureDefaults?.[key])}) // NOSONAR typescript:S9382 sequential hooks
+    }
+    const checks = featureKeys.map(key => evaluateAndRecordCheck(key, entityContext, overrides))
+    const result = combineGateChecks(featureKeys, requirement, checks)
+    for (const {key, dataMap} of dataMaps) {
+      const keyResult = getEffectiveFlag(key, entityContext, overrides)
+      hookExecutor.executeAfterEvaluation(key, dataMap, keyResult).catch(() => {})
+    }
+    return result
+  }
+
+  async function evaluateBrowserFeatureGate(
+    selectedKeys: string[],
+    requirement: FeatureRequirement,
+    entityContext: ReturnType<typeof normalizeEntityContext>,
+    overrides: EvalContextArg | undefined,
+    captured: ReturnType<typeof captureEvaluation> | undefined,
+  ): Promise<boolean> {
+    if (selectedKeys.length === 0) return true
+    let result = requirement !== 'any'
+    for (const key of selectedKeys) {
+      const dataMap = await hookExecutor.executeBeforeEvaluation( // NOSONAR typescript:S9382 sequential hooks
+        key,
+        (captured?.owner ?? config).featureDefaults?.[key],
+      )
+      const keyResult = evaluateAndRecordCheck(key, entityContext, overrides, captured)
+      hookExecutor.executeAfterEvaluation(key, dataMap, keyResult).catch(() => {})
+      const shouldStop = requirement === 'any' ? keyResult : !keyResult
+      if (shouldStop) {
+        result = requirement === 'any'
+        break
+      }
+    }
+    return result
+  }
+
   const client: TogglyClient = {
     get state() {
       return { ...state }
@@ -1060,35 +1104,9 @@ export function createTogglyClient(
       const selectedKeys = frontend ? [...featureKeys] : featureKeys
       const captured = frontend ? captureEvaluation(selectedKeys) : undefined
       const entityContext = normalizeEntityContext(context, kind)
-
-      if (!frontend) {
-        const dataMaps = []
-        for (const key of featureKeys) {
-          dataMaps.push({key, dataMap: await hookExecutor.executeBeforeEvaluation(key, config.featureDefaults?.[key])}) // NOSONAR typescript:S9382 sequential hooks
-        }
-        const checks = featureKeys.map(key => evaluateAndRecordCheck(key, entityContext, overrides))
-        const result = combineGateChecks(featureKeys, requirement, checks)
-        for (const {key, dataMap} of dataMaps) {
-          const keyResult = getEffectiveFlag(key, entityContext, overrides)
-          hookExecutor.executeAfterEvaluation(key, dataMap, keyResult).catch(() => {})
-        }
-        return negate ? !result : result
-      }
-      if (selectedKeys.length === 0) return !negate
-      let result = requirement !== 'any'
-      for (const key of selectedKeys) {
-        const dataMap = await hookExecutor.executeBeforeEvaluation( // NOSONAR typescript:S9382 sequential hooks
-          key,
-          (captured?.owner ?? config).featureDefaults?.[key],
-        )
-        const keyResult = evaluateAndRecordCheck(key, entityContext, overrides, captured)
-        hookExecutor.executeAfterEvaluation(key, dataMap, keyResult).catch(() => {})
-        const shouldStop = requirement === 'any' ? keyResult : !keyResult
-        if (shouldStop) {
-          result = requirement === 'any'
-          break
-        }
-      }
+      const result = frontend
+        ? await evaluateBrowserFeatureGate(selectedKeys, requirement, entityContext, overrides, captured)
+        : await evaluateTrustedFeatureGate(featureKeys, requirement, entityContext, overrides)
       return negate ? !result : result
     },
 
