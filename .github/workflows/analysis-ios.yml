@@ -243,6 +243,13 @@ jobs:
           grep '^SF:' sonar-reports/coverage.lcov | head -20 || true
         continue-on-error: true
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: Toggly.FeatureManagement.iOS/TogglyCore/Sources/TogglyCore.swift
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
@@ -253,6 +260,7 @@ jobs:
           projectBaseDir: ${{ env.SDK_ROOT }}
           args: >
             -Dsonar.projectKey=toggly-sdks-ios
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - iOS"
             -Dsonar.sources=TogglyCore/Sources,TogglySwiftUI/Sources,TogglyUIKit/Sources,TogglyCombine/Sources
@@ -274,6 +282,7 @@ jobs:
           projectBaseDir: ${{ env.SDK_ROOT }}
           args: >
             -Dsonar.projectKey=toggly-sdks-ios
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - iOS"
             -Dsonar.language=swift
             -Dsonar.sources=TogglyCore/Sources,TogglySwiftUI/Sources,TogglyUIKit/Sources,TogglyCombine/Sources

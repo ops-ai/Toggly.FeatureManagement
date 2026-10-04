@@ -669,6 +669,13 @@ jobs:
       - name: Organize coverage files
         run: node .github/scripts/organize-js-coverage.mjs
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: Toggly.FeatureManagement.Javascript/feature_flags_toggly/package.json
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: Validate SonarCloud credentials
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -683,6 +690,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-javascript
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - JavaScript/TypeScript"
             -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.SvelteKit,Toggly.FeatureManagement.Solid,Toggly.FeatureManagement.Astro,Toggly.FeatureManagement.Gatsby,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,Toggly.FeatureManagement.NestJS,toggly-eval,toggly-local-gates/src,toggly-hooks-types,toggly-signed-defs/src,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook,toggly-client-telemetry
@@ -730,6 +738,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-javascript
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - JavaScript/TypeScript"
             -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.SvelteKit,Toggly.FeatureManagement.Solid,Toggly.FeatureManagement.Astro,Toggly.FeatureManagement.Gatsby,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,Toggly.FeatureManagement.NestJS,toggly-eval,toggly-local-gates/src,toggly-hooks-types,toggly-signed-defs/src,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook,toggly-client-telemetry
             -Dsonar.exclusions=Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs,**/host-fixtures/**,toggly-hooks-types/reference/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/test-setup.ts,toggly-client-telemetry/tests/**,toggly-client-telemetry/scripts/**,toggly-docusaurus-edge-sdk/cloudflare/pages-function/tests/**,toggly-docusaurus-edge-sdk/cloudflare/pages-function/scripts/**,Toggly.FeatureManagement.SvelteKit/tests/**,Toggly.FeatureManagement.SvelteKit/scripts/**,**/node_modules/**,**/dist/**,**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/tests/**/*.cjs,**/coverage/**,**/*.config.js,**/*.config.ts,**/*.conf.js,Toggly.FeatureManagement.ReactNative/**,Toggly.FeatureManagement.React/scripts/**,toggly-docusaurus-edge-sdk/libs/core/tests/**,Toggly.FeatureManagement.Next/**,Toggly.FeatureManagement.Nuxt/**,Toggly.FeatureManagement.Remix/**,Toggly.FeatureManagement.Css/**,Toggly.FeatureManagement.Wordpress/**,toggly-ruby/**,toggly-rust/**,Toggly.FeatureManagement.Node/eslint.config.mjs,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-koa/tests/compat/fixtures/**,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-check.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-cleanup.test.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/host-resources.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-browser-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Astro/tests/**,Toggly.FeatureManagement.Gatsby/tests/**

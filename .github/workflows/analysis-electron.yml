@@ -101,6 +101,13 @@ jobs:
           ls -la coverage/ || echo "No coverage files found"
         continue-on-error: true
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: Toggly.FeatureManagement.Electron/package.json
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
@@ -110,6 +117,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-electron
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Electron"
             -Dsonar.sources=Toggly.FeatureManagement.Electron/src
@@ -136,6 +144,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-electron
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - Electron"
             -Dsonar.sources=Toggly.FeatureManagement.Electron/src
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts

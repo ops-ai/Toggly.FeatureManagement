@@ -181,6 +181,13 @@ jobs:
           ls -la coverage/ || true
         continue-on-error: true
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: Toggly.FeatureManagement.ReactRouter/react-router-toggly/package.json
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
@@ -190,6 +197,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-react-router
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - React Router"
             -Dsonar.sources=${{ env.SDK_ROOT }}/${{ env.PKG }}/src
@@ -215,6 +223,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-react-router
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - React Router"
             -Dsonar.sources=${{ env.SDK_ROOT }}/${{ env.PKG }}/src
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs,**/tests/**/*.cjs,**/*.config.js,**/*.config.ts,**/fixtures/**

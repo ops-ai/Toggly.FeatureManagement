@@ -203,6 +203,13 @@ jobs:
           name: java-coverage
           path: coverage-artifacts/
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: Toggly.FeatureManagement.Java/pom.xml
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: Build and run SonarCloud analysis
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -211,6 +218,7 @@ jobs:
           test -n "${SONAR_TOKEN}" || { echo "SonarCloud token is required"; exit 1; }
           mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:5.5.0.6356:sonar \
             -Dsonar.projectKey=toggly-sdks-java \
+            -Dsonar.projectVersion="${{ steps.sonar_version.outputs.version }}" \
             -Dsonar.organization=ops-ai \
             -Dsonar.projectName="Toggly SDKs - Java" \
             -Dsonar.host.url=https://sonarcloud.io \
@@ -240,6 +248,7 @@ jobs:
           test -n "${SONAR_SERVER_TOKEN}" && test -n "${SONAR_HOST_URL}" || { echo "SonarQube Server credentials are required"; exit 1; }
           mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:5.5.0.6356:sonar \
             -Dsonar.projectKey=toggly-sdks-java \
+            -Dsonar.projectVersion="${{ steps.sonar_version.outputs.version }}" \
             -Dsonar.projectName="Toggly SDKs - Java" \
             -Dsonar.host.url="${SONAR_HOST_URL}" \
             -Dsonar.token="${SONAR_SERVER_TOKEN}" \

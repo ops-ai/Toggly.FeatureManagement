@@ -180,6 +180,13 @@ jobs:
             echo "test-results.xml not found, skipping normalization"
           fi
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: Toggly.FeatureManagement.PHP/composer.json
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
@@ -189,6 +196,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-php
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - PHP"
             -Dsonar.sources=Toggly.FeatureManagement.PHP/src
@@ -213,6 +221,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-php
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - PHP"
             -Dsonar.sources=Toggly.FeatureManagement.PHP/src
             -Dsonar.tests=Toggly.FeatureManagement.PHP/tests
