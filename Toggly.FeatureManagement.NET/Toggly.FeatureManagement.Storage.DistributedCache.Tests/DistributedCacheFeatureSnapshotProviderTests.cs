@@ -40,6 +40,16 @@ public class DistributedCacheFeatureSnapshotProviderTests
     }
 
     [Fact]
+    public async Task GetFeaturesSnapshotAsync_ReturnsNull_WhenCacheContainsJsonNull()
+    {
+        var cache = CreateCache();
+        await cache.SetAsync("FeatureSnapshots", System.Text.Encoding.UTF8.GetBytes("null"), new DistributedCacheEntryOptions());
+        var provider = CreateProvider(cache);
+
+        (await provider.GetFeaturesSnapshotAsync()).Should().BeNull();
+    }
+
+    [Fact]
     public async Task GetFeaturesSnapshotAsync_ReturnsFeatures_WhenCacheHasData()
     {
         // Arrange
@@ -57,6 +67,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
         var result = await provider.GetFeaturesSnapshotAsync();
 
         // Assert
+        Assert.NotNull(result);
         result.Features.Should().HaveCount(2);
         result.Features![0].FeatureKey.Should().Be("feature1");
         result.Features[1].FeatureKey.Should().Be("feature2");
@@ -83,6 +94,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
         var result = await provider2.GetFeaturesSnapshotAsync();
 
         // Assert
+        Assert.NotNull(result);
         result.Features.Should().HaveCount(1);
         result.Features![0].FeatureKey.Should().Be("default-doc-test");
     }
@@ -111,6 +123,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
 
         // Assert
         defaultResult.Should().BeNull();
+        Assert.NotNull(customResult);
         customResult.Features.Should().HaveCount(1);
         customResult.Features![0].FeatureKey.Should().Be("custom-doc-feature");
     }
@@ -150,6 +163,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
 
         // Assert
         var result = await provider.GetFeaturesSnapshotAsync();
+        Assert.NotNull(result);
         result.Features.Should().HaveCount(1);
         result.Features![0].FeatureKey.Should().Be("stored-feature");
         result.Features[0].SecuredFeature.Should().BeTrue();
@@ -177,6 +191,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
 
         // Assert
         var result = await provider.GetFeaturesSnapshotAsync();
+        Assert.NotNull(result);
         result.Features.Should().HaveCount(2);
         result.Features![0].FeatureKey.Should().Be("updated1");
         result.Signature.Should().Be("sig2");
@@ -199,6 +214,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
 
         // Assert
         var result = await provider.GetFeaturesSnapshotAsync();
+        Assert.NotNull(result);
         result.Features.Should().HaveCount(1);
         result.Signature.Should().BeNull();
         result.KeyId.Should().BeNull();
@@ -244,6 +260,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
 
         // Assert
         var result = await provider.GetFeaturesSnapshotAsync();
+        Assert.NotNull(result);
         result.Features.Should().HaveCount(1);
         var feature = result.Features![0];
         feature.FeatureKey.Should().Be("complex-feature");
@@ -269,6 +286,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
 
         // Assert
         var result = await provider.GetFeaturesSnapshotAsync();
+        Assert.NotNull(result);
         result.Features.Should().HaveCount(1);
     }
 
@@ -317,9 +335,10 @@ public class DistributedCacheFeatureSnapshotProviderTests
         var result = await provider.GetJwkSnapshotAsync();
 
         // Assert
-        result.Jwks.Should().NotBeNull();
-        result.Jwks!.Keys.Should().HaveCount(1);
-        result.Jwks.Keys[0].Kid.Should().Be("key1");
+        var loadedJwks = Assert.IsType<JsonWebKeySet>(result.Jwks);
+        var keys = Assert.IsType<List<JsonWebKey>>(loadedJwks.Keys);
+        keys.Should().HaveCount(1);
+        keys[0].Kid.Should().Be("key1");
         result.Timestamp.Should().Be(timestamp);
     }
 
@@ -351,8 +370,9 @@ public class DistributedCacheFeatureSnapshotProviderTests
 
         // Assert
         defaultResult.Jwks.Should().BeNull();
-        customResult.Jwks.Should().NotBeNull();
-        customResult.Jwks!.Keys[0].Kid.Should().Be("custom-jwk");
+        var loadedJwks = Assert.IsType<JsonWebKeySet>(customResult.Jwks);
+        var keys = Assert.IsType<List<JsonWebKey>>(loadedJwks.Keys);
+        keys[0].Kid.Should().Be("custom-jwk");
     }
 
     [Fact]
@@ -401,9 +421,10 @@ public class DistributedCacheFeatureSnapshotProviderTests
 
         // Assert
         var result = await provider.GetJwkSnapshotAsync();
-        result.Jwks.Should().NotBeNull();
-        result.Jwks!.Keys.Should().HaveCount(1);
-        var key = result.Jwks.Keys[0];
+        var loadedJwks = Assert.IsType<JsonWebKeySet>(result.Jwks);
+        var keys = Assert.IsType<List<JsonWebKey>>(loadedJwks.Keys);
+        keys.Should().HaveCount(1);
+        var key = keys[0];
         key.Kid.Should().Be("stored-key");
         key.Kty.Should().Be("EC");
         key.Crv.Should().Be("P-256");
@@ -441,8 +462,10 @@ public class DistributedCacheFeatureSnapshotProviderTests
 
         // Assert
         var result = await provider.GetJwkSnapshotAsync();
-        result.Jwks!.Keys.Should().HaveCount(2);
-        result.Jwks.Keys[0].Kid.Should().Be("updated-key-1");
+        var loadedJwks = Assert.IsType<JsonWebKeySet>(result.Jwks);
+        var keys = Assert.IsType<List<JsonWebKey>>(loadedJwks.Keys);
+        keys.Should().HaveCount(2);
+        keys[0].Kid.Should().Be("updated-key-1");
         result.Timestamp.Should().Be(futureTimestamp + 3600);
     }
 
@@ -467,7 +490,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
 
         // Assert
         var result = await provider.GetJwkSnapshotAsync();
-        result.Jwks.Should().NotBeNull();
+        Assert.NotNull(result.Jwks);
     }
 
     #endregion
@@ -510,6 +533,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
         var result = await provider.GetFeaturesSnapshotAsync();
 
         // Assert
+        Assert.NotNull(result);
         result.Features.Should().HaveCount(2);
         result.Features![0].FeatureKey.Should().Be("feature1");
         result.Features[0].RequirementType.Should().Be(RequirementType.Any);
@@ -585,13 +609,14 @@ public class DistributedCacheFeatureSnapshotProviderTests
         var result = await provider.GetJwkSnapshotAsync();
 
         // Assert
-        result.Jwks.Should().NotBeNull();
-        result.Jwks!.Keys.Should().HaveCount(2);
-        result.Jwks.Keys[0].Kid.Should().Be("key-1");
-        result.Jwks.Keys[0].Kty.Should().Be("EC");
-        result.Jwks.Keys[0].Crv.Should().Be("P-256");
-        result.Jwks.Keys[1].Kid.Should().Be("key-2");
-        result.Jwks.Keys[1].Kty.Should().Be("RSA");
+        var loadedJwks = Assert.IsType<JsonWebKeySet>(result.Jwks);
+        var keys = Assert.IsType<List<JsonWebKey>>(loadedJwks.Keys);
+        keys.Should().HaveCount(2);
+        keys[0].Kid.Should().Be("key-1");
+        keys[0].Kty.Should().Be("EC");
+        keys[0].Crv.Should().Be("P-256");
+        keys[1].Kid.Should().Be("key-2");
+        keys[1].Kty.Should().Be("RSA");
         result.Timestamp.Should().Be(timestamp);
     }
 
@@ -615,6 +640,7 @@ public class DistributedCacheFeatureSnapshotProviderTests
         var result = await provider.GetFeaturesSnapshotAsync();
 
         // Assert
+        Assert.NotNull(result);
         result.Features![0].Metrics.Should().HaveCount(3);
         result.Features[0].Metrics.Should().Contain("page_view");
         result.Features[0].Metrics.Should().Contain("click");

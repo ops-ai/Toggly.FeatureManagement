@@ -21,8 +21,13 @@ namespace Toggly.FeatureManagement.Storage.DistributedCache.Configuration
             this IServiceCollection services,
             Action<TogglyDistributedCacheCatalogOptions> configure)
         {
+#if NET6_0_OR_GREATER
+            ArgumentNullException.ThrowIfNull(services);
+            ArgumentNullException.ThrowIfNull(configure);
+#else
             if (services == null) throw new ArgumentNullException(nameof(services));
             if (configure == null) throw new ArgumentNullException(nameof(configure));
+#endif
 
             services.AddOptions<TogglyDistributedCacheCatalogOptions>().Configure(configure);
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<TogglyDistributedCacheCatalogOptions>, TogglyDistributedCacheCatalogOptionsValidator>());
@@ -31,6 +36,7 @@ namespace Toggly.FeatureManagement.Storage.DistributedCache.Configuration
             return services;
         }
 
+        /// <summary>Adds the snapshot provider with configurable cache entry names.</summary>
         public static IServiceCollection AddTogglyDistributedCacheSnapshotProvider(this IServiceCollection services, Action<TogglySnapshotSettings> togglySnapshotOptions)
         {
             services.Configure(togglySnapshotOptions);
@@ -40,6 +46,7 @@ namespace Toggly.FeatureManagement.Storage.DistributedCache.Configuration
             return services;
         }
 
+        /// <summary>Adds the snapshot provider using supplied cache entry settings.</summary>
         public static IServiceCollection AddTogglyDistributedCacheSnapshotProvider(this IServiceCollection services, TogglySnapshotSettings togglySnapshotOptions)
         {
             services.AddOptions<TogglySnapshotSettings>()
@@ -53,12 +60,13 @@ namespace Toggly.FeatureManagement.Storage.DistributedCache.Configuration
             return services;
         }
 
+        /// <summary>Adds the snapshot provider with default cache entry names.</summary>
         public static IServiceCollection AddTogglyDistributedCacheSnapshotProvider(this IServiceCollection services)
         {
             services.AddOptions<TogglySnapshotSettings>()
                 .Configure(options =>
                 {
-                    
+
                 });
 
             services.AddSingleton<IFeatureSnapshotProvider, DistributedCacheFeatureSnapshotProvider>();

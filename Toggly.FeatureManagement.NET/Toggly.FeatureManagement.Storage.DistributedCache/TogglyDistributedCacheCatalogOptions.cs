@@ -35,7 +35,11 @@ namespace Toggly.FeatureManagement.Storage.DistributedCache
         public ValidateOptionsResult Validate(string? name, TogglyDistributedCacheCatalogOptions options)
         {
             if (options == null) return ValidateOptionsResult.Fail("Toggly distributed-cache catalog options are required.");
+#if NET7_0_OR_GREATER
+            if (!Enum.IsDefined(options.AccessMode))
+#else
             if (!Enum.IsDefined(typeof(CatalogCacheAccessMode), options.AccessMode))
+#endif
             {
                 return ValidateOptionsResult.Fail("Toggly distributed-cache catalog AccessMode is invalid.");
             }
