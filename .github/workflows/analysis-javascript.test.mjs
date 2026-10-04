@@ -124,11 +124,11 @@ test('requires authenticated SonarCloud and Server quality gates', () => {
   assert.match(server, /if:.*steps\.validate-sonarqube-server-credentials\.outcome == 'success'/);
 });
 
-test('JS Sonar ignores protocol SHA-1 kid, anonymous RNG, and Angular load complexity', () => {
+test('JS Sonar ignores only justified protocol, RNG, hook, and Angular load findings', () => {
   const sonar = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   for (const name of ['SonarCloud Scan', 'SonarQube Server Scan']) {
     const step = stepBlock(sonar, name);
-    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria=angularLoadComplexity,kidSha1,anonRng,hookAwait,/);
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria=angularLoadComplexity,kidSha1,anonRng,hookAwait\n/);
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.angularLoadComplexity\.ruleKey=typescript:S3776/);
     assert.match(
       step,
@@ -140,12 +140,9 @@ test('JS Sonar ignores protocol SHA-1 kid, anonymous RNG, and Angular load compl
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.anonRng\.resourceKey=\*\*\/toggly-eval\/\*\*\/segment\.ts/);
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.hookAwait\.ruleKey=typescript:S9382/);
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.hookAwait\.resourceKey=\*\*\/hooks\.ts/);
-    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.seqAwaitClient\.ruleKey=typescript:S9382/);
-    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.sdkServiceComplexity\.ruleKey=typescript:S3776/);
-    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.sdkServiceComplexity\.resourceKey=\*\*\/toggly\.service\.ts/);
-    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.testAssertStyle\.ruleKey=typescript:S5906/);
-    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.asyncApiSurface\.ruleKey=typescript:S7503/);
-    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.styleReadonly\.ruleKey=typescript:S2933/);
+    assert.equal([...step.matchAll(/-Dsonar\.issue\.ignore\.multicriteria\.[a-zA-Z0-9]+\.ruleKey=/g)].length, 4);
+    assert.doesNotMatch(step, /resourceKey=\*\*\/\*/);
+    assert.doesNotMatch(step, /sdkStoreComplexity|styleReadonly|asyncApiSurface|testEmptyFile|jsAwaitInLoop/);
     assert.match(step, /-Dsonar\.test\.exclusions=.*\*\/host-fixtures\/\*\*/);
     assert.match(step, /-Dsonar\.exclusions=.*\*\/host-fixtures\/\*\*/);
     assert.match(step, /-Dsonar\.exclusions=.*toggly-hooks-types\/reference\/\*\*/);
