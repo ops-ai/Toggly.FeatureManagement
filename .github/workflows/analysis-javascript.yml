@@ -31,6 +31,7 @@ on:
       - 'toggly-ga4-hook/**'
       - 'toggly-appinsights-hook/**'
       - '.github/workflows/analysis-javascript.yml'
+      - '.github/scripts/organize-js-coverage*.mjs'
       - '.github/actions/build-shared-js-deps/**'
       - '.github/actions/upload-shared-js-deps/**'
       - '.github/actions/download-shared-js-deps/**'
@@ -48,6 +49,7 @@ on:
         default: true
 
 permissions:
+  actions: read
   contents: read
   security-events: write
 
@@ -644,54 +646,11 @@ jobs:
         with:
           pattern: coverage-*
           path: coverage-artifacts/
-        continue-on-error: true
 
       - name: Organize coverage files
-        run: |
-          mkdir -p coverage
-          # Map SDK names to repo-root-relative paths (must match matrix.path)
-          declare -A SDK_PATHS=(
-            ["Angular"]="Toggly.FeatureManagement.Angular"
-            ["React"]="Toggly.FeatureManagement.React"
-            ["Vue"]="Toggly.FeatureManagement.Vue/vue-feature-flags-toggly"
-            ["SolidJS"]="Toggly.FeatureManagement.Solid"
-            ["Svelte"]="Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly"
-            ["SvelteKit"]="Toggly.FeatureManagement.SvelteKit"
-            ["Astro"]="Toggly.FeatureManagement.Astro"
-            ["Gatsby"]="Toggly.FeatureManagement.Gatsby"
-            ["JavaScript"]="Toggly.FeatureManagement.Javascript/feature_flags_toggly"
-            ["Docusaurus"]="toggly-docusaurus-edge-sdk/libs/docusaurus-plugin"
-            ["Docusaurus-Pages"]="toggly-docusaurus-edge-sdk/cloudflare/pages-function"
-            ["Clarity-Hook"]="toggly-clarity-hook"
-            ["GA4-Hook"]="toggly-ga4-hook"
-            ["AppInsights-Hook"]="toggly-appinsights-hook"
-            ["Hooks-Types"]="toggly-hooks-types"
-            ["Signed-Defs"]="toggly-signed-defs"
-            ["Client-Telemetry"]="toggly-client-telemetry"
-            ["Evaluator"]="toggly-eval"
-            ["Local-Gates"]="toggly-local-gates"
-            ["NestJS"]="Toggly.FeatureManagement.NestJS"
-            ["Node-Core"]="Toggly.FeatureManagement.Node/toggly-node-core"
-            ["Node-Express"]="Toggly.FeatureManagement.Node/toggly-express"
-            ["Node-Fastify"]="Toggly.FeatureManagement.Node/toggly-fastify"
-            ["Node-Hono"]="Toggly.FeatureManagement.Node/toggly-hono"
-            ["Node-Koa"]="Toggly.FeatureManagement.Node/toggly-koa"
-          )
-          find coverage-artifacts -name "lcov.info" -type f | while IFS= read -r file; do
-            sdk_name=$(echo "$file" | sed 's|coverage-artifacts/coverage-||' | sed 's|/.*||')
-            prefix="${SDK_PATHS[$sdk_name]}"
-            if [ -n "$prefix" ]; then
-              # Rewrite SF: paths to be relative to repo root so Sonar can match them
-              sed "s|SF:|SF:${prefix}/|g" "$file" > "coverage/${sdk_name}-lcov.info"
-            else
-              cp "$file" "coverage/${sdk_name}-lcov.info" || true
-            fi
-          done
-          echo "Coverage files:"
-          ls -la coverage/ || echo "No coverage files found"
-          echo "Sample paths from lcov files:"
-          grep "^SF:" coverage/*.info 2>/dev/null | head -20 || true
-        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .github/scripts/organize-js-coverage.mjs
 
       - name: Validate SonarCloud credentials
         env:

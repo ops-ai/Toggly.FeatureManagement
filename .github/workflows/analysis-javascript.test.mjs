@@ -190,8 +190,11 @@ test('uploads signed definitions coverage and includes its source in both Sonar 
 
   const sonarJob = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   assert.match(sonarJob, /pattern: coverage-\*/);
-  assert.match(sonarJob, /\["Signed-Defs"\]="toggly-signed-defs"/);
-  assert.match(sonarJob, /sed "s\|SF:\|SF:\$\{prefix\}\/\|g" "\$file" > "coverage\/\$\{sdk_name\}-lcov\.info"/);
+  const organizer = stepBlock(sonarJob, 'Organize coverage files');
+  assert.match(workflow, /permissions:\s+actions: read/);
+  assert.match(organizer, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.match(organizer, /run: node \.github\/scripts\/organize-js-coverage\.mjs/);
+  assert.doesNotMatch(organizer, /continue-on-error/);
 
   for (const property of ['sources', 'tests']) {
     const values = [...sonarJob.matchAll(new RegExp(`-Dsonar\\.${property}=([^\\n]+)`, 'g'))].map((match) => match[1]);
@@ -221,7 +224,7 @@ test('maps evaluator source, tests, and LCOV into both Sonar scans', () => {
   for (const value of [...sources, ...tests]) assert.ok(value.split(',').includes('toggly-eval'));
   assert.equal(lcov.length, 4, 'both scanners must receive JavaScript and TypeScript LCOV paths');
   for (const value of lcov) assert.equal(value, 'coverage/*-lcov.info');
-  assert.match(sonarSetup, /\["Evaluator"\]="toggly-eval"/);
+  assert.match(sonarSetup, /run: node \.github\/scripts\/organize-js-coverage\.mjs/);
   const analysisInstall = sonarSetup.match(/for dir in \\\n([\s\S]*?)toggly-appinsights-hook; do/)?.[1] ?? '';
   assert.ok(analysisInstall.includes('toggly-eval'));
   assert.match(testJob, /matrix\.sdk == 'Evaluator'/);
@@ -239,7 +242,7 @@ test('maps local gates source, tests, and LCOV into both Sonar scans', () => {
     assert.ok(value.split(',').includes('toggly-local-gates/src'));
     assert.ok(!value.split(',').includes('toggly-local-gates'));
   }
-  assert.match(sonarSetup, /\["Local-Gates"\]="toggly-local-gates"/);
+  assert.match(sonarSetup, /run: node \.github\/scripts\/organize-js-coverage\.mjs/);
   assert.match(testJob, /matrix\.sdk == 'Local-Gates'/);
   assert.match(testJob, /name: coverage-\$\{\{ matrix\.sdk \}\}/);
   assert.match(sonarSetup, /-Dsonar\.test\.inclusions=.*\*\*\/\*\.spec\.ts/);
@@ -321,7 +324,6 @@ test('runs Pages Function coverage in the Docusaurus gate and maps it into both 
   assert.match(hostJob, /name: coverage-Docusaurus-Pages/);
   assert.match(hostJob, new RegExp(`${pagesPath}/coverage/lcov\\.info`));
   assert.match(sonarJob, /needs: \[prepare, build-shared-js-deps, test, test-node-server, test-docusaurus-host, dependency-check\]/);
-  assert.match(workflow, /\["Docusaurus-Pages"\]="toggly-docusaurus-edge-sdk\/cloudflare\/pages-function"/);
 
   const testInclusions = [...workflow.matchAll(/-Dsonar\.test\.inclusions=([^\n]+)/g)].map((match) => match[1]);
   const sourceExclusions = [...workflow.matchAll(/-Dsonar\.exclusions=([^\n]+)/g)].map((match) => match[1]);
