@@ -100,7 +100,8 @@ class SegmentMembershipClientTest {
     @Test
     void httpErrorThrows() {
         statusCode.set(403);
-        assertThatThrownBy(() -> client().listSegments())
+        SegmentMembershipClient client = client();
+        assertThatThrownBy(client::listSegments)
                 .isInstanceOf(RuntimeException.class)
                 .hasMessageContaining("403");
     }
@@ -109,5 +110,14 @@ class SegmentMembershipClientTest {
     void rejectsBlankAppKey() {
         assertThatThrownBy(() -> new SegmentMembershipClient(" ", "https://app.toggly.io"))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void trimsTrailingSlashFromBaseUrl() {
+        SegmentMembershipClient trimmed = new SegmentMembershipClient(
+                "backend-key",
+                "http://127.0.0.1:" + server.getAddress().getPort() + "/");
+        assertThat(trimmed.listSegments()).contains("list-1");
+        assertThat(path.get()).isEqualTo("/api/v2/segments");
     }
 }

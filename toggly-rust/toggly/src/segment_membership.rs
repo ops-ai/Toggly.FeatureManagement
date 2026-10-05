@@ -101,6 +101,9 @@ impl SegmentMembershipClient {
                 "segment membership failed: {status} {body}"
             )));
         }
+        if body.trim().is_empty() {
+            return Ok(Value::Null);
+        }
         Ok(serde_json::from_str(&body)?)
     }
 }
@@ -121,9 +124,112 @@ fn encode_path_segment(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use wiremock::matchers::{body_json, header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[test]
     fn encodes_spaces_in_segment_names() {
         assert_eq!(encode_path_segment("Beta Testers"), "Beta%20Testers");
+    }
+
+    #[test]
+    fn trims_trailing_slash_from_base_url() {
+        let client = SegmentMembershipClient::new("key", Some("https://app.toggly.io/"));
+        assert_eq!(client.base_url, "https://app.toggly.io");
+    }
+
+    #[test]
+    fn defaults_app_base_url() {
+        let client = SegmentMembershipClient::new("key", None);
+        assert_eq!(client.base_url, "https://app.toggly.io");
+    }
+
+    #[tokio::test]
+    async fn list_segments_uses_authorization_header() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v2/segments"))
+            .and(header("Authorization", "backend-key"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([{"id":"list-1"}])))
+            .mount(&server)
+            .await;
+
+        let client = SegmentMembershipClient::new("backend-key", Some(&server.uri()));
+        let value = client.list_segments().await.expect("list");
+        assert_eq!(value[0]["id"], "list-1");
+    }
+
+    #[tokio::test]
+    async fn add_segment_members_posts_identifiers() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/v2/segments/Beta%20Testers/items"))
+            .and(header("Authorization", "backend-key"))
+            .and(body_json(serde_json::json!({"identifiers":["user-1"]})))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id":"list-1","itemCount":1})))
+            .mount(&server)
+            .await;
+
+        let client = SegmentMembershipClient::new("backend-key", Some(&server.uri()));
+        let value = client
+            .add_segment_members("Beta Testers", &["user-1".into()])
+            .await
+            .expect("add");
+        assert_eq!(value["itemCount"], 1);
+    }
+
+    #[tokio::test]
+    async fn remove_and_replace_segment_members() {
+        let server = MockServer::start().await;
+        Mock::given(method("DELETE"))
+            .and(path("/api/v2/segments/vip/items"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id":"list-1"})))
+            .mount(&server)
+            .await;
+        Mock::given(method("PUT"))
+            .and(path("/api/v2/segments/vip/items"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id":"list-1","itemCount":0})))
+            .mount(&server)
+            .await;
+
+        let client = SegmentMembershipClient::new("backend-key", Some(&server.uri()));
+        client
+            .remove_segment_members("vip", &["user-1".into()])
+            .await
+            .expect("remove");
+        let replaced = client
+            .replace_segment_members("vip", &[])
+            .await
+            .expect("replace");
+        assert_eq!(replaced["itemCount"], 0);
+    }
+
+    #[tokio::test]
+    async fn empty_success_body_returns_null() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v2/segments"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&server)
+            .await;
+
+        let client = SegmentMembershipClient::new("backend-key", Some(&server.uri()));
+        let value = client.list_segments().await.expect("empty");
+        assert!(value.is_null());
+    }
+
+    #[tokio::test]
+    async fn http_error_surfaces_status() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/api/v2/segments"))
+            .respond_with(ResponseTemplate::new(403).set_body_string("forbidden"))
+            .mount(&server)
+            .await;
+
+        let client = SegmentMembershipClient::new("frontend-key", Some(&server.uri()));
+        let err = client.list_segments().await.expect_err("forbidden");
+        let message = err.to_string();
+        assert!(message.contains("403"), "{message}");
     }
 }
