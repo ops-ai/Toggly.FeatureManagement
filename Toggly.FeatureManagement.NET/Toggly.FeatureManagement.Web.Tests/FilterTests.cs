@@ -247,6 +247,8 @@ public class BrowserLanguageFilterTests
 public class CountryFilterTests
 {
     private static readonly string[] CanadaAndWhitespace = { "CA", " " };
+    private static readonly string[] UnitedStates = { "US" };
+    private static readonly string[] BlankCountry = { " " };
 
     private readonly Mock<IHttpContextAccessor> _httpContextAccessorMock;
     private readonly CountryFilter _filter;
@@ -345,7 +347,7 @@ public class CountryFilterTests
     {
         // Arrange
         _httpContextAccessorMock.Setup(x => x.HttpContext).Returns(new DefaultHttpContext());
-        var context = CreateContext(new[] { "US" }, 100);
+        var context = CreateContext(UnitedStates, 100);
 
         // Act
         var result = await _filter.EvaluateAsync(context);
@@ -375,7 +377,7 @@ public class CountryFilterTests
     {
         // Arrange
         SetupCountryHeader("US");
-        var context = CreateContext(new[] { " " }, 100);
+        var context = CreateContext(BlankCountry, 100);
 
         // Act
         var result = await _filter.EvaluateAsync(context);
