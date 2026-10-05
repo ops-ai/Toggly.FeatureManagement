@@ -19,6 +19,13 @@ spec.loader.exec_module(java_signature)
 
 
 class JavaSignatureFingerprintTests(unittest.TestCase):
+    def test_release_workflow_reads_maven_generated_module_target(self):
+        workflow = (SCRIPT.parents[2] / ".github/workflows/sdk-java-release.yml").read_text()
+        self.assertIn(
+            'run: python3 .github/scripts/report-java-signature-fingerprint.py "${{ env.SDK_ROOT }}/toggly-core/target"',
+            workflow,
+        )
+
     def test_reports_only_issuer_fingerprint_from_generated_pom_signature(self):
         with tempfile.TemporaryDirectory() as directory:
             signature = Path(directory) / "toggly-core-2.1.5.pom.asc"
