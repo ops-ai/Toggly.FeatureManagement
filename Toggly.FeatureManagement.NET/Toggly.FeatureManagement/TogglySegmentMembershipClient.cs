@@ -107,7 +107,14 @@ namespace Toggly.FeatureManagement
                 return Activator.CreateInstance<T>()!;
             }
 
-            return JsonConvert.DeserializeObject<T>(payload, JsonSettings)!;
+            try
+            {
+                return JsonConvert.DeserializeObject<T>(payload, JsonSettings)!;
+            }
+            catch (JsonException ex)
+            {
+                throw new HttpRequestException($"Segment membership {method} {path} returned invalid JSON", ex);
+            }
         }
     }
 }

@@ -114,4 +114,12 @@ public class TogglySegmentMembershipClientTests
         Assert.NotNull(summary);
         Assert.Equal(string.Empty, summary.Name);
     }
+
+    [Fact]
+    public async Task MalformedSuccessBody_ThrowsHttpRequestException()
+    {
+        var (client, _) = Build(HttpStatusCode.OK, "not-json{");
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(() => client.ListSegmentsAsync());
+        Assert.Contains("invalid JSON", ex.Message);
+    }
 }

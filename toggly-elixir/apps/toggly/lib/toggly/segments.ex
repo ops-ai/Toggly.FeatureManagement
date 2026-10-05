@@ -47,7 +47,10 @@ defmodule Toggly.Segments do
         if trimmed == "" do
           {:ok, nil}
         else
-          {:ok, Jason.decode!(trimmed)}
+          case Jason.decode(trimmed) do
+            {:ok, decoded} -> {:ok, decoded}
+            {:error, reason} -> {:error, {:json, reason}}
+          end
         end
 
       {:ok, %{status: status}} ->
