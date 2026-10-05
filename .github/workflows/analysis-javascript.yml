@@ -213,7 +213,9 @@ jobs:
           test -f "$SEGMENTS_TGZ"
           echo "TOGGLY_TEST_SEGMENTS_TARBALL=$SEGMENTS_TGZ" >> "$GITHUB_ENV"
           cd Toggly.FeatureManagement.NestJS
-          npm install "$CORE_TGZ" "$EVAL_TGZ" "$SEGMENTS_TGZ"
+          # --no-save: do not rewrite package.json to file:../../_temp paths
+          # (npm pack in check-packed would otherwise ship those broken relatives).
+          npm install --no-save "$CORE_TGZ" "$EVAL_TGZ" "$SEGMENTS_TGZ"
 
       - name: Overlay shared JS deps into node_modules
         if: >
