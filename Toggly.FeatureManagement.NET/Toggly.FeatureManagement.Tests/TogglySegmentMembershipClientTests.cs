@@ -13,7 +13,7 @@ namespace Toggly.FeatureManagement.Tests;
 
 public class TogglySegmentMembershipClientTests
 {
-    private static readonly string[] SampleIdentifiers = ["user-1"];
+    private static readonly string[] SampleIdentifiers = new[] { "user-1" };
 
     private sealed class RequestCapture
     {
@@ -92,7 +92,7 @@ public class TogglySegmentMembershipClientTests
     [Fact]
     public async Task ListItems_UsesQuery()
     {
-        var (client, capture) = Build(body: "{"items":[{"identifier":"user-1"}],"skip":0,"take":10,"total":1}");
+        var (client, capture) = Build(body: "{\"items\":[{\"identifier\":\"user-1\"}],\"skip\":0,\"take\":10,\"total\":1}");
         var page = await client.ListItemsAsync("Beta Testers", 0, 10);
         Assert.Single(page.Items);
         Assert.Equal(HttpMethod.Get, capture.Request!.Method);

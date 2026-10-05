@@ -203,12 +203,16 @@ jobs:
           CORE_TGZ="$(ls -1 "$RUNNER_TEMP"/ops-ai-toggly-node-core-*.tgz | head -1)"
           test -f "$CORE_TGZ"
           echo "TOGGLY_TEST_CORE_TARBALL=$CORE_TGZ" >> "$GITHUB_ENV"
-          EVAL_TGZ="$(cd "$EVAL_DIR" && npm pack --pack-destination "$RUNNER_TEMP")"
-          echo "TOGGLY_TEST_EVAL_TARBALL=$RUNNER_TEMP/$EVAL_TGZ" >> "$GITHUB_ENV"
-          SEGMENTS_TGZ="$(cd "$SEGMENTS_DIR" && npm pack --pack-destination "$RUNNER_TEMP")"
-          echo "TOGGLY_TEST_SEGMENTS_TARBALL=$RUNNER_TEMP/$SEGMENTS_TGZ" >> "$GITHUB_ENV"
+          (cd "$EVAL_DIR" && npm pack --pack-destination "$RUNNER_TEMP" >/dev/null)
+          EVAL_TGZ="$(ls -1 "$RUNNER_TEMP"/ops-ai-toggly-eval-*.tgz | head -1)"
+          test -f "$EVAL_TGZ"
+          echo "TOGGLY_TEST_EVAL_TARBALL=$EVAL_TGZ" >> "$GITHUB_ENV"
+          (cd "$SEGMENTS_DIR" && npm pack --pack-destination "$RUNNER_TEMP" >/dev/null)
+          SEGMENTS_TGZ="$(ls -1 "$RUNNER_TEMP"/ops-ai-toggly-segments-*.tgz | head -1)"
+          test -f "$SEGMENTS_TGZ"
+          echo "TOGGLY_TEST_SEGMENTS_TARBALL=$SEGMENTS_TGZ" >> "$GITHUB_ENV"
           cd Toggly.FeatureManagement.NestJS
-          npm install "$CORE_TGZ" "$RUNNER_TEMP/$EVAL_TGZ" "$RUNNER_TEMP/$SEGMENTS_TGZ"
+          npm install "$CORE_TGZ" "$EVAL_TGZ" "$SEGMENTS_TGZ"
 
       - name: Overlay shared JS deps into node_modules
         if: >

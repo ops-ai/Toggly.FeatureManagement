@@ -118,16 +118,19 @@ try {
     rxjs: '^7.8.2',
     ws: '^8.0.0',
   };
-  if (process.env.TOGGLY_TEST_CORE_TARBALL)
-    dependencies['@ops-ai/toggly-node-core'] = `file:${resolve(
-      process.env.TOGGLY_TEST_CORE_TARBALL,
-    )}`;
-  if (process.env.TOGGLY_TEST_EVAL_TARBALL)
-    dependencies['@ops-ai/toggly-eval'] = `file:${resolve(process.env.TOGGLY_TEST_EVAL_TARBALL)}`;
-  if (process.env.TOGGLY_TEST_SEGMENTS_TARBALL)
-    dependencies['@ops-ai/toggly-segments'] = `file:${resolve(
-      process.env.TOGGLY_TEST_SEGMENTS_TARBALL,
-    )}`;
+  function localTarball(envName) {
+    const value = process.env[envName];
+    if (!value) return undefined;
+    const absolute = isAbsolute(value) ? value : resolve(value);
+    if (!existsSync(absolute)) throw new Error(`${envName} tarball missing: ${absolute}`);
+    return `file:${absolute}`;
+  }
+  const coreTarball = localTarball('TOGGLY_TEST_CORE_TARBALL');
+  const evalTarball = localTarball('TOGGLY_TEST_EVAL_TARBALL');
+  const segmentsTarball = localTarball('TOGGLY_TEST_SEGMENTS_TARBALL');
+  if (coreTarball) dependencies['@ops-ai/toggly-node-core'] = coreTarball;
+  if (evalTarball) dependencies['@ops-ai/toggly-eval'] = evalTarball;
+  if (segmentsTarball) dependencies['@ops-ai/toggly-segments'] = segmentsTarball;
   writeFileSync(
     join(consumer, 'package.json'),
     JSON.stringify({ private: true, type: 'module', dependencies }),
