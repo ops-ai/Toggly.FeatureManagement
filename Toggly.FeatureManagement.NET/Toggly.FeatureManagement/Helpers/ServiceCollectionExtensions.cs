@@ -118,6 +118,17 @@ namespace Toggly.FeatureManagement.Helpers
             );
         }
 
+        private static object CreateFallbackInstance(IServiceProvider services, ServiceDescriptor descriptor)
+        {
+            if (descriptor.ImplementationFactory != null)
+                return descriptor.ImplementationFactory(services);
+
+            if (descriptor.ImplementationType != null)
+                return ActivatorUtilities.CreateInstance(services, descriptor.ImplementationType);
+
+            throw new InvalidOperationException("Unable to create instance");
+        }
+
         /// <summary>
         /// Like <see cref="AddTransientForFeature{TInterface, TImplementation}(IServiceCollection, string)"/>, but resolves the feature name from an enum value.
         /// </summary>
@@ -168,7 +179,7 @@ namespace Toggly.FeatureManagement.Helpers
                   typeof(TInterface),
                   serviceProvider => serviceProvider.GetRequiredService<IFeatureManager>().IsEnabledAsync(featureName).ConfigureAwait(false).GetAwaiter().GetResult() ?
                         ActivatorUtilities.CreateInstance(serviceProvider, typeof(TImplementation)) :
-                        oldDescriptor.ImplementationFactory != null ? oldDescriptor.ImplementationFactory(serviceProvider) : oldDescriptor.ImplementationType != null ? ActivatorUtilities.CreateInstance(serviceProvider, oldDescriptor.ImplementationType) : throw new InvalidOperationException("Unable to create instance"),
+                        CreateFallbackInstance(serviceProvider, oldDescriptor),
                   ServiceLifetime.Transient)
                 );
         }
@@ -223,7 +234,7 @@ namespace Toggly.FeatureManagement.Helpers
                   typeof(TInterface),
                   serviceProvider => serviceProvider.GetRequiredService<IFeatureManager>().IsEnabledAsync(featureName).ConfigureAwait(false).GetAwaiter().GetResult() ?
                         ActivatorUtilities.CreateInstance(serviceProvider, typeof(TImplementation)) :
-                        oldDescriptor.ImplementationFactory != null ? oldDescriptor.ImplementationFactory(serviceProvider) : oldDescriptor.ImplementationType != null ? ActivatorUtilities.CreateInstance(serviceProvider, oldDescriptor.ImplementationType) : throw new InvalidOperationException("Unable to create instance"),
+                        CreateFallbackInstance(serviceProvider, oldDescriptor),
                   ServiceLifetime.Scoped)
                 );
         }
