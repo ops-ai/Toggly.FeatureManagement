@@ -678,6 +678,32 @@ public class OpenApiDocumentMiddlewareTests
         _documentGeneratorMock.Verify(x => x.GenerateAsync("v1"), Times.Once);
     }
 
+    [Fact]
+    public async Task Invoke_ExplicitKey_VersionChangeDoesNotReplayCachedException()
+    {
+        var version = 1;
+        _apiExplorerMock.Setup(x => x.ApiDescriptionGroups)
+            .Returns(() => new ApiDescriptionGroupCollection(new List<ApiDescriptionGroup>(), version));
+        _documentGeneratorMock.SetupSequence(x => x.GenerateAsync("v1"))
+            .ThrowsAsync(new InvalidOperationException("Generation failed"))
+            .ReturnsAsync(new OpenApiDocument());
+        var serviceProvider = CreateServiceProvider();
+        var middleware = new OpenApiDocumentMiddleware(
+            _ => Task.CompletedTask, serviceProvider, "v1", "/swagger/v1/swagger.json",
+            new OpenApiDocumentMiddlewareSettings
+            {
+                CreateDocumentCacheKey = _ => "same-state",
+                ExceptionCacheTime = TimeSpan.FromMinutes(1)
+            });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => middleware.Invoke(CreateHttpContext(serviceProvider)));
+        version = 2;
+        await middleware.Invoke(CreateHttpContext(serviceProvider));
+
+        _documentGeneratorMock.Verify(x => x.GenerateAsync("v1"), Times.Exactly(2));
+    }
+
     #endregion
 
     #region Feature State Integration Tests

@@ -117,24 +117,10 @@ namespace Toggly.FeatureManagement.NSwag
                 ? null
                 : cacheKeyFactory(context.Request);
             var apiDescriptionGroups = _apiDescriptionGroupCollectionProvider.ApiDescriptionGroups;
-            DocumentCacheEntry? document = null;
-            int cacheGeneration;
-            lock (_documentsCacheLock)
-            {
-                cacheGeneration = _cacheGeneration;
-                if (documentKey != null)
-                    _documentsCache.TryGetValue(documentKey, out document);
-            }
-
-            if (document?.ApiDescriptionVersion == apiDescriptionGroups.Version)
-            {
-                if (document.Exception != null &&
-                    document.CreatedAt + _settings.ExceptionCacheTime > DateTimeOffset.UtcNow)
-                    document.Exception.Throw();
-
-                if (document.Data != null)
-                    return document.Data;
-            }
+            var cachedData = GetCachedDocument(documentKey, apiDescriptionGroups.Version,
+                out var cacheGeneration);
+            if (cachedData != null)
+                return cachedData;
 
             try
             {
@@ -185,6 +171,27 @@ namespace Toggly.FeatureManagement.NSwag
             _settings.PostProcess?.Invoke(document, context.Request);
 
             return document;
+        }
+
+        private string? GetCachedDocument(string? documentKey, int apiDescriptionVersion,
+            out int cacheGeneration)
+        {
+            DocumentCacheEntry? document = null;
+            lock (_documentsCacheLock)
+            {
+                cacheGeneration = _cacheGeneration;
+                if (documentKey != null)
+                    _documentsCache.TryGetValue(documentKey, out document);
+            }
+
+            if (document?.ApiDescriptionVersion != apiDescriptionVersion)
+                return null;
+
+            if (document.Exception != null &&
+                document.CreatedAt + _settings.ExceptionCacheTime > DateTimeOffset.UtcNow)
+                document.Exception.Throw();
+
+            return document.Data;
         }
 
         private void StoreDocument(string key, DocumentCacheEntry document, int cacheGeneration)
