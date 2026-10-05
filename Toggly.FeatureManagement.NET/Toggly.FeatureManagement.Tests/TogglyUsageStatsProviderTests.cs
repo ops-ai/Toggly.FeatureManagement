@@ -900,15 +900,23 @@ public class TogglyUsageStatsProviderTests : IDisposable
     [Fact]
     public async Task Constructor_RegistersApplicationStoppingCallback()
     {
-        // Arrange
+        var requests = new List<FeatureStat>();
+        _usageClientMock.Setup(x => x.SendStatsAsync(It.IsAny<FeatureStat>(), It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .Returns((FeatureStat request, Metadata _, DateTime? _, CancellationToken _) =>
+            {
+                requests.Add(request.Clone());
+                return UnaryCall(Task.FromResult(new StatResult { FeatureCount = request.Stats.Count }));
+            });
         _provider = CreateProvider();
+        await _provider.RecordUsageAsync("ShutdownFeature");
 
-        // Act - simulate application stopping
+        // Cancellation callbacks execute synchronously, so the completed RPC needs no timing delay.
         _stoppingCts.Cancel();
-        await Task.Delay(100);
 
-        // Assert - no exception should be thrown
-        _provider.Should().NotBeNull();
+        Assert.Equal("ShutdownFeature", Assert.Single(Assert.Single(requests).Stats).Feature);
+        Assert.NotNull(_provider.GetDebugInfo().LastSend);
+        Assert.Empty(GetPendingStats(_provider));
     }
 
     #endregion
@@ -1657,54 +1665,53 @@ public class TogglyUsageStatsProviderTests : IDisposable
     #region Shutdown and Dispose Tests
 
     [Fact]
-    public void Dispose_AfterManyOperations_DisposesCleanly()
+    public async Task Dispose_AfterManyOperations_DisposesCleanly()
     {
-        // Arrange
         _provider = CreateProvider();
-
-        // Act - record many operations
         for (int i = 0; i < 100; i++)
-        {
-            _provider.RecordUsageAsync($"DisposalFeature{i % 10}").Wait();
-        }
+            await _provider.RecordUsageAsync($"DisposalFeature{i % 10}");
 
-        // Dispose
         _provider.Dispose();
-        _provider = null;
 
-        // Assert - no exception
+        var pendingStats = GetPendingStats(_provider);
+        Assert.Equal(10, pendingStats.Count);
+        Assert.All(pendingStats.Values, count => Assert.Equal(10, count));
     }
 
     [Fact]
     public async Task Dispose_DuringOperations_HandlesGracefully()
     {
-        // Arrange
-        _provider = CreateProvider();
-
-        // Start operations
-        var recordTask = Task.Run(async () =>
+        var contextEntered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var contextResult = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var contextProvider = new Mock<IFeatureContextProvider>();
+        contextProvider.Setup(x => x.GetContextIdentifierAsync()).Returns(() =>
         {
-            for (int i = 0; i < 50; i++)
-            {
-                try
-                {
-                    await _provider!.RecordUsageAsync($"ConcurrentDisposalFeature{i}");
-                }
-                catch (ObjectDisposedException)
-                {
-                    // Expected during dispose
-                    break;
-                }
-            }
+            contextEntered.SetResult(true);
+            return contextResult.Task;
         });
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider)))
+            .Returns(contextProvider.Object);
+        _provider = CreateProvider();
+        var provider = _provider;
 
-        // Wait a bit then dispose
-        await Task.Delay(10);
-        _provider?.Dispose();
-        _provider = null;
+        var recordTask = provider.RecordUsageAsync("ConcurrentDisposalFeature");
+        await contextEntered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        try
+        {
+            provider.Dispose();
+        }
+        finally
+        {
+            contextResult.TrySetResult("dispose-user");
+        }
 
-        // Wait for operations to complete or fail
-        await Task.WhenAny(recordTask, Task.Delay(1000));
+        var exception = await Record.ExceptionAsync(() => recordTask.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.True(exception is null or ObjectDisposedException);
+        Assert.True(recordTask.IsCompleted);
+        Assert.Equal(1, GetPendingStats(provider)[("ConcurrentDisposalFeature", (byte)TogglyUsageStatsProvider.StatType.Used)]);
+        contextProvider.Verify(x => x.GetContextIdentifierAsync(), Times.Once);
+        if (exception is null)
+            Assert.Single(provider.GetDebugInfo().UniqueUsageUsedMap!["ConcurrentDisposalFeature"]);
     }
 
     #endregion
@@ -2077,41 +2084,39 @@ public class TogglyUsageStatsProviderTests : IDisposable
     [Fact]
     public async Task SendStats_ConcurrentCalls_OnlyOneExecutes()
     {
-        // Arrange
-        var callCount = 0;
-        _usageClientMock.Setup(x => x.SendStatsAsync(
-            It.IsAny<FeatureStat>(),
-            It.IsAny<Metadata>(),
-            It.IsAny<DateTime?>(),
-            It.IsAny<CancellationToken>()))
-            .Callback(() => Interlocked.Increment(ref callCount))
-            .Returns(() => new AsyncUnaryCall<StatResult>(
-                Task.Delay(100).ContinueWith(_ => new StatResult { FeatureCount = 1 }),
-                Task.FromResult(new Metadata()),
-                () => Status.DefaultSuccess,
-                () => new Metadata(),
-                () => { }));
-
+        var entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var response = new TaskCompletionSource<StatResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var requests = new List<FeatureStat>();
+        _usageClientMock.Setup(x => x.SendStatsAsync(It.IsAny<FeatureStat>(), It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .Returns((FeatureStat request, Metadata _, DateTime? _, CancellationToken _) =>
+            {
+                requests.Add(request.Clone());
+                entered.TrySetResult(true);
+                return UnaryCall(response.Task);
+            });
         _provider = CreateProvider();
-
-        // Record stats
         await _provider.RecordUsageAsync("ConcurrentFeature");
-
-        // Use reflection to invoke SendStats
-        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
-            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
-                new[] { typeof(bool) });
-
-        // Act - Call SendStats concurrently
-        var tasks = Enumerable.Range(0, 5)
-            .Select(_ => (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!);
-
-        await Task.WhenAll(tasks);
-
-        // Assert - Only one should execute due to semaphore
-        // (The first one gets the semaphore, others skip)
-        // Due to test timing, we might get 1 or 2 calls
-        callCount.Should().BeLessOrEqualTo(2);
+        var firstSend = SendStatsAsync(_provider);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        try
+        {
+            // Pending data makes the second calls observable even while the first RPC is paused.
+            await _provider.RecordUsageAsync("ConcurrentFeature");
+            await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => SendStatsAsync(_provider)))
+                .WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Single(requests);
+            Assert.False(firstSend.IsCompleted);
+        }
+        finally
+        {
+            response.TrySetResult(new StatResult { FeatureCount = 1 });
+            await firstSend.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        await SendStatsAsync(_provider);
+        await SendStatsAsync(_provider);
+        Assert.Equal(2, requests.Count);
+        Assert.All(requests, request => Assert.Equal(1, Assert.Single(request.Stats).VariantStats["enabled"].UsedCount));
     }
 
     #endregion
@@ -2196,6 +2201,7 @@ public class TogglyUsageStatsProviderTests : IDisposable
         // Act & Assert - Should not throw even after dispose
         // The TryLog method handles disposed state
         await _provider.RecordUsageAsync("PostDisposeFeature");
+        Assert.Equal(1, GetPendingStats(_provider)[("PostDisposeFeature", (byte)TogglyUsageStatsProvider.StatType.Used)]);
     }
 
     #endregion
@@ -2559,4 +2565,156 @@ public class TogglyUsageStatsProviderTests : IDisposable
     }
 
     #endregion
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task SendStats_InFlightBatch_PreservesEveryCounterAndHash(bool failFirstSend, bool repeatUser)
+    {
+        var currentUser = "first-user";
+        var contextProvider = new Mock<IFeatureContextProvider>();
+        contextProvider.Setup(x => x.GetContextIdentifierAsync()).ReturnsAsync(() => currentUser);
+        contextProvider.Setup(x => x.AccessedInRequestAsync(It.IsAny<string>())).ReturnsAsync(false);
+        _serviceProviderMock.Setup(x => x.GetService(typeof(IFeatureContextProvider))).Returns(contextProvider.Object);
+        var response = new TaskCompletionSource<StatResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var requests = new List<FeatureStat>();
+        var metadata = new List<Metadata>();
+        var deadlines = new List<DateTime?>();
+        _usageClientMock.Setup(x => x.SendStatsAsync(It.IsAny<FeatureStat>(), It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .Returns((FeatureStat request, Metadata headers, DateTime? deadline, CancellationToken _) =>
+            {
+                requests.Add(request.Clone());
+                metadata.Add(headers);
+                deadlines.Add(deadline);
+                entered.TrySetResult(true);
+                return requests.Count == 1 ? UnaryCall(response.Task)
+                    : UnaryCall(Task.FromResult(new StatResult { FeatureCount = request.Stats.Count }));
+            });
+        _provider = CreateProvider();
+        await _provider.RecordCheckAsync("BatchFeature", true);
+        await _provider.RecordCheckAsync("BatchFeature", false);
+        await _provider.RecordUsageAsync("BatchFeature");
+        await _provider.RecordViewAsync("BatchFeature");
+        _provider.RecordDefinitionCacheHit();
+        _provider.RecordDefinitionCacheMiss();
+        var firstHash = Assert.Single(_provider.GetDebugInfo().UniqueUsageUsedMap!["BatchFeature"]);
+        var beforeSend = DateTime.UtcNow;
+        var firstSend = SendStatsAsync(_provider);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        try
+        {
+            AssertCompleteBatch(Assert.Single(requests), 1, new[] { firstHash });
+            Assert.Empty(_provider.GetDebugInfo().UniqueUsageEnabledMap!);
+            Assert.Empty(_provider.GetDebugInfo().UniqueUsageDisabledMap!);
+            Assert.Empty(_provider.GetDebugInfo().UniqueUsageUsedMap!);
+            currentUser = repeatUser ? "first-user" : "second-user";
+            await _provider.RecordCheckAsync("BatchFeature", true);
+            await _provider.RecordCheckAsync("BatchFeature", false);
+            await _provider.RecordUsageAsync("BatchFeature");
+            await _provider.RecordViewAsync("BatchFeature");
+            _provider.RecordDefinitionCacheHit();
+            _provider.RecordDefinitionCacheMiss();
+            AssertCompleteBatch(requests[0], 1, new[] { firstHash });
+        }
+        finally
+        {
+            if (failFirstSend)
+                response.TrySetException(new RpcException(new Status(StatusCode.Unavailable, "retry batch")));
+            else
+                response.TrySetResult(new StatResult { FeatureCount = 1 });
+            await firstSend.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+
+        var pendingHashes = _provider.GetDebugInfo().UniqueUsageUsedMap!["BatchFeature"].ToArray();
+        Assert.Equal(failFirstSend && !repeatUser ? 2 : 1, pendingHashes.Length);
+        Assert.Equal(pendingHashes.OrderBy(x => x), GetViewedUsageHashes(_provider).OrderBy(x => x));
+        Assert.Equal(failFirstSend, _provider.GetDebugInfo().LastSend is null);
+        if (failFirstSend)
+            Assert.Contains("retry batch", _provider.GetDebugInfo().LastError);
+
+        await SendStatsAsync(_provider);
+        Assert.Equal(2, requests.Count);
+        AssertCompleteBatch(requests[1], failFirstSend ? 2 : 1, pendingHashes);
+        Assert.NotNull(_provider.GetDebugInfo().LastSend);
+        await SendStatsAsync(_provider);
+        Assert.Equal(2, requests.Count);
+        Assert.All(metadata, headers => Assert.Equal(_provider.GetDebugInfo().UserAgent, Assert.Single(headers).Value));
+        Assert.All(metadata, headers => Assert.Equal("ua", Assert.Single(headers).Key));
+        Assert.InRange(deadlines[0]!.Value, beforeSend.AddSeconds(180), DateTime.UtcNow.AddSeconds(180));
+    }
+
+    [Fact]
+    public async Task SendStats_WithNegativeViewedCounter_PreservesLegacyZeroViewedCount()
+    {
+        FeatureStat? request = null;
+        _usageClientMock.Setup(x => x.SendStatsAsync(It.IsAny<FeatureStat>(), It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .Returns((FeatureStat packet, Metadata _, DateTime? _, CancellationToken _) =>
+            {
+                request = packet.Clone();
+                return UnaryCall(Task.FromResult(new StatResult { FeatureCount = 1 }));
+            });
+        _provider = CreateProvider();
+        await _provider.RecordUsageAsync("OverflowFeature");
+        var stats = (System.Collections.Concurrent.ConcurrentDictionary<(string FeatureKey, byte Type), int>)typeof(TogglyUsageStatsProvider)
+            .GetField("_stats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(_provider)!;
+        stats[("OverflowFeature", (byte)TogglyUsageStatsProvider.StatType.Viewed)] = int.MinValue;
+
+        await SendStatsAsync(_provider);
+
+        Assert.NotNull(request);
+        var enabledVariant = Assert.Single(request.Stats).VariantStats["enabled"];
+        Assert.Equal(1, enabledVariant.UsedCount);
+        Assert.Equal(0, enabledVariant.ViewedCount);
+    }
+
+    private static void AssertCompleteBatch(FeatureStat request, int count, int[] hashes)
+    {
+        Assert.Equal("test-app-key", request.AppKey);
+        Assert.Equal("Test", request.Environment);
+        Assert.Equal("1.0.0", request.AppVersion);
+        Assert.Equal("test-instance", request.InstanceName);
+        Assert.NotNull(request.Time);
+        Assert.NotNull(request.ProcessStartTime);
+        Assert.Equal(0, request.TotalUniqueUsers);
+        Assert.Equal(count, request.DefinitionCacheHits);
+        Assert.Equal(count, request.DefinitionCacheMisses);
+        Assert.Equal(hashes.OrderBy(x => x), request.UniqueUserHashes.OrderBy(x => x));
+        var stat = Assert.Single(request.Stats);
+        Assert.Equal("BatchFeature", stat.Feature);
+        Assert.Equal(2, stat.VariantStats.Count);
+        Assert.Equal(hashes.Length, stat.UniqueContextIdentifierEnabledCount);
+        Assert.Equal(hashes.Length, stat.UniqueContextIdentifierDisabledCount);
+        Assert.Equal(hashes.Length, stat.UniqueUsersUsedCount);
+        Assert.Equal(hashes.OrderBy(x => x), stat.UniqueUserHashes.OrderBy(x => x));
+        Assert.Equal(hashes.OrderBy(x => x), stat.UniqueViewedUserHashes.OrderBy(x => x));
+        Assert.Equal(count, stat.VariantStats["enabled"].CheckCount);
+        Assert.Equal(count, stat.VariantStats["enabled"].RequestCount);
+        Assert.Equal(count, stat.VariantStats["enabled"].UsedCount);
+        Assert.Equal(count, stat.VariantStats["enabled"].ViewedCount);
+        Assert.Equal(count, stat.VariantStats["disabled"].CheckCount);
+        Assert.Equal(count, stat.VariantStats["disabled"].RequestCount);
+        Assert.Equal(0, stat.VariantStats["disabled"].UsedCount);
+        Assert.Equal(0, stat.VariantStats["disabled"].ViewedCount);
+    }
+
+    private static int[] GetViewedUsageHashes(TogglyUsageStatsProvider provider) =>
+        ((System.Collections.Concurrent.ConcurrentDictionary<string, ConcurrentCollections.ConcurrentHashSet<int>>)typeof(TogglyUsageStatsProvider)
+            .GetField("_uniqueUsageViewedMap", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(provider)!)["BatchFeature"].ToArray();
+
+    private static AsyncUnaryCall<StatResult> UnaryCall(Task<StatResult> response) => new(
+        response, Task.FromResult(new Metadata()), () => Status.DefaultSuccess, () => new Metadata(), () => { });
+
+    private static Task SendStatsAsync(TogglyUsageStatsProvider provider) => (Task)typeof(TogglyUsageStatsProvider)
+        .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+            new[] { typeof(bool) })!.Invoke(provider, new object[] { false })!;
+
+    private static Dictionary<(string FeatureKey, byte Type), int> GetPendingStats(TogglyUsageStatsProvider provider) =>
+        new((System.Collections.Concurrent.ConcurrentDictionary<(string FeatureKey, byte Type), int>)typeof(TogglyUsageStatsProvider)
+            .GetField("_stats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(provider)!);
 }

@@ -28,8 +28,6 @@ namespace Toggly.FeatureManagement
 
         private readonly ILogger _logger;
 
-        private readonly IHttpClientFactory _clientFactory;
-
         private readonly ConcurrentDictionary<(string FeatureKey, byte Type), int> _stats = new ConcurrentDictionary<(string, byte), int>();
 
         public enum StatType : byte
@@ -123,7 +121,6 @@ namespace Toggly.FeatureManagement
             _appKey = togglySettings.Value.AppKey;
             _environment = togglySettings.Value.Environment;
             _baseUrl = togglySettings.Value.ResolveMetricsBaseUrl();
-            _clientFactory = clientFactory;
             _contextProvider = (IFeatureContextProvider?)serviceProvider.GetService(typeof(IFeatureContextProvider));
             _usageClient = usageClient;
 
@@ -267,261 +264,35 @@ namespace Toggly.FeatureManagement
 
         private async Task SendStats(bool suppressLogging)
         {
-            // Prevent concurrent send operations (timer, longTimer, and ApplicationStopping could overlap)
+            // Timers and application shutdown share the same single in-flight send.
             if (!await _sendStatsSemaphore.WaitAsync(0).ConfigureAwait(false))
             {
                 if (!suppressLogging) TryLog(LogLevel.Debug, "SendStats already in progress, skipping");
                 return;
             }
 
-            // Declare variables outside try block so they're accessible in catch
-            Dictionary<(string FeatureKey, byte Type), int>? stats = null;
-            Dictionary<string, ConcurrentHashSet<int>>? uniqueUsageEnabledMap = null;
-            Dictionary<string, ConcurrentHashSet<int>>? uniqueUsageDisabledMap = null;
-            Dictionary<string, ConcurrentHashSet<int>>? uniqueUsageUsedMap = null;
-            Dictionary<string, ConcurrentHashSet<int>>? uniqueUsageViewedMap = null;
-            Dictionary<string, List<int>>? uniqueUserHashesToSend = null;
-            Dictionary<string, List<int>>? uniqueViewedUserHashesToSend = null;
-            List<int>? applicationUniqueUserHashesToSend = null;
-            int definitionCacheHitsToSend = 0;
-            int definitionCacheMissesToSend = 0;
-
+            UsageStatsBatch? batch = null;
             try
             {
-                var pendingCacheHits = Volatile.Read(ref _definitionCacheHits);
-                var pendingCacheMisses = Volatile.Read(ref _definitionCacheMisses);
-                if (_stats.IsEmpty && _uniqueUserHashesSinceLastSend.IsEmpty && _uniqueViewedUserHashesSinceLastSend.IsEmpty && _applicationUniqueUserHashesSinceLastSend.IsEmpty
-                    && pendingCacheHits == 0 && pendingCacheMisses == 0)
+                if (!HasPendingStats())
                 {
                     if (!suppressLogging) TryLog(LogLevel.Trace, "Send stats - nothing to send");
                     return;
                 }
 
-                // Clone stats and uniqueUsage maps
-                stats = new Dictionary<(string FeatureKey, byte Type), int>(_stats);
-                _stats.Clear();
-                definitionCacheHitsToSend = Interlocked.Exchange(ref _definitionCacheHits, 0);
-                definitionCacheMissesToSend = Interlocked.Exchange(ref _definitionCacheMisses, 0);
-                uniqueUsageEnabledMap = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageEnabledMap);
-                _uniqueUsageEnabledMap.Clear();
-                uniqueUsageDisabledMap = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageDisabledMap);
-                _uniqueUsageDisabledMap.Clear();
-                uniqueUsageUsedMap = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageUsedMap);
-                _uniqueUsageUsedMap.Clear();
-                uniqueUsageViewedMap = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageViewedMap);
-                _uniqueUsageViewedMap.Clear();
-                
-                // Clone unique user hashes for monthly tracking (incremental since last send)
-                uniqueUserHashesToSend = new Dictionary<string, List<int>>();
-                foreach (var kvp in _uniqueUserHashesSinceLastSend)
-                {
-                    if (kvp.Value.Count > 0)
-                    {
-                        uniqueUserHashesToSend[kvp.Key] = kvp.Value.ToList();
-                    }
-                }
-                _uniqueUserHashesSinceLastSend.Clear();
-                
-                // Clone unique viewed user hashes for monthly tracking (incremental since last send)
-                uniqueViewedUserHashesToSend = new Dictionary<string, List<int>>();
-                foreach (var kvp in _uniqueViewedUserHashesSinceLastSend)
-                {
-                    if (kvp.Value.Count > 0)
-                    {
-                        uniqueViewedUserHashesToSend[kvp.Key] = kvp.Value.ToList();
-                    }
-                }
-                _uniqueViewedUserHashesSinceLastSend.Clear();
-                
-                // Clone application-level unique user hashes for monthly tracking (incremental since last send)
-                if (_applicationUniqueUserHashesSinceLastSend.Count > 0)
-                {
-                    applicationUniqueUserHashesToSend = _applicationUniqueUserHashesSinceLastSend.ToList();
-                    _applicationUniqueUserHashesSinceLastSend.Clear();
-                }
-
+                batch = CaptureBatch();
                 if (!suppressLogging) TryLog(LogLevel.Trace, "Sending stats");
-                var currentTime = DateTime.UtcNow;
-                var dataPacket = new FeatureStat
-                {
-                    AppKey = _appKey,
-                    Environment = _environment,
-                    Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(currentTime),
-                    TotalUniqueUsers = 0,
-                    AppVersion = appVersion,
-                    InstanceName = appInstanceName
-                };
-                if (processStartTime.HasValue)
-                    dataPacket.ProcessStartTime = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(processStartTime.Value);
-                if (definitionCacheHitsToSend > 0)
-                    dataPacket.DefinitionCacheHits = definitionCacheHitsToSend;
-                if (definitionCacheMissesToSend > 0)
-                    dataPacket.DefinitionCacheMisses = definitionCacheMissesToSend;
-
-                // Get all feature keys (from stats, unique user hashes, and unique viewed user hashes)
-                var featureKeysFromStats = stats.Keys.Select(t => t.FeatureKey).Distinct().ToList();
-                var featureKeysFromUsedHashes = uniqueUserHashesToSend.Keys.ToList();
-                var featureKeysFromViewedHashes = uniqueViewedUserHashesToSend.Keys.ToList();
-                var allFeatureKeys = featureKeysFromStats.Union(featureKeysFromUsedHashes).Union(featureKeysFromViewedHashes).Distinct().ToList();
-                
-                for (int i = 0; i < allFeatureKeys.Count; i++)
-                {
-                    var featureKey = allFeatureKeys[i];
-                    var enabledCheckCount = stats.TryGetValue((featureKey, (byte)StatType.Enabled), out var enabledCount) ? enabledCount : 0;
-                    var disabledCheckCount = stats.TryGetValue((featureKey, (byte)StatType.Disabled), out var disabledCount) ? disabledCount : 0;
-                    var uniqueRequestEnabledCount = stats.TryGetValue((featureKey, (byte)StatType.UniqueRequestEnabled), out var uniqueEnabledCount) ? uniqueEnabledCount : 0;
-                    var uniqueRequestDisabledCount = stats.TryGetValue((featureKey, (byte)StatType.UniqueRequestDisabled), out var uniqueDisabledCount) ? uniqueDisabledCount : 0;
-                    var usedCountTotal = stats.TryGetValue((featureKey, (byte)StatType.Used), out var usedCount) ? usedCount : 0;
-
-                    var statMessage = new StatMessage
-                    {
-                        Feature = featureKey,
-                        UniqueContextIdentifierEnabledCount = uniqueUsageEnabledMap.TryGetValue(featureKey, out var uniqueIdEnabledCount) ? uniqueIdEnabledCount.Count : 0,
-                        UniqueContextIdentifierDisabledCount = uniqueUsageDisabledMap.TryGetValue(featureKey, out var uniqueIdDisabledCount) ? uniqueIdDisabledCount.Count : 0,
-                        UniqueUsersUsedCount = uniqueUsageUsedMap.TryGetValue(featureKey, out var uniqueUsedCount) ? uniqueUsedCount.Count : 0
-                    };
-
-                    // Legacy scalar counts map to variantStats (enabled / disabled); server reads these instead of deprecated fields.
-                    if (enabledCheckCount > 0 || uniqueRequestEnabledCount > 0 || usedCountTotal > 0)
-                    {
-                        statMessage.VariantStats["enabled"] = new VariantStats
-                        {
-                            CheckCount = enabledCheckCount,
-                            RequestCount = uniqueRequestEnabledCount,
-                            UsedCount = usedCountTotal
-                        };
-                    }
-
-                    if (disabledCheckCount > 0 || uniqueRequestDisabledCount > 0)
-                    {
-                        statMessage.VariantStats["disabled"] = new VariantStats
-                        {
-                            CheckCount = disabledCheckCount,
-                            RequestCount = uniqueRequestDisabledCount
-                        };
-                    }
-
-                    // Add viewedCount via variantStats (new approach, not legacy fields)
-                    var viewedCount = stats.TryGetValue((featureKey, (byte)StatType.Viewed), out var vc) ? vc : 0;
-                    if (viewedCount > 0)
-                    {
-                        // Views are associated with "enabled" variant by default (you only view enabled features)
-                        if (!statMessage.VariantStats.ContainsKey("enabled"))
-                        {
-                            statMessage.VariantStats["enabled"] = new VariantStats();
-                        }
-                        statMessage.VariantStats["enabled"].ViewedCount = viewedCount;
-                    }
-                    
-                    // Add unique user hashes for monthly tracking (incremental since last send)
-                    if (uniqueUserHashesToSend != null && uniqueUserHashesToSend.TryGetValue(featureKey, out var hashes))
-                    {
-                        statMessage.UniqueUserHashes.AddRange(hashes);
-                    }
-                    
-                    // Add unique viewed user hashes for monthly tracking (incremental since last send)
-                    if (uniqueViewedUserHashesToSend != null && uniqueViewedUserHashesToSend.TryGetValue(featureKey, out var viewedHashes))
-                    {
-                        statMessage.UniqueViewedUserHashes.AddRange(viewedHashes);
-                    }
-                    
-                    dataPacket.Stats.Add(statMessage);
-                }
-                
-                // Add application-level unique user hashes for monthly tracking (incremental since last send)
-                if (applicationUniqueUserHashesToSend != null && applicationUniqueUserHashesToSend.Count > 0)
-                {
-                    dataPacket.UniqueUserHashes.AddRange(applicationUniqueUserHashesToSend);
-                }
-
-                var grpcMetadata = new Metadata
-                {
-                    { "UA", userAgent }
-                };
-
+                var dataPacket = CreateDataPacket(batch);
+                var grpcMetadata = new Metadata { { "UA", userAgent } };
                 var result = await _usageClient.SendStatsAsync(dataPacket, grpcMetadata, DateTime.UtcNow.AddSeconds(180)).ConfigureAwait(false);
-
-                if (result.FeatureCount != dataPacket.Stats.Count)
-                    if (!suppressLogging) TryLog(LogLevel.Warning, "Feature count did not match. Possible data integrity issues");
-
+                if (result.FeatureCount != dataPacket.Stats.Count && !suppressLogging)
+                    TryLog(LogLevel.Warning, "Feature count did not match. Possible data integrity issues");
                 _lastSend = DateTime.UtcNow;
             }
             catch (Exception ex)
             {
                 if (!suppressLogging) TryLog(LogLevel.Error, ex, "Error sending stats to toggly");
-
-                // Restore stats on error (only if we successfully cloned them)
-                if (stats != null)
-                {
-                    foreach (var stat in stats)
-                        _stats.AddOrUpdate(stat.Key, stat.Value, (_, oldValue) => oldValue + stat.Value);
-                }
-
-                // Restore unique usage maps on error
-                if (uniqueUsageEnabledMap != null)
-                {
-                    foreach (var u in uniqueUsageEnabledMap)
-                        _uniqueUsageEnabledMap.AddOrUpdate(u.Key, u.Value, (_, oldValue) => new ConcurrentHashSet<int>(u.Value.Union(oldValue)));
-                }
-
-                if (uniqueUsageDisabledMap != null)
-                {
-                    foreach (var u in uniqueUsageDisabledMap)
-                        _uniqueUsageDisabledMap.AddOrUpdate(u.Key, u.Value, (_, oldValue) => new ConcurrentHashSet<int>(u.Value.Union(oldValue)));
-                }
-
-                if (uniqueUsageUsedMap != null)
-                {
-                    foreach (var u in uniqueUsageUsedMap)
-                        _uniqueUsageUsedMap.AddOrUpdate(u.Key, u.Value, (_, oldValue) => new ConcurrentHashSet<int>(u.Value.Union(oldValue)));
-                }
-
-                if (uniqueUsageViewedMap != null)
-                {
-                    foreach (var u in uniqueUsageViewedMap)
-                        _uniqueUsageViewedMap.AddOrUpdate(u.Key, u.Value, (_, oldValue) => new ConcurrentHashSet<int>(u.Value.Union(oldValue)));
-                }
-
-                // Restore unique user hashes on error
-                if (uniqueUserHashesToSend != null)
-                {
-                    foreach (var kvp in uniqueUserHashesToSend)
-                    {
-                        var hashSet = _uniqueUserHashesSinceLastSend.GetOrAdd(kvp.Key, _ => new ConcurrentHashSet<int>());
-                        foreach (var hash in kvp.Value)
-                        {
-                            hashSet.Add(hash);
-                        }
-                    }
-                }
-                
-                // Restore unique viewed user hashes on error
-                if (uniqueViewedUserHashesToSend != null)
-                {
-                    foreach (var kvp in uniqueViewedUserHashesToSend)
-                    {
-                        var hashSet = _uniqueViewedUserHashesSinceLastSend.GetOrAdd(kvp.Key, _ => new ConcurrentHashSet<int>());
-                        foreach (var hash in kvp.Value)
-                        {
-                            hashSet.Add(hash);
-                        }
-                    }
-                }
-                
-                // Restore application-level unique user hashes on error
-                if (applicationUniqueUserHashesToSend != null)
-                {
-                    foreach (var hash in applicationUniqueUserHashesToSend)
-                    {
-                        _applicationUniqueUserHashesSinceLastSend.Add(hash);
-                    }
-                }
-
-                if (definitionCacheHitsToSend > 0)
-                    Interlocked.Add(ref _definitionCacheHits, definitionCacheHitsToSend);
-                if (definitionCacheMissesToSend > 0)
-                    Interlocked.Add(ref _definitionCacheMisses, definitionCacheMissesToSend);
-
+                if (batch != null) RestoreBatch(batch);
                 _lastError = ex.Message;
                 _lastErrorTime = DateTime.UtcNow;
             }
@@ -529,6 +300,168 @@ namespace Toggly.FeatureManagement
             {
                 _sendStatsSemaphore.Release();
             }
+        }
+
+        private bool HasPendingStats()
+        {
+            var pendingCacheHits = Volatile.Read(ref _definitionCacheHits);
+            var pendingCacheMisses = Volatile.Read(ref _definitionCacheMisses);
+            return !_stats.IsEmpty || !_uniqueUserHashesSinceLastSend.IsEmpty || !_uniqueViewedUserHashesSinceLastSend.IsEmpty
+                || !_applicationUniqueUserHashesSinceLastSend.IsEmpty || pendingCacheHits != 0 || pendingCacheMisses != 0;
+        }
+
+        private UsageStatsBatch CaptureBatch()
+        {
+            var batch = new UsageStatsBatch();
+            try
+            {
+                // Keep the capture/clear order and retain each completed snapshot if a later capture fails.
+                batch.Stats = new Dictionary<(string FeatureKey, byte Type), int>(_stats);
+                _stats.Clear();
+                batch.DefinitionCacheHits = Interlocked.Exchange(ref _definitionCacheHits, 0);
+                batch.DefinitionCacheMisses = Interlocked.Exchange(ref _definitionCacheMisses, 0);
+                batch.Enabled = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageEnabledMap);
+                _uniqueUsageEnabledMap.Clear();
+                batch.Disabled = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageDisabledMap);
+                _uniqueUsageDisabledMap.Clear();
+                batch.Used = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageUsedMap);
+                _uniqueUsageUsedMap.Clear();
+                batch.Viewed = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageViewedMap);
+                _uniqueUsageViewedMap.Clear();
+                batch.UsedHashes = SnapshotHashes(_uniqueUserHashesSinceLastSend);
+                _uniqueUserHashesSinceLastSend.Clear();
+                batch.ViewedHashes = SnapshotHashes(_uniqueViewedUserHashesSinceLastSend);
+                _uniqueViewedUserHashesSinceLastSend.Clear();
+                if (_applicationUniqueUserHashesSinceLastSend.Count > 0)
+                {
+                    batch.ApplicationHashes = _applicationUniqueUserHashesSinceLastSend.ToList();
+                    _applicationUniqueUserHashesSinceLastSend.Clear();
+                }
+                return batch;
+            }
+            catch
+            {
+                RestoreBatch(batch);
+                throw;
+            }
+        }
+
+        private static Dictionary<string, List<int>> SnapshotHashes(ConcurrentDictionary<string, ConcurrentHashSet<int>> source) =>
+            source.Where(entry => entry.Value.Count > 0).ToDictionary(entry => entry.Key, entry => entry.Value.ToList());
+
+        private FeatureStat CreateDataPacket(UsageStatsBatch batch)
+        {
+            var dataPacket = new FeatureStat
+            {
+                AppKey = _appKey,
+                Environment = _environment,
+                Time = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.UtcNow),
+                TotalUniqueUsers = 0,
+                AppVersion = appVersion,
+                InstanceName = appInstanceName
+            };
+            if (processStartTime.HasValue)
+                dataPacket.ProcessStartTime = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(processStartTime.Value);
+            if (batch.DefinitionCacheHits > 0) dataPacket.DefinitionCacheHits = batch.DefinitionCacheHits;
+            if (batch.DefinitionCacheMisses > 0) dataPacket.DefinitionCacheMisses = batch.DefinitionCacheMisses;
+
+            var featureKeys = batch.Stats!.Keys.Select(stat => stat.FeatureKey).Distinct()
+                .Union(batch.UsedHashes.Keys).Union(batch.ViewedHashes.Keys).Distinct();
+            foreach (var featureKey in featureKeys)
+                dataPacket.Stats.Add(CreateStatMessage(featureKey, batch));
+            dataPacket.UniqueUserHashes.AddRange(batch.ApplicationHashes);
+            return dataPacket;
+        }
+
+        private static StatMessage CreateStatMessage(string featureKey, UsageStatsBatch batch)
+        {
+            var statMessage = new StatMessage
+            {
+                Feature = featureKey,
+                UniqueContextIdentifierEnabledCount = batch.Enabled!.TryGetValue(featureKey, out var enabled) ? enabled.Count : 0,
+                UniqueContextIdentifierDisabledCount = batch.Disabled!.TryGetValue(featureKey, out var disabled) ? disabled.Count : 0,
+                UniqueUsersUsedCount = batch.Used!.TryGetValue(featureKey, out var used) ? used.Count : 0
+            };
+            var viewedCount = GetStatCount(batch, featureKey, StatType.Viewed);
+            var enabledVariant = new VariantStats
+            {
+                CheckCount = GetStatCount(batch, featureKey, StatType.Enabled),
+                RequestCount = GetStatCount(batch, featureKey, StatType.UniqueRequestEnabled),
+                UsedCount = GetStatCount(batch, featureKey, StatType.Used),
+                ViewedCount = viewedCount > 0 ? viewedCount : 0
+            };
+            if (enabledVariant.CheckCount > 0 || enabledVariant.RequestCount > 0 || enabledVariant.UsedCount > 0 || enabledVariant.ViewedCount > 0)
+                statMessage.VariantStats["enabled"] = enabledVariant;
+
+            var disabledVariant = new VariantStats
+            {
+                CheckCount = GetStatCount(batch, featureKey, StatType.Disabled),
+                RequestCount = GetStatCount(batch, featureKey, StatType.UniqueRequestDisabled)
+            };
+            if (disabledVariant.CheckCount > 0 || disabledVariant.RequestCount > 0)
+                statMessage.VariantStats["disabled"] = disabledVariant;
+            if (batch.UsedHashes.TryGetValue(featureKey, out var hashes)) statMessage.UniqueUserHashes.AddRange(hashes);
+            if (batch.ViewedHashes.TryGetValue(featureKey, out var viewedHashes)) statMessage.UniqueViewedUserHashes.AddRange(viewedHashes);
+            return statMessage;
+        }
+
+        private static int GetStatCount(UsageStatsBatch batch, string featureKey, StatType type) =>
+            batch.Stats!.TryGetValue((featureKey, (byte)type), out var count) ? count : 0;
+
+        private void RestoreBatch(UsageStatsBatch batch)
+        {
+            if (batch.Stats != null)
+                foreach (var stat in batch.Stats)
+                    _stats.AddOrUpdate(stat.Key, stat.Value, (_, oldValue) => oldValue + stat.Value);
+            RestoreUsageMaps(batch);
+            RestoreUserHashes(batch);
+            if (batch.DefinitionCacheHits > 0) Interlocked.Add(ref _definitionCacheHits, batch.DefinitionCacheHits);
+            if (batch.DefinitionCacheMisses > 0) Interlocked.Add(ref _definitionCacheMisses, batch.DefinitionCacheMisses);
+        }
+
+        private void RestoreUsageMaps(UsageStatsBatch batch)
+        {
+            if (batch.Enabled != null)
+                foreach (var entry in batch.Enabled)
+                    _uniqueUsageEnabledMap.AddOrUpdate(entry.Key, entry.Value, (_, oldValue) => new ConcurrentHashSet<int>(entry.Value.Union(oldValue)));
+            if (batch.Disabled != null)
+                foreach (var entry in batch.Disabled)
+                    _uniqueUsageDisabledMap.AddOrUpdate(entry.Key, entry.Value, (_, oldValue) => new ConcurrentHashSet<int>(entry.Value.Union(oldValue)));
+            if (batch.Used != null)
+                foreach (var entry in batch.Used)
+                    _uniqueUsageUsedMap.AddOrUpdate(entry.Key, entry.Value, (_, oldValue) => new ConcurrentHashSet<int>(entry.Value.Union(oldValue)));
+            if (batch.Viewed != null)
+                foreach (var entry in batch.Viewed)
+                    _uniqueUsageViewedMap.AddOrUpdate(entry.Key, entry.Value, (_, oldValue) => new ConcurrentHashSet<int>(entry.Value.Union(oldValue)));
+        }
+
+        private void RestoreUserHashes(UsageStatsBatch batch)
+        {
+            foreach (var entry in batch.UsedHashes)
+            {
+                var hashSet = _uniqueUserHashesSinceLastSend.GetOrAdd(entry.Key, _ => new ConcurrentHashSet<int>());
+                foreach (var hash in entry.Value) hashSet.Add(hash);
+            }
+            foreach (var entry in batch.ViewedHashes)
+            {
+                var hashSet = _uniqueViewedUserHashesSinceLastSend.GetOrAdd(entry.Key, _ => new ConcurrentHashSet<int>());
+                foreach (var hash in entry.Value) hashSet.Add(hash);
+            }
+            foreach (var hash in batch.ApplicationHashes) _applicationUniqueUserHashesSinceLastSend.Add(hash);
+        }
+
+        private sealed class UsageStatsBatch
+        {
+            public Dictionary<(string FeatureKey, byte Type), int>? Stats { get; set; }
+            public Dictionary<string, ConcurrentHashSet<int>>? Enabled { get; set; }
+            public Dictionary<string, ConcurrentHashSet<int>>? Disabled { get; set; }
+            public Dictionary<string, ConcurrentHashSet<int>>? Used { get; set; }
+            public Dictionary<string, ConcurrentHashSet<int>>? Viewed { get; set; }
+            public Dictionary<string, List<int>> UsedHashes { get; set; } = new Dictionary<string, List<int>>();
+            public Dictionary<string, List<int>> ViewedHashes { get; set; } = new Dictionary<string, List<int>>();
+            public List<int> ApplicationHashes { get; set; } = new List<int>();
+            public int DefinitionCacheHits { get; set; }
+            public int DefinitionCacheMisses { get; set; }
         }
 
         /// <inheritdoc/>
