@@ -167,7 +167,7 @@ jobs:
       - name: Report Java signature fingerprint after publish failure
         if: failure() && steps.publish_central.outcome == 'failure'
         continue-on-error: true
-        run: python3 .github/scripts/report-java-signature-fingerprint.py "${{ env.SDK_ROOT }}/toggly-core/target/gpg"
+        run: python3 .github/scripts/report-java-signature-fingerprint.py "${{ env.SDK_ROOT }}/toggly-core/target"
 
   release:
     needs: [publish, validate]

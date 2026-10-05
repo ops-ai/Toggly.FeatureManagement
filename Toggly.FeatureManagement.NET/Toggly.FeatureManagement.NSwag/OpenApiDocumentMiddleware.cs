@@ -17,7 +17,6 @@ using NSwag.Generation;
 using System;
 using System.Collections.Generic;
 using System.Runtime.ExceptionServices;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace Toggly.FeatureManagement.NSwag
@@ -25,15 +24,35 @@ namespace Toggly.FeatureManagement.NSwag
     /// <summary>Generates a Swagger specification on a given path.</summary>
     public class OpenApiDocumentMiddleware
     {
+        private static readonly Func<HttpRequest, string>? DefaultDocumentCacheKey =
+            new OpenApiDocumentMiddlewareSettings().CreateDocumentCacheKey;
         private readonly RequestDelegate _nextDelegate;
         private readonly string _documentName;
         private readonly string _path;
         private readonly IApiDescriptionGroupCollectionProvider _apiDescriptionGroupCollectionProvider;
         private readonly OpenApiDocumentMiddlewareSettings _settings;
-        private int _version;
+        private const int MaxDocumentCacheEntries = 32;
         private readonly object _documentsCacheLock = new object();
-        private readonly Dictionary<string, Tuple<string?, ExceptionDispatchInfo?, DateTimeOffset>> _documentsCache =
-            new Dictionary<string, Tuple<string?, ExceptionDispatchInfo?, DateTimeOffset>>();
+        private readonly Dictionary<string, DocumentCacheEntry> _documentsCache =
+            new Dictionary<string, DocumentCacheEntry>();
+        private readonly Queue<string> _cacheInsertionOrder = new Queue<string>();
+        private int _cacheGeneration;
+
+        private sealed class DocumentCacheEntry
+        {
+            public DocumentCacheEntry(string? data, ExceptionDispatchInfo? exception, int apiDescriptionVersion)
+            {
+                Data = data;
+                Exception = exception;
+                ApiDescriptionVersion = apiDescriptionVersion;
+                CreatedAt = DateTimeOffset.UtcNow;
+            }
+
+            public string? Data { get; }
+            public ExceptionDispatchInfo? Exception { get; }
+            public int ApiDescriptionVersion { get; }
+            public DateTimeOffset CreatedAt { get; }
+        }
 
         /// <summary>Initializes a new instance of the <see cref="OpenApiDocumentMiddleware"/> class.</summary>
         /// <param name="nextDelegate">The next delegate.</param>
@@ -92,29 +111,20 @@ namespace Toggly.FeatureManagement.NSwag
         /// <returns>The Swagger specification.</returns>
         protected virtual async Task<string> GetDocumentAsync(HttpContext context)
         {
-            var documentKey = _settings.CreateDocumentCacheKey?.Invoke(context.Request) ?? string.Empty;
-
-            Tuple<string?, ExceptionDispatchInfo?, DateTimeOffset>? document;
-            lock (_documentsCacheLock)
-            {
-                _documentsCache.TryGetValue(documentKey, out document);
-            }
-
-            if (document?.Item2 != null &&
-                document.Item3 + _settings.ExceptionCacheTime > DateTimeOffset.UtcNow)
-            {
-                document.Item2.Throw();
-            }
-
+            var cacheKeyFactory = _settings.CreateDocumentCacheKey;
+            // NSwag's default key uses the request host; only a caller-supplied key opts in here.
+            var documentKey = cacheKeyFactory == null || cacheKeyFactory.Equals(DefaultDocumentCacheKey)
+                ? null
+                : cacheKeyFactory(context.Request);
             var apiDescriptionGroups = _apiDescriptionGroupCollectionProvider.ApiDescriptionGroups;
-            if (apiDescriptionGroups.Version == Volatile.Read(ref _version) &&
-                document?.Item1 != null)
-            {
-                return document.Item1;
-            }
+            var cachedData = GetCachedDocument(documentKey, apiDescriptionGroups.Version,
+                out var cacheGeneration);
+            if (cachedData != null)
+                return cachedData;
 
             try
             {
+                context.RequestAborted.ThrowIfCancellationRequested();
                 var openApiDocument = await GenerateDocumentAsync(context);
                 var data = _path.Contains(".yaml", StringComparison.OrdinalIgnoreCase) ?
                     OpenApiYamlDocument.ToYaml(openApiDocument) :
@@ -123,23 +133,22 @@ namespace Toggly.FeatureManagement.NSwag
                 XmlDocs.ClearCache();
                 CachedType.ClearCache();
 
-                _version = apiDescriptionGroups.Version;
-
-                lock (_documentsCacheLock)
-                {
-                    _documentsCache[documentKey] = new Tuple<string?, ExceptionDispatchInfo?, DateTimeOffset>(
-                        data, null, DateTimeOffset.UtcNow);
-                }
+                if (documentKey != null && !context.RequestAborted.IsCancellationRequested)
+                    StoreDocument(documentKey,
+                        new DocumentCacheEntry(data, null, apiDescriptionGroups.Version), cacheGeneration);
 
                 return data;
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch (Exception exception)
             {
-                lock (_documentsCacheLock)
-                {
-                    _documentsCache[documentKey] = new Tuple<string?, ExceptionDispatchInfo?, DateTimeOffset>(
-                        null, ExceptionDispatchInfo.Capture(exception), DateTimeOffset.UtcNow);
-                }
+                if (documentKey != null && !context.RequestAborted.IsCancellationRequested)
+                    StoreDocument(documentKey,
+                        new DocumentCacheEntry(null, ExceptionDispatchInfo.Capture(exception),
+                            apiDescriptionGroups.Version), cacheGeneration);
 
                 throw;
             }
@@ -164,11 +173,52 @@ namespace Toggly.FeatureManagement.NSwag
             return document;
         }
 
+        private string? GetCachedDocument(string? documentKey, int apiDescriptionVersion,
+            out int cacheGeneration)
+        {
+            DocumentCacheEntry? document = null;
+            lock (_documentsCacheLock)
+            {
+                cacheGeneration = _cacheGeneration;
+                if (documentKey != null)
+                    _documentsCache.TryGetValue(documentKey, out document);
+            }
+
+            if (document?.ApiDescriptionVersion != apiDescriptionVersion)
+                return null;
+
+            if (document.Exception != null &&
+                document.CreatedAt + _settings.ExceptionCacheTime > DateTimeOffset.UtcNow)
+                document.Exception.Throw();
+
+            return document.Data;
+        }
+
+        private void StoreDocument(string key, DocumentCacheEntry document, int cacheGeneration)
+        {
+            lock (_documentsCacheLock)
+            {
+                if (cacheGeneration != _cacheGeneration)
+                    return;
+
+                if (!_documentsCache.ContainsKey(key))
+                {
+                    if (_documentsCache.Count == MaxDocumentCacheEntries)
+                        _documentsCache.Remove(_cacheInsertionOrder.Dequeue());
+                    _cacheInsertionOrder.Enqueue(key);
+                }
+
+                _documentsCache[key] = document;
+            }
+        }
+
         private void ClearDocumentsCache()
         {
             lock (_documentsCacheLock)
             {
+                _cacheGeneration++;
                 _documentsCache.Clear();
+                _cacheInsertionOrder.Clear();
             }
         }
     }
