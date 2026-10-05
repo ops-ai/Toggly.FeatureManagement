@@ -1,5 +1,12 @@
 # Changelog
 
+## All .NET SDK packages 3.12.12 - 2026-10-05
+
+### Changed
+- `Toggly.FeatureManagement.Storage.EntityFramework` computes the same SHA-256
+  catalog IDs without creating a hash instance for each lookup. Missing
+  catalog-store dependencies and registration arguments still fail immediately.
+
 ## All .NET SDK packages 3.12.11 - 2026-10-04
 
 ### Fixed
