@@ -1,3 +1,11 @@
+## 0.4.1
+
+2026-10-04
+
+### Fixed
+
+- Require Node 20.19.x or Node 22.12.0 or later so CommonJS applications can load NestJS 12's ESM packages.
+
 ## 0.4.0
 
 2026-09-28
