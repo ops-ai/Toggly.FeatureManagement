@@ -86,8 +86,9 @@ func (c *SegmentMembershipClient) send(method, path string, body any, dest any) 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("segment membership %s %s failed: %d", method, path, resp.StatusCode)
 	}
-	if dest == nil || len(data) == 0 {
+	trimmed := bytes.TrimSpace(data)
+	if dest == nil || len(trimmed) == 0 {
 		return nil
 	}
-	return json.Unmarshal(data, dest)
+	return json.Unmarshal(trimmed, dest)
 }

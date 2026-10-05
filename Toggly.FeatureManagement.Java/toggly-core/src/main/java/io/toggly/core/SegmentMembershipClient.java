@@ -2,6 +2,7 @@ package io.toggly.core;
 
 import io.toggly.core.config.TogglyConfig;
 import io.toggly.core.exception.TogglyNetworkException;
+import io.toggly.core.util.SimpleJson;
 
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -9,8 +10,10 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Map;
 
 /**
  * Backend-key client for targeting-list membership on {@code app.toggly.io}.
@@ -54,10 +57,19 @@ public final class SegmentMembershipClient {
     }
 
     private static String identifiersJson(List<String> identifiers) {
-        String quoted = identifiers.stream()
-                .map(id -> "\"" + id.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
-                .collect(Collectors.joining(","));
-        return "{\"identifiers\":[" + quoted + "]}";
+        if (identifiers == null) {
+            throw new IllegalArgumentException("identifiers is required");
+        }
+        List<String> cleaned = new ArrayList<>(identifiers.size());
+        for (String id : identifiers) {
+            if (id == null) {
+                throw new IllegalArgumentException("identifiers must not contain null");
+            }
+            cleaned.add(id);
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("identifiers", cleaned);
+        return SimpleJson.serialize(body);
     }
 
     private String send(String method, String path, String body) {

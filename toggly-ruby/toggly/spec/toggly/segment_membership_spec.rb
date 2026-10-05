@@ -15,6 +15,13 @@ RSpec.describe Toggly::SegmentMembership do
     expect(summary).to eq("id" => "list-1", "itemCount" => 1)
   end
 
+  it "returns nil for empty success bodies" do
+    stub_request(:delete, "https://app.toggly.io/api/v2/segments/Beta%20Testers/items")
+      .to_return(status: 204, body: "")
+
+    expect(described_class.new(app_key: "backend-key").remove_segment_members("Beta Testers", ["user-1"])).to be_nil
+  end
+
   it "requires an app key" do
     expect { described_class.new(app_key: "") }.to raise_error(ArgumentError)
   end

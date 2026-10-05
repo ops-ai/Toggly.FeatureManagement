@@ -33,15 +33,18 @@ export class SegmentMembershipError extends Error {
 export function createSegmentMembershipClient(options: SegmentMembershipClientOptions) {
   const baseUrl = (options.baseUrl ?? 'https://app.toggly.io').replace(/\/+$/, '')
   const http = options.fetch ?? fetch
-  const headers = {
-    Authorization: options.appKey,
-    'Content-Type': 'application/json',
-  }
 
   async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const requestHeaders: Record<string, string> = {
+      Authorization: options.appKey,
+      Accept: 'application/json',
+    }
+    if (body !== undefined) {
+      requestHeaders['Content-Type'] = 'application/json'
+    }
     const response = await http(`${baseUrl}${path}`, {
       method,
-      headers,
+      headers: requestHeaders,
       body: body === undefined ? undefined : JSON.stringify(body),
     })
     if (!response.ok) {
@@ -50,7 +53,11 @@ export function createSegmentMembershipClient(options: SegmentMembershipClientOp
     if (response.status === 204) {
       return undefined as T
     }
-    return (await response.json()) as T
+    const text = await response.text()
+    if (!text.trim()) {
+      return undefined as T
+    }
+    return JSON.parse(text) as T
   }
 
   return {

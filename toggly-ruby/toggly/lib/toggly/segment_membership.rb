@@ -56,7 +56,11 @@ module Toggly
         )
       end
 
-      JSON.parse(response.body)
+      # Mutations may return 204/empty bodies; do not JSON-parse blank payloads.
+      body = response.body.to_s
+      return nil if body.strip.empty?
+
+      JSON.parse(body)
     end
   end
 end

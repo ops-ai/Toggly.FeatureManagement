@@ -26,16 +26,29 @@ defmodule Toggly.Segments do
 
     headers = [
       {"authorization", app_key},
-      {"accept", "application/json"},
-      {"content-type", "application/json"}
+      {"accept", "application/json"}
     ]
+
+    headers =
+      if payload do
+        [{"content-type", "application/json"} | headers]
+      else
+        headers
+      end
 
     request = %{method: method, url: base <> path, headers: headers, timeout: 30_000}
     request = if payload, do: Map.put(request, :body, payload), else: request
 
     case Toggly.Transport.request(request) do
       {:ok, %{status: status, body: response_body}} when status >= 200 and status < 300 ->
-        {:ok, Jason.decode!(response_body)}
+        # Mutations may return 204/empty bodies; do not JSON-decode blanks.
+        trimmed = response_body |> to_string() |> String.trim()
+
+        if trimmed == "" do
+          {:ok, nil}
+        else
+          {:ok, Jason.decode!(trimmed)}
+        end
 
       {:ok, %{status: status}} ->
         {:error, {:http, status}}

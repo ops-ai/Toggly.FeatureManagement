@@ -113,6 +113,19 @@ class SegmentMembershipClientTest {
     }
 
     @Test
+    void rejectsNullIdentifier() {
+        assertThatThrownBy(() -> client().addSegmentMembers("beta", java.util.Arrays.asList("user-1", null)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("null");
+    }
+
+    @Test
+    void escapesControlCharactersInIdentifiers() {
+        client().addSegmentMembers("beta", List.of("user\n1\t\"x\""));
+        assertThat(body.get()).isEqualTo("{\"identifiers\":[\"user\\n1\\t\\\"x\\\"\"]}");
+    }
+
+    @Test
     void trimsTrailingSlashFromBaseUrl() {
         SegmentMembershipClient trimmed = new SegmentMembershipClient(
                 "backend-key",

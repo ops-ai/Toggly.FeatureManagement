@@ -46,9 +46,10 @@ class SegmentMembershipClient:
         data = None if body is None else json.dumps(body).encode("utf-8")
         headers = {
             "Authorization": self._app_key,
-            "Content-Type": "application/json",
             "Accept": "application/json",
         }
+        if body is not None:
+            headers["Content-Type"] = "application/json"
         request = urllib.request.Request(
             self._base + path,
             data=data,
@@ -57,7 +58,11 @@ class SegmentMembershipClient:
         )
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
-                return json.loads(response.read().decode("utf-8"))
+                payload = response.read().decode("utf-8")
+                # Mutations may return 204/empty bodies; skip JSON parse.
+                if not payload.strip():
+                    return None
+                return json.loads(payload)
         except urllib.error.HTTPError as exc:
             raise RuntimeError(
                 f"Segment membership {method} {path} failed: {exc.code}"

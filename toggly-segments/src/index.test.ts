@@ -12,6 +12,14 @@ describe('createSegmentMembershipClient', () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     expect(url).toBe('https://app.toggly.io/api/v2/segments')
     expect((init.headers as Record<string, string>).Authorization).toBe('backend-key')
+    expect((init.headers as Record<string, string>).Accept).toBe('application/json')
+    expect((init.headers as Record<string, string>)['Content-Type']).toBeUndefined()
+  })
+
+  it('returns undefined for empty success bodies', async () => {
+    const fetchMock = vi.fn(async () => new Response('', { status: 200 })) as unknown as typeof fetch
+    const client = createSegmentMembershipClient({ appKey: 'backend-key', fetch: fetchMock })
+    await expect(client.removeSegmentMembers('beta', ['u1'])).resolves.toBeUndefined()
   })
 
   it('throws on 403', async () => {

@@ -51,6 +51,27 @@ def test_add_segment_members_posts_identifiers(membership_server):
     assert _Handler.last["body"] == {"identifiers": ["user-1"]}
 
 
+def test_empty_success_body_returns_none(membership_server):
+    class EmptyHandler(BaseHTTPRequestHandler):
+        def do_DELETE(self):  # noqa: N802
+            self.send_response(204)
+            self.end_headers()
+
+        def log_message(self, format, *args):  # noqa: A003
+            return
+
+    server = HTTPServer(("127.0.0.1", 0), EmptyHandler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        client = SegmentMembershipClient(
+            "backend-key", f"http://127.0.0.1:{server.server_port}"
+        )
+        assert client.remove_segment_members("beta", ["user-1"]) is None
+    finally:
+        server.shutdown()
+
+
 def test_requires_app_key():
     with pytest.raises(ValueError):
         SegmentMembershipClient("")

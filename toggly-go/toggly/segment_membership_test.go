@@ -140,6 +140,25 @@ func TestSegmentMembershipClient_DefaultHTTPClient(t *testing.T) {
 	}
 }
 
+func TestSegmentMembershipClient_WhitespaceBodyIgnored(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("   \n"))
+	}))
+	t.Cleanup(server.Close)
+
+	client := SegmentMembershipClient{AppKey: "backend-key", BaseURL: server.URL, HTTP: server.Client()}
+	segments, err := client.ListSegments()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if segments != nil {
+		t.Fatalf("segments = %#v", segments)
+	}
+}
+
 func TestSegmentMembershipClient_HTTPError(t *testing.T) {
 	t.Parallel()
 

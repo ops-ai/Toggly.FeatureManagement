@@ -105,4 +105,12 @@ public class TogglySegmentMembershipClientTests
         var (client, _) = Build(HttpStatusCode.Forbidden, "{}");
         await Assert.ThrowsAsync<HttpRequestException>(() => client.ListSegmentsAsync());
     }
+
+    [Fact]
+    public async Task EmptySuccessBody_ReturnsDefault()
+    {
+        var (client, _) = Build(HttpStatusCode.NoContent, "");
+        var summary = await client.RemoveSegmentMembersAsync("Beta Testers", SampleIdentifiers);
+        Assert.Null(summary);
+    }
 }
