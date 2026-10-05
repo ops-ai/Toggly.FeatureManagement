@@ -20,7 +20,8 @@ namespace Toggly.FeatureManagement.Storage.EntityFramework
         /// </summary>
         public EntityFrameworkCatalogStore(IDbContextFactory<TogglyCatalogDbContext> contextFactory)
         {
-            _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
+            ArgumentNullException.ThrowIfNull(contextFactory);
+            _contextFactory = contextFactory;
         }
 
         /// <inheritdoc />
@@ -46,7 +47,7 @@ namespace Toggly.FeatureManagement.Storage.EntityFramework
             CancellationToken cancellationToken = default)
         {
             var normalizedName = ValidateCatalogName(catalogName);
-            if (document == null) throw new ArgumentNullException(nameof(document));
+            ArgumentNullException.ThrowIfNull(document);
 
             var payload = CatalogJson.Serialize(document);
             var normalizedDocument = CatalogJson.Parse(payload);
@@ -123,8 +124,7 @@ namespace Toggly.FeatureManagement.Storage.EntityFramework
         public static string GetCatalogId(string catalogName)
         {
             var name = ValidateCatalogName(catalogName);
-            using var hash = SHA256.Create();
-            var bytes = hash.ComputeHash(Encoding.UTF8.GetBytes(name));
+            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(name));
             var builder = new StringBuilder(bytes.Length * 2);
             foreach (var value in bytes)
             {

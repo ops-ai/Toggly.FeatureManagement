@@ -107,10 +107,11 @@ public class TogglySegmentMembershipClientTests
     }
 
     [Fact]
-    public async Task EmptySuccessBody_ReturnsDefault()
+    public async Task EmptySuccessBody_ReturnsDefaultInstance()
     {
         var (client, _) = Build(HttpStatusCode.NoContent, "");
         var summary = await client.RemoveSegmentMembersAsync("Beta Testers", SampleIdentifiers);
-        Assert.Null(summary);
+        Assert.NotNull(summary);
+        Assert.Equal(string.Empty, summary.Name);
     }
 }

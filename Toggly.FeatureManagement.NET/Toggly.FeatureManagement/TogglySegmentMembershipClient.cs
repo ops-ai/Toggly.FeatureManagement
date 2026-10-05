@@ -99,9 +99,13 @@ namespace Toggly.FeatureManagement
             if (!response.IsSuccessStatusCode)
                 throw new HttpRequestException($"Segment membership {method} {path} failed with {(int)response.StatusCode}: {payload}");
 
-            // Mutations may return 204/empty bodies; skip JSON deserialize.
+            // Mutations may return 204/empty bodies; honor non-nullable contracts.
             if (string.IsNullOrWhiteSpace(payload))
-                return default!;
+            {
+                if (typeof(T).IsValueType)
+                    return default!;
+                return Activator.CreateInstance<T>()!;
+            }
 
             return JsonConvert.DeserializeObject<T>(payload, JsonSettings)!;
         }

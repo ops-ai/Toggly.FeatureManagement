@@ -87,7 +87,14 @@ public final class SegmentMembershipClient {
             }
             int status = connection.getResponseCode();
             InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
-            String payload = stream == null ? "" : new String(stream.readAllBytes(), StandardCharsets.UTF_8);
+            String payload;
+            if (stream == null) {
+                payload = "";
+            } else {
+                try (InputStream in = stream) {
+                    payload = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                }
+            }
             if (status >= 400) {
                 throw new TogglyNetworkException("Segment membership " + method + " " + path + " failed: " + status);
             }

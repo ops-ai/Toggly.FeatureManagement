@@ -7,6 +7,22 @@
   configured Backend application key (`GET/POST/DELETE/PUT /api/v2/segments`).
   Evaluation still waits for definition republish.
 
+## All .NET SDK packages 3.12.12 - 2026-10-05
+
+### Changed
+- `Toggly.FeatureManagement.Storage.EntityFramework` computes the same SHA-256
+  catalog IDs without creating a hash instance for each lookup. Missing
+  catalog-store dependencies and registration arguments still fail immediately.
+
+## All .NET SDK packages 3.12.11 - 2026-10-04
+
+### Fixed
+- `Toggly.FeatureManagement.NSwag` generates OpenAPI documents per request by
+  default, so request-scoped feature gates cannot reuse another request's
+  schema. Applications can opt into bounded caching with an explicit document
+  key that distinguishes their document variants.
+
+
 ## All .NET SDK packages 3.12.10 - 2026-10-04
 
 ### Fixed
