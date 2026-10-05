@@ -1,6 +1,6 @@
 # Changelog
 
-## All .NET SDK packages 3.12.10 - 2026-10-04
+## All .NET SDK packages 3.12.11 - 2026-10-04
 
 ### Fixed
 - `Toggly.FeatureManagement.NSwag` generates OpenAPI documents per request by
