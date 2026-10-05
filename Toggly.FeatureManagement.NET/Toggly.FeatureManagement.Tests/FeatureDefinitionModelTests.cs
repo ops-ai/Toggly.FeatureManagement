@@ -74,7 +74,7 @@ public class FeatureDefinitionModelTests
         // Arrange
         var model1 = CreateFeatureDefinition("feature1", CreateParameterizedFilter());
         var model2 = CreateFeatureDefinition("feature1", CreateParameterizedFilter());
-        IEqualityComparer<FeatureDefinitionModel> comparer = new FeatureDefinitionModel();
+        var comparer = new FeatureDefinitionModel();
         var models = new HashSet<FeatureDefinitionModel>(comparer) { model1 };
 
         // Act & Assert
@@ -101,7 +101,7 @@ public class FeatureDefinitionModelTests
         var model1 = CreateFeatureDefinition("feature1", CreateParameterizedFilter());
         var model2 = CreateFeatureDefinition(featureKey,
             CreateParameterizedFilter(filterName, parameterName, parameterValue));
-        IEqualityComparer<FeatureDefinitionModel> comparer = new FeatureDefinitionModel();
+        var comparer = new FeatureDefinitionModel();
 
         // Act & Assert
         comparer.Equals(model1, model2).Should().BeFalse();
@@ -183,7 +183,7 @@ public class FeatureDefinitionModelTests
                 { "Group", "Beta" }
             }
         });
-        IEqualityComparer<FeatureDefinitionModel> comparer = new FeatureDefinitionModel();
+        var comparer = new FeatureDefinitionModel();
 
         // Act
         var hash1 = comparer.GetHashCode(model1);
@@ -216,7 +216,7 @@ public class FeatureDefinitionModelTests
         // Arrange
         var filter1 = CreateParameterizedFilter();
         var filter2 = CreateParameterizedFilter();
-        IEqualityComparer<FeatureFilter> comparer = new FeatureFilter();
+        var comparer = new FeatureFilter();
         var filters = new HashSet<FeatureFilter>(comparer) { filter1 };
 
         // Act & Assert
@@ -241,7 +241,7 @@ public class FeatureDefinitionModelTests
         // Arrange
         var filter1 = CreateParameterizedFilter();
         var filter2 = CreateParameterizedFilter(name, parameterName, parameterValue);
-        IEqualityComparer<FeatureFilter> comparer = new FeatureFilter();
+        var comparer = new FeatureFilter();
 
         // Act & Assert
         filter1.Equals(filter2).Should().BeFalse();
@@ -255,7 +255,7 @@ public class FeatureDefinitionModelTests
         // Arrange
         var filter1 = new FeatureFilter { Name = "AlwaysOn", Parameters = null };
         var filter2 = new FeatureFilter { Name = "AlwaysOn", Parameters = null };
-        IEqualityComparer<FeatureFilter> comparer = new FeatureFilter();
+        var comparer = new FeatureFilter();
 
         // Act & Assert
         comparer.Equals(filter1, filter2).Should().BeTrue();
@@ -269,7 +269,7 @@ public class FeatureDefinitionModelTests
     {
         // Arrange
         var filter = CreateParameterizedFilter();
-        IEqualityComparer<FeatureFilter> comparer = new FeatureFilter();
+        var comparer = new FeatureFilter();
 
         // Act
         var result = comparer.Equals(nullX ? null : filter, nullY ? null : filter);
@@ -390,7 +390,7 @@ public class FeatureDefinitionModelTests
                 { "Group", "Beta" }
             }
         };
-        IEqualityComparer<FeatureFilter> comparer = new FeatureFilter();
+        var comparer = new FeatureFilter();
 
         // Act
         var hash1 = comparer.GetHashCode(filter1);
