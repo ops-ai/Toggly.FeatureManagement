@@ -57,6 +57,7 @@ public class TogglySegmentMembershipClientTests
         Assert.Equal(HttpMethod.Get, capture.Request!.Method);
         Assert.Equal("/api/v2/segments", capture.Request.RequestUri!.PathAndQuery);
         Assert.Equal("backend-key", capture.Request.Headers.GetValues("Authorization").First());
+        Assert.Equal("application/json", capture.Request.Headers.GetValues("Accept").First());
     }
 
     [Fact]
@@ -69,6 +70,7 @@ public class TogglySegmentMembershipClientTests
         Assert.Equal(HttpMethod.Post, capture.Request!.Method);
         Assert.Equal("/api/v2/segments/Beta%20Testers/items", capture.Request.RequestUri!.PathAndQuery);
         Assert.Equal("backend-key", capture.Request.Headers.GetValues("Authorization").First());
+        Assert.Equal("application/json", capture.Request.Headers.GetValues("Accept").First());
     }
 
     [Fact]

@@ -75,3 +75,9 @@ def test_empty_success_body_returns_none(membership_server):
 def test_requires_app_key():
     with pytest.raises(ValueError):
         SegmentMembershipClient("")
+
+
+def test_transport_failure_raises_runtime_error():
+    client = SegmentMembershipClient("backend-key", "http://127.0.0.1:1")
+    with pytest.raises(RuntimeError, match="failed"):
+        client.list_segments()

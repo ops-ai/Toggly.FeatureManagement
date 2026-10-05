@@ -40,6 +40,8 @@ module Toggly
       uri = URI.parse("#{@base}#{path}")
       http = Net::HTTP.new(uri.host, uri.port)
       http.use_ssl = uri.scheme == "https"
+      http.open_timeout = 30
+      http.read_timeout = 30
       req = klass.new(uri)
       req["Authorization"] = @app_key
       req["Accept"] = "application/json"

@@ -67,3 +67,7 @@ class SegmentMembershipClient:
             raise RuntimeError(
                 f"Segment membership {method} {path} failed: {exc.code}"
             ) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(
+                f"Segment membership {method} {path} failed: {exc.reason}"
+            ) from exc

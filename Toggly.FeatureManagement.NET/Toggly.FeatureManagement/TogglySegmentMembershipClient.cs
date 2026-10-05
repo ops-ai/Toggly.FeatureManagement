@@ -84,6 +84,7 @@ namespace Toggly.FeatureManagement
             var client = _httpClientFactory.CreateClient("toggly-app");
             using var request = new HttpRequestMessage(method, path);
             request.Headers.TryAddWithoutValidation("Authorization", _settings.Value.AppKey);
+            request.Headers.TryAddWithoutValidation("Accept", "application/json");
             if (body != null)
             {
                 request.Content = new StringContent(JsonConvert.SerializeObject(body, JsonSettings), Encoding.UTF8, "application/json");
