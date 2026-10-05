@@ -60,8 +60,25 @@ if (registryVersion) {
   sdkDependency = `file:./${artifact}`;
   console.log(`Packed artifact SHA256 ${artifactHash}`);
 }
+let segmentsDependency;
+if (registryVersion) {
+  segmentsDependency = undefined;
+} else {
+  const segmentsDir = path.join(packageDir, '..', 'toggly-segments');
+  await run([npm, 'run', 'build'], segmentsDir);
+  await run([npm, 'pack', '--pack-destination', root], segmentsDir);
+  const segmentsManifest = JSON.parse(await readFile(path.join(segmentsDir, 'package.json')));
+  const segmentsName = `ops-ai-toggly-segments-${segmentsManifest.version}.tgz`;
+  const segmentsBytes = await readFile(path.join(root, segmentsName));
+  const segmentsHash = createHash('sha256').update(segmentsBytes).digest('hex');
+  const segmentsArtifact = `toggly-segments-${segmentsHash}.tgz`;
+  await writeFile(path.join(root, segmentsArtifact), segmentsBytes);
+  segmentsDependency = `file:./${segmentsArtifact}`;
+  console.log(`Packed segments artifact SHA256 ${segmentsHash}`);
+}
 const dependencies = {
   ...selected, '@ops-ai/astro-feature-flags-toggly': sdkDependency,
+  ...(segmentsDependency ? { '@ops-ai/toggly-segments': segmentsDependency } : {}),
   react: process.env.ASTRO_MAJOR === '5-min' ? '18.3.1' : '19.2.4',
   'react-dom': process.env.ASTRO_MAJOR === '5-min' ? '18.3.1' : '19.2.4',
   '@types/react': process.env.ASTRO_MAJOR === '5-min' ? '18.3.27' : '19.2.14',
@@ -77,7 +94,7 @@ await run([npm, 'install', '--no-audit', '--no-fund', '--engine-strict']);
 await run([npm, 'ci', '--no-audit', '--no-fund', '--engine-strict']);
 await run([npm, 'ls', '--depth=0']);
 const lock = JSON.parse(await readFile(path.join(root, 'package-lock.json')));
-const localPackages = new Set(registryVersion ? [] : ['node_modules/@ops-ai/astro-feature-flags-toggly']);
+const localPackages = new Set(registryVersion ? [] : ['node_modules/@ops-ai/astro-feature-flags-toggly', 'node_modules/@ops-ai/toggly-segments']);
 for (const [name, entry] of Object.entries(lock.packages)) {
   if (!name || localPackages.has(name)) continue;
   assert.equal(entry.link, undefined, `${name} must not use a linked dependency`);

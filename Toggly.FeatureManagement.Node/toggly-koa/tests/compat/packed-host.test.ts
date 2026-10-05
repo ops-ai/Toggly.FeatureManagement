@@ -40,6 +40,13 @@ function installAndVerify(koaVersion: string) {
     const evalTarballs = readdirSync(evalPackagesDirectory).filter((file) => file.endsWith('.tgz'))
     assert.equal(evalTarballs.length, 1, 'Expected one eval tarball')
     const evalTarball = join(evalPackagesDirectory, evalTarballs[0])
+    const segmentsDirectory = resolve(packageDirectory, '../../toggly-segments')
+    const segmentsPackagesDirectory = join(packagesDirectory, 'segments')
+    mkdirSync(segmentsPackagesDirectory, { recursive: true })
+    run('npm', ['pack', '--pack-destination', segmentsPackagesDirectory], segmentsDirectory)
+    const segmentsTarballs = readdirSync(segmentsPackagesDirectory).filter((file) => file.endsWith('.tgz'))
+    assert.equal(segmentsTarballs.length, 1, 'Expected one segments tarball')
+    const segmentsTarball = join(segmentsPackagesDirectory, segmentsTarballs[0])
 
     const packageJsonPath = join(temporaryDirectory, 'package.json')
     const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'))
@@ -56,6 +63,7 @@ function installAndVerify(koaVersion: string) {
         '--no-fund',
         '--package-lock=false',
         evalTarball,
+        segmentsTarball,
         coreTarball,
         koaTarball,
       ],
