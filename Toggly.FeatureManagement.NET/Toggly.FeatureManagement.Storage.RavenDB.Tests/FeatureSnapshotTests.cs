@@ -39,7 +39,7 @@ public class FeatureSnapshotTests
 
         // Assert
         snapshot.Features.Should().HaveCount(2);
-        snapshot.Features[0].FeatureKey.Should().Be("Feature1");
+        snapshot.Features![0].FeatureKey.Should().Be("Feature1");
         snapshot.Features[1].FeatureKey.Should().Be("Feature2");
     }
 
@@ -147,7 +147,7 @@ public class FeatureSnapshotTests
         // Assert
         snapshot.Id.Should().Be("FeatureSnapshots/Test");
         snapshot.Features.Should().HaveCount(1);
-        snapshot.Features[0].FeatureKey.Should().Be("TestFeature");
+        snapshot.Features![0].FeatureKey.Should().Be("TestFeature");
         snapshot.Signature.Should().Be("sig-abc");
         snapshot.KeyId.Should().Be("kid-xyz");
         snapshot.Timestamp.Should().Be(9876543210L);

@@ -46,7 +46,11 @@ namespace Toggly.FeatureManagement.Storage.RavenDB
             CancellationToken cancellationToken = default(CancellationToken))
         {
             var normalizedName = ValidateCatalogName(catalogName);
+#if NET6_0_OR_GREATER
+            ArgumentNullException.ThrowIfNull(document);
+#else
             if (document == null) throw new ArgumentNullException(nameof(document));
+#endif
 
             var payload = CatalogJson.Serialize(document);
             var normalizedDocument = CatalogJson.Parse(payload);
@@ -120,8 +124,16 @@ namespace Toggly.FeatureManagement.Storage.RavenDB
         public static string GetCatalogId(string catalogName)
         {
             var name = ValidateCatalogName(catalogName);
-            using var hash = SHA256.Create();
-            var bytes = hash.ComputeHash(Encoding.UTF8.GetBytes(name));
+            var input = Encoding.UTF8.GetBytes(name);
+            byte[] bytes;
+#if NET5_0_OR_GREATER
+            bytes = SHA256.HashData(input);
+#else
+            using (var hash = SHA256.Create())
+            {
+                bytes = hash.ComputeHash(input);
+            }
+#endif
             var builder = new StringBuilder(bytes.Length * 2);
             foreach (var value in bytes)
             {
