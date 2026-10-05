@@ -69,6 +69,46 @@ public class FeatureDefinitionModelTests
     #region FeatureDefinitionModel.Equals(x, y) Tests
 
     [Fact]
+    public void EqualsComparer_WithEquivalentIndependentModels_SupportsHashSetLookup()
+    {
+        // Arrange
+        var model1 = CreateFeatureDefinition("feature1", CreateParameterizedFilter());
+        var model2 = CreateFeatureDefinition("feature1", CreateParameterizedFilter());
+        IEqualityComparer<FeatureDefinitionModel> comparer = new FeatureDefinitionModel();
+        var models = new HashSet<FeatureDefinitionModel>(comparer) { model1 };
+
+        // Act & Assert
+        model1.Equals(model2).Should().BeTrue();
+        comparer.Equals(model1, model2).Should().BeTrue();
+        comparer.Equals(model2, model1).Should().BeTrue();
+        var hash = comparer.GetHashCode(model1);
+        comparer.GetHashCode(model2).Should().Be(hash);
+        comparer.GetHashCode(model1).Should().Be(hash);
+        models.Contains(model2).Should().BeTrue();
+        models.Add(model2).Should().BeFalse();
+        models.Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData("feature2", "Targeting", "Group", "Beta")]
+    [InlineData("feature1", "Percentage", "Group", "Beta")]
+    [InlineData("feature1", "Targeting", "Audience", "Beta")]
+    [InlineData("feature1", "Targeting", "Group", "EarlyAccess")]
+    public void EqualsComparer_WithDifferentKeysOrFilters_ReturnsFalse(
+        string featureKey, string filterName, string parameterName, string parameterValue)
+    {
+        // Arrange
+        var model1 = CreateFeatureDefinition("feature1", CreateParameterizedFilter());
+        var model2 = CreateFeatureDefinition(featureKey,
+            CreateParameterizedFilter(filterName, parameterName, parameterValue));
+        IEqualityComparer<FeatureDefinitionModel> comparer = new FeatureDefinitionModel();
+
+        // Act & Assert
+        comparer.Equals(model1, model2).Should().BeFalse();
+        comparer.Equals(model2, model1).Should().BeFalse();
+    }
+
+    [Fact]
     public void EqualsComparer_WithNullX_ReturnsFalse()
     {
         // Arrange
@@ -145,6 +185,75 @@ public class FeatureDefinitionModelTests
     #endregion
 
     #region FeatureFilter Tests
+
+    [Fact]
+    public void FeatureFilter_EqualsComparer_WithEquivalentIndependentFilters_SupportsHashSetLookup()
+    {
+        // Arrange
+        var filter1 = CreateParameterizedFilter();
+        var filter2 = CreateParameterizedFilter();
+        IEqualityComparer<FeatureFilter> comparer = new FeatureFilter();
+        var filters = new HashSet<FeatureFilter>(comparer) { filter1 };
+
+        // Act & Assert
+        filter1.Equals(filter2).Should().BeTrue();
+        comparer.Equals(filter1, filter2).Should().BeTrue();
+        comparer.Equals(filter2, filter1).Should().BeTrue();
+        var hash = comparer.GetHashCode(filter1);
+        comparer.GetHashCode(filter2).Should().Be(hash);
+        comparer.GetHashCode(filter1).Should().Be(hash);
+        filters.Contains(filter2).Should().BeTrue();
+        filters.Add(filter2).Should().BeFalse();
+        filters.Should().ContainSingle();
+    }
+
+    [Theory]
+    [InlineData("Percentage", "Group", "Beta")]
+    [InlineData("Targeting", "Audience", "Beta")]
+    [InlineData("Targeting", "Group", "EarlyAccess")]
+    public void FeatureFilter_EqualsComparer_WithDifferentNamesOrParameters_ReturnsFalse(
+        string name, string parameterName, string parameterValue)
+    {
+        // Arrange
+        var filter1 = CreateParameterizedFilter();
+        var filter2 = CreateParameterizedFilter(name, parameterName, parameterValue);
+        IEqualityComparer<FeatureFilter> comparer = new FeatureFilter();
+
+        // Act & Assert
+        filter1.Equals(filter2).Should().BeFalse();
+        comparer.Equals(filter1, filter2).Should().BeFalse();
+        comparer.Equals(filter2, filter1).Should().BeFalse();
+    }
+
+    [Fact]
+    public void FeatureFilter_EqualsComparer_WithNullParametersOnBothSides_ReturnsTrue()
+    {
+        // Arrange
+        var filter1 = new FeatureFilter { Name = "AlwaysOn", Parameters = null };
+        var filter2 = new FeatureFilter { Name = "AlwaysOn", Parameters = null };
+        IEqualityComparer<FeatureFilter> comparer = new FeatureFilter();
+
+        // Act & Assert
+        comparer.Equals(filter1, filter2).Should().BeTrue();
+        comparer.Equals(filter2, filter1).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void FeatureFilter_EqualsComparer_WithNullOperand_ReturnsFalse(bool nullX, bool nullY)
+    {
+        // Arrange
+        var filter = CreateParameterizedFilter();
+        IEqualityComparer<FeatureFilter> comparer = new FeatureFilter();
+
+        // Act
+        var result = comparer.Equals(nullX ? null : filter, nullY ? null : filter);
+
+        // Assert
+        result.Should().BeFalse();
+    }
 
     [Fact]
     public void FeatureFilter_Equals_WithMatchingParameters_ReturnsTrue()
@@ -319,6 +428,20 @@ public class FeatureDefinitionModelTests
             Filters = filters.Length > 0 ? filters.ToList() : new List<FeatureFilter>
             {
                 new AlwaysOnFilter { Name = "AlwaysOn" }
+            }
+        };
+    }
+
+    private static FeatureFilter CreateParameterizedFilter(
+        string name = "Targeting", string parameterName = "Group", string parameterValue = "Beta")
+    {
+        return new FeatureFilter
+        {
+            Name = name,
+            Parameters = new Dictionary<string, string>
+            {
+                { parameterName, parameterValue },
+                { "Value", "50" }
             }
         };
     }
