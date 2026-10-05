@@ -26,6 +26,22 @@ public class HelpersServiceCollectionExtensionsTests
         public string GetValue() => "B";
     }
 
+    public class TestDependency
+    {
+    }
+
+    public class DependentTestService : ITestService
+    {
+        public TestDependency Dependency { get; }
+
+        public DependentTestService(TestDependency dependency)
+        {
+            Dependency = dependency;
+        }
+
+        public string GetValue() => "Dependent";
+    }
+
     public class TestDecorator : ITestService
     {
         private readonly ITestService _inner;
@@ -42,6 +58,180 @@ public class HelpersServiceCollectionExtensionsTests
     {
         FeatureA,
         FeatureB
+    }
+
+    #endregion
+
+    #region Feature registration fallback contracts
+
+    [Theory]
+    [InlineData(ServiceLifetime.Transient, false)]
+    [InlineData(ServiceLifetime.Transient, true)]
+    [InlineData(ServiceLifetime.Scoped, false)]
+    [InlineData(ServiceLifetime.Scoped, true)]
+    public void FeatureRegistration_WhenDisabled_InvokesFallbackFactoryWithResolvingScope(
+        ServiceLifetime lifetime, bool useEnum)
+    {
+        var services = new ServiceCollection();
+        services.AddScoped<TestDependency>();
+        var factoryCalls = 0;
+        ((IServiceCollection)services).Add(ServiceDescriptor.Describe(typeof(ITestService), provider =>
+        {
+            factoryCalls++;
+            return new DependentTestService(provider.GetRequiredService<TestDependency>());
+        }, ServiceLifetime.Singleton));
+        var featureManager = AddDisabledFeatureManager(services, useEnum);
+
+        RegisterForFeature(services, lifetime, useEnum);
+        services.Single(descriptor => descriptor.ServiceType == typeof(ITestService))
+            .Lifetime.Should().Be(lifetime);
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        using var firstScope = provider.CreateScope();
+        using var secondScope = provider.CreateScope();
+
+        var first = firstScope.ServiceProvider.GetRequiredService<ITestService>();
+        var repeat = firstScope.ServiceProvider.GetRequiredService<ITestService>();
+        var second = secondScope.ServiceProvider.GetRequiredService<ITestService>();
+
+        first.Should().BeOfType<DependentTestService>().Which.Dependency.Should()
+            .BeSameAs(firstScope.ServiceProvider.GetRequiredService<TestDependency>());
+        second.Should().BeOfType<DependentTestService>().Which.Dependency.Should()
+            .BeSameAs(secondScope.ServiceProvider.GetRequiredService<TestDependency>());
+        AssertResolutionLifetime(first, repeat, second, lifetime);
+        var expectedResolutions = lifetime == ServiceLifetime.Scoped ? 2 : 3;
+        factoryCalls.Should().Be(expectedResolutions);
+        featureManager.Verify(manager => manager.IsEnabledAsync(GetFeatureName(useEnum)), Times.Exactly(expectedResolutions));
+        featureManager.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [InlineData(ServiceLifetime.Transient, false)]
+    [InlineData(ServiceLifetime.Transient, true)]
+    [InlineData(ServiceLifetime.Scoped, false)]
+    [InlineData(ServiceLifetime.Scoped, true)]
+    public void FeatureRegistration_WhenDisabled_ActivatesFallbackTypeInsteadOfResolvingRegisteredConcrete(
+        ServiceLifetime lifetime, bool useEnum)
+    {
+        var services = new ServiceCollection();
+        services.AddScoped<TestDependency>();
+        var registeredConcrete = new DependentTestService(new TestDependency());
+        services.AddSingleton(registeredConcrete);
+        ((IServiceCollection)services).Add(ServiceDescriptor.Describe(typeof(ITestService), typeof(DependentTestService), ServiceLifetime.Singleton));
+        var featureManager = AddDisabledFeatureManager(services, useEnum);
+
+        RegisterForFeature(services, lifetime, useEnum);
+        services.Single(descriptor => descriptor.ServiceType == typeof(ITestService))
+            .Lifetime.Should().Be(lifetime);
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        using var firstScope = provider.CreateScope();
+        using var secondScope = provider.CreateScope();
+
+        var first = firstScope.ServiceProvider.GetRequiredService<ITestService>();
+        var repeat = firstScope.ServiceProvider.GetRequiredService<ITestService>();
+        var second = secondScope.ServiceProvider.GetRequiredService<ITestService>();
+
+        first.Should().NotBeSameAs(registeredConcrete);
+        first.Should().BeOfType<DependentTestService>().Which.Dependency.Should()
+            .BeSameAs(firstScope.ServiceProvider.GetRequiredService<TestDependency>());
+        second.Should().BeOfType<DependentTestService>().Which.Dependency.Should()
+            .BeSameAs(secondScope.ServiceProvider.GetRequiredService<TestDependency>());
+        AssertResolutionLifetime(first, repeat, second, lifetime);
+        featureManager.Verify(manager => manager.IsEnabledAsync(GetFeatureName(useEnum)),
+            Times.Exactly(lifetime == ServiceLifetime.Scoped ? 2 : 3));
+        featureManager.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [InlineData(ServiceLifetime.Transient, false)]
+    [InlineData(ServiceLifetime.Transient, true)]
+    [InlineData(ServiceLifetime.Scoped, false)]
+    [InlineData(ServiceLifetime.Scoped, true)]
+    public void FeatureRegistration_WhenDisabledWithoutFallback_PreservesException(
+        ServiceLifetime lifetime, bool useEnum)
+    {
+        var services = new ServiceCollection();
+        var featureManager = AddDisabledFeatureManager(services, useEnum);
+        RegisterForFeature(services, lifetime, useEnum);
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var resolve = () => scope.ServiceProvider.GetRequiredService<ITestService>();
+
+        resolve.Should().ThrowExactly<NotImplementedException>().WithMessage(
+            $"Feature {GetFeatureName(useEnum)} is not enabled, and no other instance of the service is registered");
+        featureManager.Verify(manager => manager.IsEnabledAsync(GetFeatureName(useEnum)), Times.Once);
+        featureManager.VerifyNoOtherCalls();
+    }
+
+    [Theory]
+    [InlineData(ServiceLifetime.Transient)]
+    [InlineData(ServiceLifetime.Scoped)]
+    public void FeatureRegistration_WhenDisabledWithInstanceFallback_PreservesUnsupportedDescriptorException(
+        ServiceLifetime lifetime)
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ITestService>(new TestServiceA());
+        AddDisabledFeatureManager(services, false);
+        RegisterForFeature(services, lifetime, false);
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var resolve = () => scope.ServiceProvider.GetRequiredService<ITestService>();
+
+        resolve.Should().ThrowExactly<InvalidOperationException>().WithMessage("Unable to create instance");
+    }
+
+    [Theory]
+    [InlineData(ServiceLifetime.Transient)]
+    [InlineData(ServiceLifetime.Scoped)]
+    public void FeatureRegistration_WhenFallbackFactoryThrows_PropagatesSameException(ServiceLifetime lifetime)
+    {
+        var services = new ServiceCollection();
+        var expected = new ArgumentException("Fallback failed");
+        services.AddTransient<ITestService>(_ => throw expected);
+        AddDisabledFeatureManager(services, false);
+        RegisterForFeature(services, lifetime, false);
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var resolve = () => scope.ServiceProvider.GetRequiredService<ITestService>();
+
+        resolve.Should().ThrowExactly<ArgumentException>().Which.Should().BeSameAs(expected);
+    }
+
+    private static string GetFeatureName(bool useEnum) => useEnum ? nameof(TestFeatures.FeatureA) : "CustomFeature";
+
+    private static Mock<IFeatureManager> AddDisabledFeatureManager(ServiceCollection services, bool useEnum)
+    {
+        var featureManager = new Mock<IFeatureManager>(MockBehavior.Strict);
+        featureManager.Setup(manager => manager.IsEnabledAsync(GetFeatureName(useEnum))).ReturnsAsync(false);
+        services.AddSingleton(featureManager.Object);
+        return featureManager;
+    }
+
+    private static void RegisterForFeature(ServiceCollection services, ServiceLifetime lifetime, bool useEnum)
+    {
+        if (lifetime == ServiceLifetime.Transient)
+        {
+            if (useEnum)
+                services.AddTransientForFeature<ITestService, TestServiceB>(TestFeatures.FeatureA);
+            else
+                services.AddTransientForFeature<ITestService, TestServiceB>("CustomFeature");
+        }
+        else if (useEnum)
+            services.AddScopedForFeature<ITestService, TestServiceB>(TestFeatures.FeatureA);
+        else
+            services.AddScopedForFeature<ITestService, TestServiceB>("CustomFeature");
+    }
+
+    private static void AssertResolutionLifetime(ITestService first, ITestService repeat, ITestService second,
+        ServiceLifetime lifetime)
+    {
+        if (lifetime == ServiceLifetime.Scoped)
+            first.Should().BeSameAs(repeat);
+        else
+            first.Should().NotBeSameAs(repeat);
+        first.Should().NotBeSameAs(second);
     }
 
     #endregion
