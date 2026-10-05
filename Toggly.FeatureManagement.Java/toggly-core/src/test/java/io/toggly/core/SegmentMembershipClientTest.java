@@ -1,6 +1,8 @@
 package io.toggly.core;
 
 import com.sun.net.httpserver.HttpServer;
+import io.toggly.core.config.TogglyConfig;
+import io.toggly.core.exception.TogglyNetworkException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -9,6 +11,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -34,7 +37,7 @@ class SegmentMembershipClientTest {
             authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
             body.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
             int code = statusCode.get();
-            if (code >= 400) {
+            if (code >= 400 || code == 204) {
                 exchange.sendResponseHeaders(code, -1);
                 exchange.close();
                 return;
@@ -113,10 +116,41 @@ class SegmentMembershipClientTest {
     }
 
     @Test
+    void constructsFromConfig() {
+        TogglyConfig config = TogglyConfig.builder().appKey("backend-key").build();
+        SegmentMembershipClient fromConfig = new SegmentMembershipClient(config);
+        assertThat(fromConfig).isNotNull();
+    }
+
+    @Test
+    void rejectsNullIdentifiersList() {
+        SegmentMembershipClient client = client();
+        assertThatThrownBy(() -> client.addSegmentMembers("beta", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("identifiers");
+    }
+
+    @Test
     void rejectsNullIdentifier() {
-        assertThatThrownBy(() -> client().addSegmentMembers("beta", java.util.Arrays.asList("user-1", null)))
+        SegmentMembershipClient client = client();
+        List<String> identifiers = Arrays.asList("user-1", null);
+        assertThatThrownBy(() -> client.addSegmentMembers("beta", identifiers))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("null");
+    }
+
+    @Test
+    void emptyNoContentBodyReturnsEmptyString() {
+        statusCode.set(204);
+        assertThat(client().listSegments()).isEmpty();
+    }
+
+    @Test
+    void wrapsTransportFailures() {
+        SegmentMembershipClient unreachable = new SegmentMembershipClient("backend-key", "http://127.0.0.1:1");
+        assertThatThrownBy(unreachable::listSegments)
+                .isInstanceOf(TogglyNetworkException.class)
+                .hasMessageContaining("Segment membership request failed");
     }
 
     @Test
