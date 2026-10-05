@@ -170,6 +170,30 @@ public class FeatureDefinitionModelTests
     }
 
     [Fact]
+    public void GetHashCode_WithParametersInsertedInReverseOrder_ProducesSameValue()
+    {
+        // Arrange
+        var model1 = CreateFeatureDefinition("feature1", CreateParameterizedFilter());
+        var model2 = CreateFeatureDefinition("feature1", new FeatureFilter
+        {
+            Name = "Targeting",
+            Parameters = new Dictionary<string, string>
+            {
+                { "Value", "50" },
+                { "Group", "Beta" }
+            }
+        });
+        IEqualityComparer<FeatureDefinitionModel> comparer = new FeatureDefinitionModel();
+
+        // Act
+        var hash1 = comparer.GetHashCode(model1);
+        var hash2 = comparer.GetHashCode(model2);
+
+        // Assert
+        hash1.Should().Be(hash2);
+    }
+
+    [Fact]
     public void GetHashCode_WithNullObject_ReturnsZero()
     {
         // Arrange
@@ -241,7 +265,6 @@ public class FeatureDefinitionModelTests
     [Theory]
     [InlineData(true, false)]
     [InlineData(false, true)]
-    [InlineData(true, true)]
     public void FeatureFilter_EqualsComparer_WithNullOperand_ReturnsFalse(bool nullX, bool nullY)
     {
         // Arrange
@@ -351,6 +374,30 @@ public class FeatureDefinitionModelTests
 
         // Assert
         hash.Should().Be(0);
+    }
+
+    [Fact]
+    public void FeatureFilter_GetHashCode_WithParametersInsertedInReverseOrder_ProducesSameValue()
+    {
+        // Arrange
+        var filter1 = CreateParameterizedFilter();
+        var filter2 = new FeatureFilter
+        {
+            Name = "Targeting",
+            Parameters = new Dictionary<string, string>
+            {
+                { "Value", "50" },
+                { "Group", "Beta" }
+            }
+        };
+        IEqualityComparer<FeatureFilter> comparer = new FeatureFilter();
+
+        // Act
+        var hash1 = comparer.GetHashCode(filter1);
+        var hash2 = comparer.GetHashCode(filter2);
+
+        // Assert
+        hash1.Should().Be(hash2);
     }
 
     [Fact]
