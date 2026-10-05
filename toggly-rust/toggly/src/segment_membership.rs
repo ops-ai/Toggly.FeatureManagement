@@ -150,7 +150,9 @@ mod tests {
         Mock::given(method("GET"))
             .and(path("/api/v2/segments"))
             .and(header("Authorization", "backend-key"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([{"id":"list-1"}])))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!([{"id":"list-1"}])),
+            )
             .mount(&server)
             .await;
 
@@ -166,7 +168,10 @@ mod tests {
             .and(path("/api/v2/segments/Beta%20Testers/items"))
             .and(header("Authorization", "backend-key"))
             .and(body_json(serde_json::json!({"identifiers":["user-1"]})))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id":"list-1","itemCount":1})))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"id":"list-1","itemCount":1})),
+            )
             .mount(&server)
             .await;
 
@@ -183,12 +188,17 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("DELETE"))
             .and(path("/api/v2/segments/vip/items"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id":"list-1"})))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"id":"list-1"})),
+            )
             .mount(&server)
             .await;
         Mock::given(method("PUT"))
             .and(path("/api/v2/segments/vip/items"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"id":"list-1","itemCount":0})))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"id":"list-1","itemCount":0})),
+            )
             .mount(&server)
             .await;
 
