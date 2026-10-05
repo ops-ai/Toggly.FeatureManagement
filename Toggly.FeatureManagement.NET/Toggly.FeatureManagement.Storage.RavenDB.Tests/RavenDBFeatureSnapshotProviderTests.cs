@@ -73,8 +73,8 @@ public class RavenDBFeatureSnapshotProviderTests
         var result = await provider.GetFeaturesSnapshotAsync();
 
         // Assert
-        result.Features.Should().NotBeNull();
-        result.Features.Should().HaveCount(2);
+        result.Should().NotBeNull();
+        result!.Features.Should().HaveCount(2);
         result.Signature.Should().Be("test-signature");
         result.KeyId.Should().Be("key-123");
         result.Timestamp.Should().Be(1700000000L);
@@ -85,7 +85,7 @@ public class RavenDBFeatureSnapshotProviderTests
     {
         // Arrange
         _sessionMock.Setup(s => s.LoadAsync<FeatureSnapshot>("FeatureSnapshots/Toggly", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((FeatureSnapshot?)null);
+            .Returns(Task.FromResult<FeatureSnapshot>(null!));
 
         var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _defaultSettings);
 
@@ -139,7 +139,7 @@ public class RavenDBFeatureSnapshotProviderTests
     {
         // Arrange
         _sessionMock.Setup(s => s.LoadAsync<FeatureSnapshot>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((FeatureSnapshot?)null);
+            .Returns(Task.FromResult<FeatureSnapshot>(null!));
 
         var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _defaultSettings);
 
@@ -164,7 +164,7 @@ public class RavenDBFeatureSnapshotProviderTests
         };
 
         _sessionMock.Setup(s => s.LoadAsync<FeatureSnapshot>("FeatureSnapshots/Toggly", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((FeatureSnapshot?)null);
+            .Returns(Task.FromResult<FeatureSnapshot>(null!));
 
         var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _defaultSettings);
 
@@ -225,7 +225,7 @@ public class RavenDBFeatureSnapshotProviderTests
         var features = new List<FeatureDefinitionModel>();
 
         _sessionMock.Setup(s => s.LoadAsync<FeatureSnapshot>("FeatureSnapshots/Custom", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((FeatureSnapshot?)null);
+            .Returns(Task.FromResult<FeatureSnapshot>(null!));
 
         var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _customSettings);
 
@@ -246,7 +246,7 @@ public class RavenDBFeatureSnapshotProviderTests
         var features = new List<FeatureDefinitionModel>();
 
         _sessionMock.Setup(s => s.LoadAsync<FeatureSnapshot>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((FeatureSnapshot?)null);
+            .Returns(Task.FromResult<FeatureSnapshot>(null!));
 
         var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _defaultSettings);
 
@@ -267,7 +267,7 @@ public class RavenDBFeatureSnapshotProviderTests
     {
         // Arrange
         _sessionMock.Setup(s => s.LoadAsync<FeatureSnapshot>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((FeatureSnapshot?)null);
+            .Returns(Task.FromResult<FeatureSnapshot>(null!));
 
         var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _defaultSettings);
 
@@ -295,7 +295,7 @@ public class RavenDBFeatureSnapshotProviderTests
         };
 
         _sessionMock.Setup(s => s.LoadAsync<JwkSnapshot>("JwkSnapshots/Toggly", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((JwkSnapshot?)null);
+            .Returns(Task.FromResult<JwkSnapshot>(null!));
 
         var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _defaultSettings);
 
@@ -349,7 +349,7 @@ public class RavenDBFeatureSnapshotProviderTests
         var jwks = new JsonWebKeySet();
 
         _sessionMock.Setup(s => s.LoadAsync<JwkSnapshot>("JwkSnapshots/Custom", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((JwkSnapshot?)null);
+            .Returns(Task.FromResult<JwkSnapshot>(null!));
 
         var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _customSettings);
 
@@ -368,7 +368,7 @@ public class RavenDBFeatureSnapshotProviderTests
     {
         // Arrange
         _sessionMock.Setup(s => s.LoadAsync<JwkSnapshot>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((JwkSnapshot?)null);
+            .Returns(Task.FromResult<JwkSnapshot>(null!));
 
         var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _defaultSettings);
 
@@ -421,7 +421,7 @@ public class RavenDBFeatureSnapshotProviderTests
     {
         // Arrange
         _sessionMock.Setup(s => s.LoadAsync<JwkSnapshot>("JwkSnapshots/Toggly", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((JwkSnapshot?)null);
+            .Returns(Task.FromResult<JwkSnapshot>(null!));
 
         var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _defaultSettings);
 
@@ -461,7 +461,7 @@ public class RavenDBFeatureSnapshotProviderTests
     {
         // Arrange
         _sessionMock.Setup(s => s.LoadAsync<JwkSnapshot>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((JwkSnapshot?)null);
+            .Returns(Task.FromResult<JwkSnapshot>(null!));
 
         var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _defaultSettings);
 
@@ -487,8 +487,8 @@ public class RavenDBFeatureSnapshotProviderTests
         FeatureSnapshot? storedSnapshot = null;
 
         _sessionMock.SetupSequence(s => s.LoadAsync<FeatureSnapshot>("FeatureSnapshots/Toggly", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((FeatureSnapshot?)null) // First call for save
-            .ReturnsAsync(() => storedSnapshot);  // Second call for get
+            .Returns(Task.FromResult<FeatureSnapshot>(null!)) // First call for save
+            .Returns(() => Task.FromResult(storedSnapshot!)); // Second call for get
 
         _sessionMock.Setup(s => s.StoreAsync(It.IsAny<FeatureSnapshot>(), It.IsAny<CancellationToken>()))
             .Callback<object, CancellationToken>((snap, _) => storedSnapshot = (FeatureSnapshot)snap)
@@ -501,7 +501,8 @@ public class RavenDBFeatureSnapshotProviderTests
         var result = await provider.GetFeaturesSnapshotAsync();
 
         // Assert
-        result.Features.Should().HaveCount(1);
+        result.Should().NotBeNull();
+        result!.Features.Should().HaveCount(1);
         result.Features![0].FeatureKey.Should().Be("TestFeature");
         result.Signature.Should().Be("sig");
         result.KeyId.Should().Be("kid");
@@ -522,8 +523,8 @@ public class RavenDBFeatureSnapshotProviderTests
         JwkSnapshot? storedSnapshot = null;
 
         _sessionMock.SetupSequence(s => s.LoadAsync<JwkSnapshot>("JwkSnapshots/Toggly", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((JwkSnapshot?)null) // First call for save
-            .ReturnsAsync(() => storedSnapshot);  // Second call for get
+            .Returns(Task.FromResult<JwkSnapshot>(null!)) // First call for save
+            .Returns(() => Task.FromResult(storedSnapshot!)); // Second call for get
 
         _sessionMock.Setup(s => s.StoreAsync(It.IsAny<JwkSnapshot>(), It.IsAny<CancellationToken>()))
             .Callback<object, CancellationToken>((snap, _) => storedSnapshot = (JwkSnapshot)snap)
@@ -551,7 +552,7 @@ public class RavenDBFeatureSnapshotProviderTests
         };
 
         _sessionMock.Setup(s => s.LoadAsync<FeatureSnapshot>("FeatureSnapshots/Toggly", It.IsAny<CancellationToken>()))
-            .ReturnsAsync((FeatureSnapshot?)null);
+            .Returns(Task.FromResult<FeatureSnapshot>(null!));
 
         var provider = new RavenDBFeatureSnapshotProvider(_storeMock.Object, _defaultSettings);
 

@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 const script = fileURLToPath(new URL('./check-packed.mjs', import.meta.url));
 function launch(npmCli: string) {
   return spawnSync(process.execPath, [script], {
@@ -14,6 +14,20 @@ function launch(npmCli: string) {
   });
 }
 describe('packed consumer npm CLI validation', () => {
+  it('declares only Node ranges that can load Nest 12 from CommonJS', () => {
+    const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+
+    expect(manifest.engines.node).toBe('^20.19.0 || >=22.12.0');
+
+    const supportsNest12CommonJs = (major: number, minor: number) =>
+      (major === 20 && minor >= 19) || major > 22 || (major === 22 && minor >= 12);
+
+    expect(supportsNest12CommonJs(20, 18)).toBe(false);
+    expect(supportsNest12CommonJs(20, 19)).toBe(true);
+    expect(supportsNest12CommonJs(22, 11)).toBe(false);
+    expect(supportsNest12CommonJs(22, 12)).toBe(true);
+  });
+
   it('rejects a relative npm CLI path before invoking a package manager', () => {
     const result = launch('npm-cli.js');
     expect(result.status).not.toBe(0);

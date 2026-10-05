@@ -11,13 +11,13 @@ namespace Toggly.FeatureManagement.Storage.RavenDB
         /// <summary>
         /// Id of the snapshot
         /// </summary>
-        public string Id { get; set; }
+        public string Id { get; set; } = string.Empty;
 
 
         /// <summary>
         /// Features in the snapshot
         /// </summary>
-        public List<FeatureDefinitionModel> Features { get; set; }
+        public List<FeatureDefinitionModel>? Features { get; set; }
 
         /// <summary>
         /// Signature of the snapshot

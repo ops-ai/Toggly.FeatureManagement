@@ -8,6 +8,17 @@
   schema. Applications can opt into bounded caching with an explicit document
   key that distinguishes their document variants.
 
+## All .NET SDK packages 3.12.10 - 2026-10-04
+
+### Fixed
+- `Toggly.FeatureManagement.Storage.RavenDB` now preserves a configured
+  `JwkDocumentName` when registering the snapshot provider with a settings
+  object, so JWK snapshots use the requested document name.
+
+### Changed
+- RavenDB snapshot contracts and document-name settings now declare nullable
+  values explicitly, matching absent feature definitions and optional settings.
+
 ## All .NET SDK packages 3.12.9 - 2026-10-04
 
 ### Changed

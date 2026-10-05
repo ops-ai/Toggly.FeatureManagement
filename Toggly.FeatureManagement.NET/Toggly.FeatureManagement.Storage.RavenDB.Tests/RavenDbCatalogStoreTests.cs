@@ -12,12 +12,38 @@ namespace Toggly.FeatureManagement.Storage.RavenDB.Tests;
 
 public sealed class RavenDbCatalogStoreTests
 {
+    [Theory]
+    [InlineData("orders", "1c168adb00d208e42f93314529f1fa9c0427eb63233ceda95a5db52b7012a719")]
+    [InlineData("Orders", "b7e8acdd522e6190ac9567ad16dff9873cbb78882bbf435b7e189c440a949159")]
+    [InlineData("café/日本", "146b0e21ad3dcedb9428cdf0dad568ea75ed1c0bc54fe510e91f8b4282f5bceb")]
+    public void GetCatalogId_preserves_existing_sha256_document_ids(string name, string expected)
+    {
+        RavenDbCatalogStore.GetCatalogId(name).Should().Be(expected);
+    }
+
+    [Fact]
+    public async Task TryWriteAsync_rejects_a_null_document_with_its_parameter_name()
+    {
+        var store = new RavenDbCatalogStore(Mock.Of<IDocumentStore>());
+        var action = () => store.TryWriteAsync("orders", null!, expectedRevision: null);
+
+        await action.Should().ThrowAsync<ArgumentNullException>().WithParameterName("document");
+    }
+
+    [Fact]
+    public void AddTogglyRavenDbCatalogStore_rejects_a_null_service_collection()
+    {
+        var action = () => ServiceCollectionExtensions.AddTogglyRavenDbCatalogStore(null!);
+
+        action.Should().Throw<ArgumentNullException>().WithParameterName("services");
+    }
+
     [Fact]
     public async Task ReadAsync_returns_null_only_when_the_catalog_is_absent()
     {
         var session = CreateSession();
         session.Setup(s => s.LoadAsync<CatalogStorageDocument>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.FromResult<CatalogStorageDocument?>(null));
+            .Returns(Task.FromResult<CatalogStorageDocument>(null!));
         var store = CreateStore(session.Object);
 
         var result = await store.ReadAsync("orders");
@@ -31,7 +57,7 @@ public sealed class RavenDbCatalogStoreTests
     {
         var session = CreateSession();
         session.Setup(s => s.LoadAsync<CatalogStorageDocument>(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.FromResult<CatalogStorageDocument?>(null));
+            .Returns(Task.FromResult<CatalogStorageDocument>(null!));
         CatalogStorageDocument? stored = null;
         session.Setup(s => s.StoreAsync(It.IsAny<CatalogStorageDocument>(), It.IsAny<CancellationToken>()))
             .Callback<object, CancellationToken>((document, _) => stored = (CatalogStorageDocument)document)
