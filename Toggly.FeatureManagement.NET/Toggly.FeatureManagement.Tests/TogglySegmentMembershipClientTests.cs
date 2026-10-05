@@ -13,6 +13,8 @@ namespace Toggly.FeatureManagement.Tests;
 
 public class TogglySegmentMembershipClientTests
 {
+    private static readonly string[] SampleIdentifiers = ["user-1"];
+
     private sealed class RequestCapture
     {
         public HttpRequestMessage? Request { get; set; }
@@ -61,7 +63,7 @@ public class TogglySegmentMembershipClientTests
     public async Task AddSegmentMembers_PostsIdentifiersWithBackendKey()
     {
         var (client, capture) = Build();
-        var summary = await client.AddSegmentMembersAsync("Beta Testers", new[] { "user-1" });
+        var summary = await client.AddSegmentMembersAsync("Beta Testers", SampleIdentifiers);
 
         Assert.Equal("Beta Testers", summary.Name);
         Assert.Equal(HttpMethod.Post, capture.Request!.Method);
@@ -73,7 +75,7 @@ public class TogglySegmentMembershipClientTests
     public async Task RemoveSegmentMembers_DeletesIdentifiers()
     {
         var (client, capture) = Build();
-        await client.RemoveSegmentMembersAsync("Beta Testers", new[] { "user-1" });
+        await client.RemoveSegmentMembersAsync("Beta Testers", SampleIdentifiers);
         Assert.Equal(HttpMethod.Delete, capture.Request!.Method);
         Assert.Equal("/api/v2/segments/Beta%20Testers/items", capture.Request.RequestUri!.PathAndQuery);
     }
@@ -82,9 +84,19 @@ public class TogglySegmentMembershipClientTests
     public async Task ReplaceSegmentMembers_PutsIdentifiers()
     {
         var (client, capture) = Build();
-        await client.ReplaceSegmentMembersAsync("Beta Testers", new[] { "user-1" });
+        await client.ReplaceSegmentMembersAsync("Beta Testers", SampleIdentifiers);
         Assert.Equal(HttpMethod.Put, capture.Request!.Method);
         Assert.Equal("/api/v2/segments/Beta%20Testers/items", capture.Request.RequestUri!.PathAndQuery);
+    }
+
+    [Fact]
+    public async Task ListItems_UsesQuery()
+    {
+        var (client, capture) = Build(body: "{"items":[{"identifier":"user-1"}],"skip":0,"take":10,"total":1}");
+        var page = await client.ListItemsAsync("Beta Testers", 0, 10);
+        Assert.Single(page.Items);
+        Assert.Equal(HttpMethod.Get, capture.Request!.Method);
+        Assert.Equal("/api/v2/segments/Beta%20Testers/items?skip=0&take=10", capture.Request.RequestUri!.PathAndQuery);
     }
 
     [Fact]

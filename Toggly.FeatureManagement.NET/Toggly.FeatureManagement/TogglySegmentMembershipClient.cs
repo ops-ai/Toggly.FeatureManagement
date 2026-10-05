@@ -90,7 +90,7 @@ namespace Toggly.FeatureManagement
             }
 
             using var response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
-            var payload = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            var payload = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
                 throw new HttpRequestException($"Segment membership {method} {path} failed with {(int)response.StatusCode}: {payload}");
 

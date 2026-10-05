@@ -198,7 +198,8 @@ jobs:
           (cd "$EVAL_DIR" && (npm ci || npm install) && npm run build)
           (cd "$SEGMENTS_DIR" && (npm ci || npm install) && npm run build)
           (cd "$NODE_WS" && pnpm install --frozen-lockfile && pnpm --filter @ops-ai/toggly-node-core build)
-          (cd "$NODE_WS" && pnpm --filter @ops-ai/toggly-node-core pack --pack-destination "$RUNNER_TEMP")
+          # pnpm 9 rejects --filter pack (Unknown option: recursive); pack in-package.
+          (cd "$NODE_WS/toggly-node-core" && pnpm pack --pack-destination "$RUNNER_TEMP")
           CORE_TGZ="$(ls -1 "$RUNNER_TEMP"/ops-ai-toggly-node-core-*.tgz | head -1)"
           test -f "$CORE_TGZ"
           echo "TOGGLY_TEST_CORE_TARBALL=$CORE_TGZ" >> "$GITHUB_ENV"

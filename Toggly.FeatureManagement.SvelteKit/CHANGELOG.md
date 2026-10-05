@@ -3,8 +3,8 @@
 ## 0.5.0 — 2026-10-04
 
 ### Added
-- `./server` re-exports `createSegmentMembershipClient` from `@ops-ai/toggly-node-core`.
 
+- `./server` re-exports `createSegmentMembershipClient` from `@ops-ai/toggly-node-core`.
 
 ## 0.4.2 — 2026-09-27
 
