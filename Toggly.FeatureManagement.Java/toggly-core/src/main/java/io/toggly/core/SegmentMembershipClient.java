@@ -73,8 +73,9 @@ public final class SegmentMembershipClient {
     }
 
     private String send(String method, String path, String body) {
+        HttpURLConnection connection = null;
         try {
-            HttpURLConnection connection = (HttpURLConnection) URI.create(baseUrl + path).toURL().openConnection();
+            connection = (HttpURLConnection) URI.create(baseUrl + path).toURL().openConnection();
             connection.setRequestMethod(method);
             connection.setRequestProperty("Authorization", appKey);
             connection.setRequestProperty("Accept", "application/json");
@@ -103,6 +104,10 @@ public final class SegmentMembershipClient {
             throw ex;
         } catch (Exception ex) {
             throw new TogglyNetworkException("Segment membership request failed", ex);
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
         }
     }
 }
