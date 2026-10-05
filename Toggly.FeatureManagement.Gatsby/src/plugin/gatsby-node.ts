@@ -4,7 +4,7 @@
  * Build-time hooks for Toggly plugin
  */
 
-import * as path from 'path';
+import * as path from 'node:path';
 import type { GatsbyNode } from 'gatsby';
 import type { TogglyPluginOptions, PageFeatureMap } from '../types/index.js';
 import {

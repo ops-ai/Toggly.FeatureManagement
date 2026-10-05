@@ -60,6 +60,14 @@ const CACHE_PREFIX_VARIANTS = 'toggly:variants:'
 const CACHE_PREFIX_REVISION = 'toggly:revision:'
 const CACHE_LRU_KEY = 'toggly:cache-lru'
 
+function stripRevisionQuotes(revision: string): string {
+  let start = 0
+  let end = revision.length
+  while (start < end && revision[start] === '"') start++
+  while (end > start && revision[end - 1] === '"') end--
+  return revision.slice(start, end)
+}
+
 function getFlagsCacheKey(appKey: string, environment: string, contextKey = '', variants = false): string {
   const suffix = contextKey ? `:${contextKey}` : ''
   // Keep evaluated-mode legacy targeting caches; variant projections must never overwrite them.
@@ -673,7 +681,7 @@ export class TogglyService implements ITogglyService, OnDestroy {
       )
       if (generation !== this._generation || this._destroyed) return this._features
       if (loaded.notModified) {
-        if (loaded.revision) this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
+        if (loaded.revision) this._cacheDefinitionsRevision(stripRevisionQuotes(loaded.revision))
         this._lastFallbackRefresh = Date.now()
         return this._features
       }
@@ -696,8 +704,10 @@ export class TogglyService implements ITogglyService, OnDestroy {
         }
       }
       // Persist the validator only after its response-mode bodies are present.
-      if (loaded.revision) this._cacheDefinitionsRevision(loaded.revision.replace(/^"+|"+$/g, ''))
-      if (this._features) this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
+      if (loaded.revision) this._cacheDefinitionsRevision(stripRevisionQuotes(loaded.revision))
+      if (this._features) {
+        void this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
+      }
     } catch (error) {
       if (generation !== this._generation || this._destroyed) return this._features
       this._reportError('Error fetching feature flags', error)

@@ -72,7 +72,7 @@ jobs:
     uses: ./.github/workflows/analysis-javascript.yml
     with:
       sdks: node-server
-      run_reporting: false
+      run_reporting: true
     secrets: inherit
 
   publish:

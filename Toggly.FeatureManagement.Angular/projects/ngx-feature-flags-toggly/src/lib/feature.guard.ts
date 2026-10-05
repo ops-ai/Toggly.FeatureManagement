@@ -89,7 +89,7 @@ export class FeatureFlagGuard implements CanActivate {
     if (isEnabled) {
       return true
     } else {
-      this.router.navigate([redirectUrl])
+      void this.router.navigate([redirectUrl])
       return false
     }
   }

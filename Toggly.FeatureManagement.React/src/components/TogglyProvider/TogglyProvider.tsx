@@ -7,6 +7,16 @@ export default async function createTogglyProvider(config: TogglyOptions) {
   let mounts = 0
   let generation = 0
 
+  const disposeIfReleased = (released: number) => {
+    if (mounts === 0 && generation === released) {
+      owner?.dispose()
+      owner = undefined
+    }
+  }
+  const scheduleDispose = (released: number) => {
+    void Promise.resolve().then(() => disposeIfReleased(released))
+  }
+
   const TogglyProvider = ({ children }: { children: ReactNode }) => {
     const [toggly, setToggly] = useState(owner)
     useEffect(() => {
@@ -16,15 +26,9 @@ export default async function createTogglyProvider(config: TogglyOptions) {
       setToggly(owner)
       return () => {
         mounts--
-        const released = ++generation
         // StrictMode immediately reattaches effects. Keep that owner alive,
         // but dispose after the last actual unmount without adding a timer.
-        void Promise.resolve().then(() => {
-          if (mounts === 0 && generation === released) {
-            owner?.dispose()
-            owner = undefined
-          }
-        })
+        scheduleDispose(++generation)
       }
     }, [])
     return <Provider value={{ toggly }}>{children}</Provider>

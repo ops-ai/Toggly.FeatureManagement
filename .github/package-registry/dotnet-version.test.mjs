@@ -65,7 +65,7 @@ test(
   },
 );
 
-import { verifyPackageVersions } from "./dotnet-version.mjs";
+import { readCommonVersion, verifyPackageVersions } from "./dotnet-version.mjs";
 
 test("packed versions and internal dependency constraints must match the shared manifest", (t) => {
   const directory = fs.mkdtempSync(
@@ -106,4 +106,24 @@ test("packed versions and internal dependency constraints must match the shared 
   assert.doesNotThrow(() =>
     verifyPackageVersions(packages, directory, "3.7.0"),
   );
+});
+
+test("common analysis version accepts SemVer and rejects malformed manifests", (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "dotnet-analysis-version-"));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const manifest = path.join(directory, "Directory.Build.props");
+  for (const version of ["3.12.6", "3.12.6-rc.1", "3.12.6+build.01"]) {
+    fs.writeFileSync(manifest, `<Project><Version>${version}</Version></Project>`);
+    assert.equal(readCommonVersion(manifest), version);
+  }
+  for (const version of ["", "3.0.4-{BranchName}.1", "3.12.6 rc", "03.12.6", "3.12.6-01", "3.12.6-rc..1", "3.12.6\n"]) {
+    fs.writeFileSync(manifest, `<Project><Version>${version}</Version></Project>`);
+    assert.throws(() => readCommonVersion(manifest), error => error.message.includes(manifest));
+  }
+});
+
+test("version CLI emits exactly the validated common manifest version", () => {
+  const packages = validateSources(loadDotnetInventory());
+  const output = execFileSync(process.execPath, [".github/package-registry/dotnet-ci.mjs", "version"], { cwd: repoRoot, encoding: "utf8" });
+  assert.equal(output, `${readCommonVersion(path.join(repoRoot, packages[0].manifest))}\n`);
 });

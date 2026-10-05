@@ -1,12 +1,56 @@
 # Changelog
 
-## All .NET SDK packages 3.12.11 - 2026-10-03
+## All .NET SDK packages 3.12.12 - 2026-10-05
 
 ### Changed
 - `Toggly.FeatureManagement.Storage.EntityFramework` computes the same SHA-256
   catalog IDs without creating a hash instance for each lookup. Missing
   catalog-store dependencies and registration arguments still fail immediately.
 
+## All .NET SDK packages 3.12.11 - 2026-10-04
+
+### Fixed
+- `Toggly.FeatureManagement.NSwag` generates OpenAPI documents per request by
+  default, so request-scoped feature gates cannot reuse another request's
+  schema. Applications can opt into bounded caching with an explicit document
+  key that distinguishes their document variants.
+
+## All .NET SDK packages 3.12.10 - 2026-10-04
+
+### Fixed
+- `Toggly.FeatureManagement.Storage.RavenDB` now preserves a configured
+  `JwkDocumentName` when registering the snapshot provider with a settings
+  object, so JWK snapshots use the requested document name.
+
+### Changed
+- RavenDB snapshot contracts and document-name settings now declare nullable
+  values explicitly, matching absent feature definitions and optional settings.
+
+## All .NET SDK packages 3.12.9 - 2026-10-04
+
+### Changed
+- `Toggly.FeatureManagement.Storage.DistributedCache` now explicitly marks
+  optional snapshot fields and cache entry names as nullable, matching their
+  existing defaults, and documents its public snapshot and registration APIs.
+- Distributed-cache catalog storage uses the available validation and hashing
+  APIs on each supported framework while preserving catalog cache keys and
+  process-wide writer serialization.
+
+## All .NET SDK packages 3.12.8 - 2026-10-04
+
+### Fixed
+- Dashboard conflict pages now generate reload links from the configured
+  routes, so nested mounts, host path bases, and encoded feature keys open
+  the current catalog or feature correctly.
+- Dashboard packages no longer include generated development reports as
+  application content.
+
+## All .NET SDK packages 3.12.7 - 2026-10-03
+
+### Fixed
+- The SDK User-Agent version now matches the NuGet package version even when
+  CI injects a different assembly informational version. Malformed assembly
+  informational versions fall back to a valid file or assembly version.
 ## All .NET SDK packages 3.12.6 - 2026-09-30
 
 ### Fixed

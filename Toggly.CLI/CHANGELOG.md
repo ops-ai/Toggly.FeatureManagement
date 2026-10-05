@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0
+
+2026-10-03
+
+### Added
+- `toggly migrate unleash` importer: dry-run compatibility report from an Unleash export / Admin API features JSON, and `--apply` to create missing features and set environment filters (OPS-1672).
+
 ## 0.4.1
 
 2026-10-01

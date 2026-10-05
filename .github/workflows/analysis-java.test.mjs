@@ -19,6 +19,16 @@ function step(source, name) {
   return next === -1 ? source.slice(start) : source.slice(start, next);
 }
 
+test('Java Sonar ignores protocol SHA-1 kid on Es256Verifier (java:S4790)', () => {
+  const sonar = job('sonar');
+  for (const name of ['Build and run SonarCloud analysis', 'Run SonarQube Server analysis']) {
+    const scan = step(sonar, name);
+    assert.match(scan, /-Dsonar\.issue\.ignore\.multicriteria=kidSha1/);
+    assert.match(scan, /-Dsonar\.issue\.ignore\.multicriteria\.kidSha1\.ruleKey=java:S4790/);
+    assert.match(scan, /-Dsonar\.issue\.ignore\.multicriteria\.kidSha1\.resourceKey=\*\*\/Es256Verifier\.java/);
+  }
+});
+
 test('both Java scans use the pinned Maven scanner and await quality gates', () => {
   const sonar = job('sonar');
   for (const name of ['Build and run SonarCloud analysis', 'Run SonarQube Server analysis']) {
@@ -34,7 +44,7 @@ test('both Java scans use the pinned Maven scanner and await quality gates', () 
 test('reporting only skips Sonar and OWASP on fork PRs or release calls without reporting', () => {
   for (const name of ['sonar', 'dependency-check']) {
     const reporting = job(name);
-    assert.match(reporting, /if:.*github\.event_name != 'workflow_call' \|\| inputs\.run_reporting/);
+    assert.match(reporting, /if:.*toJSON\(inputs\.run_reporting\) != 'false'/);
     assert.match(reporting, /github\.event_name != 'pull_request' \|\| !github\.event\.pull_request\.head\.repo\.fork/);
   }
 });
@@ -42,7 +52,7 @@ test('reporting only skips Sonar and OWASP on fork PRs or release calls without 
 test('the Java summary requires Sonar except for intentional reporting skips', () => {
   const summary = job('summary');
   assert.match(summary, /required-jobs: build,current-hosts,smoke-test,code-quality,coverage,sonar,dependency-check/);
-  assert.match(summary, /allow-skipped:.*github\.event_name == 'workflow_call'.*!inputs\.run_reporting/);
+  assert.match(summary, /allow-skipped:.*toJSON\(inputs\.run_reporting\) == 'false'/);
   assert.match(summary, /allow-skipped:.*github\.event_name == 'pull_request'.*github\.event\.pull_request\.head\.repo\.fork/);
   assert.match(summary, /allow-skipped:.*dependency-check,sonar/);
   assert.match(summary, /allow-skipped:.*\|\| 'none'/);

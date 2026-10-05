@@ -82,10 +82,10 @@ test('rust SonarCloud and Server scans require credentials and distinct quality 
 test('rust Sonar is required except for intentional fork and non-reporting skips', () => {
   const sonar = rustWorkflow.slice(rustWorkflow.indexOf('\n  sonar:'), rustWorkflow.indexOf('\n  dependency-check:'));
   const summary = rustWorkflow.slice(rustWorkflow.indexOf('\n  summary:'));
-  assert.match(sonar, /github\.event_name != 'workflow_call' \|\| inputs\.run_reporting/);
+  assert.match(sonar, /toJSON\(inputs\.run_reporting\) != 'false'/);
   assert.match(sonar, /github\.event_name != 'pull_request' \|\| !github\.event\.pull_request\.head\.repo\.fork/);
   assert.match(summary, /required-jobs: test,smoke-test,coverage,docs,msrv,security,sonar,dependency-check/);
-  assert.match(summary, /allow-skipped:.*github\.event_name == 'workflow_call'.*!inputs\.run_reporting/);
+  assert.match(summary, /allow-skipped:.*toJSON\(inputs\.run_reporting\) == 'false'/);
   assert.match(summary, /allow-skipped:.*github\.event_name == 'pull_request'.*github\.event\.pull_request\.head\.repo\.fork/);
   assert.match(summary, /allow-skipped:.*dependency-check,sonar/);
   assert.match(summary, /allow-skipped:.*\|\| 'none'/);

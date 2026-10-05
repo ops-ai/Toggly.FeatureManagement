@@ -210,7 +210,7 @@ jobs:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
     needs: [coverage, dependency-check]
-    if: ${{ always() && (github.event_name != 'workflow_call' || inputs.run_reporting) && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
+    if: ${{ always() && toJSON(inputs.run_reporting) != 'false' && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
 
     steps:
       - name: Checkout code
@@ -269,6 +269,13 @@ jobs:
           print(f'Converted {len(files)} files to SonarQube generic coverage format')
           "
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: toggly-rust/Cargo.toml
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: Validate SonarCloud credentials
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -284,6 +291,7 @@ jobs:
           projectBaseDir: ${{ env.SDK_ROOT }}
           args: >
             -Dsonar.projectKey=toggly-sdks-rust
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Rust"
             -Dsonar.sources=.
@@ -319,6 +327,7 @@ jobs:
           projectBaseDir: ${{ env.SDK_ROOT }}
           args: >
             -Dsonar.projectKey=toggly-sdks-rust
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - Rust"
             -Dsonar.sources=.
             -Dsonar.exclusions=**/target/**,**/examples/**,**/*_test.rs
@@ -331,7 +340,7 @@ jobs:
   dependency-check:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
-    if: ${{ (github.event_name != 'workflow_call' || inputs.run_reporting) && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
+    if: ${{ toJSON(inputs.run_reporting) != 'false' && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
 
     steps:
       - name: Checkout code
@@ -393,7 +402,7 @@ jobs:
         with:
           needs-json: ${{ toJSON(needs) }}
           required-jobs: test,smoke-test,coverage,docs,msrv,security,sonar,dependency-check
-          allow-skipped: ${{ (github.event_name == 'workflow_call' && !inputs.run_reporting || github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork) && 'dependency-check,sonar' || 'none' }}
+          allow-skipped: ${{ (toJSON(inputs.run_reporting) == 'false' || github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork) && 'dependency-check,sonar' || 'none' }}
 
       - name: Generate summary
         working-directory: .

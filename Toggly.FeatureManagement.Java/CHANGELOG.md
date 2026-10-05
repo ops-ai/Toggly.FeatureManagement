@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.1.5
+
+2026-10-02
+
+### Changed
+
+- `toggly-servlet` Maven metadata now declares Mockito as a test-scoped
+  dependency for adapter verification.
+- User-Agent and live-update `sdkVersion` report `toggly-java/2.1.5`.
+
 ## 2.1.4
 
 2026-09-29

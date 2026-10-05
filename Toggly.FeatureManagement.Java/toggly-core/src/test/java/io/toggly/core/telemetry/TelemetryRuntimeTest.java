@@ -28,6 +28,7 @@ class TelemetryRuntimeTest {
 
             @Override
             public void close() {
+                // Test double: no gRPC channel to shut down.
             }
         };
         MetricsGrpcClient metricsClient = new MetricsGrpcClient() {
@@ -38,6 +39,7 @@ class TelemetryRuntimeTest {
 
             @Override
             public void close() {
+                // Test double: no gRPC channel to shut down.
             }
         };
 
@@ -78,6 +80,7 @@ class TelemetryRuntimeTest {
 
             @Override
             public void close() {
+                // Test double: no gRPC channel to shut down.
             }
         };
 
@@ -114,6 +117,7 @@ class TelemetryRuntimeTest {
 
             @Override
             public void close() {
+                // Test double: no gRPC channel to shut down.
             }
         };
 
@@ -158,6 +162,7 @@ class TelemetryRuntimeTest {
 
             @Override
             public void close() {
+                // Test double: no gRPC channel to shut down.
             }
         };
 
@@ -209,6 +214,7 @@ class TelemetryRuntimeTest {
 
             @Override
             public void close() {
+                // Test double: no gRPC channel to shut down.
             }
         };
 

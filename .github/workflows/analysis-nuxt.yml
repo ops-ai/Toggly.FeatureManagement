@@ -257,6 +257,13 @@ jobs:
         working-directory: .
         continue-on-error: true
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: Toggly.FeatureManagement.Nuxt/nuxt-toggly-core/package.json
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: Validate SonarCloud credentials
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -271,6 +278,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-nuxt
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Nuxt"
             -Dsonar.sources=${{ env.SDK_ROOT }}/nuxt-toggly-core/src,${{ env.SDK_ROOT }}/nuxt-toggly-server/src,${{ env.SDK_ROOT }}/nuxt-toggly-client/src,${{ env.SDK_ROOT }}/nuxt-toggly/src
@@ -278,6 +286,9 @@ jobs:
             -Dsonar.javascript.lcov.reportPaths=coverage/nuxt-toggly-core.lcov.info,coverage/nuxt-toggly-server.lcov.info,coverage/nuxt-toggly-client.lcov.info,coverage/nuxt-toggly.lcov.info
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/playground/**
             -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts
+            -Dsonar.issue.ignore.multicriteria=hookAwait
+            -Dsonar.issue.ignore.multicriteria.hookAwait.ruleKey=typescript:S9382
+            -Dsonar.issue.ignore.multicriteria.hookAwait.resourceKey=**/hooks.ts
             -Dsonar.qualitygate.wait=true
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -305,6 +316,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-nuxt
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - Nuxt"
             -Dsonar.sources=${{ env.SDK_ROOT }}/nuxt-toggly-core/src,${{ env.SDK_ROOT }}/nuxt-toggly-server/src,${{ env.SDK_ROOT }}/nuxt-toggly-client/src,${{ env.SDK_ROOT }}/nuxt-toggly/src
             -Dsonar.tests=${{ env.SDK_ROOT }}/nuxt-toggly-core/tests,${{ env.SDK_ROOT }}/nuxt-toggly-server/tests,${{ env.SDK_ROOT }}/nuxt-toggly-client/tests,${{ env.SDK_ROOT }}/nuxt-toggly/tests
@@ -312,7 +324,48 @@ jobs:
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/playground/**
             -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
+            -Dsonar.issue.ignore.multicriteria=hookAwait
+            -Dsonar.issue.ignore.multicriteria.hookAwait.ruleKey=typescript:S9382
+            -Dsonar.issue.ignore.multicriteria.hookAwait.resourceKey=**/hooks.ts
             -Dsonar.qualitygate.wait=true
+
+      - name: Report SonarQube Server quality gate
+        if: ${{ failure() && steps.validate-sonarqube-server-credentials.outcome == 'success' }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          pr="${{ github.event.pull_request.number }}"
+          echo "## SonarQube Server quality gate (toggly-sdks-nuxt)" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$pr" ]; then
+            status_url="${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=toggly-sdks-nuxt&pullRequest=${pr}"
+            issues_url="${SONAR_HOST_URL}/api/issues/search?componentKeys=toggly-sdks-nuxt&pullRequest=${pr}&resolved=false&ps=20&s=SEVERITY&asc=false"
+          else
+            status_url="${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=toggly-sdks-nuxt&branch=${GITHUB_REF_NAME}"
+            issues_url="${SONAR_HOST_URL}/api/issues/search?componentKeys=toggly-sdks-nuxt&branch=${GITHUB_REF_NAME}&resolved=false&ps=20&s=SEVERITY&asc=false"
+          fi
+          echo "GET ${status_url}"
+          curl -sS -u "${SONAR_TOKEN}:" "$status_url" | tee /tmp/sonar-qg.json
+          echo
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          data = json.loads(Path("/tmp/sonar-qg.json").read_text())
+          status = data.get("projectStatus", {})
+          print(f"**Status:** `{status.get('status')}`")
+          print("")
+          print("| Metric | Status | Actual | Threshold |")
+          print("|---|---|---|---|")
+          for condition in status.get("conditions", []):
+              print(
+                  f"| `{condition.get('metricKey')}` | {condition.get('status')} | "
+                  f"{condition.get('actualValue')} | {condition.get('errorThreshold')} |"
+              )
+          PY
+          echo
+          echo "Open issues:"
+          curl -sS -u "${SONAR_TOKEN}:" "$issues_url" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("total", d.get("total"));
+          [print(i.get("rule"), i.get("severity"), i.get("component","").split(":")[-1], i.get("line"), (i.get("message") or "")[:120]) for i in d.get("issues",[])]'
 
   dependency-check:
     name: OWASP Dependency Check

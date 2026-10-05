@@ -1,3 +1,11 @@
+## 2.10.2
+
+2026-10-04
+
+### Fixed
+- Avoid slow feature refreshes when a definitions revision contains a long run
+  of quote characters; quote characters inside the revision remain intact.
+
 ## 2.10.1
 
 2026-09-27

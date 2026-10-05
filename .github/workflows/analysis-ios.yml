@@ -171,7 +171,7 @@ jobs:
   dependency-check:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'workflow_call' || inputs.run_reporting }}
+    if: ${{ toJSON(inputs.run_reporting) != 'false' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -207,7 +207,7 @@ jobs:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
     needs: [build-and-test, lint, smoke-test, dependency-check]
-    if: ${{ always() && (github.event_name != 'workflow_call' || inputs.run_reporting) }}
+    if: ${{ always() && toJSON(inputs.run_reporting) != 'false' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -243,6 +243,13 @@ jobs:
           grep '^SF:' sonar-reports/coverage.lcov | head -20 || true
         continue-on-error: true
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: Toggly.FeatureManagement.iOS/TogglyCore/Sources/TogglyCore.swift
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
@@ -253,6 +260,7 @@ jobs:
           projectBaseDir: ${{ env.SDK_ROOT }}
           args: >
             -Dsonar.projectKey=toggly-sdks-ios
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - iOS"
             -Dsonar.sources=TogglyCore/Sources,TogglySwiftUI/Sources,TogglyUIKit/Sources,TogglyCombine/Sources
@@ -260,6 +268,9 @@ jobs:
             -Dsonar.exclusions=**/.build/**,**/Package.resolved
             -Dsonar.coverageReportPaths=sonar-reports/coverage-generic.xml
             -Dsonar.swift.swiftlint.report=sonar-reports/swiftlint-report.txt
+            -Dsonar.issue.ignore.multicriteria=kidSha1
+            -Dsonar.issue.ignore.multicriteria.kidSha1.ruleKey=swift:S4790
+            -Dsonar.issue.ignore.multicriteria.kidSha1.resourceKey=**/SignedDefsVerify.swift
             -Dsonar.qualitygate.wait=true
 
       - name: SonarQube Server Scan
@@ -271,6 +282,7 @@ jobs:
           projectBaseDir: ${{ env.SDK_ROOT }}
           args: >
             -Dsonar.projectKey=toggly-sdks-ios
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - iOS"
             -Dsonar.language=swift
             -Dsonar.sources=TogglyCore/Sources,TogglySwiftUI/Sources,TogglyUIKit/Sources,TogglyCombine/Sources
@@ -280,6 +292,9 @@ jobs:
             -Dsonar.coverageReportPaths=sonar-reports/coverage-generic.xml
             -Dsonar.swift.swiftlint.report=sonar-reports/swiftlint-report.txt
             -Dsonar.dependencyCheck.reportPath=sonar-reports/dependency-check-report.xml
+            -Dsonar.issue.ignore.multicriteria=kidSha1
+            -Dsonar.issue.ignore.multicriteria.kidSha1.ruleKey=swift:S4790
+            -Dsonar.issue.ignore.multicriteria.kidSha1.resourceKey=**/SignedDefsVerify.swift
             -Dsonar.qualitygate.wait=true
 
   build-platforms:
@@ -323,3 +338,4 @@ jobs:
         with:
           needs-json: ${{ toJSON(needs) }}
           required-jobs: build-and-test,lint,smoke-test,dependency-check,sonar,build-platforms
+          allow-skipped: ${{ toJSON(inputs.run_reporting) == 'false' && 'sonar,dependency-check' || 'none' }}

@@ -307,8 +307,8 @@ function TargetOwner({
     [client, flags]
   );
   const getFlag = useCallback(
-    async (key: string, fallback?: boolean) =>
-      staticGating ? evaluateFlag(key, fallback) : client.getFlag(key, fallback),
+    (key: string, fallback?: boolean) =>
+      staticGating ? Promise.resolve(evaluateFlag(key, fallback)) : client.getFlag(key, fallback),
     [client, staticGating, evaluateFlag]
   );
   const publicFlags = useMemo(() => ({ ...flags }), [flags]);

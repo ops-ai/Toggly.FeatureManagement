@@ -90,7 +90,7 @@ jobs:
     uses: ./.github/workflows/analysis-javascript.yml
     with:
       sdks: Svelte
-      run_reporting: false
+      run_reporting: true
     secrets: inherit
 
   publish:

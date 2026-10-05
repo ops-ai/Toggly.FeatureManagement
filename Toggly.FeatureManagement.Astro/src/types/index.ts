@@ -2,7 +2,7 @@
  * Toggly Astro SDK - Type Definitions
  */
 
-import type { Hook, EvaluatedDefinitions, TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
+import type { Hook, EvaluatedDefinitions } from '@ops-ai/toggly-hooks-types';
 import type { LocalGate } from '@ops-ai/toggly-local-gates';
 
 /**

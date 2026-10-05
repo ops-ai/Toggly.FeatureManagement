@@ -11,6 +11,8 @@ namespace Toggly.FeatureManagement.Storage.DistributedCache
     public sealed class CatalogWriterGate
     {
         private static readonly ConcurrentDictionary<string, SemaphoreSlim> Gates = new ConcurrentDictionary<string, SemaphoreSlim>(StringComparer.Ordinal);
+        // Instances retain the public DI API while sharing serialization across the process.
+        private readonly ConcurrentDictionary<string, SemaphoreSlim> _gates = Gates;
 
         /// <summary>
         /// Enters the process-local writer gate for a catalog cache key.
@@ -19,7 +21,7 @@ namespace Toggly.FeatureManagement.Storage.DistributedCache
         {
             if (string.IsNullOrWhiteSpace(cacheKey)) throw new ArgumentException("Cache key is required.", nameof(cacheKey));
 
-            var gate = Gates.GetOrAdd(cacheKey, _ => new SemaphoreSlim(1, 1));
+            var gate = _gates.GetOrAdd(cacheKey, _ => new SemaphoreSlim(1, 1));
             await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             return new Releaser(gate);
         }

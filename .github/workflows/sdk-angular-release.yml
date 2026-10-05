@@ -91,7 +91,7 @@ jobs:
     uses: ./.github/workflows/analysis-javascript.yml
     with:
       sdks: Angular
-      run_reporting: false
+      run_reporting: true
     secrets: inherit
 
   publish:

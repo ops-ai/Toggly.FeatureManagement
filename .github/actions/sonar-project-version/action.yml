@@ -1,0 +1,38 @@
+name: Resolve Sonar project version
+description: Read an SDK manifest and emit sonar.projectVersion (package version plus optional leak-cutover suffix).
+
+inputs:
+  manifest:
+    description: Path to the package manifest relative to the repository root
+    required: true
+  manifest_type:
+    description: Manifest format override (auto-detected from the path when omitted)
+    required: false
+    default: ''
+  suffix:
+    description: >-
+      Version suffix. Empty uses +baseline. Pass none to send the plain package
+      version after the first develop analysis that recorded +baseline.
+    required: false
+    default: ''
+
+outputs:
+  version:
+    description: Value for -Dsonar.projectVersion
+    value: ${{ steps.resolve.outputs.version }}
+  package_version:
+    description: Manifest version without suffix
+    value: ${{ steps.resolve.outputs.package_version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve sonar.projectVersion
+      id: resolve
+      shell: bash
+      env:
+        SONAR_PROJECT_VERSION_SUFFIX: ${{ inputs.suffix }}
+      run: |
+        node "${{ github.action_path }}/../../scripts/sonar-project-version.mjs" \
+          --manifest "${{ inputs.manifest }}" \
+          --type "${{ inputs.manifest_type }}"

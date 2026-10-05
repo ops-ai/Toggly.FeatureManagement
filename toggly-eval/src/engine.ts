@@ -59,9 +59,7 @@ function evaluateGroup(
 let defaultRegistry: Map<string, FilterEvaluator> | null = null
 
 function getDefaultRegistry(): Map<string, FilterEvaluator> {
-  if (!defaultRegistry) {
-    defaultRegistry = createDefaultRegistry()
-  }
+  defaultRegistry ??= createDefaultRegistry()
   return defaultRegistry
 }
 

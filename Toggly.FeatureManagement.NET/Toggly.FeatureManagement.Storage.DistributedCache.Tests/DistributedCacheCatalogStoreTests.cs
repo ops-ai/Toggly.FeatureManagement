@@ -18,6 +18,24 @@ namespace Toggly.FeatureManagement.Storage.DistributedCache.Tests;
 public sealed class DistributedCacheCatalogStoreTests
 {
     [Fact]
+    public void AddTogglyDistributedCacheCatalogStore_rejects_a_null_service_collection()
+    {
+        var action = () => ServiceCollectionExtensions.AddTogglyDistributedCacheCatalogStore(null!, _ => { });
+
+        action.Should().Throw<ArgumentNullException>().WithParameterName("services");
+    }
+
+    [Fact]
+    public void AddTogglyDistributedCacheCatalogStore_rejects_a_null_configuration_callback()
+    {
+        var services = new ServiceCollection();
+        var action = () => services.AddTogglyDistributedCacheCatalogStore(null!);
+
+        action.Should().Throw<ArgumentNullException>().WithParameterName("configure");
+        services.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task ReadAsync_returns_null_only_when_the_catalog_entry_is_absent()
     {
         var store = CreateStore(CatalogCacheAccessMode.Reader);
@@ -115,6 +133,18 @@ public sealed class DistributedCacheCatalogStoreTests
         var action = () => store.ReadAsync("orders");
 
         await action.Should().ThrowAsync<InvalidOperationException>().WithMessage("*payload is invalid*");
+    }
+
+    [Fact]
+    public async Task ReadAsync_rejects_a_null_envelope_instead_of_reporting_absence()
+    {
+        var cache = new RecordingCache();
+        cache.Put(DistributedCacheCatalogStore.GetCatalogKey("orders"), Encoding.UTF8.GetBytes("null"));
+        var store = CreateStore(cache, CatalogCacheAccessMode.Reader);
+
+        var action = () => store.ReadAsync("orders");
+
+        await action.Should().ThrowAsync<InvalidOperationException>().WithMessage("*payload is incomplete*");
     }
 
     [Fact]

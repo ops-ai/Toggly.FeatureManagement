@@ -89,7 +89,7 @@ jobs:
     if: needs.resolve.outputs.action == 'publish'
     uses: ./.github/workflows/analysis-react-router.yml
     with:
-      run_reporting: false
+      run_reporting: true
     secrets: inherit
 
   publish:

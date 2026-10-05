@@ -97,7 +97,7 @@ jobs:
     if: needs.resolve.outputs.action != 'fail'
     uses: ./.github/workflows/analysis-nuxt.yml
     with:
-      run_reporting: false
+      run_reporting: true
     secrets: inherit
 
   publish:
@@ -136,10 +136,6 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
-
-      # Keep release packed-host replay aligned with the analysis workflow.
-      - name: Pin npm for recorded consumer locks
-        run: npm install --global npm@10.2.3
 
       - name: Sync monorepo package versions
         if: needs.resolve.outputs.manifest_changed == 'true'
@@ -202,6 +198,12 @@ jobs:
             echo "nuxt-toggly is not selected; packed module host verification is not required."
             exit 0
           fi
+          # Pin npm only for recorded consumer lock replay. Do not replace the
+          # setup-node OIDC-capable npm that pnpm publish --provenance needs.
+          NPM_PIN_PREFIX="${RUNNER_TEMP}/npm-10.2.3"
+          mkdir -p "$NPM_PIN_PREFIX"
+          npm install --prefix "$NPM_PIN_PREFIX" npm@10.2.3
+          export PATH="${NPM_PIN_PREFIX}/node_modules/.bin:${PATH}"
           npx --yes playwright install-deps chromium
           node tests/hosts/run.mjs 3.21.1 locked
           node tests/hosts/run.mjs 4.5.2 locked

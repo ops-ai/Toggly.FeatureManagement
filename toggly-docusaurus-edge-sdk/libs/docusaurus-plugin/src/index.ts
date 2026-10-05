@@ -147,7 +147,7 @@ export default function togglyPlugin(
      * Load content: Extract x-feature frontmatter from docs
      * We'll access doc metadata through the content system
      */
-    async loadContent() {
+    loadContent() {
       return {
         config: {
           baseURI,
@@ -242,7 +242,7 @@ export default function togglyPlugin(
     /**
      * Post build: Write manifest to output directory
      */
-    async postBuild({ outDir }) {
+    postBuild({ outDir }) {
       const pluginData = (this as any).__togglyPluginData;
       if (!pluginData) {
         return;

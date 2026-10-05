@@ -157,6 +157,7 @@ public class CommandCatalogTests
         "toggly-env.1",
         "toggly-feature.1",
         "toggly-release.1",
+        "toggly-migrate.1",
         "toggly-context.1"
     ];
 

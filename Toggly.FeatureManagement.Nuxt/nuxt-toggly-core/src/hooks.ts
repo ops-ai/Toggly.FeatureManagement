@@ -68,7 +68,7 @@ export class HookExecutor {
     for (const hook of this.hooks) {
       if (hook.beforeEvaluation) {
         try {
-          const data = await hook.beforeEvaluation(flagKey, defaultValue)
+          const data = await hook.beforeEvaluation(flagKey, defaultValue) // NOSONAR typescript:S9382 sequential hooks
           dataMap.set(hook.getMetadata().name, data)
         } catch (error) {
           console.error(
@@ -98,7 +98,7 @@ export class HookExecutor {
       if (hook.afterEvaluation) {
         try {
           const data = dataMap.get(hook.getMetadata().name)
-          await hook.afterEvaluation(flagKey, data, result)
+          await hook.afterEvaluation(flagKey, data, result) // NOSONAR typescript:S9382 sequential hooks
         } catch (error) {
           console.error(
             `[Toggly] Error in afterEvaluation hook "${hook.getMetadata().name}":`,
@@ -120,7 +120,7 @@ export class HookExecutor {
     for (const hook of this.hooks) {
       if (hook.beforeIdentify) {
         try {
-          const data = await hook.beforeIdentify(identity)
+          const data = await hook.beforeIdentify(identity) // NOSONAR typescript:S9382 sequential hooks
           dataMap.set(hook.getMetadata().name, data)
         } catch (error) {
           console.error(
@@ -148,7 +148,7 @@ export class HookExecutor {
       if (hook.afterIdentify) {
         try {
           const data = dataMap.get(hook.getMetadata().name)
-          await hook.afterIdentify(identity, data)
+          await hook.afterIdentify(identity, data) // NOSONAR typescript:S9382 sequential hooks
         } catch (error) {
           console.error(
             `[Toggly] Error in afterIdentify hook "${hook.getMetadata().name}":`,
@@ -172,7 +172,7 @@ export class HookExecutor {
       if (!isCurrent()) return
       if (hook.afterRefresh) {
         try {
-          await hook.afterRefresh(booleanFlags)
+          await hook.afterRefresh(booleanFlags) // NOSONAR typescript:S9382 sequential hooks
         } catch (error) {
           console.error(
             `[Toggly] Error in afterRefresh hook "${hook.getMetadata().name}":`,

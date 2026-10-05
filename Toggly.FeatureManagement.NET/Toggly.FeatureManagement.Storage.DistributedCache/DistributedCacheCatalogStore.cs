@@ -35,10 +35,18 @@ namespace Toggly.FeatureManagement.Storage.DistributedCache
             IOptions<TogglyDistributedCacheCatalogOptions> options,
             CatalogWriterGate writerGate)
         {
-            _cache = cache ?? throw new ArgumentNullException(nameof(cache));
+#if NET6_0_OR_GREATER
+            ArgumentNullException.ThrowIfNull(cache);
+            ArgumentNullException.ThrowIfNull(options);
+            ArgumentNullException.ThrowIfNull(writerGate);
+#else
+            if (cache == null) throw new ArgumentNullException(nameof(cache));
             if (options == null) throw new ArgumentNullException(nameof(options));
+            if (writerGate == null) throw new ArgumentNullException(nameof(writerGate));
+#endif
+            _cache = cache;
             _options = options.Value ?? throw new ArgumentException("Catalog options are required.", nameof(options));
-            _writerGate = writerGate ?? throw new ArgumentNullException(nameof(writerGate));
+            _writerGate = writerGate;
         }
 
         /// <inheritdoc />
@@ -66,7 +74,11 @@ namespace Toggly.FeatureManagement.Storage.DistributedCache
             CancellationToken cancellationToken = default(CancellationToken))
         {
             var normalizedName = ValidateCatalogName(catalogName);
+#if NET6_0_OR_GREATER
+            ArgumentNullException.ThrowIfNull(document);
+#else
             if (document == null) throw new ArgumentNullException(nameof(document));
+#endif
             if (_options.AccessMode != CatalogCacheAccessMode.SingleWriter)
             {
                 throw new InvalidOperationException("Distributed-cache catalog Reader mode does not permit writes. Configure AccessMode as SingleWriter for exactly one writer process per catalog.");
@@ -116,17 +128,23 @@ namespace Toggly.FeatureManagement.Storage.DistributedCache
         public static string GetCatalogKey(string catalogName)
         {
             var normalizedName = ValidateCatalogName(catalogName);
+            var input = Encoding.UTF8.GetBytes(normalizedName);
+            byte[] bytes;
+#if NET5_0_OR_GREATER
+            bytes = SHA256.HashData(input);
+#else
             using (var hash = SHA256.Create())
             {
-                var bytes = hash.ComputeHash(Encoding.UTF8.GetBytes(normalizedName));
-                var builder = new StringBuilder(bytes.Length * 2);
-                foreach (var value in bytes)
-                {
-                    builder.Append(value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture));
-                }
-
-                return "Toggly:Catalogs:" + builder;
+                bytes = hash.ComputeHash(input);
             }
+#endif
+            var builder = new StringBuilder(bytes.Length * 2);
+            foreach (var value in bytes)
+            {
+                builder.Append(value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture));
+            }
+
+            return "Toggly:Catalogs:" + builder;
         }
 
         private static CatalogSnapshot DeserializeSnapshot(byte[] bytes, string expectedCatalogName)

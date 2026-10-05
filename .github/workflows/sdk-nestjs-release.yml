@@ -93,7 +93,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: [20, 22, 24]
+        node: ['20.19.0', '22.12.0', 24]
         nest: [10, 11, 12]
     defaults:
       run:
@@ -105,7 +105,29 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: Toggly.FeatureManagement.NestJS/package-lock.json
+          registry-url: https://registry.npmjs.org
+      - name: Wait for published toggly-node-core
+        working-directory: ${{ github.workspace }}
+        run: |
+          CORE_RANGE=$(node -p "require('./Toggly.FeatureManagement.NestJS/package.json').dependencies['@ops-ai/toggly-node-core']")
+          CORE_VER=$(npm view "@ops-ai/toggly-node-core@${CORE_RANGE}" version)
+          test -n "$CORE_VER"
+          bash .github/scripts/wait-for-npm-version.sh "@ops-ai/toggly-node-core@${CORE_VER}"
       - run: npm ci
+      - name: Refuse local-path dependencies
+        run: |
+          BAD=$(node -e "
+            const m = require('./package.json');
+            const deps = { ...m.dependencies, ...m.peerDependencies, ...m.optionalDependencies };
+            const fatal = Object.entries(deps)
+              .filter(([, v]) => /^(file|link):/.test(String(v)))
+              .map(([k, v]) => k + '@' + v);
+            console.log(fatal.join(', '));
+          ")
+          if [ -n "$BAD" ]; then
+            echo "::error::Refusing NestJS compat-test with local-path dependencies: $BAD"
+            exit 1
+          fi
       - name: Install host compatibility version
         run: npm install --no-save --package-lock=false @nestjs/common@${{ matrix.nest }} @nestjs/core@${{ matrix.nest }} @nestjs/testing@${{ matrix.nest }} @nestjs/platform-express@${{ matrix.nest }}
       - run: npm run typecheck && npm run build && npm run test:coverage && npm run test:packed
@@ -116,7 +138,7 @@ jobs:
     uses: ./.github/workflows/analysis-javascript.yml
     with:
       sdks: NestJS
-      run_reporting: false
+      run_reporting: true
     secrets: inherit
 
   publish:
@@ -148,6 +170,29 @@ jobs:
         with:
           node-version: '24'
           registry-url: https://registry.npmjs.org
+
+      - name: Wait for published toggly-node-core
+        working-directory: ${{ github.workspace }}
+        run: |
+          CORE_RANGE=$(node -p "require('./Toggly.FeatureManagement.NestJS/package.json').dependencies['@ops-ai/toggly-node-core']")
+          CORE_VER=$(npm view "@ops-ai/toggly-node-core@${CORE_RANGE}" version)
+          test -n "$CORE_VER"
+          bash .github/scripts/wait-for-npm-version.sh "@ops-ai/toggly-node-core@${CORE_VER}"
+
+      - name: Refuse local-path dependencies
+        run: |
+          BAD=$(node -e "
+            const m = require('./package.json');
+            const deps = { ...m.dependencies, ...m.peerDependencies, ...m.optionalDependencies };
+            const fatal = Object.entries(deps)
+              .filter(([, v]) => /^(file|link):/.test(String(v)))
+              .map(([k, v]) => k + '@' + v);
+            console.log(fatal.join(', '));
+          ")
+          if [ -n "$BAD" ]; then
+            echo "::error::Refusing to publish NestJS with local-path dependencies: $BAD"
+            exit 1
+          fi
 
       - run: npm ci && npm run build
 

@@ -149,7 +149,7 @@ jobs:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
     needs: [check-sdk, test, dependency-check]
-    if: ${{ always() && needs.check-sdk.outputs.present == 'true' && (github.event_name != 'workflow_call' || inputs.run_reporting) }}
+    if: ${{ always() && needs.check-sdk.outputs.present == 'true' && toJSON(inputs.run_reporting) != 'false' }}
 
     steps:
       - name: Checkout code
@@ -180,6 +180,13 @@ jobs:
             echo "test-results.xml not found, skipping normalization"
           fi
 
+      - name: Resolve Sonar project version
+        id: sonar_version
+        uses: ./.github/actions/sonar-project-version
+        with:
+          manifest: Toggly.FeatureManagement.PHP/composer.json
+          suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
+
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.2.2
         env:
@@ -189,6 +196,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-php
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - PHP"
             -Dsonar.sources=Toggly.FeatureManagement.PHP/src
@@ -213,6 +221,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-php
+            -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - PHP"
             -Dsonar.sources=Toggly.FeatureManagement.PHP/src
             -Dsonar.tests=Toggly.FeatureManagement.PHP/tests
@@ -225,7 +234,7 @@ jobs:
   dependency-check:
     name: OWASP Dependency Check
     needs: check-sdk
-    if: ${{ needs.check-sdk.outputs.present == 'true' && (github.event_name != 'workflow_call' || inputs.run_reporting) }}
+    if: ${{ needs.check-sdk.outputs.present == 'true' && toJSON(inputs.run_reporting) != 'false' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -288,6 +297,7 @@ jobs:
         with:
           needs-json: ${{ toJSON(needs) }}
           required-jobs: test,smoke-test,dependency-check
+          allow-skipped: ${{ toJSON(inputs.run_reporting) == 'false' && 'sonar,dependency-check' || 'none' }}
 
       - name: Generate summary
         run: |

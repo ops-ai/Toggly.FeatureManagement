@@ -1,11 +1,18 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
+using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Primitives;
+using Microsoft.FeatureManagement;
+using Microsoft.FeatureManagement.Mvc;
 using Moq;
 using NSwag;
 using NSwag.AspNetCore;
 using NSwag.Generation;
+using NSwag.Generation.AspNetCore;
+using System.Reflection;
 using Toggly.FeatureManagement;
 using Toggly.FeatureManagement.NSwag;
 using Xunit;
@@ -377,11 +384,96 @@ public class OpenApiDocumentMiddlewareTests
     #region Caching Tests
 
     [Fact]
-    public async Task Invoke_SecondRequestWithSameVersion_UsesCachedDocument()
+    public async Task Invoke_WithoutExplicitCacheKey_DoesNotReuseGatedDocumentAcrossRequestContexts()
+    {
+        var accessor = new HttpContextAccessor();
+        var apiExplorer = new Mock<IApiDescriptionGroupCollectionProvider>();
+        apiExplorer.Setup(x => x.ApiDescriptionGroups)
+            .Returns(new ApiDescriptionGroupCollection(new List<ApiDescriptionGroup>(), 1));
+        var generator = new Mock<IOpenApiDocumentGenerator>();
+        FeatureGateOperationProcessor? processor = null;
+        generator.Setup(x => x.GenerateAsync("v1")).ReturnsAsync(() =>
+        {
+            var document = new OpenApiDocument();
+            if (processor!.Process(CreateGatedOperationContext()))
+                document.Paths["/gated"] = new OpenApiPathItem();
+            return document;
+        });
+        using var rootServices = new ServiceCollection()
+            .AddSingleton<IApiDescriptionGroupCollectionProvider>(apiExplorer.Object)
+            .AddSingleton<IOpenApiDocumentGenerator>(generator.Object)
+            .AddSingleton<IHttpContextAccessor>(accessor)
+            .BuildServiceProvider();
+        processor = new FeatureGateOperationProcessor(rootServices);
+        var middleware = new OpenApiDocumentMiddleware(
+            _ => Task.CompletedTask, rootServices, "v1", "/swagger/v1/swagger.json",
+            new OpenApiDocumentMiddlewareSettings());
+
+        using var enabledServices = CreateGatedRequestServices(rootServices, true);
+        var enabled = CreateHttpContext(enabledServices);
+        accessor.HttpContext = enabled;
+        await middleware.Invoke(enabled);
+        using var disabledServices = CreateGatedRequestServices(rootServices, false);
+        var disabled = CreateHttpContext(disabledServices);
+        accessor.HttpContext = disabled;
+        await middleware.Invoke(disabled);
+
+        enabled.Response.Body.Position = 0;
+        disabled.Response.Body.Position = 0;
+        using var enabledReader = new StreamReader(enabled.Response.Body);
+        using var disabledReader = new StreamReader(disabled.Response.Body);
+        (await enabledReader.ReadToEndAsync()).Should().Contain("/gated");
+        (await disabledReader.ReadToEndAsync()).Should().NotContain("/gated");
+        generator.Verify(x => x.GenerateAsync("v1"), Times.Exactly(2));
+    }
+
+    private static ServiceProvider CreateGatedRequestServices(IServiceProvider rootServices, bool enabled)
+    {
+        var snapshot = new Mock<IFeatureManagerSnapshot>();
+        snapshot.Setup(x => x.IsEnabledAsync("GatedFeature")).ReturnsAsync(enabled);
+        return new ServiceCollection()
+            .AddSingleton(snapshot.Object)
+            .AddSingleton(rootServices.GetRequiredService<IOpenApiDocumentGenerator>())
+            .BuildServiceProvider();
+    }
+
+    private static AspNetCoreOperationProcessorContext CreateGatedOperationContext()
+    {
+        var controllerType = typeof(GatedController);
+        var method = controllerType.GetMethod(nameof(GatedController.Action))!;
+        return new AspNetCoreOperationProcessorContext(
+            new OpenApiDocument(), new OpenApiOperationDescription
+            {
+                Path = "/gated", Method = "GET", Operation = new OpenApiOperation()
+            }, controllerType, method, null!, null!, null!,
+            new List<OpenApiOperationDescription>())
+        {
+            ApiDescription = new ApiDescription
+            {
+                ActionDescriptor = new ControllerActionDescriptor
+                {
+                    ControllerTypeInfo = controllerType.GetTypeInfo(),
+                    MethodInfo = method
+                }
+            }
+        };
+    }
+
+    private sealed class GatedController : ControllerBase
+    {
+        [FeatureGate("GatedFeature")]
+        public OkResult Action() => Ok();
+    }
+
+    [Fact]
+    public async Task Invoke_ExplicitKeyWithSameVersion_UsesCachedDocument()
     {
         // Arrange
         var serviceProvider = CreateServiceProvider();
-        var settings = new OpenApiDocumentMiddlewareSettings();
+        var settings = new OpenApiDocumentMiddlewareSettings
+        {
+            CreateDocumentCacheKey = _ => "same-state"
+        };
         RequestDelegate nextDelegate = (ctx) => Task.CompletedTask;
 
         var middleware = new OpenApiDocumentMiddleware(
@@ -403,6 +495,121 @@ public class OpenApiDocumentMiddlewareTests
     }
 
     [Fact]
+    public async Task Invoke_WithoutExplicitKey_RegeneratesForSameState()
+    {
+        var serviceProvider = CreateServiceProvider();
+        var middleware = new OpenApiDocumentMiddleware(
+            _ => Task.CompletedTask, serviceProvider, "v1", "/swagger/v1/swagger.json",
+            new OpenApiDocumentMiddlewareSettings());
+
+        await middleware.Invoke(CreateHttpContext(serviceProvider));
+        await middleware.Invoke(CreateHttpContext(serviceProvider));
+
+        _documentGeneratorMock.Verify(x => x.GenerateAsync("v1"), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task Invoke_ExplicitEmptyKey_ReusesDocument()
+    {
+        var serviceProvider = CreateServiceProvider();
+        var middleware = new OpenApiDocumentMiddleware(
+            _ => Task.CompletedTask, serviceProvider, "v1", "/swagger/v1/swagger.json",
+            new OpenApiDocumentMiddlewareSettings { CreateDocumentCacheKey = _ => string.Empty });
+
+        await middleware.Invoke(CreateHttpContext(serviceProvider));
+        await middleware.Invoke(CreateHttpContext(serviceProvider));
+
+        _documentGeneratorMock.Verify(x => x.GenerateAsync("v1"), Times.Once);
+    }
+
+    [Fact]
+    public async Task Invoke_NullCacheKeyResult_RegeneratesDocument()
+    {
+        var serviceProvider = CreateServiceProvider();
+        var middleware = new OpenApiDocumentMiddleware(
+            _ => Task.CompletedTask, serviceProvider, "v1", "/swagger/v1/swagger.json",
+            new OpenApiDocumentMiddlewareSettings { CreateDocumentCacheKey = _ => null! });
+
+        await middleware.Invoke(CreateHttpContext(serviceProvider));
+        await middleware.Invoke(CreateHttpContext(serviceProvider));
+
+        _documentGeneratorMock.Verify(x => x.GenerateAsync("v1"), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task Invoke_ExplicitKey_VersionChangeOnAnotherKeyDoesNotReuseStaleDocument()
+    {
+        var version = 1;
+        _apiExplorerMock.Setup(x => x.ApiDescriptionGroups)
+            .Returns(() => new ApiDescriptionGroupCollection(new List<ApiDescriptionGroup>(), version));
+        var serviceProvider = CreateServiceProvider();
+        var middleware = new OpenApiDocumentMiddleware(
+            _ => Task.CompletedTask, serviceProvider, "v1", "/swagger/v1/swagger.json",
+            new OpenApiDocumentMiddlewareSettings
+            {
+                CreateDocumentCacheKey = request => request.Headers["X-Cache-Key"].ToString()
+            });
+        var first = CreateHttpContext(serviceProvider);
+        first.Request.Headers["X-Cache-Key"] = "first";
+        await middleware.Invoke(first);
+        version = 2;
+        var second = CreateHttpContext(serviceProvider);
+        second.Request.Headers["X-Cache-Key"] = "second";
+        await middleware.Invoke(second);
+        var firstAgain = CreateHttpContext(serviceProvider);
+        firstAgain.Request.Headers["X-Cache-Key"] = "first";
+        await middleware.Invoke(firstAgain);
+
+        _documentGeneratorMock.Verify(x => x.GenerateAsync("v1"), Times.Exactly(3));
+    }
+
+    [Fact]
+    public async Task Invoke_ExplicitHighCardinalityKeys_EvictsOldestEntry()
+    {
+        var serviceProvider = CreateServiceProvider();
+        var middleware = new OpenApiDocumentMiddleware(
+            _ => Task.CompletedTask, serviceProvider, "v1", "/swagger/v1/swagger.json",
+            new OpenApiDocumentMiddlewareSettings
+            {
+                CreateDocumentCacheKey = request => request.Headers["X-Cache-Key"].ToString()
+            });
+
+        for (var key = 0; key < 33; key++)
+        {
+            var context = CreateHttpContext(serviceProvider);
+            context.Request.Headers["X-Cache-Key"] = key.ToString();
+            await middleware.Invoke(context);
+        }
+        var firstAgain = CreateHttpContext(serviceProvider);
+        firstAgain.Request.Headers["X-Cache-Key"] = "0";
+        await middleware.Invoke(firstAgain);
+
+        _documentGeneratorMock.Verify(x => x.GenerateAsync("v1"), Times.Exactly(34));
+    }
+
+    [Fact]
+    public async Task Invoke_ExplicitKey_DoesNotCacheCanceledGeneration()
+    {
+        _documentGeneratorMock.SetupSequence(x => x.GenerateAsync("v1"))
+            .ThrowsAsync(new OperationCanceledException())
+            .ReturnsAsync(new OpenApiDocument());
+        var serviceProvider = CreateServiceProvider();
+        var middleware = new OpenApiDocumentMiddleware(
+            _ => Task.CompletedTask, serviceProvider, "v1", "/swagger/v1/swagger.json",
+            new OpenApiDocumentMiddlewareSettings
+            {
+                CreateDocumentCacheKey = _ => "same-state",
+                ExceptionCacheTime = TimeSpan.FromMinutes(1)
+            });
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => middleware.Invoke(CreateHttpContext(serviceProvider)));
+        await middleware.Invoke(CreateHttpContext(serviceProvider));
+
+        _documentGeneratorMock.Verify(x => x.GenerateAsync("v1"), Times.Exactly(2));
+    }
+
+    [Fact]
     public async Task Invoke_AfterDefinitionsChange_RegeneratesDocument()
     {
         Action? onDefinitionsChange = null;
@@ -412,11 +619,38 @@ public class OpenApiDocumentMiddlewareTests
         var serviceProvider = CreateServiceProvider();
         var middleware = new OpenApiDocumentMiddleware(
             _ => Task.CompletedTask, serviceProvider, "v1", "/swagger/v1/swagger.json",
-            new OpenApiDocumentMiddlewareSettings());
+            new OpenApiDocumentMiddlewareSettings { CreateDocumentCacheKey = _ => "same-state" });
 
         await middleware.Invoke(CreateHttpContext(serviceProvider));
         onDefinitionsChange.Should().NotBeNull();
         onDefinitionsChange!();
+        await middleware.Invoke(CreateHttpContext(serviceProvider));
+
+        _documentGeneratorMock.Verify(x => x.GenerateAsync("v1"), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task Invoke_DefinitionsChangeDuringGeneration_DoesNotRestoreOldCacheEntry()
+    {
+        Action? onDefinitionsChange = null;
+        _featureStateServiceMock.Setup(x => x.WhenDefinitionsChange(It.IsAny<Action>()))
+            .Callback<Action>(callback => onDefinitionsChange = callback)
+            .Returns(Guid.NewGuid());
+        var firstGeneration = new TaskCompletionSource<OpenApiDocument>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        _documentGeneratorMock.SetupSequence(x => x.GenerateAsync("v1"))
+            .Returns(firstGeneration.Task)
+            .ReturnsAsync(new OpenApiDocument());
+        var serviceProvider = CreateServiceProvider();
+        var middleware = new OpenApiDocumentMiddleware(
+            _ => Task.CompletedTask, serviceProvider, "v1", "/swagger/v1/swagger.json",
+            new OpenApiDocumentMiddlewareSettings { CreateDocumentCacheKey = _ => "same-state" });
+
+        var pendingRequest = middleware.Invoke(CreateHttpContext(serviceProvider));
+        onDefinitionsChange.Should().NotBeNull();
+        onDefinitionsChange!();
+        firstGeneration.SetResult(new OpenApiDocument());
+        await pendingRequest;
         await middleware.Invoke(CreateHttpContext(serviceProvider));
 
         _documentGeneratorMock.Verify(x => x.GenerateAsync("v1"), Times.Exactly(2));
@@ -430,7 +664,11 @@ public class OpenApiDocumentMiddlewareTests
         var serviceProvider = CreateServiceProvider();
         var middleware = new OpenApiDocumentMiddleware(
             _ => Task.CompletedTask, serviceProvider, "v1", "/swagger/v1/swagger.json",
-            new OpenApiDocumentMiddlewareSettings { ExceptionCacheTime = TimeSpan.FromMinutes(1) });
+            new OpenApiDocumentMiddlewareSettings
+            {
+                CreateDocumentCacheKey = _ => "same-state",
+                ExceptionCacheTime = TimeSpan.FromMinutes(1)
+            });
 
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => middleware.Invoke(CreateHttpContext(serviceProvider)));
@@ -438,6 +676,32 @@ public class OpenApiDocumentMiddlewareTests
             () => middleware.Invoke(CreateHttpContext(serviceProvider)));
 
         _documentGeneratorMock.Verify(x => x.GenerateAsync("v1"), Times.Once);
+    }
+
+    [Fact]
+    public async Task Invoke_ExplicitKey_VersionChangeDoesNotReplayCachedException()
+    {
+        var version = 1;
+        _apiExplorerMock.Setup(x => x.ApiDescriptionGroups)
+            .Returns(() => new ApiDescriptionGroupCollection(new List<ApiDescriptionGroup>(), version));
+        _documentGeneratorMock.SetupSequence(x => x.GenerateAsync("v1"))
+            .ThrowsAsync(new InvalidOperationException("Generation failed"))
+            .ReturnsAsync(new OpenApiDocument());
+        var serviceProvider = CreateServiceProvider();
+        var middleware = new OpenApiDocumentMiddleware(
+            _ => Task.CompletedTask, serviceProvider, "v1", "/swagger/v1/swagger.json",
+            new OpenApiDocumentMiddlewareSettings
+            {
+                CreateDocumentCacheKey = _ => "same-state",
+                ExceptionCacheTime = TimeSpan.FromMinutes(1)
+            });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => middleware.Invoke(CreateHttpContext(serviceProvider)));
+        version = 2;
+        await middleware.Invoke(CreateHttpContext(serviceProvider));
+
+        _documentGeneratorMock.Verify(x => x.GenerateAsync("v1"), Times.Exactly(2));
     }
 
     #endregion

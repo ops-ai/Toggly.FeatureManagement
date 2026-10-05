@@ -63,9 +63,13 @@ for (const mode of modes) {
       process.env.PATH = previousPath;
       if (previousMarker === undefined) delete process.env.ROUTER_OBSERVER_FAIL_MARKER; else process.env.ROUTER_OBSERVER_FAIL_MARKER = previousMarker;
       // Retained handles, not PID evidence, remain the final cleanup authority.
+      // After close-hang, Chrome is already SIGKILL'd; skip disconnect so finally cannot hang.
       await cleanupOwned([
         () => child && stopChild(child),
-        () => browser?.disconnect(),
+        () => {
+          if (!browser || (child && (child.exitCode !== null || child.signalCode !== null))) return;
+          return Promise.resolve(browser.disconnect()).catch(() => {});
+        },
         () => stopChild(sentinel),
         () => { if (existsSync(`${evidence}.stages.json`)) console.log('ROUTER_CHROME_STARTUP_STAGES', JSON.stringify({ mode, ...JSON.parse(readFileSync(`${evidence}.stages.json`, 'utf8')) })); },
         () => rmSync(root, { recursive: true, force: true }),
