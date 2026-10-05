@@ -82,6 +82,7 @@ jobs:
                   print("component_body_unparsed")
               print("issue_missing")
               raise SystemExit(1)
+          issues = payload.get("issues") or []
           current = issues[0]
           print(
               "before",
