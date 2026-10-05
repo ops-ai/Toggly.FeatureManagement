@@ -112,7 +112,7 @@ namespace Toggly.FeatureManagement.NSwag
         protected virtual async Task<string> GetDocumentAsync(HttpContext context)
         {
             var cacheKeyFactory = _settings.CreateDocumentCacheKey;
-            // NSwag supplies an implicit empty-string key; only a caller-supplied key opts in.
+            // NSwag's default key uses the request host; only a caller-supplied key opts in here.
             var documentKey = cacheKeyFactory == null || cacheKeyFactory.Equals(DefaultDocumentCacheKey)
                 ? null
                 : cacheKeyFactory(context.Request);
