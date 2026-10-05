@@ -109,9 +109,9 @@ jobs:
       - name: Wait for published toggly-node-core
         working-directory: ${{ github.workspace }}
         run: |
-          CORE_RANGE=$(node -p "require('./Toggly.FeatureManagement.NestJS/package.json').dependencies['@ops-ai/toggly-node-core']")
-          CORE_VER=$(npm view "@ops-ai/toggly-node-core@${CORE_RANGE}" version)
-          test -n "$CORE_VER"
+          CORE_VER=$(bash .github/scripts/resolve-lockfile-dep-version.sh \
+            Toggly.FeatureManagement.NestJS/package-lock.json \
+            @ops-ai/toggly-node-core)
           bash .github/scripts/wait-for-npm-version.sh "@ops-ai/toggly-node-core@${CORE_VER}"
       - run: npm ci
       - name: Refuse local-path dependencies
@@ -174,9 +174,9 @@ jobs:
       - name: Wait for published toggly-node-core
         working-directory: ${{ github.workspace }}
         run: |
-          CORE_RANGE=$(node -p "require('./Toggly.FeatureManagement.NestJS/package.json').dependencies['@ops-ai/toggly-node-core']")
-          CORE_VER=$(npm view "@ops-ai/toggly-node-core@${CORE_RANGE}" version)
-          test -n "$CORE_VER"
+          CORE_VER=$(bash .github/scripts/resolve-lockfile-dep-version.sh \
+            Toggly.FeatureManagement.NestJS/package-lock.json \
+            @ops-ai/toggly-node-core)
           bash .github/scripts/wait-for-npm-version.sh "@ops-ai/toggly-node-core@${CORE_VER}"
 
       - name: Refuse local-path dependencies
