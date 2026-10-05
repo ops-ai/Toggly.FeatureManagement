@@ -112,6 +112,24 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
+    public void AddTogglyRavenDbSnapshotProvider_WithSettingsObject_ConfiguresJwkDocumentName()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton(Mock.Of<IDocumentStore>());
+        var settings = new TogglySnapshotSettings { JwkDocumentName = "MyJwkDocument" };
+
+        // Act
+        services.AddTogglyRavenDbSnapshotProvider(settings);
+
+        using var serviceProvider = services.BuildServiceProvider();
+        var options = serviceProvider.GetRequiredService<IOptions<TogglySnapshotSettings>>();
+
+        // Assert
+        options.Value.JwkDocumentName.Should().Be("MyJwkDocument");
+    }
+
+    [Fact]
     public void AddTogglyRavenDbSnapshotProvider_WithEmptyDocumentName_DoesNotSetDocumentName()
     {
         // Arrange

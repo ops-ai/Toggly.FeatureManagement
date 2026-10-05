@@ -62,6 +62,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Test Java signature diagnostic
+        run: python3 .github/scripts/report-java-signature-fingerprint.test.py
+
       - name: Resolve release version
         id: release
         uses: ./.github/actions/resolve-release-version
@@ -157,8 +160,14 @@ jobs:
         run: bash .github/scripts/publish-java-central.sh
 
       - name: Publish to Maven Central
+        id: publish_central
         working-directory: ${{ env.SDK_ROOT }}
         run: mvn -B -Prelease clean deploy
+
+      - name: Report Java signature fingerprint after publish failure
+        if: failure() && steps.publish_central.outcome == 'failure'
+        continue-on-error: true
+        run: python3 .github/scripts/report-java-signature-fingerprint.py "${{ env.SDK_ROOT }}/toggly-core/target"
 
   release:
     needs: [publish, validate]
