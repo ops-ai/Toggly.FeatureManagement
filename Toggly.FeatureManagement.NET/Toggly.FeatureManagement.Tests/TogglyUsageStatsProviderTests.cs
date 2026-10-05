@@ -2647,6 +2647,31 @@ public class TogglyUsageStatsProviderTests : IDisposable
         Assert.InRange(deadlines[0]!.Value, beforeSend.AddSeconds(180), DateTime.UtcNow.AddSeconds(180));
     }
 
+    [Fact]
+    public async Task SendStats_WithNegativeViewedCounter_PreservesLegacyZeroViewedCount()
+    {
+        FeatureStat? request = null;
+        _usageClientMock.Setup(x => x.SendStatsAsync(It.IsAny<FeatureStat>(), It.IsAny<Metadata>(),
+                It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .Returns((FeatureStat packet, Metadata _, DateTime? _, CancellationToken _) =>
+            {
+                request = packet.Clone();
+                return UnaryCall(Task.FromResult(new StatResult { FeatureCount = 1 }));
+            });
+        _provider = CreateProvider();
+        await _provider.RecordUsageAsync("OverflowFeature");
+        var stats = (System.Collections.Concurrent.ConcurrentDictionary<(string FeatureKey, byte Type), int>)typeof(TogglyUsageStatsProvider)
+            .GetField("_stats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(_provider)!;
+        stats[("OverflowFeature", (byte)TogglyUsageStatsProvider.StatType.Viewed)] = int.MinValue;
+
+        await SendStatsAsync(_provider);
+
+        Assert.NotNull(request);
+        var enabledVariant = Assert.Single(request.Stats).VariantStats["enabled"];
+        Assert.Equal(1, enabledVariant.UsedCount);
+        Assert.Equal(0, enabledVariant.ViewedCount);
+    }
+
     private static void AssertCompleteBatch(FeatureStat request, int count, int[] hashes)
     {
         Assert.Equal("test-app-key", request.AppKey);

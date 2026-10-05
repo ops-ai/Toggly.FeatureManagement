@@ -382,12 +382,13 @@ namespace Toggly.FeatureManagement
                 UniqueContextIdentifierDisabledCount = batch.Disabled!.TryGetValue(featureKey, out var disabled) ? disabled.Count : 0,
                 UniqueUsersUsedCount = batch.Used!.TryGetValue(featureKey, out var used) ? used.Count : 0
             };
+            var viewedCount = GetStatCount(batch, featureKey, StatType.Viewed);
             var enabledVariant = new VariantStats
             {
                 CheckCount = GetStatCount(batch, featureKey, StatType.Enabled),
                 RequestCount = GetStatCount(batch, featureKey, StatType.UniqueRequestEnabled),
                 UsedCount = GetStatCount(batch, featureKey, StatType.Used),
-                ViewedCount = GetStatCount(batch, featureKey, StatType.Viewed)
+                ViewedCount = viewedCount > 0 ? viewedCount : 0
             };
             if (enabledVariant.CheckCount > 0 || enabledVariant.RequestCount > 0 || enabledVariant.UsedCount > 0 || enabledVariant.ViewedCount > 0)
                 statMessage.VariantStats["enabled"] = enabledVariant;
