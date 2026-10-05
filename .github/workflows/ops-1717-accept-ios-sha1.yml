@@ -39,17 +39,47 @@ jobs:
               except urllib.error.HTTPError as err:
                   return err.code, err.read().decode()
 
-          status, body = call(
-              "GET",
+          queries = [
               "/issues/search?issues=" + issue + "&additionalFields=transitions,comments",
-          )
-          print("search_http", status)
-          payload = json.loads(body)
-          if payload.get("errors"):
-              print("search_errors", json.dumps(payload["errors"]))
-              raise SystemExit(1)
-          issues = payload.get("issues") or []
-          if not issues:
+              "/issues/search?issues="
+              + issue
+              + "&componentKeys=toggly-sdks-ios&pullRequest=755&additionalFields=transitions,comments",
+              "/issues/search?componentKeys=toggly-sdks-ios&pullRequest=755&rules=swift:S4790&additionalFields=transitions,comments",
+          ]
+          payload = None
+          for query in queries:
+              status, body = call("GET", query)
+              print("search_http", status, "bytes", len(body))
+              parsed = json.loads(body)
+              if parsed.get("errors"):
+                  print("search_errors", json.dumps(parsed["errors"]))
+                  continue
+              found = parsed.get("issues") or []
+              print("search_total", parsed.get("total"), "count", len(found))
+              if found:
+                  payload = parsed
+                  break
+              if len(body) < 1500:
+                  print("search_body", body)
+          if payload is None:
+              valid_status, valid_body = call("GET", "/authentication/validate")
+              print("validate_http", valid_status, valid_body[:200])
+              show_status, show_body = call(
+                  "GET", "/components/show?component=toggly-sdks-ios"
+              )
+              print("component_http", show_status)
+              try:
+                  show = json.loads(show_body)
+                  component = show.get("component") or {}
+                  print(
+                      "component",
+                      component.get("key"),
+                      component.get("qualifier"),
+                      "errors",
+                      json.dumps(show.get("errors")),
+                  )
+              except json.JSONDecodeError:
+                  print("component_body_unparsed")
               print("issue_missing")
               raise SystemExit(1)
           current = issues[0]
