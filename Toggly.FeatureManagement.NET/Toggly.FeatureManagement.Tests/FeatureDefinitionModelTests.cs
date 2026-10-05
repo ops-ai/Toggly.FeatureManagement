@@ -179,8 +179,8 @@ public class FeatureDefinitionModelTests
             Name = "Targeting",
             Parameters = new Dictionary<string, string>
             {
-                { "Value", "50" },
-                { "Group", "Beta" }
+                { "Group", "Beta" },
+                { "Value", "50" }
             }
         });
         var comparer = new FeatureDefinitionModel();
@@ -386,8 +386,8 @@ public class FeatureDefinitionModelTests
             Name = "Targeting",
             Parameters = new Dictionary<string, string>
             {
-                { "Value", "50" },
-                { "Group", "Beta" }
+                { "Group", "Beta" },
+                { "Value", "50" }
             }
         };
         var comparer = new FeatureFilter();
@@ -487,8 +487,8 @@ public class FeatureDefinitionModelTests
             Name = name,
             Parameters = new Dictionary<string, string>
             {
-                { parameterName, parameterValue },
-                { "Value", "50" }
+                ["Value"] = "50",
+                [parameterName] = parameterValue
             }
         };
     }
