@@ -1,0 +1,129 @@
+name: Accept iOS wire-format SHA-1 issue
+
+on:
+  push:
+    branches:
+      - alex/ops-1717-accept-sonar-once
+
+permissions:
+  contents: read
+
+jobs:
+  accept:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Accept exact Cloud issue
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${SONAR_TOKEN}"
+          issue="AaEJeXoeyIjIAJjAzWdH"
+          python3 - <<'PY'
+          import json, os, urllib.error, urllib.parse, urllib.request
+
+          token = os.environ["SONAR_TOKEN"]
+          issue = "AaEJeXoeyIjIAJjAzWdH"
+          base = "https://sonarcloud.io/api"
+
+          def call(method, path, fields=None):
+              data = None
+              if fields is not None:
+                  data = urllib.parse.urlencode(fields).encode()
+              req = urllib.request.Request(base + path, data=data, method=method)
+              req.add_header("Authorization", "Bearer " + token)
+              try:
+                  with urllib.request.urlopen(req, timeout=60) as resp:
+                      body = resp.read().decode()
+                      return resp.status, body
+              except urllib.error.HTTPError as err:
+                  return err.code, err.read().decode()
+
+          status, body = call(
+              "GET",
+              "/issues/search?issues=" + issue + "&additionalFields=transitions,comments",
+          )
+          print("search_http", status)
+          payload = json.loads(body)
+          if payload.get("errors"):
+              print("search_errors", json.dumps(payload["errors"]))
+              raise SystemExit(1)
+          issues = payload.get("issues") or []
+          if not issues:
+              print("issue_missing")
+              raise SystemExit(1)
+          current = issues[0]
+          print(
+              "before",
+              current.get("issueStatus") or current.get("status"),
+              current.get("resolution"),
+          )
+          print("transitions", ",".join(current.get("transitions") or []))
+          state = current.get("issueStatus") or current.get("status")
+          if state != "ACCEPTED":
+              transition = "accept"
+              available = current.get("transitions") or []
+              if available and transition not in available:
+                  print("accept_unavailable")
+                  raise SystemExit(1)
+              status, body = call(
+                  "POST",
+                  "/issues/do_transition",
+                  {"issue": issue, "transition": transition},
+              )
+              print("transition_http", status)
+              try:
+                  parsed = json.loads(body)
+              except json.JSONDecodeError:
+                  print("transition_body_unparsed")
+                  raise SystemExit(1)
+              if parsed.get("errors"):
+                  print("transition_errors", json.dumps(parsed["errors"]))
+                  raise SystemExit(1)
+              issue_body = parsed.get("issue") or {}
+              print(
+                  "after_transition",
+                  issue_body.get("issueStatus") or issue_body.get("status"),
+                  issue_body.get("resolution"),
+              )
+
+          rationale = (
+              "SHA-1 here implements the existing wire-format JWK key ID: "
+              "uppercase SHA1(x_bytes || y_bytes) followed by ES256. This must "
+              "match the server and other SDKs. It fingerprints public key "
+              "coordinates for key selection and the existing allowed-kid policy; "
+              "it does not hash passwords or provide the signed-definition payload "
+              "integrity check. Payload verification computes SHA-256 twice and "
+              "verifies ES256/P-256 with SecKeyVerifySignature using "
+              "ecdsaSignatureDigestX962SHA256 (SignedDefsVerify.swift:298-320). "
+              "Keep the issue visible and accept this exact compatibility use; "
+              "future weak-hash uses in this file must continue to be analyzed. "
+              "This is an accepted protocol constraint, not a file-wide exclusion."
+          )
+          status, body = call(
+              "POST",
+              "/issues/add_comment",
+              {"issue": issue, "text": rationale},
+          )
+          print("comment_http", status)
+          try:
+              parsed = json.loads(body)
+          except json.JSONDecodeError:
+              print("comment_body_unparsed")
+              raise SystemExit(1)
+          if parsed.get("errors"):
+              print("comment_errors", json.dumps(parsed["errors"]))
+              raise SystemExit(1)
+
+          status, body = call(
+              "GET",
+              "/issues/search?issues=" + issue,
+          )
+          print("confirm_http", status)
+          payload = json.loads(body)
+          confirmed = (payload.get("issues") or [{}])[0]
+          final = confirmed.get("issueStatus") or confirmed.get("status")
+          print("final", final, confirmed.get("resolution"))
+          if final != "ACCEPTED":
+              raise SystemExit(1)
+          PY
