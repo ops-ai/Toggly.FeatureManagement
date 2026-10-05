@@ -186,6 +186,7 @@ jobs:
         run: npm ci || npm install
 
       # NestJS depends on unpublished @ops-ai/toggly-node-core from this PR.
+      # OPS-1696 packed tarball paths use absolute RUNNER_TEMP artifacts
       # Build via pnpm, then install packed tarballs (pnpm pack rewrites workspace
       # protocol) so npm does not see workspace:^ or wait for registry publish.
       - name: Install NestJS with in-repo toggly-node-core

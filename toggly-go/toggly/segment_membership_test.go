@@ -1,5 +1,7 @@
 package toggly
 
+// Coverage for Sonar new-code on segment membership client.
+
 import (
 	"encoding/json"
 	"io"
