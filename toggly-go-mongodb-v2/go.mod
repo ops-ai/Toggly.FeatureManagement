@@ -3,7 +3,7 @@ module github.com/ops-ai/Toggly.FeatureManagement/toggly-go-mongodb-v2
 go 1.25.0
 
 require (
-	github.com/ops-ai/Toggly.FeatureManagement/toggly-go v0.10.0
+	github.com/ops-ai/Toggly.FeatureManagement/toggly-go v0.11.2
 	go.mongodb.org/mongo-driver/v2 v2.8.2
 )
 
