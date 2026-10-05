@@ -38,7 +38,7 @@ hilt = "2.60.1"
 hiltCompose = "1.4.0"
 
 # WorkManager
-workManager = "2.10.0"
+workManager = "2.12.0"
 
 # Testing
 junit = "4.13.2"
@@ -49,7 +49,7 @@ turbine = "1.2.1"
 robolectric = "4.17"
 coroutinesTest = "1.10.2"
 archCoreTesting = "2.2.0"
-kover = "0.9.9"
+kover = "0.9.11"
 
 [libraries]
 # AndroidX Core
