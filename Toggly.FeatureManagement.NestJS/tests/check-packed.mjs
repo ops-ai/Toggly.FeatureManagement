@@ -123,7 +123,11 @@ try {
     if (!value) return undefined;
     const absolute = isAbsolute(value) ? value : resolve(value);
     if (!existsSync(absolute)) throw new Error(`${envName} tarball missing: ${absolute}`);
-    return `file:${absolute}`;
+    // npm rewrites absolute file: deps to relatives in the lockfile; keep those
+    // relatives valid by colocating reviewed tarballs inside the consumer dir.
+    const local = join(consumer, basename(absolute));
+    cpSync(absolute, local);
+    return `file:./${basename(absolute)}`;
   }
   const coreTarball = localTarball('TOGGLY_TEST_CORE_TARBALL');
   const evalTarball = localTarball('TOGGLY_TEST_EVAL_TARBALL');
