@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.FeatureManagement;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Reflection;
@@ -191,6 +192,10 @@ namespace Toggly.FeatureManagement
                 return;
             }
 
+            var drainedStats = new List<((string MetricKey, string? FeatureKey, string Variant) Key, double Value)>();
+            var drainedCounters = new List<((string MetricKey, string? FeatureKey, string Variant) Key, double Value)>();
+            var drainedObservations = new List<(DateTime Date, string MetricKey, string? FeatureKey, string Variant, double Value)>();
+
             try
             {
                 await BeforeSendMetrics().ConfigureAwait(false);
@@ -213,9 +218,9 @@ namespace Toggly.FeatureManagement
                     InstanceName = appInstanceName
                 };
 
-                DrainMeasurements(dataPacket);
-                DrainCounters(dataPacket);
-                DrainObservations(dataPacket);
+                DrainMeasurements(dataPacket, drainedStats);
+                DrainCounters(dataPacket, drainedCounters);
+                DrainObservations(dataPacket, drainedObservations);
 
                 var grpcMetadata = new Metadata
                 {
@@ -234,6 +239,15 @@ namespace Toggly.FeatureManagement
                 if (!suppressLogging) TryLog(LogLevel.Error, ex, "Error sending metrics to toggly");
                 _lastError = ex.Message;
                 _lastErrorTime = DateTime.UtcNow;
+
+                foreach (var (key, value) in drainedStats)
+                    _stats.AddOrUpdate(key, value, (_, existing) => existing + value);
+
+                foreach (var (key, value) in drainedCounters)
+                    _counters.AddOrUpdate(key, value, (_, existing) => existing + value);
+
+                foreach (var observation in drainedObservations)
+                    _observations.Add(observation);
             }
             finally
             {
@@ -241,7 +255,9 @@ namespace Toggly.FeatureManagement
             }
         }
 
-        private void DrainMeasurements(MetricStat dataPacket)
+        private void DrainMeasurements(
+            MetricStat dataPacket,
+            List<((string MetricKey, string? FeatureKey, string Variant) Key, double Value)> drained)
         {
             var statKeys = _stats.Keys
                 .Select(t => (t.MetricKey, t.FeatureKey))
@@ -265,6 +281,7 @@ namespace Toggly.FeatureManagement
                 {
                     if (_stats.TryRemove(key, out var value) && value > 0)
                     {
+                        drained.Add((key, value));
                         stat.VariantValues[key.Variant] = value;
                     }
                 }
@@ -277,7 +294,9 @@ namespace Toggly.FeatureManagement
             }
         }
 
-        private void DrainCounters(MetricStat dataPacket)
+        private void DrainCounters(
+            MetricStat dataPacket,
+            List<((string MetricKey, string? FeatureKey, string Variant) Key, double Value)> drained)
         {
             var counterKeys = _counters.Keys
                 .Select(t => (t.MetricKey, t.FeatureKey))
@@ -301,6 +320,7 @@ namespace Toggly.FeatureManagement
                 {
                     if (_counters.TryRemove(key, out var value) && value > 0)
                     {
+                        drained.Add((key, value));
                         counter.VariantValues[key.Variant] = value;
                     }
                 }
@@ -313,20 +333,35 @@ namespace Toggly.FeatureManagement
             }
         }
 
-        private void DrainObservations(MetricStat dataPacket)
+        private void DrainObservations(
+            MetricStat dataPacket,
+            List<(DateTime Date, string MetricKey, string? FeatureKey, string Variant, double Value)> drained)
         {
             // Group observations by metric+feature+time, then aggregate variants
-            var observationGroups = new System.Collections.Generic.Dictionary<(DateTime, string, string?), MetricObservationMessage>();
+            var observationGroups = new Dictionary<(DateTime, string, string?), MetricObservationMessage>();
 
             while (_observations.TryTake(out var observation))
             {
+                Google.Protobuf.WellKnownTypes.Timestamp observationTime;
+                try
+                {
+                    observationTime = observation.Date.ToTimestamp();
+                }
+                catch (ArgumentException)
+                {
+                    // Drop observations that cannot be encoded (e.g. Unspecified DateTimeKind).
+                    // Do not requeue them or they would permanently block SendMetrics after restore.
+                    continue;
+                }
+
+                drained.Add(observation);
                 var key = (observation.Date, observation.MetricKey, observation.FeatureKey);
 
                 if (!observationGroups.TryGetValue(key, out var observationMessage))
                 {
                     observationMessage = new MetricObservationMessage
                     {
-                        Time = observation.Date.ToTimestamp(),
+                        Time = observationTime,
                         Metric = observation.MetricKey
                     };
 

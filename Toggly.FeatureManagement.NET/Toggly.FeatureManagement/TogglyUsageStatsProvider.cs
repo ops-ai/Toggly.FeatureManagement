@@ -113,6 +113,12 @@ namespace Toggly.FeatureManagement
         
         private readonly SemaphoreSlim _sendStatsSemaphore = new SemaphoreSlim(1, 1);
 
+        /// <summary>
+        /// Serializes unique-user hash Add and snapshot-and-clear so SendStats does not
+        /// call ConcurrentHashSet.ToList while evaluations mutate the same set.
+        /// </summary>
+        private readonly object _uniqueHashLock = new object();
+
         private volatile bool _disposed = false;
         private volatile bool _shuttingDown = false;
 
@@ -328,14 +334,17 @@ namespace Toggly.FeatureManagement
                 _uniqueUsageUsedMap.Clear();
                 batch.Viewed = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageViewedMap);
                 _uniqueUsageViewedMap.Clear();
-                batch.UsedHashes = SnapshotHashes(_uniqueUserHashesSinceLastSend);
-                _uniqueUserHashesSinceLastSend.Clear();
-                batch.ViewedHashes = SnapshotHashes(_uniqueViewedUserHashesSinceLastSend);
-                _uniqueViewedUserHashesSinceLastSend.Clear();
-                if (_applicationUniqueUserHashesSinceLastSend.Count > 0)
+                lock (_uniqueHashLock)
                 {
-                    batch.ApplicationHashes = _applicationUniqueUserHashesSinceLastSend.ToList();
-                    _applicationUniqueUserHashesSinceLastSend.Clear();
+                    batch.UsedHashes = SnapshotHashes(_uniqueUserHashesSinceLastSend);
+                    _uniqueUserHashesSinceLastSend.Clear();
+                    batch.ViewedHashes = SnapshotHashes(_uniqueViewedUserHashesSinceLastSend);
+                    _uniqueViewedUserHashesSinceLastSend.Clear();
+                    if (_applicationUniqueUserHashesSinceLastSend.Count > 0)
+                    {
+                        batch.ApplicationHashes = SnapshotHashSet(_applicationUniqueUserHashesSinceLastSend);
+                        _applicationUniqueUserHashesSinceLastSend.Clear();
+                    }
                 }
                 return batch;
             }
@@ -346,8 +355,32 @@ namespace Toggly.FeatureManagement
             }
         }
 
-        private static Dictionary<string, List<int>> SnapshotHashes(ConcurrentDictionary<string, ConcurrentHashSet<int>> source) =>
-            source.Where(entry => entry.Value.Count > 0).ToDictionary(entry => entry.Key, entry => entry.Value.ToList());
+        /// <summary>
+        /// Snapshot per-feature hash sets with foreach (caller must hold <see cref="_uniqueHashLock"/>).
+        /// Avoids ConcurrentHashSet.ToList, which sizes from Count then CopyTo under mutation.
+        /// </summary>
+        private static Dictionary<string, List<int>> SnapshotHashes(ConcurrentDictionary<string, ConcurrentHashSet<int>> source)
+        {
+            var result = new Dictionary<string, List<int>>();
+            foreach (var entry in source)
+            {
+                var hashes = SnapshotHashSet(entry.Value);
+                if (hashes.Count > 0)
+                    result[entry.Key] = hashes;
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Copy hash set contents with foreach (caller must hold <see cref="_uniqueHashLock"/>).
+        /// </summary>
+        private static List<int> SnapshotHashSet(ConcurrentHashSet<int> set)
+        {
+            var list = new List<int>();
+            foreach (var hash in set)
+                list.Add(hash);
+            return list;
+        }
 
         private FeatureStat CreateDataPacket(UsageStatsBatch batch)
         {
@@ -437,17 +470,21 @@ namespace Toggly.FeatureManagement
 
         private void RestoreUserHashes(UsageStatsBatch batch)
         {
-            foreach (var entry in batch.UsedHashes)
+            lock (_uniqueHashLock)
             {
-                var hashSet = _uniqueUserHashesSinceLastSend.GetOrAdd(entry.Key, _ => new ConcurrentHashSet<int>());
-                foreach (var hash in entry.Value) hashSet.Add(hash);
+                foreach (var entry in batch.UsedHashes)
+                {
+                    var hashSet = _uniqueUserHashesSinceLastSend.GetOrAdd(entry.Key, _ => new ConcurrentHashSet<int>());
+                    foreach (var hash in entry.Value) hashSet.Add(hash);
+                }
+                foreach (var entry in batch.ViewedHashes)
+                {
+                    var hashSet = _uniqueViewedUserHashesSinceLastSend.GetOrAdd(entry.Key, _ => new ConcurrentHashSet<int>());
+                    foreach (var hash in entry.Value) hashSet.Add(hash);
+                }
+                foreach (var hash in batch.ApplicationHashes)
+                    _applicationUniqueUserHashesSinceLastSend.Add(hash);
             }
-            foreach (var entry in batch.ViewedHashes)
-            {
-                var hashSet = _uniqueViewedUserHashesSinceLastSend.GetOrAdd(entry.Key, _ => new ConcurrentHashSet<int>());
-                foreach (var hash in entry.Value) hashSet.Add(hash);
-            }
-            foreach (var hash in batch.ApplicationHashes) _applicationUniqueUserHashesSinceLastSend.Add(hash);
         }
 
         private sealed class UsageStatsBatch
@@ -699,16 +736,20 @@ namespace Toggly.FeatureManagement
                 return;
 
             var hash = GetDeterministicHashCode(userId);
-            var hashSet = _uniqueUserHashesSinceLastSend.GetOrAdd(featureKey, _ => new ConcurrentHashSet<int>());
-            
-            // Check size limit to prevent unbounded growth
-            if (hashSet.Count >= MaxUniqueUserHashesPerFeature)
+
+            lock (_uniqueHashLock)
             {
-                TryLog(LogLevel.Warning, "Unique user hash limit reached for feature {FeatureKey}. Consider sending more frequently or increasing limit.", featureKey);
-                // Still try to add, but log warning
+                var hashSet = _uniqueUserHashesSinceLastSend.GetOrAdd(featureKey, _ => new ConcurrentHashSet<int>());
+
+                // Check size limit to prevent unbounded growth
+                if (hashSet.Count >= MaxUniqueUserHashesPerFeature)
+                {
+                    TryLog(LogLevel.Warning, "Unique user hash limit reached for feature {FeatureKey}. Consider sending more frequently or increasing limit.", featureKey);
+                    // Still try to add, but log warning
+                }
+
+                hashSet.Add(hash);
             }
-            
-            hashSet.Add(hash);
         }
         
         /// <summary>
@@ -725,16 +766,20 @@ namespace Toggly.FeatureManagement
                 return;
 
             var hash = GetDeterministicHashCode(userId);
-            var hashSet = _uniqueViewedUserHashesSinceLastSend.GetOrAdd(featureKey, _ => new ConcurrentHashSet<int>());
-            
-            // Check size limit to prevent unbounded growth
-            if (hashSet.Count >= MaxUniqueUserHashesPerFeature)
+
+            lock (_uniqueHashLock)
             {
-                TryLog(LogLevel.Warning, "Unique viewed user hash limit reached for feature {FeatureKey}. Consider sending more frequently or increasing limit.", featureKey);
-                // Still try to add, but log warning
+                var hashSet = _uniqueViewedUserHashesSinceLastSend.GetOrAdd(featureKey, _ => new ConcurrentHashSet<int>());
+
+                // Check size limit to prevent unbounded growth
+                if (hashSet.Count >= MaxUniqueUserHashesPerFeature)
+                {
+                    TryLog(LogLevel.Warning, "Unique viewed user hash limit reached for feature {FeatureKey}. Consider sending more frequently or increasing limit.", featureKey);
+                    // Still try to add, but log warning
+                }
+
+                hashSet.Add(hash);
             }
-            
-            hashSet.Add(hash);
         }
         
         /// <summary>
@@ -750,15 +795,18 @@ namespace Toggly.FeatureManagement
                 return;
 
             var hash = GetDeterministicHashCode(userId);
-            
-            // Check size limit to prevent unbounded growth
-            if (_applicationUniqueUserHashesSinceLastSend.Count >= MaxApplicationUniqueUserHashes)
+
+            lock (_uniqueHashLock)
             {
-                TryLog(LogLevel.Warning, "Application-level unique user hash limit reached. Consider sending more frequently or increasing limit.");
-                // Still try to add, but log warning
+                // Check size limit to prevent unbounded growth
+                if (_applicationUniqueUserHashesSinceLastSend.Count >= MaxApplicationUniqueUserHashes)
+                {
+                    TryLog(LogLevel.Warning, "Application-level unique user hash limit reached. Consider sending more frequently or increasing limit.");
+                    // Still try to add, but log warning
+                }
+
+                _applicationUniqueUserHashesSinceLastSend.Add(hash);
             }
-            
-            _applicationUniqueUserHashesSinceLastSend.Add(hash);
         }
 
         /// <inheritdoc/>

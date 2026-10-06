@@ -1,12 +1,25 @@
 # Changelog
 
-## All .NET SDK packages 3.13.1 - 2026-10-05
+## All .NET SDK packages 3.13.3 - 2026-10-05
 
 ### Changed
 - Web feature tag helpers reuse the separator used to parse feature names,
   reducing repeated allocations when rendering feature-gated content.
 - Expanded Web XML API documentation for HTTP feature contexts, targeting
   accessors, and feature tag helpers.
+
+## All .NET SDK packages 3.13.2 - 2026-10-05
+
+### Fixed
+- Failed `SendMetrics` RPCs restore drained measurements, counters, and
+  observations so the next interval retries the same batch instead of dropping it.
+
+## All .NET SDK packages 3.13.1 - 2026-10-05
+
+### Fixed
+- Unique-user hash snapshots in `SendStats` no longer throw when evaluations
+  add hashes during the copy. Application and per-feature used/viewed sets are
+  snapshotted under one lock with a foreach copy.
 
 ## All .NET SDK packages 3.13.0 - 2026-10-04
 
