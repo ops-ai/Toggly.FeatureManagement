@@ -1,3 +1,14 @@
+## 0.12.0
+
+2026-10-04
+
+### Added
+- Re-export `@ops-ai/toggly-segments` so a Backend application key can add,
+  remove, and replace targeting-list members from Node without a dashboard
+  OAuth token.
+
+
+
 ## 0.11.3
 
 2026-09-28

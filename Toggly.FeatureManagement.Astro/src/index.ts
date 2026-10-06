@@ -20,6 +20,10 @@ export type { TogglyIntegrationOptions } from './integration/index.js';
 // Server-side
 export { createTogglyServerClient, TogglyServer } from './server/toggly-server.js';
 export {
+  createSegmentMembershipClient,
+  SegmentMembershipError,
+} from '@ops-ai/toggly-segments';
+export {
   getTogglyFromAstroGlobal,
   withFeatureFlag,
   anyFeatureEnabled,

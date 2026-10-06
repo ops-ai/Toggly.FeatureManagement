@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "host": "https://app.toggly.io",
+  "basePath": "/api/v2/segments",
+  "auth": {
+    "header": "Authorization",
+    "schemes": ["raw-key", "Bearer"],
+    "keyType": "Backend",
+    "unknownKey": 401,
+    "nonBackendKey": 403
+  },
+  "cors": false,
+  "limits": {
+    "maxIdentifiersPerRequest": 500,
+    "maxIdentifiersPerList": 10000,
+    "maxIdentifierLength": 256,
+    "defaultTake": 100,
+    "maxTake": 500,
+    "maxBodyBytes": 524288
+  },
+  "routes": [
+    { "method": "GET", "path": "/api/v2/segments", "name": "listSegments" },
+    { "method": "GET", "path": "/api/v2/segments/{segment}/items", "name": "listItems", "query": ["skip", "take"] },
+    { "method": "POST", "path": "/api/v2/segments/{segment}/items", "name": "addSegmentMembers" },
+    { "method": "DELETE", "path": "/api/v2/segments/{segment}/items", "name": "removeSegmentMembers" },
+    { "method": "PUT", "path": "/api/v2/segments/{segment}/items", "name": "replaceSegmentMembers" }
+  ],
+  "body": {
+    "identifiers": ["user-123"],
+    "items": [{ "identifier": "user-123", "description": "optional" }]
+  },
+  "statuses": {
+    "ok": 200,
+    "badRequest": 400,
+    "unauthorized": 401,
+    "forbidden": 403,
+    "notFound": 404,
+    "conflict": 409,
+    "tooManyRequests": 429
+  },
+  "notes": [
+    "The Backend key identifies the application; do not send applicationId.",
+    "segment is a short list id or a unique name among lists the key can see.",
+    "Evaluation updates after definitions republish and the SDK refresh TTL."
+  ]
+}

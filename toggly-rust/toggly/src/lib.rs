@@ -128,6 +128,7 @@ pub mod entity_context;
 pub mod eval;
 pub mod provider;
 mod sdk_identity;
+mod segment_membership;
 pub mod telemetry;
 
 pub use client::TogglyClient;
@@ -142,6 +143,7 @@ pub use entity_context::{
 };
 pub use error::Error;
 pub use eval::{AssignmentReason, VariantAssignment};
+pub use segment_membership::SegmentMembershipClient;
 pub use telemetry::{
     hash_identity, MetricsFeatureOptions, TelemetryRuntime, TelemetryRuntimeConfig,
     TelemetrySenders,

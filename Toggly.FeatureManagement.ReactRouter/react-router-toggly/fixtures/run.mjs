@@ -16,6 +16,20 @@ async function command(executable, args, cwd, env = process.env) {
 let failure;
 try {
 await command(process.execPath, ['--test', join(here, 'cleanup.test.mjs')], pkg);
+const segmentsRoot = resolve(pkg, '../../toggly-segments');
+let segmentsTarball = process.env.TOGGLY_TEST_SEGMENTS_TARBALL || '';
+if (!segmentsTarball) {
+  await command('npm', ['run', 'build'], segmentsRoot);
+  await command('npm', ['pack', '--pack-destination', artifacts], segmentsRoot);
+  const segmentsManifest = JSON.parse(readFileSync(join(segmentsRoot, 'package.json'), 'utf8'));
+  segmentsTarball = join(
+    artifacts,
+    `${segmentsManifest.name.replace('@', '').replace('/', '-')}-${segmentsManifest.version}.tgz`,
+  );
+}
+if (!existsSync(segmentsTarball)) {
+  throw new Error(`Expected toggly-segments tarball at ${segmentsTarball}`);
+}
 await command('npm', ['run', 'build'], pkg);
 await command('npm', ['pack', '--pack-destination', artifacts], pkg);
 const manifest = JSON.parse(readFileSync(join(pkg, 'package.json'), 'utf8'));
@@ -53,6 +67,7 @@ for (const row of selected) {
     },
     dependencies: {
       '@ops-ai/react-router-toggly': tarball,
+      '@ops-ai/toggly-segments': segmentsTarball,
       react: row.react,
       'react-dom': row.react,
       'react-router': row.router,

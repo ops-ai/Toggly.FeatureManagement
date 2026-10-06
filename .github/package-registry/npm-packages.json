@@ -334,6 +334,15 @@
       "oidcReady": true
     },
     {
+      "name": "@ops-ai/toggly-segments",
+      "group": "shared",
+      "manifest": "toggly-segments/package.json",
+      "changelog": "toggly-segments/CHANGELOG.md",
+      "workflow": ".github/workflows/sdk-segments-release.yml",
+      "docsUrl": "https://docs.toggly.io/docs/core-concepts/segment-membership-sync",
+      "oidcReady": false
+    },
+    {
       "name": "@ops-ai/toggly-signed-defs",
       "group": "shared",
       "manifest": "toggly-signed-defs/package.json",
