@@ -2717,4 +2717,87 @@ public class TogglyUsageStatsProviderTests : IDisposable
     private static Dictionary<(string FeatureKey, byte Type), int> GetPendingStats(TogglyUsageStatsProvider provider) =>
         new((System.Collections.Concurrent.ConcurrentDictionary<(string FeatureKey, byte Type), int>)typeof(TogglyUsageStatsProvider)
             .GetField("_stats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(provider)!);
+
+    [Fact]
+    public async Task SendStats_ConcurrentApplicationUniqueUserHashAdds_DoesNotThrow()
+    {
+        var sentHashes = new System.Collections.Concurrent.ConcurrentBag<int>();
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(),
+            It.IsAny<Metadata>(),
+            It.IsAny<DateTime?>(),
+            It.IsAny<CancellationToken>()))
+            .Callback<FeatureStat, Metadata, DateTime?, CancellationToken>((stat, _, _, _) =>
+            {
+                foreach (var hash in stat.UniqueUserHashes)
+                    sentHashes.Add(hash);
+            })
+            .Returns(new AsyncUnaryCall<StatResult>(
+                Task.FromResult(new StatResult { FeatureCount = 0 }),
+                Task.FromResult(new Metadata()),
+                () => Status.DefaultSuccess,
+                () => new Metadata(),
+                () => { }));
+
+        _provider = CreateProvider();
+
+        var recordMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("RecordApplicationUniqueUserId", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+        static int DeterministicHash(string str)
+        {
+            unchecked
+            {
+                int hash1 = (5381 << 16) + 5381;
+                int hash2 = hash1;
+                for (int i = 0; i < str.Length; i += 2)
+                {
+                    hash1 = ((hash1 << 5) + hash1) ^ str[i];
+                    if (i == str.Length - 1)
+                        break;
+                    hash2 = ((hash2 << 5) + hash2) ^ str[i + 1];
+                }
+                return hash1 + (hash2 * 1566083941);
+            }
+        }
+
+        var recordedUserIds = new System.Collections.Concurrent.ConcurrentBag<string>();
+        var errors = new System.Collections.Concurrent.ConcurrentBag<Exception>();
+
+        var workers = Enumerable.Range(0, 8).Select(async thread =>
+        {
+            for (var i = 0; i < 100; i++)
+            {
+                var userId = $"user-{thread}-{i}";
+                try
+                {
+                    recordMethod!.Invoke(_provider, new object[] { userId });
+                    recordedUserIds.Add(userId);
+                    if (i % 5 == 0)
+                        await SendStatsAsync(_provider!);
+                }
+                catch (System.Reflection.TargetInvocationException ex) when (ex.InnerException != null)
+                {
+                    errors.Add(ex.InnerException);
+                }
+                catch (Exception ex)
+                {
+                    errors.Add(ex);
+                }
+            }
+        });
+
+        await Task.WhenAll(workers);
+        await SendStatsAsync(_provider!);
+
+        errors.Should().BeEmpty();
+        sentHashes.Should().NotBeEmpty();
+
+        var expectedHashes = recordedUserIds.Select(DeterministicHash).ToHashSet();
+        var remainingField = typeof(TogglyUsageStatsProvider)
+            .GetField("_applicationUniqueUserHashesSinceLastSend", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        var remaining = (System.Collections.Generic.IEnumerable<int>)remainingField!.GetValue(_provider)!;
+        var observed = sentHashes.Concat(remaining).ToHashSet();
+        expectedHashes.Should().BeSubsetOf(observed);
+    }
 }
