@@ -342,6 +342,18 @@ namespace Toggly.FeatureManagement
 
             while (_observations.TryTake(out var observation))
             {
+                Google.Protobuf.WellKnownTypes.Timestamp observationTime;
+                try
+                {
+                    observationTime = observation.Date.ToTimestamp();
+                }
+                catch (ArgumentException)
+                {
+                    // Drop observations that cannot be encoded (e.g. Unspecified DateTimeKind).
+                    // Do not requeue them or they would permanently block SendMetrics after restore.
+                    continue;
+                }
+
                 drained.Add(observation);
                 var key = (observation.Date, observation.MetricKey, observation.FeatureKey);
 
@@ -349,7 +361,7 @@ namespace Toggly.FeatureManagement
                 {
                     observationMessage = new MetricObservationMessage
                     {
-                        Time = observation.Date.ToTimestamp(),
+                        Time = observationTime,
                         Metric = observation.MetricKey
                     };
 

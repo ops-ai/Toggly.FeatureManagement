@@ -1822,7 +1822,7 @@ public class TogglyMetricsServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SendMetrics_FailedRpc_DiscardsDrainedPacketAndReleasesSendLock()
+    public async Task SendMetrics_FailedRpc_RestoresDrainedPacketAndReleasesSendLock()
     {
         var packets = CapturePackets(new RpcException(new Status(StatusCode.Unavailable, "metrics unavailable")));
         _service = CreateService();
@@ -1835,18 +1835,21 @@ public class TogglyMetricsServiceTests : IDisposable
         error.LastError.Should().Contain("metrics unavailable");
         error.LastErrorTime.Should().NotBeNull();
         error.LastSend.Should().BeNull();
-        await SendPendingMetricsAsync();
         packets.Should().ContainSingle();
-        packets[0].Stats.Should().ContainSingle().Which.VariantValues["enabled"].Should().Be(4);
-        packets[0].Counters.Should().ContainSingle().Which.VariantValues["enabled"].Should().Be(5);
-        packets[0].Observations.Should().ContainSingle().Which.VariantValues["enabled"].Should().Be(6);
+
+        // Restored batch is retried on the next send.
+        await SendPendingMetricsAsync();
+        packets.Should().HaveCount(2);
+        packets[1].Stats.Should().ContainSingle().Which.VariantValues["enabled"].Should().Be(4);
+        packets[1].Counters.Should().ContainSingle().Which.VariantValues["enabled"].Should().Be(5);
+        packets[1].Observations.Should().ContainSingle().Which.VariantValues["enabled"].Should().Be(6);
 
         await _service.MeasureAsync("new-measurement", 7);
         await SendPendingMetricsAsync();
-        packets.Should().HaveCount(2);
-        packets[1].Stats.Should().ContainSingle().Which.Metric.Should().Be("new-measurement");
-        packets[1].Counters.Should().BeEmpty();
-        packets[1].Observations.Should().BeEmpty();
+        packets.Should().HaveCount(3);
+        packets[2].Stats.Should().ContainSingle().Which.Metric.Should().Be("new-measurement");
+        packets[2].Counters.Should().BeEmpty();
+        packets[2].Observations.Should().BeEmpty();
         var success = _service.GetDebugInfo();
         success.LastSend.Should().NotBeNull();
         success.LastError.Should().Be(error.LastError);
@@ -1854,7 +1857,7 @@ public class TogglyMetricsServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SendMetrics_InvalidObservationTime_FailsAfterDrainingMeasurementsAndCounters()
+    public async Task SendMetrics_InvalidObservationTime_SkipsPoisonObservationAndSendsDrainedPacket()
     {
         _metricsRegistryServiceMock.SetupSequence(x => x.GetObservationValuesAsync())
             .ReturnsAsync(new Dictionary<string, (DateTime, double)>
@@ -1868,19 +1871,19 @@ public class TogglyMetricsServiceTests : IDisposable
         await _service.IncrementCounterAsync("drained-counter", 5);
 
         await SendPendingMetricsAsync();
-        packets.Should().BeEmpty();
-        var error = _service.GetDebugInfo();
-        error.LastError.Should().NotBeNullOrEmpty();
-        error.LastErrorTime.Should().NotBeNull();
-        error.LastSend.Should().BeNull();
+        var packet = packets.Should().ContainSingle().Which;
+        packet.Stats.Should().ContainSingle().Which.Metric.Should().Be("drained-measurement");
+        packet.Counters.Should().ContainSingle().Which.Metric.Should().Be("drained-counter");
+        packet.Observations.Should().BeEmpty();
+        _service.GetDebugInfo().LastSend.Should().NotBeNull();
+        _service.GetDebugInfo().LastError.Should().BeNullOrEmpty();
 
         await _service.MeasureAsync("next-measurement", 7);
         await SendPendingMetricsAsync();
-        var packet = packets.Should().ContainSingle().Which;
-        packet.Stats.Should().ContainSingle().Which.Metric.Should().Be("next-measurement");
-        packet.Counters.Should().BeEmpty();
-        packet.Observations.Should().BeEmpty();
-        _service.GetDebugInfo().LastSend.Should().NotBeNull();
+        packets.Should().HaveCount(2);
+        packets[1].Stats.Should().ContainSingle().Which.Metric.Should().Be("next-measurement");
+        packets[1].Counters.Should().BeEmpty();
+        packets[1].Observations.Should().BeEmpty();
     }
 
     private Task SendPendingMetricsAsync()
