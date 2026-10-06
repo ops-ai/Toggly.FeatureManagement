@@ -1,5 +1,13 @@
 # Changelog
 
+## All .NET SDK packages 3.13.3 - 2026-10-05
+
+### Changed
+- Web feature tag helpers reuse the separator used to parse feature names,
+  reducing repeated allocations when rendering feature-gated content.
+- Expanded Web XML API documentation for HTTP feature contexts, targeting
+  accessors, and feature tag helpers.
+
 ## All .NET SDK packages 3.13.2 - 2026-10-05
 
 ### Fixed
