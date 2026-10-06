@@ -1,5 +1,12 @@
 # Changelog
 
+## All .NET SDK packages 3.13.0 - 2026-10-04
+
+### Added
+- `ITogglySegmentMembershipClient` updates targeting-list membership with the
+  configured Backend application key (`GET/POST/DELETE/PUT /api/v2/segments`).
+  Evaluation still waits for definition republish.
+
 ## All .NET SDK packages 3.12.12 - 2026-10-05
 
 ### Changed
@@ -14,6 +21,7 @@
   default, so request-scoped feature gates cannot reuse another request's
   schema. Applications can opt into bounded caching with an explicit document
   key that distinguishes their document variants.
+
 
 ## All .NET SDK packages 3.12.10 - 2026-10-04
 
@@ -51,6 +59,7 @@
 - The SDK User-Agent version now matches the NuGet package version even when
   CI injects a different assembly informational version. Malformed assembly
   informational versions fall back to a valid file or assembly version.
+
 ## All .NET SDK packages 3.12.6 - 2026-09-30
 
 ### Fixed

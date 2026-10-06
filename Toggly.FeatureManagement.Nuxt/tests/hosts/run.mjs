@@ -91,12 +91,21 @@ for (const name of ['core', 'client', 'server', '']) {
   await run('pnpm', ['pack', '--pack-destination', join(work, 'artifacts')], join(root, dir))
   dependencies[pkg.name] = `file:artifacts/${pkg.name.replace('@', '').replace('/', '-')}-${pkg.version}.tgz`
 }
+const segmentsRoot = resolve(root, '../toggly-segments')
+const segmentsPackage = JSON.parse(await readFile(join(segmentsRoot, 'package.json')))
+await run('npm', ['run', 'build'], segmentsRoot)
+await run('npm', ['pack', '--pack-destination', join(work, 'artifacts')], segmentsRoot)
+dependencies[segmentsPackage.name] =
+  `file:artifacts/${segmentsPackage.name.replace('@', '').replace('/', '-')}-${segmentsPackage.version}.tgz`
 assert(!process.env.TOGGLY_SIGNED_DEFS_ARTIFACT, 'shared dependencies must resolve from the public registry')
 dependencies['@ops-ai/toggly-signed-defs'] = '1.2.7'
 const manifest = { private: true, type: 'module', dependencies }
-const packedSdkDependencies = Object.entries(dependencies).filter(([name]) => name.startsWith('@ops-ai/nuxt-toggly'))
+const packedSdkDependencies = Object.entries(dependencies).filter(([name]) =>
+  name.startsWith('@ops-ai/nuxt-toggly') || name === '@ops-ai/toggly-segments',
+)
 const packedCandidateDependencies = Object.entries(dependencies).filter(([name]) =>
   name.startsWith('@ops-ai/nuxt-toggly') ||
+  name === '@ops-ai/toggly-segments' ||
   (process.env.TOGGLY_CLIENT_TELEMETRY_SOURCE && name === '@ops-ai/toggly-client-telemetry'),
 )
 const artifactPath = spec => spec.replace(/^file:(?:\.\/)?/, '')

@@ -37,6 +37,7 @@ require_relative "toggly/snapshot_providers/file"
 require_relative "toggly/definition_cache"
 require_relative "toggly/definitions_provider"
 require_relative "toggly/client"
+require_relative "toggly/segment_membership"
 
 # Toggly - Feature Flag Management SDK for Ruby
 #

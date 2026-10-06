@@ -1,0 +1,51 @@
+{
+  "name": "@ops-ai/toggly-segments",
+  "version": "0.1.0",
+  "description": "Backend-key client for Toggly targeting-list membership",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run clean && npm run build",
+    "test:coverage": "vitest run --coverage"
+  },
+  "keywords": [
+    "toggly",
+    "feature-flags",
+    "feature-management",
+    "segments",
+    "targeting",
+    "server-side"
+  ],
+  "author": "Toggly <support@toggly.io>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ops-ai/Toggly.FeatureManagement.git",
+    "directory": "toggly-segments"
+  },
+  "homepage": "https://docs.toggly.io/docs/core-concepts/segment-membership-sync",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.12",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.4",
+    "@vitest/coverage-v8": "^3.0.4"
+  },
+  "bugs": {
+    "url": "https://github.com/ops-ai/Toggly.FeatureManagement/issues"
+  }
+}

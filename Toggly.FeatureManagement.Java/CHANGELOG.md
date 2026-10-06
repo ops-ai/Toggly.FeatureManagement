@@ -1,8 +1,8 @@
 # Changelog
 
-## 2.1.6
+## 2.2.1
 
-2026-10-03
+2026-10-06
 
 ### Changed
 
@@ -10,7 +10,17 @@
   JUnit and Mockito dependencies used to verify its snapshot cache behavior.
   These dependencies are test scoped and do not affect application runtime
   dependencies.
-- User-Agent and live-update `sdkVersion` report `toggly-java/2.1.6`.
+- User-Agent and live-update `sdkVersion` report `toggly-java/2.2.1`.
+
+## 2.2.0
+
+2026-10-04
+
+### Added
+- `SegmentMembershipClient` updates targeting-list members with a Backend application key.
+
+### Changed
+- User-Agent and live-update `sdkVersion` report `toggly-java/2.2.0`.
 
 ## 2.1.5
 

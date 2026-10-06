@@ -14,6 +14,7 @@ export {
   MemoryCacheProvider,
   decodeVariantValue,
 } from '@ops-ai/toggly-node-core';
+export { createSegmentMembershipClient, SegmentMembershipError } from '@ops-ai/toggly-segments';
 export type {
   EvaluationContext,
   TogglyEntityContext,

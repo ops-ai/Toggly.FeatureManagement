@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0
+
+2026-10-04
+
+### Added
+- `Toggly.Segments` for Backend-key targeting-list membership updates.
+
 ## 0.5.0
 
 ### Added

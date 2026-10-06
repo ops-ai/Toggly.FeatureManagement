@@ -63,6 +63,7 @@ from toggly.providers import (
     MemorySnapshotProvider,
     SnapshotProvider,
 )
+from toggly.segments import SegmentMembershipClient
 from toggly.variants import VariantAssignment, assign_variant
 from toggly.version import __version__
 
@@ -76,6 +77,7 @@ __all__ = [
     "HttpRequestMapper",
     "RequestContext",
     "TogglyEntityContext",
+    "SegmentMembershipClient",
     "register_context",
     "EntityContextPropertySchema",
     "EntityContextSchemaRegistration",

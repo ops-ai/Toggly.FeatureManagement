@@ -21,6 +21,7 @@ on:
       - 'Toggly.FeatureManagement.Node/**'
       - 'Toggly.FeatureManagement.NestJS/**'
       - 'toggly-eval/**'
+      - 'toggly-segments/**'
       - 'toggly-local-gates/**'
       - 'toggly-hooks-types/**'
       - 'toggly-client-telemetry/**'
@@ -92,7 +93,7 @@ jobs:
       - name: Build shared packages
         uses: ./.github/actions/build-shared-js-deps
         with:
-          packages: hooks-types,signed-defs,eval
+          packages: hooks-types,signed-defs,eval,segments
 
       - name: Verify shared signed definitions and consumers
         working-directory: toggly-signed-defs
@@ -142,6 +143,13 @@ jobs:
         with:
           fetch-depth: 0  # Full history for SonarCloud
 
+      # NestJS / SvelteKit need pnpm to build in-repo toggly-node-core.
+      - name: Install pnpm
+        if: matrix.sdk == 'NestJS' || matrix.sdk == 'SvelteKit'
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9
+
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
@@ -152,6 +160,15 @@ jobs:
       - name: Restore shared JS deps
         if: needs.prepare.outputs.need_shared_deps == 'true'
         uses: ./.github/actions/download-shared-js-deps
+
+      # SvelteKit links file: toggly-node-core; build dist before npm ci resolves the link.
+      - name: Build unpublished Node server deps for SvelteKit
+        if: matrix.sdk == 'SvelteKit'
+        run: |
+          set -euo pipefail
+          (cd toggly-segments && (npm ci || npm install) && npm run build)
+          (cd toggly-eval && (npm ci || npm install) && npm run build)
+          (cd Toggly.FeatureManagement.Node && pnpm install --frozen-lockfile && pnpm --filter @ops-ai/toggly-node-core build)
 
       - name: Install locked SolidJS or SvelteKit dependencies
         if: matrix.sdk == 'SolidJS' || matrix.sdk == 'SvelteKit'
@@ -169,23 +186,36 @@ jobs:
         run: npm ci || npm install
 
       # NestJS depends on unpublished @ops-ai/toggly-node-core from this PR.
-      # Build core from source and install via file: so CI does not wait for npm publish.
-      # Pack a tarball for test:packed (TOGGLY_TEST_CORE_TARBALL) so the packed
-      # consumer gate does not require registry 0.10.0 before this PR merges.
+      # OPS-1696 packed tarball paths use absolute RUNNER_TEMP artifacts
+      # Build via pnpm, then install packed tarballs (pnpm pack rewrites workspace
+      # protocol) so npm does not see workspace:^ or wait for registry publish.
       - name: Install NestJS with in-repo toggly-node-core
         if: matrix.sdk == 'NestJS'
         run: |
           set -euo pipefail
           EVAL_DIR="$GITHUB_WORKSPACE/toggly-eval"
-          CORE_DIR="$GITHUB_WORKSPACE/Toggly.FeatureManagement.Node/toggly-node-core"
+          SEGMENTS_DIR="$GITHUB_WORKSPACE/toggly-segments"
+          NODE_WS="$GITHUB_WORKSPACE/Toggly.FeatureManagement.Node"
           (cd "$EVAL_DIR" && (npm ci || npm install) && npm run build)
-          (cd "$CORE_DIR" && (npm ci || npm install) && npm install --no-save "file:$EVAL_DIR" && npm run build)
-          CORE_TGZ="$(cd "$CORE_DIR" && npm pack --pack-destination "$RUNNER_TEMP")"
-          echo "TOGGLY_TEST_CORE_TARBALL=$RUNNER_TEMP/$CORE_TGZ" >> "$GITHUB_ENV"
-          EVAL_TGZ="$(cd "$EVAL_DIR" && npm pack --pack-destination "$RUNNER_TEMP")"
-          echo "TOGGLY_TEST_EVAL_TARBALL=$RUNNER_TEMP/$EVAL_TGZ" >> "$GITHUB_ENV"
+          (cd "$SEGMENTS_DIR" && (npm ci || npm install) && npm run build)
+          (cd "$NODE_WS" && pnpm install --frozen-lockfile && pnpm --filter @ops-ai/toggly-node-core build)
+          # pnpm 9 rejects --filter pack (Unknown option: recursive); pack in-package.
+          (cd "$NODE_WS/toggly-node-core" && pnpm pack --pack-destination "$RUNNER_TEMP")
+          CORE_TGZ="$(ls -1 "$RUNNER_TEMP"/ops-ai-toggly-node-core-*.tgz | head -1)"
+          test -f "$CORE_TGZ"
+          echo "TOGGLY_TEST_CORE_TARBALL=$CORE_TGZ" >> "$GITHUB_ENV"
+          (cd "$EVAL_DIR" && npm pack --pack-destination "$RUNNER_TEMP" >/dev/null)
+          EVAL_TGZ="$(ls -1 "$RUNNER_TEMP"/ops-ai-toggly-eval-*.tgz | head -1)"
+          test -f "$EVAL_TGZ"
+          echo "TOGGLY_TEST_EVAL_TARBALL=$EVAL_TGZ" >> "$GITHUB_ENV"
+          (cd "$SEGMENTS_DIR" && npm pack --pack-destination "$RUNNER_TEMP" >/dev/null)
+          SEGMENTS_TGZ="$(ls -1 "$RUNNER_TEMP"/ops-ai-toggly-segments-*.tgz | head -1)"
+          test -f "$SEGMENTS_TGZ"
+          echo "TOGGLY_TEST_SEGMENTS_TARBALL=$SEGMENTS_TGZ" >> "$GITHUB_ENV"
           cd Toggly.FeatureManagement.NestJS
-          npm install "file:$CORE_DIR" "file:$EVAL_DIR"
+          # --no-save: do not rewrite package.json to file:../../_temp paths
+          # (npm pack in check-packed would otherwise ship those broken relatives).
+          npm install --no-save "$CORE_TGZ" "$EVAL_TGZ" "$SEGMENTS_TGZ"
 
       - name: Overlay shared JS deps into node_modules
         if: >
@@ -338,6 +368,11 @@ jobs:
           cache: npm
           cache-dependency-path: Toggly.FeatureManagement.Astro/package-lock.json
 
+      - name: Build toggly-segments
+        run: |
+          set -euo pipefail
+          (cd toggly-segments && (npm ci || npm install) && npm run build)
+
       - name: Install locked Astro SDK dependencies
         working-directory: Toggly.FeatureManagement.Astro
         run: npm ci
@@ -369,12 +404,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Install pnpm
+        if: matrix.host.sdk == 'SvelteKit'
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9
+
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
           cache-dependency-path: ${{ matrix.host.path }}/package-lock.json
+
+      - name: Build unpublished Node server deps
+        if: matrix.host.sdk == 'SvelteKit'
+        run: |
+          set -euo pipefail
+          (cd toggly-segments && (npm ci || npm install) && npm run build)
+          (cd toggly-eval && (npm ci || npm install) && npm run build)
+          (cd Toggly.FeatureManagement.Node && pnpm install --frozen-lockfile && pnpm --filter @ops-ai/toggly-node-core build)
 
       - name: Install locked dependencies
         working-directory: ${{ matrix.host.path }}
