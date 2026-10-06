@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.0
+
+2026-10-04
+
+### Added
+- Re-export `createSegmentMembershipClient` from `@ops-ai/toggly-segments` for Backend-key targeting-list updates.
+
+
 ## 1.8.0
 
 2026-09-12

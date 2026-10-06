@@ -1,12 +1,19 @@
 # Changelog
 
-## All .NET SDK packages 3.12.13 - 2026-10-05
+## All .NET SDK packages 3.13.1 - 2026-10-05
 
 ### Changed
 - Web feature tag helpers reuse the separator used to parse feature names,
   reducing repeated allocations when rendering feature-gated content.
 - Expanded Web XML API documentation for HTTP feature contexts, targeting
   accessors, and feature tag helpers.
+
+## All .NET SDK packages 3.13.0 - 2026-10-04
+
+### Added
+- `ITogglySegmentMembershipClient` updates targeting-list membership with the
+  configured Backend application key (`GET/POST/DELETE/PUT /api/v2/segments`).
+  Evaluation still waits for definition republish.
 
 ## All .NET SDK packages 3.12.12 - 2026-10-05
 
@@ -22,6 +29,7 @@
   default, so request-scoped feature gates cannot reuse another request's
   schema. Applications can opt into bounded caching with an explicit document
   key that distinguishes their document variants.
+
 
 ## All .NET SDK packages 3.12.10 - 2026-10-04
 
