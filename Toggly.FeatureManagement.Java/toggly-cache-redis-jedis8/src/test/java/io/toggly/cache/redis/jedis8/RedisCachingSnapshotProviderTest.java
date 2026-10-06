@@ -25,6 +25,9 @@ import static org.mockito.Mockito.mockConstruction;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+// Jedis 8 deprecates the pool and setex APIs used by this adapter's published
+// compatibility contract. These tests intentionally exercise that exact path.
+@SuppressWarnings("java:S1874")
 class RedisCachingSnapshotProviderTest {
 
     @Test
