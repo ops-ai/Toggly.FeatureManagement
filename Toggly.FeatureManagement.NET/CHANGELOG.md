@@ -1,3 +1,9 @@
+## All .NET SDK packages 3.13.2 - 2026-10-05
+
+### Fixed
+- Failed `SendMetrics` RPCs restore drained measurements, counters, and
+  observations so the next interval retries the same batch instead of dropping it.
+
 ## All .NET SDK packages 3.13.1 - 2026-10-05
 
 ### Fixed

@@ -1429,17 +1429,34 @@ public class TogglyMetricsServiceTests : IDisposable
         _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
             .Returns((List<string>?)null);
 
+        MetricStat? retryRequest = null;
+        var callCount = 0;
         _metricsClientMock.Setup(x => x.SendMetricsAsync(
             It.IsAny<MetricStat>(),
             It.IsAny<Metadata>(),
             It.IsAny<DateTime?>(),
             It.IsAny<CancellationToken>()))
-            .Returns(new AsyncUnaryCall<MetricResult>(
-                Task.FromException<MetricResult>(new RpcException(new Status(StatusCode.Unavailable, "Server unavailable"))),
-                Task.FromResult(new Metadata()),
-                () => new Status(StatusCode.Unavailable, "Server unavailable"),
-                () => new Metadata(),
-                () => { }));
+            .Returns<MetricStat, Metadata, DateTime?, CancellationToken>((stat, _, _, _) =>
+            {
+                callCount++;
+                if (callCount == 1)
+                {
+                    return new AsyncUnaryCall<MetricResult>(
+                        Task.FromException<MetricResult>(new RpcException(new Status(StatusCode.Unavailable, "Server unavailable"))),
+                        Task.FromResult(new Metadata()),
+                        () => new Status(StatusCode.Unavailable, "Server unavailable"),
+                        () => new Metadata(),
+                        () => { });
+                }
+
+                retryRequest = stat;
+                return new AsyncUnaryCall<MetricResult>(
+                    Task.FromResult(new MetricResult { Count = 1 }),
+                    Task.FromResult(new Metadata()),
+                    () => Status.DefaultSuccess,
+                    () => new Metadata(),
+                    () => { });
+            });
 
         _service = CreateService();
 
@@ -1459,6 +1476,13 @@ public class TogglyMetricsServiceTests : IDisposable
         var debugInfo = _service.GetDebugInfo();
         debugInfo.LastError.Should().NotBeNullOrEmpty();
         debugInfo.LastErrorTime.Should().NotBeNull();
+
+        // Second send should still carry the measurement restored after the failed RPC.
+        var retryTask = (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!;
+        await retryTask;
+
+        retryRequest.Should().NotBeNull();
+        retryRequest!.Stats.Should().Contain(s => s.Metric == "error-test");
     }
 
     [Fact]
