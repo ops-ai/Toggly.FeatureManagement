@@ -1,23 +1,22 @@
 /** Preserve immutable family tags and append disjoint publication evidence on retries. */
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-function getReleaseByTag(tag) {
-  const result = spawnSync(
-    "gh",
-    ["api", `repos/{owner}/{repo}/releases/tags/${tag}`],
-    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
-  );
-  if (result.status === 0) {
-    return JSON.parse(result.stdout);
+function getReleaseByTag(tag, run) {
+  try {
+    return JSON.parse(
+      run("gh", ["api", `repos/{owner}/{repo}/releases/tags/${tag}`]),
+    );
+  } catch (error) {
+    const detail = `${error.stderr ?? ""}${error.stdout ?? ""}${error.message ?? ""}`;
+    // GitHub returns "status":"404" on stdout; stderr is inherited by execFileSync.
+    if (/Not Found|"status"\s*:\s*"?404"?/i.test(detail)) {
+      return null;
+    }
+    throw error;
   }
-  const detail = `${result.stderr ?? ""}${result.stdout ?? ""}`;
-  if (/Not Found|"status"\s*:\s*404/i.test(detail)) {
-    return null;
-  }
-  throw new Error(detail || `gh api releases/tags/${tag} failed (${result.status})`);
 }
 
 export function createReleases(releases, directory, run, prerelease = false) {
@@ -39,7 +38,7 @@ export function createReleases(releases, directory, run, prerelease = false) {
     }
 
     // Per-tag lookup avoids loading every release (ENOBUFS when the repo has many tags).
-    const existing = getReleaseByTag(release.tag);
+    const existing = getReleaseByTag(release.tag, run);
     const notes = fs.readFileSync(release.notes, "utf8");
     const assets = release.assets.map((asset) => path.join(directory, asset));
     if (!existing) {
