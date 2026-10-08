@@ -1,4 +1,11 @@
-## 1.11.1
+## 1.12.0
+
+2026-10-04
+
+### Added
+- Re-export `createSegmentMembershipClient` for Node/SSR targeting-list updates.
+
+
 
 2026-09-28
 

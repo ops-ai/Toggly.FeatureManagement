@@ -1,5 +1,49 @@
 # Changelog
 
+## All .NET SDK packages 3.13.3 - 2026-10-05
+
+### Changed
+- Web feature tag helpers reuse the separator used to parse feature names,
+  reducing repeated allocations when rendering feature-gated content.
+- Expanded Web XML API documentation for HTTP feature contexts, targeting
+  accessors, and feature tag helpers.
+
+## All .NET SDK packages 3.13.2 - 2026-10-05
+
+### Fixed
+- Failed `SendMetrics` RPCs restore drained measurements, counters, and
+  observations so the next interval retries the same batch instead of dropping it.
+
+## All .NET SDK packages 3.13.1 - 2026-10-05
+
+### Fixed
+- Unique-user hash snapshots in `SendStats` no longer throw when evaluations
+  add hashes during the copy. Application and per-feature used/viewed sets are
+  snapshotted under one lock with a foreach copy.
+
+## All .NET SDK packages 3.13.0 - 2026-10-04
+
+### Added
+- `ITogglySegmentMembershipClient` updates targeting-list membership with the
+  configured Backend application key (`GET/POST/DELETE/PUT /api/v2/segments`).
+  Evaluation still waits for definition republish.
+
+## All .NET SDK packages 3.12.12 - 2026-10-05
+
+### Changed
+- `Toggly.FeatureManagement.Storage.EntityFramework` computes the same SHA-256
+  catalog IDs without creating a hash instance for each lookup. Missing
+  catalog-store dependencies and registration arguments still fail immediately.
+
+## All .NET SDK packages 3.12.11 - 2026-10-04
+
+### Fixed
+- `Toggly.FeatureManagement.NSwag` generates OpenAPI documents per request by
+  default, so request-scoped feature gates cannot reuse another request's
+  schema. Applications can opt into bounded caching with an explicit document
+  key that distinguishes their document variants.
+
+
 ## All .NET SDK packages 3.12.10 - 2026-10-04
 
 ### Fixed
@@ -36,6 +80,7 @@
 - The SDK User-Agent version now matches the NuGet package version even when
   CI injects a different assembly informational version. Malformed assembly
   informational versions fall back to a valid file or assembly version.
+
 ## All .NET SDK packages 3.12.6 - 2026-09-30
 
 ### Fixed

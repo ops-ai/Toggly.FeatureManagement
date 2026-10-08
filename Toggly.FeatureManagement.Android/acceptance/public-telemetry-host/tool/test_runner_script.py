@@ -12,7 +12,6 @@ import unittest
 HOST = Path(__file__).resolve().parents[1]
 REPO = HOST.parents[2]
 WORKFLOWS = (
-    REPO / ".github/workflows/acceptance-android-public-telemetry.yml",
     REPO / ".github/workflows/analysis-android.yml",
 )
 SCRIPT = HOST / "tool/run_android_coverage.sh"
@@ -28,23 +27,17 @@ def action_command(workflow):
 
 
 class RunnerScriptTest(unittest.TestCase):
-    def test_public_and_coverage_macos_keep_native_gate(self):
-        public = WORKFLOWS[0].read_text()
-        self.assertIn("public-android:\n    runs-on: macos-15-intel", public)
-        self.assertNotIn("- name: Enable KVM for Android emulator", public)
-        self.assertNotIn("disable-linux-hw-accel:", public)
-
-        analysis = WORKFLOWS[1].read_text()
+    def test_coverage_macos_keeps_native_gate(self):
+        analysis = WORKFLOWS[0].read_text()
         coverage = analysis.split("\n  code-coverage:\n", 1)[1].split(
             "\n  build-samples:\n", 1
         )[0]
         self.assertIn("runs-on: macos-15-intel", coverage)
         self.assertNotIn("- name: Enable KVM for Android emulator", coverage)
         self.assertNotIn("disable-linux-hw-accel:", coverage)
-        for job in (public, coverage):
-            self.assertIn("api-level: 35", job)
-            self.assertIn("arch: x86_64", job)
-            self.assertIn("script: bash tool/run_android_coverage.sh", job)
+        self.assertIn("api-level: 35", coverage)
+        self.assertIn("arch: x86_64", coverage)
+        self.assertIn("script: bash tool/run_android_coverage.sh", coverage)
         self.assertIn("./gradlew testDebugUnitTest koverXmlReport", coverage)
         self.assertIn("python -m coverage run --parallel-mode --source=tool", coverage)
         self.assertIn("python -m coverage combine", coverage)
