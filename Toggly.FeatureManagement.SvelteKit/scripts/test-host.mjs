@@ -28,12 +28,29 @@ try {
   await run('npm', ['run', 'build'], root);
   await run(process.execPath, [join(root, 'tests/offline-process.mjs')], root);
   await run('npm', ['pack', '--pack-destination', temporary], root);
+  const coreRoot = join(root, '../Toggly.FeatureManagement.Node/toggly-node-core');
+  const segmentsRoot = join(root, '../toggly-segments');
+  await run('pnpm', ['pack', '--pack-destination', temporary], coreRoot);
+  await run('npm', ['run', 'build'], segmentsRoot);
+  await run('npm', ['pack', '--pack-destination', temporary], segmentsRoot);
   await cp(join(root, 'tests/host'), host, { recursive: true });
   const archive = join(
     temporary,
     `ops-ai-toggly-sveltekit-${JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version}.tgz`,
   );
-  await run('npm', ['install', '--package-lock-only', '--ignore-scripts', archive], host);
+  const coreArchive = join(
+    temporary,
+    `ops-ai-toggly-node-core-${JSON.parse(await readFile(join(coreRoot, 'package.json'), 'utf8')).version}.tgz`,
+  );
+  const segmentsArchive = join(
+    temporary,
+    `ops-ai-toggly-segments-${JSON.parse(await readFile(join(segmentsRoot, 'package.json'), 'utf8')).version}.tgz`,
+  );
+  await run(
+    'npm',
+    ['install', '--package-lock-only', '--ignore-scripts', archive, coreArchive, segmentsArchive],
+    host,
+  );
   await run('npm', ['ci', '--no-audit', '--no-fund'], host);
   await run(
     'npm',

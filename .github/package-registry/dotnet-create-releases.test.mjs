@@ -30,21 +30,21 @@ test("later sibling preserves existing tag, notes and assets while adding its ow
     }
 
     if (args[0] === "api") {
-      return JSON.stringify([
-        [
-          {
-            tag_name: release.tag,
-            body: "First package evidence",
-            assets: [{ name: "SHA256SUMS-first" }],
-          },
-        ],
-      ]);
+      return JSON.stringify({
+        tag_name: release.tag,
+        body: "First package evidence",
+        assets: [{ name: "SHA256SUMS-first" }],
+      });
     }
 
     return "";
   };
   createReleases([release], directory, run);
   assert.equal(calls.filter((call) => call[0] === "git").length, 1);
+  assert.deepEqual(
+    calls.find((call) => call[1] === "api"),
+    ["gh", "api", `repos/{owner}/{repo}/releases/tags/${release.tag}`],
+  );
   assert.equal(
     calls.filter((call) => call[1] === "release" && call[2] === "upload")
       .length,
@@ -72,15 +72,11 @@ test("retry after partial asset upload fills only missing evidence without dupli
     }
 
     if (args[0] === "api") {
-      return JSON.stringify([
-        [
-          {
-            tag_name: release.tag,
-            body: release.marker,
-            assets: [{ name: release.assets[0] }],
-          },
-        ],
-      ]);
+      return JSON.stringify({
+        tag_name: release.tag,
+        body: release.marker,
+        assets: [{ name: release.assets[0] }],
+      });
     }
 
     return "";
@@ -103,7 +99,13 @@ test("retry after signed tag push creates the missing release without moving the
     }
 
     if (args[0] === "api") {
-      return "[[]]";
+      const error = new Error("Command failed: gh api releases/tags");
+      error.status = 1;
+      error.stdout = JSON.stringify({
+        message: "Not Found",
+        status: "404",
+      });
+      throw error;
     }
 
     return "";
@@ -115,5 +117,31 @@ test("retry after signed tag push creates the missing release without moving the
   );
   assert.ok(
     calls.find((call) => call[2] === "create").includes("--prerelease"),
+  );
+});
+
+test("release lookup failures other than a missing tag fail closed", (t) => {
+  const { directory, release } = fixture(t);
+  const run = (binary, args) => {
+    if (args[0] === "ls-remote") {
+      return "existing-tag";
+    }
+
+    if (args[0] === "api") {
+      const error = new Error("Command failed: gh api releases/tags");
+      error.status = 1;
+      error.stdout = JSON.stringify({
+        message: "Bad credentials",
+        status: "401",
+      });
+      throw error;
+    }
+
+    return "";
+  };
+
+  assert.throws(
+    () => createReleases([release], directory, run),
+    (error) => error.stdout.includes("Bad credentials"),
   );
 });

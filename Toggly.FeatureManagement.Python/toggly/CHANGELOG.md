@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0 - 2026-10-04
+
+### Added
+- `SegmentMembershipClient` for Backend-key targeting-list membership updates.
+
 ## 1.1.1 - 2026-09-28
 
 ### Fixed

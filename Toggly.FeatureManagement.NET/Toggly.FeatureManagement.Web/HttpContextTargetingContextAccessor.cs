@@ -16,19 +16,27 @@ namespace Toggly.FeatureManagement.Web
         private const string TargetingContextLookup = "HttpContextTargetingContextAccessor.TargetingContext";
         private readonly IHttpContextAccessor _httpContextAccessor;
 
+        /// <summary>
+        /// Creates an accessor that derives targeting data from the active HTTP request.
+        /// </summary>
+        /// <param name="httpContextAccessor">Provides the current HTTP context.</param>
         public HttpContextTargetingContextAccessor(IHttpContextAccessor httpContextAccessor)
         {
             _httpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
         }
 
+        /// <summary>
+        /// Gets the request-scoped targeting context, caching it in HTTP context items.
+        /// </summary>
+        /// <returns>The current user's targeting context.</returns>
         public ValueTask<TargetingContext> GetContextAsync()
         {
-            HttpContext httpContext = _httpContextAccessor.HttpContext!;
+            HttpContext httpContext = _httpContextAccessor.HttpContext;
 
             //
             // Try cache lookup
             if (httpContext.Items.TryGetValue(TargetingContextLookup, out object value))
-                return new ValueTask<TargetingContext>((TargetingContext)value!);
+                return new ValueTask<TargetingContext>((TargetingContext)value);
             
             ClaimsPrincipal user = httpContext.User;
 
@@ -44,7 +52,7 @@ namespace Toggly.FeatureManagement.Web
             // Build targeting context based off user info
             var targetingContext = new TargetingContext
             {
-                UserId = user.Identity!.Name,
+                UserId = user.Identity.Name,
                 Groups = groups
             };
 

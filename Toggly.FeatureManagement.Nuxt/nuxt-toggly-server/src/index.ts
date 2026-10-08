@@ -81,3 +81,8 @@ export {
   isEventFeatureOff,
   evaluateEventFeatureGate,
 } from './middleware'
+
+export {
+  createSegmentMembershipClient,
+  SegmentMembershipError,
+} from '@ops-ai/toggly-segments'

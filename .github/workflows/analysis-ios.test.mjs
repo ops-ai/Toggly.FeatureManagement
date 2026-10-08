@@ -25,18 +25,14 @@ test('iOS reporting jobs use toJSON(run_reporting) fail-open for string false', 
   );
 });
 
-test('iOS Sonar excludes swift:S4790 on SignedDefsVerify (wire-format kid SHA-1)', () => {
+test('iOS Sonar scans retain quality gates without scanner-wide issue exclusions', () => {
   const sonar = job('sonar');
   for (const name of ['SonarCloud Scan', 'SonarQube Server Scan']) {
     const start = sonar.indexOf(`      - name: ${name}\n`);
     assert.notEqual(start, -1, `missing ${name}`);
     const next = sonar.indexOf('\n      - name:', start + 1);
     const step = next === -1 ? sonar.slice(start) : sonar.slice(start, next);
-    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria=kidSha1/);
-    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.kidSha1\.ruleKey=swift:S4790/);
-    assert.match(
-      step,
-      /-Dsonar\.issue\.ignore\.multicriteria\.kidSha1\.resourceKey=\*\*\/SignedDefsVerify\.swift/,
-    );
+    assert.doesNotMatch(step, /-Dsonar\.issue\.ignore\.multicriteria/);
+    assert.match(step, /-Dsonar\.qualitygate\.wait=true/);
   }
 });

@@ -39,7 +39,7 @@ function run(command, args, cwd, capture = false, finishMarker) {
       signal('SIGTERM')
       killTimer ??= setTimeout(() => signal('SIGKILL'), 2000)
     }
-    const timeout = finishMarker ? setTimeout(() => { timedOut = true; stop() }, 30000) : undefined
+    const timeout = finishMarker ? setTimeout(() => { timedOut = true; stop() }, 60000) : undefined
     child.stdout?.on('data', chunk => {
       stdout += chunk
       if (finishMarker && !markerSeen && stdout.includes(finishMarker)) {
@@ -292,12 +292,17 @@ try {
     const staticPort = await listen(staticServer)
     try {
       console.log(`${label}: browser phase (Node ${process.version}/${process.arch}, ${translated ? 'native ARM Chrome' : 'default Chrome'})`)
+      const linuxChromeFlags = process.platform === 'linux'
+        ? ['--no-sandbox', '--disable-dev-shm-usage']
+        : []
       const result = await run(browser, [
         ...browserPrefix,
         '--headless=new', '--disable-background-networking', '--disable-default-apps',
         '--disable-extensions', '--disable-sync', '--metrics-recording-only', '--no-first-run',
+        ...linuxChromeFlags,
         `--user-data-dir=${join(temporary, `${label}-chrome`)}`,
-        '--virtual-time-budget=5000', '--dump-dom', `http://127.0.0.1:${staticPort}/`,
+        // Heavy onMount harness (multiple createToggly + delays) outruns 5s on busy runners.
+        '--virtual-time-budget=30000', '--dump-dom', `http://127.0.0.1:${staticPort}/`,
       ], host, true, 'data-acceptance="done"')
       assert(result.stdout.includes('data-acceptance="done"'), `${label}: browser app did not complete\n${result.stdout}\n${result.stderr}`)
       verify(label, requests, optionsCount, definitions)

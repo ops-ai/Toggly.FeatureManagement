@@ -7,6 +7,7 @@ on:
       - main
     paths:
       - 'Toggly.FeatureManagement.Electron/**'
+      - 'toggly-segments/**'
       - '.github/workflows/analysis-electron.yml'
   workflow_dispatch:
   workflow_call:
@@ -37,6 +38,11 @@ jobs:
           node-version: 'lts/*'
           cache: 'npm'
           cache-dependency-path: Toggly.FeatureManagement.Electron/package-lock.json
+
+      - name: Build toggly-segments
+        run: |
+          set -euo pipefail
+          (cd toggly-segments && (npm ci || npm install) && npm run build)
 
       - name: Install dependencies
         working-directory: Toggly.FeatureManagement.Electron

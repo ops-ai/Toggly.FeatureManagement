@@ -8,6 +8,7 @@ on:
     paths:
       - 'Toggly.FeatureManagement.Nuxt/**'
       - 'toggly-eval/**'
+      - 'toggly-segments/**'
       - 'toggly-signed-defs/**'
       - '.github/workflows/analysis-nuxt.yml'
       - '.github/workflows/sdk-nuxt-release.yml'
@@ -45,7 +46,7 @@ jobs:
       - name: Build shared packages
         uses: ./.github/actions/build-shared-js-deps
         with:
-          packages: signed-defs,eval
+          packages: signed-defs,eval,segments
           node-version: '20'
 
       - name: Upload shared package dist artifacts
