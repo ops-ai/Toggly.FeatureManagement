@@ -109,10 +109,10 @@ packages:
     dependency: "direct main"
     description:
       name: feature_flags_toggly
-      sha256: "8a023f552a8c6ca615f34fcf4851951e56ee514a96a562fad9c1e0999e604d87"
+      sha256: "272716b813bde2821aaeb5dbe8022470edf01202295278ff1b1339a421a37f12"
       url: "https://pub.dev"
     source: hosted
-    version: "1.12.0"
+    version: "1.13.1"
   fixnum:
     dependency: transitive
     description:

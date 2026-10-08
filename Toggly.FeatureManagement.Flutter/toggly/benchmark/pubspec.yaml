@@ -11,6 +11,7 @@ dependencies:
     
   feature_flags_toggly:
     path: ../
+    version: 1.13.1
   benchmark_harness: ^2.4.0
 
 dev_dependencies:
