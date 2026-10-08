@@ -24,7 +24,7 @@ const rows = [
 ]
 
 
-function writeHost(hostDirectory, tarball) {
+function writeHost(hostDirectory, tarball, segmentsTarball) {
   writeFileSync(
     join(hostDirectory, 'package.json'),
     JSON.stringify(
@@ -34,6 +34,7 @@ function writeHost(hostDirectory, tarball) {
         main: 'main.mjs',
         dependencies: {
           '@ops-ai/electron-feature-flags-toggly': tarball,
+          '@ops-ai/toggly-segments': segmentsTarball,
           electron: 'PLACEHOLDER_ELECTRON',
           esbuild: '0.25.10',
           react: '18.3.1',
@@ -353,13 +354,20 @@ try {
   if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) throw new Error('Genuine registry acceptance requires the published reporter')
   await run('npm', ['run', 'build'], sdkDirectory)
   await run('npm', ['pack', '--pack-destination', workspace], sdkDirectory)
+  const segmentsDirectory = join(sdkDirectory, '..', 'toggly-segments')
+  await run('npm', ['run', 'build'], segmentsDirectory)
+  await run('npm', ['pack', '--pack-destination', workspace], segmentsDirectory)
   const { version } = JSON.parse(
     readFileSync(join(sdkDirectory, 'package.json'), 'utf8'),
   )
+  const segmentsVersion = JSON.parse(
+    readFileSync(join(segmentsDirectory, 'package.json'), 'utf8'),
+  ).version
   const tarball = join(
     workspace,
     `ops-ai-electron-feature-flags-toggly-${version}.tgz`,
   )
+  const segmentsTarball = join(workspace, `ops-ai-toggly-segments-${segmentsVersion}.tgz`)
   console.log('Packed archive SHA256', createHash('sha256').update(readFileSync(tarball)).digest('hex'))
   for (const row of rows.filter(
     (row) => !process.env.HOST || row.name === process.env.HOST,
@@ -367,7 +375,7 @@ try {
     const hostDirectory = join(workspace, row.name)
     console.log(`Owned Electron host: ${hostDirectory}`)
     await run('mkdir', ['-p', hostDirectory], workspace)
-    writeHost(hostDirectory, tarball)
+    writeHost(hostDirectory, tarball, segmentsTarball)
     const manifestPath = join(hostDirectory, 'package.json')
     writeFileSync(
       manifestPath,

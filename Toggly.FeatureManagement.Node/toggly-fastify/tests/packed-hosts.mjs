@@ -184,7 +184,7 @@ function verifyPackedFile(tarball) {
     assert.ok(contents.includes(expected), `packed adapter contains ${expected}`)
   }
   const manifest = JSON.parse(run('tar', ['-xOf', tarball, 'package/package.json']))
-  assert.equal(manifest.dependencies['@ops-ai/toggly-node-core'], '^0.11.3')
+  assert.equal(manifest.dependencies['@ops-ai/toggly-node-core'], '^0.12.0')
 }
 
 function packCore() {
@@ -208,9 +208,19 @@ function nodeMajor(node) {
   return Number(run(node, ['-p', "process.versions.node.split('.')[0]"]).trim())
 }
 
+function packSegments() {
+  const destination = mkdtempSync(join(tmpdir(), 'toggly-segments-pack-'))
+  const segmentsDirectory = join(workspaceDirectory, '..', 'toggly-segments')
+  run('npm', ['pack', '--pack-destination', destination], { cwd: segmentsDirectory })
+  const [filename] = readdirSync(destination).filter((name) => name.endsWith('.tgz'))
+  assert.ok(filename, 'npm pack produced a segments tarball')
+  return { destination, tarball: join(destination, filename) }
+}
+
 const packed = packAdapter()
 const packedCore = packCore()
 const packedEval = packEval()
+const packedSegments = packSegments()
 const { tarball } = packed
 const hostDirectory = mkdtempSync(join(tmpdir(), 'toggly-fastify-host-'))
 try {
@@ -232,6 +242,7 @@ try {
       '@types/node@22.19.11',
       packedCore.tarball,
       packedEval.tarball,
+      packedSegments.tarball,
       tarball,
     ], { cwd: hostDirectory })
     run(join(hostDirectory, 'node_modules', '.bin', 'tsc'), ['--noEmit'], { cwd: hostDirectory })
@@ -248,4 +259,5 @@ try {
   rmSync(packed.destination, { recursive: true, force: true })
   rmSync(packedCore.destination, { recursive: true, force: true })
   rmSync(packedEval.destination, { recursive: true, force: true })
+  rmSync(packedSegments.destination, { recursive: true, force: true })
 }

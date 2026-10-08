@@ -4,6 +4,21 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+function getReleaseByTag(tag, run) {
+  try {
+    return JSON.parse(
+      run("gh", ["api", `repos/{owner}/{repo}/releases/tags/${tag}`]),
+    );
+  } catch (error) {
+    const detail = `${error.stderr ?? ""}${error.stdout ?? ""}${error.message ?? ""}`;
+    // GitHub returns "status":"404" on stdout; stderr is inherited by execFileSync.
+    if (/Not Found|"status"\s*:\s*"?404"?/i.test(detail)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 export function createReleases(releases, directory, run, prerelease = false) {
   for (const release of releases) {
     // A later sibling publication can share the family version. Never move its tag.
@@ -22,17 +37,8 @@ export function createReleases(releases, directory, run, prerelease = false) {
       run("git", ["push", "origin", release.tag]);
     }
 
-    // Listing succeeds even when the release does not exist; authentication failures still fail closed.
-    const existing = JSON.parse(
-      run("gh", [
-        "api",
-        "--paginate",
-        "--slurp",
-        "repos/{owner}/{repo}/releases",
-      ]),
-    )
-      .flat()
-      .find((item) => item.tag_name === release.tag);
+    // Per-tag lookup avoids loading every release (ENOBUFS when the repo has many tags).
+    const existing = getReleaseByTag(release.tag, run);
     const notes = fs.readFileSync(release.notes, "utf8");
     const assets = release.assets.map((asset) => path.join(directory, asset));
     if (!existing) {

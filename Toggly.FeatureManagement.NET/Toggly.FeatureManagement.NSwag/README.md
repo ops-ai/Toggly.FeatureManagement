@@ -11,7 +11,7 @@ dotnet add package Toggly.FeatureManagement.NSwag
 ## Features
 
 - **Automatic Filtering**: Endpoints with `[FeatureGate]` attributes are automatically excluded from Swagger when their feature flags are disabled
-- **Dynamic Updates**: The Swagger document is generated on-demand, so it always reflects the current state of your feature flags
+- **Dynamic Updates**: By default, the Swagger document is generated for each request, so request-scoped feature gates are evaluated for that request
 - **Controller & Action Support**: Works with both controller-level and action-level `[FeatureGate]` attributes
 - **Requirement Types**: Supports both `RequirementType.All` and `RequirementType.Any` from FeatureGateAttribute
 
@@ -35,7 +35,7 @@ services.AddOpenApiDocument((config, services) =>
     // ... rest of your NSwag configuration
 });
 
-// Serve the filtered document (bypasses NSwag internal cache)
+// Serve the filtered document with per-request generation by default
 // Important: use UseFeatureAwareOpenApi instead of UseOpenApi
 app.UseFeatureAwareOpenApi();
 app.UseSwaggerUi();
@@ -66,9 +66,15 @@ Without this package, all endpoints appear in Swagger regardless of feature flag
 
 ### After
 
-With `Toggly.FeatureManagement.NSwag`, endpoints are automatically excluded from Swagger when their feature flags are disabled. The documentation always reflects the current state of your feature flags.
+With `Toggly.FeatureManagement.NSwag`, endpoints are automatically excluded from Swagger when their feature flags are disabled. With default settings, the document reflects each request's feature-gate state.
 
-**Dynamic Updates**: The Swagger document is generated on-demand when requested (e.g., when accessing `/swagger/v1/swagger.json`), so you can turn features on/off dynamically without restarting the application, and the Swagger documentation will update accordingly.
+**Dynamic Updates**: With the default settings, the Swagger document is generated on each request (e.g., when accessing `/swagger/v1/swagger.json`). Turning a feature on or off changes the next requested document without restarting the application.
+
+### Optional document caching
+
+`UseFeatureAwareOpenApi` generates a fresh document for each request unless you set `CreateDocumentCacheKey`. This protects request-scoped feature gates from reusing another request's schema. If your application has a small, fixed set of document variants, configure `CreateDocumentCacheKey` with one key for each complete variant.
+
+The key must distinguish **every** input that can change the generated document: feature-gate outcomes, request origin, and any request data used by `PostProcess`. Cache only a bounded set of variants; do not use user IDs or other high-cardinality identities as keys. The middleware retains at most 32 explicit-key documents and evicts older entries when the limit is reached. Reusing a key for different gate states can disclose an endpoint in another request's schema. OpenAPI filtering does not replace endpoint authorization.
 
 ## How It Works
 

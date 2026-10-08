@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.12.0
+
+2026-10-04
+
+### Added
+- `SegmentMembershipClient` for Backend-key targeting-list membership updates.
+
+### Changed
+- User-Agent and live-update `sdkVersion` report `toggly-go/0.12.0`.
+
 ## 0.11.2
 
 2026-09-28

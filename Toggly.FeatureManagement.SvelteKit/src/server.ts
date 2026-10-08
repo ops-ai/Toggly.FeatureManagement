@@ -10,6 +10,7 @@ import { verifyEnvelope } from './persistence.js';
 import { buildBrowserDefinitionsUrl, captureEvaluatedResponse } from './transport.js';
 import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions } from '@ops-ai/toggly-signed-defs';
 export { createTogglyClient } from '@ops-ai/toggly-node-core';
+export { createSegmentMembershipClient, SegmentMembershipError } from '@ops-ai/toggly-node-core';
 export type { TogglyClient, TogglyServerConfig, EvaluationContext } from '@ops-ai/toggly-node-core';
 
 export interface ServerOptions {
