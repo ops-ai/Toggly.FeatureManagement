@@ -49,6 +49,35 @@ public sealed class EntityFrameworkCatalogStoreTests : IAsyncLifetime
     }
 
     [Fact]
+    public void Constructor_rejects_a_missing_context_factory()
+    {
+        var action = () => new EntityFrameworkCatalogStore(null!);
+
+        action.Should().Throw<ArgumentNullException>()
+            .Which.ParamName.Should().Be("contextFactory");
+    }
+
+    [Fact]
+    public async Task TryWriteAsync_rejects_a_missing_catalog_document()
+    {
+        var action = () => _store.TryWriteAsync("orders", null!, expectedRevision: null);
+
+        await action.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void GetCatalogId_rejects_missing_or_blank_catalog_names(string? catalogName)
+    {
+        var action = () => EntityFrameworkCatalogStore.GetCatalogId(catalogName!);
+
+        action.Should().Throw<ArgumentException>()
+            .Which.ParamName.Should().Be("catalogName");
+    }
+
+    [Fact]
     public async Task TryWriteAsync_creates_and_reads_a_canonical_snapshot()
     {
         var write = await _store.TryWriteAsync("orders", Document("Orders"), expectedRevision: null);
@@ -139,6 +168,29 @@ public sealed class EntityFrameworkCatalogStoreTests : IAsyncLifetime
         var action = () => _store.ReadAsync("orders");
 
         await action.Should().ThrowAsync<CatalogFormatException>();
+    }
+
+    [Fact]
+    public async Task Catalog_identity_collision_is_rejected_by_reads_and_writes()
+    {
+        await using (var context = await _factory.CreateDbContextAsync())
+        {
+            context.TogglyCatalogs.Add(new CatalogEntity
+            {
+                Id = EntityFrameworkCatalogStore.GetCatalogId("orders"),
+                CatalogName = "billing",
+                Revision = Guid.NewGuid().ToString("D"),
+                Payload = CatalogJson.Serialize(Document("Billing")),
+                UpdatedAtUtc = DateTimeOffset.UtcNow
+            });
+            await context.SaveChangesAsync();
+        }
+
+        var read = () => _store.ReadAsync("orders");
+        var write = () => _store.TryWriteAsync("orders", Document("Orders"), expectedRevision: null);
+
+        await read.Should().ThrowAsync<InvalidOperationException>();
+        await write.Should().ThrowAsync<InvalidOperationException>();
     }
 
     [Fact]

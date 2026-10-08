@@ -28,8 +28,13 @@ namespace Toggly.FeatureManagement.Web
     [HtmlTargetElement(Attributes = "feature")]
     public sealed class FeatureTagHelper : TagHelper
     {
+        private static readonly char[] FeatureNameSeparators = { ',' };
         private readonly IFeatureManager _featureManager;
 
+        /// <summary>
+        /// Creates a feature tag helper using the configured feature manager.
+        /// </summary>
+        /// <param name="featureManager">Evaluates feature flags for rendered content.</param>
         public FeatureTagHelper(IFeatureManager featureManager)
         {
             _featureManager = featureManager;
@@ -59,6 +64,11 @@ namespace Toggly.FeatureManagement.Web
         /// <summary>Entity instance for ContextProperty evaluation (Order, Product, etc.).</summary>
         public object? Context { get; set; }
 
+        /// <summary>
+        /// Evaluates the configured feature names and renders or suppresses the element.
+        /// </summary>
+        /// <param name="context">The current tag helper context.</param>
+        /// <param name="output">The output to render or suppress.</param>
         public override async Task ProcessAsync(TagHelperContext context, TagHelperOutput output)
         {
             var isFeatureElement = string.Equals(output.TagName, "feature", StringComparison.OrdinalIgnoreCase);
@@ -109,7 +119,7 @@ namespace Toggly.FeatureManagement.Web
         private static List<string> SplitNames(string value)
         {
             return value
-                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                .Split(FeatureNameSeparators, StringSplitOptions.RemoveEmptyEntries)
                 .Select(n => n.Trim())
                 .Where(n => !string.IsNullOrWhiteSpace(n))
                 .ToList();

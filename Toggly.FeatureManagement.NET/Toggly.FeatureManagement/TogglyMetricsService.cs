@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.FeatureManagement;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Reflection;
@@ -29,8 +30,6 @@ namespace Toggly.FeatureManagement
         private readonly string _baseUrl;
 
         private readonly ILogger _logger;
-
-        private readonly IHttpClientFactory _clientFactory;
 
         // Multi-variant support: Track metrics per variant name instead of boolean enabled/disabled
         private readonly ConcurrentDictionary<(string MetricKey, string? FeatureKey, string Variant), double> _stats = new ConcurrentDictionary<(string, string?, string), double>();
@@ -67,7 +66,6 @@ namespace Toggly.FeatureManagement
             _appKey = togglySettings.Value.AppKey;
             _environment = togglySettings.Value.Environment;
             _baseUrl = togglySettings.Value.ResolveMetricsBaseUrl();
-            _clientFactory = clientFactory;
             _featureExperimentProvider = (IFeatureExperimentProvider)featureDefinitionProvider;
             _featureManager = featureManager;
             _metricsRegistryService = serviceProvider.GetRequiredService<IMetricsRegistryService>();
@@ -194,6 +192,10 @@ namespace Toggly.FeatureManagement
                 return;
             }
 
+            var drainedStats = new List<((string MetricKey, string? FeatureKey, string Variant) Key, double Value)>();
+            var drainedCounters = new List<((string MetricKey, string? FeatureKey, string Variant) Key, double Value)>();
+            var drainedObservations = new List<(DateTime Date, string MetricKey, string? FeatureKey, string Variant, double Value)>();
+
             try
             {
                 await BeforeSendMetrics().ConfigureAwait(false);
@@ -216,96 +218,9 @@ namespace Toggly.FeatureManagement
                     InstanceName = appInstanceName
                 };
 
-                var statKeys = _stats.Keys
-                    .Select(t => (t.MetricKey, t.FeatureKey))
-                    .Distinct()
-                    .ToList();
-                for (int i = 0; i < statKeys.Count; i++)
-                {
-                    var stat = new MetricStatMessage
-                    {
-                        Metric = statKeys[i].MetricKey
-                    };
-                    
-                    if (statKeys[i].FeatureKey != null) stat.Feature = statKeys[i].FeatureKey;
-                    
-                    // Collect all variants for this metric+feature combination
-                    var variantsToRemove = _stats.Keys
-                        .Where(k => k.MetricKey == statKeys[i].MetricKey && k.FeatureKey == statKeys[i].FeatureKey)
-                        .ToList();
-                    
-                    foreach (var key in variantsToRemove)
-                    {
-                        if (_stats.TryRemove(key, out var value) && value > 0)
-                        {
-                            stat.VariantValues[key.Variant] = value;
-                        }
-                    }
-                    
-                    // Only add if we have variant values
-                    if (stat.VariantValues.Count > 0)
-                    {
-                        dataPacket.Stats.Add(stat);
-                    }
-                }
-
-                var counterKeys = _counters.Keys
-                    .Select(t => (t.MetricKey, t.FeatureKey))
-                    .Distinct()
-                    .ToList();
-                for (int i = 0; i < counterKeys.Count; i++)
-                {
-                    var counter = new MetricCounterMessage
-                    {
-                        Metric = counterKeys[i].MetricKey
-                    };
-
-                    if (counterKeys[i].FeatureKey != null) counter.Feature = counterKeys[i].FeatureKey;
-                    
-                    // Collect all variants for this metric+feature combination
-                    var variantsToRemove = _counters.Keys
-                        .Where(k => k.MetricKey == counterKeys[i].MetricKey && k.FeatureKey == counterKeys[i].FeatureKey)
-                        .ToList();
-                    
-                    foreach (var key in variantsToRemove)
-                    {
-                        if (_counters.TryRemove(key, out var value) && value > 0)
-                        {
-                            counter.VariantValues[key.Variant] = value;
-                        }
-                    }
-                    
-                    // Only add if we have variant values
-                    if (counter.VariantValues.Count > 0)
-                    {
-                        dataPacket.Counters.Add(counter);
-                    }
-                }
-
-                // Group observations by metric+feature+time, then aggregate variants
-                var observationGroups = new System.Collections.Generic.Dictionary<(DateTime, string, string?), MetricObservationMessage>();
-                
-                while (_observations.TryTake(out var observation))
-                {
-                    var key = (observation.Date, observation.MetricKey, observation.FeatureKey);
-                    
-                    if (!observationGroups.TryGetValue(key, out var observationMessage))
-                    {
-                        observationMessage = new MetricObservationMessage
-                        {
-                            Time = observation.Date.ToTimestamp(),
-                            Metric = observation.MetricKey
-                        };
-                        
-                        if (observation.FeatureKey != null) observationMessage.Feature = observation.FeatureKey;
-                        observationGroups[key] = observationMessage;
-                    }
-                    
-                    // Add to variant values map
-                    observationMessage.VariantValues[observation.Variant] = observation.Value;
-                }
-                
-                dataPacket.Observations.AddRange(observationGroups.Values);
+                DrainMeasurements(dataPacket, drainedStats);
+                DrainCounters(dataPacket, drainedCounters);
+                DrainObservations(dataPacket, drainedObservations);
 
                 var grpcMetadata = new Metadata
                 {
@@ -314,8 +229,8 @@ namespace Toggly.FeatureManagement
 
                 var result = await _metricsClient.SendMetricsAsync(dataPacket, grpcMetadata, DateTime.UtcNow.AddSeconds(180)).ConfigureAwait(false);
 
-                if (result.Count != dataPacket.Stats.Count)
-                    if (!suppressLogging) TryLog(LogLevel.Warning, "Metric count did not match. Possible data integrity issues");
+                if (result.Count != dataPacket.Stats.Count && !suppressLogging)
+                    TryLog(LogLevel.Warning, "Metric count did not match. Possible data integrity issues");
 
                 _lastSend = DateTime.UtcNow;
             }
@@ -324,11 +239,141 @@ namespace Toggly.FeatureManagement
                 if (!suppressLogging) TryLog(LogLevel.Error, ex, "Error sending metrics to toggly");
                 _lastError = ex.Message;
                 _lastErrorTime = DateTime.UtcNow;
+
+                foreach (var (key, value) in drainedStats)
+                    _stats.AddOrUpdate(key, value, (_, existing) => existing + value);
+
+                foreach (var (key, value) in drainedCounters)
+                    _counters.AddOrUpdate(key, value, (_, existing) => existing + value);
+
+                foreach (var observation in drainedObservations)
+                    _observations.Add(observation);
             }
             finally
             {
                 _sendMetricsSemaphore.Release();
             }
+        }
+
+        private void DrainMeasurements(
+            MetricStat dataPacket,
+            List<((string MetricKey, string? FeatureKey, string Variant) Key, double Value)> drained)
+        {
+            var statKeys = _stats.Keys
+                .Select(t => (t.MetricKey, t.FeatureKey))
+                .Distinct()
+                .ToList();
+            for (int i = 0; i < statKeys.Count; i++)
+            {
+                var stat = new MetricStatMessage
+                {
+                    Metric = statKeys[i].MetricKey
+                };
+
+                if (statKeys[i].FeatureKey != null) stat.Feature = statKeys[i].FeatureKey;
+
+                // Collect all variants for this metric+feature combination
+                var variantsToRemove = _stats.Keys
+                    .Where(k => k.MetricKey == statKeys[i].MetricKey && k.FeatureKey == statKeys[i].FeatureKey)
+                    .ToList();
+
+                foreach (var key in variantsToRemove)
+                {
+                    if (_stats.TryRemove(key, out var value) && value > 0)
+                    {
+                        drained.Add((key, value));
+                        stat.VariantValues[key.Variant] = value;
+                    }
+                }
+
+                // Only add if we have variant values
+                if (stat.VariantValues.Count > 0)
+                {
+                    dataPacket.Stats.Add(stat);
+                }
+            }
+        }
+
+        private void DrainCounters(
+            MetricStat dataPacket,
+            List<((string MetricKey, string? FeatureKey, string Variant) Key, double Value)> drained)
+        {
+            var counterKeys = _counters.Keys
+                .Select(t => (t.MetricKey, t.FeatureKey))
+                .Distinct()
+                .ToList();
+            for (int i = 0; i < counterKeys.Count; i++)
+            {
+                var counter = new MetricCounterMessage
+                {
+                    Metric = counterKeys[i].MetricKey
+                };
+
+                if (counterKeys[i].FeatureKey != null) counter.Feature = counterKeys[i].FeatureKey;
+
+                // Collect all variants for this metric+feature combination
+                var variantsToRemove = _counters.Keys
+                    .Where(k => k.MetricKey == counterKeys[i].MetricKey && k.FeatureKey == counterKeys[i].FeatureKey)
+                    .ToList();
+
+                foreach (var key in variantsToRemove)
+                {
+                    if (_counters.TryRemove(key, out var value) && value > 0)
+                    {
+                        drained.Add((key, value));
+                        counter.VariantValues[key.Variant] = value;
+                    }
+                }
+
+                // Only add if we have variant values
+                if (counter.VariantValues.Count > 0)
+                {
+                    dataPacket.Counters.Add(counter);
+                }
+            }
+        }
+
+        private void DrainObservations(
+            MetricStat dataPacket,
+            List<(DateTime Date, string MetricKey, string? FeatureKey, string Variant, double Value)> drained)
+        {
+            // Group observations by metric+feature+time, then aggregate variants
+            var observationGroups = new Dictionary<(DateTime, string, string?), MetricObservationMessage>();
+
+            while (_observations.TryTake(out var observation))
+            {
+                Google.Protobuf.WellKnownTypes.Timestamp observationTime;
+                try
+                {
+                    observationTime = observation.Date.ToTimestamp();
+                }
+                catch (ArgumentException)
+                {
+                    // Drop observations that cannot be encoded (e.g. Unspecified DateTimeKind).
+                    // Do not requeue them or they would permanently block SendMetrics after restore.
+                    continue;
+                }
+
+                drained.Add(observation);
+                var key = (observation.Date, observation.MetricKey, observation.FeatureKey);
+
+                if (!observationGroups.TryGetValue(key, out var observationMessage))
+                {
+                    observationMessage = new MetricObservationMessage
+                    {
+                        Time = observationTime,
+                        Metric = observation.MetricKey
+                    };
+
+                    if (observation.FeatureKey != null) observationMessage.Feature = observation.FeatureKey;
+                    observationGroups[key] = observationMessage;
+                }
+
+                // Add to variant values map
+                observationMessage.VariantValues[observation.Variant] = observation.Value;
+            }
+
+            dataPacket.Observations.AddRange(observationGroups.Values);
         }
 
         public MetricsDebugInfo GetDebugInfo()

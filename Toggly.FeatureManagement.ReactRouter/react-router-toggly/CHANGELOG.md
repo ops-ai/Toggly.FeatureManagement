@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.0] - 2026-10-04
+
+### Added
+- Server export of `createSegmentMembershipClient` for Backend-key targeting-list updates.
+
+
 ## [1.2.1] - 2026-09-27
 
 ### Fixed

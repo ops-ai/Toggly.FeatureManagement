@@ -20,7 +20,7 @@ const (
 	WSReconnectMaxMs = 60000
 
 	sdkID               = "go"
-	sdkVersion          = "0.11.2"
+	sdkVersion          = "0.12.0"
 	flagsUpdatedMessage = "flags-updated"
 )
 

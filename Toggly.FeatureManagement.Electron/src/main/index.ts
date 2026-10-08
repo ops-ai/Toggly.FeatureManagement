@@ -19,6 +19,10 @@ export {
   __resetTogglyForTests,
 } from './client.js'
 export { registerTogglyIpc } from './ipc.js'
+export {
+  createSegmentMembershipClient,
+  SegmentMembershipError,
+} from '@ops-ai/toggly-segments'
 export { DiskFeatureCache, buildCacheFilePath } from './cache.js'
 export type { DiskCacheEntry } from './cache.js'
 export type {

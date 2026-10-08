@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-10-04
+
+### Added
+- Main-process re-export of `createSegmentMembershipClient` for Backend-key targeting-list updates.
+
 ## [1.2.2] - 2026-09-28
 
 ### Fixed

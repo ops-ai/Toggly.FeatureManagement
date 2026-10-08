@@ -1429,17 +1429,34 @@ public class TogglyMetricsServiceTests : IDisposable
         _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
             .Returns((List<string>?)null);
 
+        MetricStat? retryRequest = null;
+        var callCount = 0;
         _metricsClientMock.Setup(x => x.SendMetricsAsync(
             It.IsAny<MetricStat>(),
             It.IsAny<Metadata>(),
             It.IsAny<DateTime?>(),
             It.IsAny<CancellationToken>()))
-            .Returns(new AsyncUnaryCall<MetricResult>(
-                Task.FromException<MetricResult>(new RpcException(new Status(StatusCode.Unavailable, "Server unavailable"))),
-                Task.FromResult(new Metadata()),
-                () => new Status(StatusCode.Unavailable, "Server unavailable"),
-                () => new Metadata(),
-                () => { }));
+            .Returns<MetricStat, Metadata, DateTime?, CancellationToken>((stat, _, _, _) =>
+            {
+                callCount++;
+                if (callCount == 1)
+                {
+                    return new AsyncUnaryCall<MetricResult>(
+                        Task.FromException<MetricResult>(new RpcException(new Status(StatusCode.Unavailable, "Server unavailable"))),
+                        Task.FromResult(new Metadata()),
+                        () => new Status(StatusCode.Unavailable, "Server unavailable"),
+                        () => new Metadata(),
+                        () => { });
+                }
+
+                retryRequest = stat;
+                return new AsyncUnaryCall<MetricResult>(
+                    Task.FromResult(new MetricResult { Count = 1 }),
+                    Task.FromResult(new Metadata()),
+                    () => Status.DefaultSuccess,
+                    () => new Metadata(),
+                    () => { });
+            });
 
         _service = CreateService();
 
@@ -1459,6 +1476,13 @@ public class TogglyMetricsServiceTests : IDisposable
         var debugInfo = _service.GetDebugInfo();
         debugInfo.LastError.Should().NotBeNullOrEmpty();
         debugInfo.LastErrorTime.Should().NotBeNull();
+
+        // Second send should still carry the measurement restored after the failed RPC.
+        var retryTask = (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!;
+        await retryTask;
+
+        retryRequest.Should().NotBeNull();
+        retryRequest!.Stats.Should().Contain(s => s.Metric == "error-test");
     }
 
     [Fact]
@@ -1673,42 +1697,218 @@ public class TogglyMetricsServiceTests : IDisposable
     [Fact]
     public async Task SendMetrics_ConcurrentCalls_OnlyOneExecutes()
     {
-        // Arrange
-        var callCount = 0;
-        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
-            .Returns((List<string>?)null);
-
+        var response = new TaskCompletionSource<MetricResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var packets = new List<MetricStat>();
+        // Every attempted send has data, so a missing semaphore cannot pass by draining an empty queue.
+        _metricsRegistryServiceMock.Setup(x => x.GetMeasurementValuesAsync())
+            .ReturnsAsync(new Dictionary<string, double> { ["concurrent-test"] = 1 });
         _metricsClientMock.Setup(x => x.SendMetricsAsync(
             It.IsAny<MetricStat>(),
             It.IsAny<Metadata>(),
             It.IsAny<DateTime?>(),
             It.IsAny<CancellationToken>()))
-            .Callback(() => Interlocked.Increment(ref callCount))
+            .Callback<MetricStat, Metadata, DateTime?, CancellationToken>((packet, _, _, _) =>
+            {
+                packets.Add(packet);
+                entered.TrySetResult();
+            })
             .Returns(() => new AsyncUnaryCall<MetricResult>(
-                Task.Delay(100).ContinueWith(_ => new MetricResult { Count = 1 }),
+                response.Task,
                 Task.FromResult(new Metadata()),
                 () => Status.DefaultSuccess,
                 () => new Metadata(),
                 () => { }));
-
         _service = CreateService();
+        var firstSend = SendPendingMetricsAsync();
+        var competingSends = Array.Empty<Task>();
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            firstSend.IsCompleted.Should().BeFalse();
+            competingSends = Enumerable.Range(0, 5).Select(_ => SendPendingMetricsAsync()).ToArray();
 
-        // Record metrics
-        await _service.MeasureAsync("concurrent-test", 1.0);
+            packets.Should().ContainSingle();
+            await Task.WhenAll(competingSends).WaitAsync(TimeSpan.FromSeconds(5));
+            firstSend.IsCompleted.Should().BeFalse();
+            _service.GetDebugInfo().LastSend.Should().BeNull();
+            packets[0].Stats.Should().ContainSingle().Which.VariantValues["enabled"].Should().Be(1);
+        }
+        finally
+        {
+            response.TrySetResult(new MetricResult { Count = 1 });
+            await Task.WhenAll(competingSends.Append(firstSend)).WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        _service.GetDebugInfo().LastSend.Should().NotBeNull();
+        await SendPendingMetricsAsync();
+        packets.Should().HaveCount(2, "completion must release the semaphore for the next send");
+    }
 
-        // Use reflection to invoke SendMetrics
-        var sendMetricsMethod = typeof(TogglyMetricsService)
-            .GetMethod("SendMetrics", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
-                new[] { typeof(bool) });
+    [Fact]
+    public async Task SendMetrics_DrainsMixedPacketsWithFeatureVariantsAndIdentity()
+    {
+        _featureExperimentProviderMock.Setup(x => x.GetFeaturesForMetric(It.IsAny<string>()))
+            .Returns(new List<string> { "experiment" });
+        _featureManagerMock.SetupSequence(x => x.IsEnabledAsync("experiment"))
+            .ReturnsAsync(true).ReturnsAsync(false)
+            .ReturnsAsync(true).ReturnsAsync(false)
+            .ReturnsAsync(false);
+        var registeredTime = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        _metricsRegistryServiceMock.SetupSequence(x => x.GetObservationValuesAsync())
+            .ReturnsAsync(new Dictionary<string, (DateTime, double)> { ["latency"] = (registeredTime, 0) })
+            .ReturnsAsync(new Dictionary<string, (DateTime, double)>());
+        var packets = CapturePackets();
+        _service = CreateService(CreateSettings(instanceName: "metrics-host"));
 
-        // Act - Call SendMetrics concurrently
-        var tasks = Enumerable.Range(0, 5)
-            .Select(_ => (Task)sendMetricsMethod!.Invoke(_service, new object[] { false })!);
+        await _service.MeasureAsync("revenue", 10);
+        await _service.MeasureAsync("revenue", 20);
+        await _service.IncrementCounterAsync("orders", 2);
+        await _service.IncrementCounterAsync("orders", 3);
+        await _service.ObserveAsync("latency", -5);
+        var beforeSend = DateTime.UtcNow;
+        await SendPendingMetricsAsync();
+        await SendPendingMetricsAsync();
 
-        await Task.WhenAll(tasks);
+        var packet = packets.Should().ContainSingle().Which;
+        packet.AppKey.Should().Be("test-app-key");
+        packet.Environment.Should().Be("test-env");
+        packet.InstanceName.Should().Be("metrics-host");
+        packet.Time.ToDateTime().Should().BeOnOrAfter(beforeSend).And.BeOnOrBefore(DateTime.UtcNow);
+        packet.Stats.Should().HaveCount(2);
+        packet.Stats.Single(s => s.Feature == "").VariantValues.Should().BeEquivalentTo(
+            new Dictionary<string, double> { ["enabled"] = 30 });
+        packet.Stats.Single(s => s.Feature == "experiment").VariantValues.Should().BeEquivalentTo(
+            new Dictionary<string, double> { ["enabled"] = 10, ["disabled"] = 20 });
+        packet.Stats.Should().OnlyContain(s => s.Metric == "revenue");
+        packet.Counters.Should().HaveCount(2);
+        packet.Counters.Single(s => s.Feature == "").VariantValues.Should().BeEquivalentTo(
+            new Dictionary<string, double> { ["enabled"] = 5 });
+        packet.Counters.Single(s => s.Feature == "experiment").VariantValues.Should().BeEquivalentTo(
+            new Dictionary<string, double> { ["enabled"] = 2, ["disabled"] = 3 });
+        packet.Counters.Should().OnlyContain(s => s.Metric == "orders");
+        packet.Observations.Should().HaveCount(3);
+        packet.Observations.Single(s => s.Feature == "" && s.Time.ToDateTime() != registeredTime)
+            .VariantValues.Should().BeEquivalentTo(
+            new Dictionary<string, double> { ["enabled"] = -5 });
+        packet.Observations.Single(s => s.Feature == "" && s.Time.ToDateTime() == registeredTime)
+            .VariantValues.Should().BeEquivalentTo(
+            new Dictionary<string, double> { ["enabled"] = 0 });
+        packet.Observations.Single(s => s.Feature == "experiment").VariantValues.Should().BeEquivalentTo(
+            new Dictionary<string, double> { ["disabled"] = -5 });
+        packet.Observations.Should().OnlyContain(s => s.Metric == "latency");
+        packet.Observations.Select(s => s.Time).Distinct().Should().HaveCount(2);
+        packet.Observations.Single(s => s.Feature == "experiment").Time.Should().Be(
+            packet.Observations.Single(s => s.Feature == "" && s.Time.ToDateTime() != registeredTime).Time);
+    }
 
-        // Assert - Due to semaphore, only one or two should execute
-        callCount.Should().BeLessOrEqualTo(2);
+    [Fact]
+    public async Task SendMetrics_NonpositiveMeasurementsAndCounters_AreDiscardedDuringDrain()
+    {
+        var packets = CapturePackets();
+        _service = CreateService();
+        await _service.MeasureAsync("zero-measurement", 0);
+        await _service.MeasureAsync("negative-measurement", -2);
+        await _service.IncrementCounterAsync("zero-counter", 0);
+        await _service.IncrementCounterAsync("negative-counter", -3);
+
+        await SendPendingMetricsAsync();
+        await SendPendingMetricsAsync();
+
+        var packet = packets.Should().ContainSingle().Which;
+        packet.Stats.Should().BeEmpty();
+        packet.Counters.Should().BeEmpty();
+        packet.Observations.Should().BeEmpty();
+        _service.GetDebugInfo().LastSend.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task SendMetrics_FailedRpc_RestoresDrainedPacketAndReleasesSendLock()
+    {
+        var packets = CapturePackets(new RpcException(new Status(StatusCode.Unavailable, "metrics unavailable")));
+        _service = CreateService();
+        await _service.MeasureAsync("lost-measurement", 4);
+        await _service.IncrementCounterAsync("lost-counter", 5);
+        await _service.ObserveAsync("lost-observation", 6);
+
+        await SendPendingMetricsAsync();
+        var error = _service.GetDebugInfo();
+        error.LastError.Should().Contain("metrics unavailable");
+        error.LastErrorTime.Should().NotBeNull();
+        error.LastSend.Should().BeNull();
+        packets.Should().ContainSingle();
+
+        // Restored batch is retried on the next send.
+        await SendPendingMetricsAsync();
+        packets.Should().HaveCount(2);
+        packets[1].Stats.Should().ContainSingle().Which.VariantValues["enabled"].Should().Be(4);
+        packets[1].Counters.Should().ContainSingle().Which.VariantValues["enabled"].Should().Be(5);
+        packets[1].Observations.Should().ContainSingle().Which.VariantValues["enabled"].Should().Be(6);
+
+        await _service.MeasureAsync("new-measurement", 7);
+        await SendPendingMetricsAsync();
+        packets.Should().HaveCount(3);
+        packets[2].Stats.Should().ContainSingle().Which.Metric.Should().Be("new-measurement");
+        packets[2].Counters.Should().BeEmpty();
+        packets[2].Observations.Should().BeEmpty();
+        var success = _service.GetDebugInfo();
+        success.LastSend.Should().NotBeNull();
+        success.LastError.Should().Be(error.LastError);
+        success.LastErrorTime.Should().Be(error.LastErrorTime);
+    }
+
+    [Fact]
+    public async Task SendMetrics_InvalidObservationTime_SkipsPoisonObservationAndSendsDrainedPacket()
+    {
+        _metricsRegistryServiceMock.SetupSequence(x => x.GetObservationValuesAsync())
+            .ReturnsAsync(new Dictionary<string, (DateTime, double)>
+            {
+                ["invalid-observation"] = (new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Unspecified), 6)
+            })
+            .ReturnsAsync(new Dictionary<string, (DateTime, double)>());
+        var packets = CapturePackets();
+        _service = CreateService();
+        await _service.MeasureAsync("drained-measurement", 4);
+        await _service.IncrementCounterAsync("drained-counter", 5);
+
+        await SendPendingMetricsAsync();
+        var packet = packets.Should().ContainSingle().Which;
+        packet.Stats.Should().ContainSingle().Which.Metric.Should().Be("drained-measurement");
+        packet.Counters.Should().ContainSingle().Which.Metric.Should().Be("drained-counter");
+        packet.Observations.Should().BeEmpty();
+        _service.GetDebugInfo().LastSend.Should().NotBeNull();
+        _service.GetDebugInfo().LastError.Should().BeNullOrEmpty();
+
+        await _service.MeasureAsync("next-measurement", 7);
+        await SendPendingMetricsAsync();
+        packets.Should().HaveCount(2);
+        packets[1].Stats.Should().ContainSingle().Which.Metric.Should().Be("next-measurement");
+        packets[1].Counters.Should().BeEmpty();
+        packets[1].Observations.Should().BeEmpty();
+    }
+
+    private Task SendPendingMetricsAsync()
+    {
+        var method = typeof(TogglyMetricsService).GetMethod("SendMetrics",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+            new[] { typeof(bool) });
+        return (Task)method!.Invoke(_service, new object[] { false })!;
+    }
+
+    private List<MetricStat> CapturePackets(Exception? firstFailure = null)
+    {
+        var packets = new List<MetricStat>();
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(), It.IsAny<Metadata>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .Returns<MetricStat, Metadata, DateTime?, CancellationToken>((packet, _, _, _) =>
+            {
+                packets.Add(packet);
+                var result = packets.Count == 1 && firstFailure != null
+                    ? Task.FromException<MetricResult>(firstFailure)
+                    : Task.FromResult(new MetricResult { Count = packet.Stats.Count });
+                return new AsyncUnaryCall<MetricResult>(result, Task.FromResult(new Metadata()),
+                    () => Status.DefaultSuccess, () => new Metadata(), () => { });
+            });
+        return packets;
     }
 
     [Fact]

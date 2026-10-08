@@ -66,3 +66,7 @@ export {
   requireFeature,
 } from './action';
 export type { FeatureGatedActionOptions, TogglyActionContext } from './action';
+export {
+  createSegmentMembershipClient,
+  SegmentMembershipError,
+} from '@ops-ai/toggly-segments';

@@ -444,6 +444,12 @@ try {
 
   await run('npm', ['run', 'build']);
   await runAsync(process.execPath, [join(packageDirectory, 'provider-ownership.mjs')]);
+  const segmentsDirectory = resolve(sdkDirectory, '../toggly-segments');
+  await run('npm', ['run', 'build'], { cwd: segmentsDirectory });
+  const segmentsPacked = JSON.parse(
+    await run('npm', ['pack', '--json', '--pack-destination', temporary], { cwd: segmentsDirectory }),
+  )[0];
+  const segmentsTarball = join(temporary, segmentsPacked.filename);
   const packed = JSON.parse(await run('npm', ['pack', '--json', '--pack-destination', temporary]))[0];
   const tarball = join(temporary, packed.filename);
   console.log('PACKED_GATSBY_ARTIFACT', JSON.stringify({ version: packed.version, integrity: packed.integrity, shasum: packed.shasum }));
@@ -462,6 +468,7 @@ try {
       '@types/react@18.3.28',
       'playwright@1.58.2',
       ...(reporterTarball ? [reporterTarball] : []),
+      segmentsTarball,
       tarball,
     ],
     { cwd: host },
