@@ -204,7 +204,6 @@ jobs:
             -Dsonar.sources=${{ env.SDK_ROOT }}/${{ env.PKG }}/src
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs,**/tests/**/*.cjs,**/*.config.js,**/*.config.ts,**/fixtures/**
             -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs,**/tests/**/*.cjs,**/*.config.js,**/*.config.ts,**/fixtures/**
-            -Dsonar.cpd.exclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs,**/router.tsx
             -Dsonar.javascript.lcov.reportPaths=coverage/all-lcov.info
             -Dsonar.tests=${{ env.SDK_ROOT }}/${{ env.PKG }}/tests
             -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs
@@ -230,7 +229,6 @@ jobs:
             -Dsonar.sources=${{ env.SDK_ROOT }}/${{ env.PKG }}/src
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs,**/tests/**/*.cjs,**/*.config.js,**/*.config.ts,**/fixtures/**
             -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs,**/tests/**/*.cjs,**/*.config.js,**/*.config.ts,**/fixtures/**
-            -Dsonar.cpd.exclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs,**/router.tsx
             -Dsonar.javascript.lcov.reportPaths=coverage/all-lcov.info
             -Dsonar.tests=${{ env.SDK_ROOT }}/${{ env.PKG }}/tests
             -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs
