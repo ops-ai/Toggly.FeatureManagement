@@ -9,7 +9,7 @@
 
 ### Changed
 
-- Widen `@ops-ai/toggly-node-core` dependency to `^0.11.0` so apps can use 0.11.x without npm overrides [OPS-1756].
+- Widen `@ops-ai/toggly-node-core` dependency to `^0.11.0 || ^0.12.0` so apps can use 0.11.x or 0.12.x without npm overrides [OPS-1756].
 - Drop `createSegmentMembershipClient` re-export from `./server` (requires unpublished node-core 0.12 APIs); import it from `@ops-ai/toggly-node-core` when on 0.12+ [OPS-1756].
 
 ## 0.5.0 — 2026-10-04
