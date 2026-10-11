@@ -52,7 +52,7 @@ function RouterTogglyProviderInner({
   serverContext,
   config,
   ...props
-}: TogglyProviderProps & { serverContext?: ServerFeatureContext }): ReactElement {
+}: Readonly<TogglyProviderProps & { serverContext?: ServerFeatureContext }>): ReactElement {
   const mergedConfig = buildMergedConfig(config, serverContext);
 
   return (
@@ -68,7 +68,7 @@ function RouterTogglyProviderWithData({
   fallbackContext,
   config,
   ...props
-}: RouterTogglyProviderProps & { data: Record<string, unknown> | undefined }): ReactElement {
+}: Readonly<RouterTogglyProviderProps & { data: Record<string, unknown> | undefined }>): ReactElement {
   const serverContext = resolveServerContext(data, fallbackContext);
 
   return (
@@ -84,7 +84,7 @@ function RouterTogglyProviderFromRoute({
   fallbackContext,
   config,
   ...props
-}: RouterTogglyProviderProps & { routeId: string }): ReactElement {
+}: Readonly<RouterTogglyProviderProps & { routeId: string }>): ReactElement {
   const routeData = useRouteLoaderData(routeId) as Record<string, unknown> | undefined;
 
   return (
@@ -104,7 +104,7 @@ function RouterTogglyProviderFromLoader({
   fallbackContext,
   config,
   ...props
-}: RouterTogglyProviderProps): ReactElement {
+}: Readonly<RouterTogglyProviderProps>): ReactElement {
   const loaderData = useLoaderData() as Record<string, unknown> | undefined;
 
   return (
@@ -124,7 +124,7 @@ function RouterTogglyProviderStatic({
   fallbackContext,
   config,
   ...props
-}: RouterTogglyProviderProps): ReactElement {
+}: Readonly<RouterTogglyProviderProps>): ReactElement {
   const serverContext = fallbackContext ?? getWindowTogglyData();
 
   return (
@@ -153,7 +153,7 @@ export function RouterTogglyProvider({
   fallbackContext,
   config,
   ...props
-}: RouterTogglyProviderProps): ReactElement {
+}: Readonly<RouterTogglyProviderProps>): ReactElement {
   const inRouter = useInRouterContext();
 
   if (routeId && inRouter) {
