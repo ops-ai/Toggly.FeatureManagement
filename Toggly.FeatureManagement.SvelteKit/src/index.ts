@@ -36,7 +36,8 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
           onDiagnostic: options.onTelemetryDiagnostic,
         })
       : undefined;
-  const detachTelemetry = telemetry ? attachBrowserLifecycle(telemetry) : undefined;
+  const detachTelemetry =
+    telemetry && !options.storage ? attachBrowserLifecycle(telemetry) : undefined;
   const acceptSnapshot = (value: TogglySnapshot): TogglySnapshot => {
     const copy = structuredClone(value);
     copy.context.instanceId = copy.context.instanceId?.trim() || undefined;
@@ -195,7 +196,7 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
       if (disposed) return;
       disposed = true;
       detachTelemetry?.();
-      telemetry?.dispose();
+      telemetry?.dispose({ flush: false });
       generation++;
       stop?.();
       stop = undefined;

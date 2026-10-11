@@ -229,6 +229,51 @@ describe('verified persistent storage', () => {
     }
   });
 
+  it('still attempts network after cache restore when live invalidation retires the refresh generation', async () => {
+    class Socket {
+      static current: Socket;
+      onmessage: any;
+      onclose: any;
+      close() {}
+      constructor() {
+        Socket.current = this;
+      }
+    }
+    vi.stubGlobal('WebSocket', Socket);
+    const storage = memoryStorage();
+    const network: string[] = [];
+    const fetcher: typeof fetch = async (input) => {
+      const url = String(input);
+      network.push(url);
+      if (url.includes('.well-known')) return new Response(JSON.stringify(jwks));
+      if (url.includes('/evaluated-signed/')) return new Response(envelope({ on: true }));
+      throw new Error('offline');
+    };
+    const seed = createClient({
+      appKey: 'front',
+      identity: 'alice',
+      storage,
+      fetch: fetcher,
+      refreshInterval: 0,
+    });
+    await seed.refresh();
+    seed.dispose();
+    network.length = 0;
+    const client = createClient({
+      appKey: 'front',
+      identity: 'alice',
+      storage,
+      fetch: fetcher,
+      refreshInterval: 0,
+    });
+    client.start();
+    Socket.current.onmessage({ data: '{"type":"flags-updated"}' });
+    await client.refresh();
+    expect(client.flags()).toEqual({ on: true });
+    expect(network.some((url) => url.includes('/evaluated-signed/'))).toBe(true);
+    client.dispose();
+  });
+
   it('restores into a fresh client with every network request disabled', async () => {
     const storage = memoryStorage();
     const requests: string[] = [];
