@@ -383,6 +383,28 @@ describe('RouterTogglyProvider', () => {
       JSON.stringify({ flags: { ssr: true }, isReady: true }),
     );
   });
+
+  it('should hydrate from window data outside a data router when fallback is absent', () => {
+    mockUseInRouterContext.mockReturnValue(false);
+    const windowContext: ServerFeatureContext = {
+      flags: { window: true },
+      fetchedAt: Date.now(),
+    };
+    (global.window as unknown as { __TOGGLY_DATA__: ServerFeatureContext }).__TOGGLY_DATA__ =
+      windowContext;
+
+    render(
+      <RouterTogglyProvider>
+        <ContextProbe />
+      </RouterTogglyProvider>,
+    );
+
+    expect(mockUseLoaderData).not.toHaveBeenCalled();
+    expect(mockUseRouteLoaderData).not.toHaveBeenCalled();
+    expect(screen.getByTestId('context-probe')).toHaveTextContent(
+      JSON.stringify({ flags: { window: true }, isReady: true }),
+    );
+  });
 });
 
 describe('useTogglyLoaderData', () => {
