@@ -345,6 +345,25 @@ describe('RouterTogglyProvider', () => {
     expect(mockUseRouteLoaderData).not.toHaveBeenCalled();
   });
 
+  it('should ignore routeId outside a data router and use static hydration', () => {
+    mockUseInRouterContext.mockReturnValue(false);
+    const fallbackContext: ServerFeatureContext = {
+      flags: { static: true },
+      fetchedAt: Date.now(),
+    };
+
+    render(
+      <RouterTogglyProvider routeId="root" fallbackContext={fallbackContext}>
+        <ContextProbe />
+      </RouterTogglyProvider>,
+    );
+
+    expect(mockUseRouteLoaderData).not.toHaveBeenCalled();
+    expect(screen.getByTestId('context-probe')).toHaveTextContent(
+      JSON.stringify({ flags: { static: true }, isReady: true }),
+    );
+  });
+
   it('should hydrate from fallbackContext outside a data router (SSR)', () => {
     mockUseInRouterContext.mockReturnValue(false);
     const fallbackContext: ServerFeatureContext = {

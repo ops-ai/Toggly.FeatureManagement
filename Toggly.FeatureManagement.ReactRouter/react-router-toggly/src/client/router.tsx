@@ -132,7 +132,7 @@ export function RouterTogglyProvider({
 }: RouterTogglyProviderProps): ReactElement {
   const inRouter = useInRouterContext();
 
-  if (routeId) {
+  if (routeId && inRouter) {
     return (
       <RouterTogglyProviderFromRoute routeId={routeId} fallbackContext={fallbackContext} config={config} {...props}>
         {children}
