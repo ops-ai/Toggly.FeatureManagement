@@ -3,16 +3,16 @@
  */
 
 import { useLoaderData, useRouteLoaderData, useInRouterContext } from 'react-router';
-
-// SerializeFrom was removed in React Router v2 — define a compatible alias
-type SerializeFrom<T> = T;
+import type { ReactElement } from 'react';
 import {
   TOGGLY_LOADER_KEY,
 } from '../core';
-import type { ReactElement } from 'react';
 import type { ServerFeatureContext, TogglyConfig } from '../core';
 import { serializeJsonForInlineScript } from '@ops-ai/toggly-hooks-types';
 import { TogglyProvider, type TogglyProviderProps } from './context';
+
+// SerializeFrom was removed in React Router v2 — define a compatible alias
+type SerializeFrom<T> = T;
 
 /**
  * Props for RouterTogglyProvider
@@ -62,6 +62,22 @@ function RouterTogglyProviderInner({
   );
 }
 
+function RouterTogglyProviderWithData({
+  children,
+  data,
+  fallbackContext,
+  config,
+  ...props
+}: RouterTogglyProviderProps & { data: Record<string, unknown> | undefined }): ReactElement {
+  const serverContext = resolveServerContext(data, fallbackContext);
+
+  return (
+    <RouterTogglyProviderInner serverContext={serverContext} config={config} {...props}>
+      {children}
+    </RouterTogglyProviderInner>
+  );
+}
+
 function RouterTogglyProviderFromRoute({
   children,
   routeId,
@@ -70,12 +86,16 @@ function RouterTogglyProviderFromRoute({
   ...props
 }: RouterTogglyProviderProps & { routeId: string }): ReactElement {
   const routeData = useRouteLoaderData(routeId) as Record<string, unknown> | undefined;
-  const serverContext = resolveServerContext(routeData, fallbackContext);
 
   return (
-    <RouterTogglyProviderInner serverContext={serverContext} config={config} {...props}>
+    <RouterTogglyProviderWithData
+      data={routeData}
+      fallbackContext={fallbackContext}
+      config={config}
+      {...props}
+    >
       {children}
-    </RouterTogglyProviderInner>
+    </RouterTogglyProviderWithData>
   );
 }
 
@@ -86,12 +106,16 @@ function RouterTogglyProviderFromLoader({
   ...props
 }: RouterTogglyProviderProps): ReactElement {
   const loaderData = useLoaderData() as Record<string, unknown> | undefined;
-  const serverContext = resolveServerContext(loaderData, fallbackContext);
 
   return (
-    <RouterTogglyProviderInner serverContext={serverContext} config={config} {...props}>
+    <RouterTogglyProviderWithData
+      data={loaderData}
+      fallbackContext={fallbackContext}
+      config={config}
+      {...props}
+    >
       {children}
-    </RouterTogglyProviderInner>
+    </RouterTogglyProviderWithData>
   );
 }
 
