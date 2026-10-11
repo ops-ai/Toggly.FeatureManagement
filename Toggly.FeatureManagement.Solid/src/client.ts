@@ -523,7 +523,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
       stopSocket();
       listeners.clear();
       detachTelemetry?.();
-      reporter?.dispose({ flush: false });
+      reporter?.dispose();
     },
   };
 }

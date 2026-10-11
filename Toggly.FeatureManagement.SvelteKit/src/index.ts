@@ -196,7 +196,7 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
       if (disposed) return;
       disposed = true;
       detachTelemetry?.();
-      telemetry?.dispose({ flush: false });
+      telemetry?.dispose();
       generation++;
       stop?.();
       stop = undefined;
