@@ -116,6 +116,18 @@ test('cross-workspace and peer deps accept caret ranges but reject exact pins', 
   }
 });
 
+test('cross-workspace deps accept a union of two caret ranges', () => {
+  assert.deepEqual(
+    check({ dependencies: { '@ops-ai/toggly-hooks-types': '^0.11.0 || ^0.12.0' } }),
+    [],
+  );
+
+  for (const specifier of ['^0.11.0 || 0.12.0', '^0.11.0||^0.12.0', '^0.11.0 || ^0.12.0 || ^0.13.0']) {
+    const errors = check({ dependencies: { '@ops-ai/toggly-hooks-types': specifier } });
+    assert.equal(errors.length, 1, `expected ${specifier} to be rejected`);
+  }
+});
+
 test('the caret range must match end to end', () => {
   // An unanchored pattern would accept trailing junk, or a second comparator
   // that pins the dependency right back down.
