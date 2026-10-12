@@ -3,6 +3,7 @@ export {
   initToggly,
   getToggly,
   recordUsage,
+  use,
   recordView,
   incrementCounter,
   setGauge,

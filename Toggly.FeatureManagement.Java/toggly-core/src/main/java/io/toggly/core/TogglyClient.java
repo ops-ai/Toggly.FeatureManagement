@@ -17,6 +17,7 @@ import io.toggly.core.model.VariantResult;
 import io.toggly.core.snapshot.FeatureSnapshot;
 import io.toggly.core.snapshot.HttpSnapshotProvider;
 import io.toggly.core.snapshot.SnapshotProvider;
+import io.toggly.core.telemetry.FeatureUsageScope;
 import io.toggly.core.telemetry.MetricsFeatureOptions;
 import io.toggly.core.telemetry.TelemetryRuntime;
 import io.toggly.core.util.VariantValueCodec;
@@ -669,6 +670,55 @@ public final class TogglyClient implements AutoCloseable {
             telemetry.recordUsage(featureKey, resolvedIdentity, variant);
         } else {
             telemetry.recordUsage(featureKey, resolvedIdentity);
+        }
+    }
+
+    /**
+     * Begin a usage scope (attempt recorded immediately; duration/errors on close).
+     * Does not evaluate the feature flag.
+     */
+    public FeatureUsageScope beginUsage(String featureKey, String identity, String variant) {
+        if (featureKey == null || featureKey.isEmpty() || telemetry == null) {
+            return FeatureUsageScope.noop();
+        }
+        String resolvedIdentity = identity != null ? identity : resolveIdentity();
+        return telemetry.beginUsage(resolvedIdentity, variant, featureKey);
+    }
+
+    /**
+     * Begin a usage scope for one feature (default variant {@code enabled}).
+     */
+    public FeatureUsageScope beginUsage(String featureKey) {
+        return beginUsage(featureKey, null, "enabled");
+    }
+
+    /**
+     * Run an action inside a usage scope. Failures propagate after counting.
+     */
+    public void use(String featureKey, Runnable action) {
+        use(featureKey, scope -> {
+            action.run();
+            return null;
+        });
+    }
+
+    /**
+     * Run an action with an explicit scope (for {@link FeatureUsageScope#fail()}).
+     */
+    public <T> T use(String featureKey, java.util.function.Function<FeatureUsageScope, T> action) {
+        if (action == null) {
+            throw new IllegalArgumentException("action");
+        }
+        if (featureKey == null || featureKey.isEmpty() || telemetry == null) {
+            return action.apply(FeatureUsageScope.noop());
+        }
+        try (FeatureUsageScope scope = beginUsage(featureKey)) {
+            try {
+                return action.apply(scope);
+            } catch (RuntimeException e) {
+                scope.fail();
+                throw e;
+            }
         }
     }
 

@@ -29,6 +29,11 @@ export type EvalContextArg = string | EvalContextOverrides
 
 export interface FrontendTelemetry {
   recordUsage(featureKey: string, variant?: string): void
+  use: <T>(
+    featureKey: string,
+    fn: (scope: import('@ops-ai/toggly-client-telemetry').FeatureUsageScope) => Promise<T>,
+    variant?: string,
+  ) => Promise<T>
   recordView(featureKey: string, variant?: string): void
   incrementCounter(metricKey: string, value?: number): void
   setGauge(metricKey: string, value: number): void
@@ -417,6 +422,14 @@ export interface TogglyClient {
 
   /** Record usage. Browser forwarding ignores identity and uses only the third variant. */
   recordUsage(featureKey: string, identity?: string, variant?: string): void
+
+  /** Timed usage scope; browser path ignores identity on the wire. */
+  use<T>(
+    featureKey: string,
+    fn: (scope: import('@ops-ai/toggly-client-telemetry').FeatureUsageScope) => Promise<T>,
+    identity?: string,
+    variant?: string,
+  ): Promise<T>
 
   /** Record a view. Browser forwarding ignores identity and uses only the third variant. */
   recordView(featureKey: string, identity?: string, variant?: string): void

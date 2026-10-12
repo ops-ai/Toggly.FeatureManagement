@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.0
+
+2026-10-11
+
+### Added
+- Feature usage scopes via `Toggly.with_usage/4`, `Toggly.use/4`, and flush fields
+  `errorCount`, `durationSumMs`, and `errorDurationSumMs` on variant stats [OPS-1758].
+
 ## 0.6.0
 
 2026-10-04

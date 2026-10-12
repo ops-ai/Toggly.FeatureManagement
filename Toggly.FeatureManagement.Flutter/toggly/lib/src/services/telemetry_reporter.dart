@@ -139,6 +139,40 @@ class TelemetryReporter {
   void recordView(String featureKey, [String variant = 'enabled']) =>
       _recordFeature(featureKey, variant, 2);
 
+  /// Runs [action] inside a usage scope (used count, duration, errors).
+  Future<T> use<T>(
+    String featureKey,
+    Future<T> Function(void Function() fail) action, [
+    String variant = 'enabled',
+  ]) async {
+    recordUsage(featureKey, variant);
+    final started = _clock();
+    var failed = false;
+    void fail() => failed = true;
+    try {
+      final result = await action(fail);
+      final durationMs =
+          max(0, _clock().difference(started).inMilliseconds);
+      if (failed) {
+        _recordFeature(featureKey, variant, 3, null, 1);
+        if (durationMs > 0) {
+          _recordFeature(featureKey, variant, 5, null, durationMs);
+        }
+      } else if (durationMs > 0) {
+        _recordFeature(featureKey, variant, 4, null, durationMs);
+      }
+      return result;
+    } catch (error, stack) {
+      final durationMs =
+          max(0, _clock().difference(started).inMilliseconds);
+      _recordFeature(featureKey, variant, 3, null, 1);
+      if (durationMs > 0) {
+        _recordFeature(featureKey, variant, 5, null, durationMs);
+      }
+      Error.throwWithStackTrace(error, stack);
+    }
+  }
+
   void incrementCounter(String metricKey, [int value = 1]) =>
       _recordMetric(metricKey, value, false);
 
@@ -146,7 +180,7 @@ class TelemetryReporter {
       _recordMetric(metricKey, value, true);
 
   void _recordFeature(String key, String variant, int field,
-      [TelemetryContext? context]) {
+      [TelemetryContext? context, int amount = 1]) {
     if (key.trim().isEmpty) {
       _diagnostic('invalid_feature');
       return;
@@ -156,7 +190,7 @@ class TelemetryReporter {
       _diagnostic('invalid_variant');
       return;
     }
-    _accept(_TelemetryEntry.feature(key, variant, field), context);
+    _accept(_TelemetryEntry.feature(key, variant, field, amount), context);
   }
 
   void _recordMetric(String key, num value, bool gauge) {
@@ -546,7 +580,10 @@ class _TelemetryEnvelope {
       if (variants != null && !hadVariant && variants.length >= 16) {
         return false;
       }
-      final counts = variants?[entry.variant] ?? [0, 0, 0];
+      final counts = List<int>.from(variants?[entry.variant] ?? [0, 0, 0]);
+      while (counts.length <= entry.field!) {
+        counts.add(0);
+      }
       if (counts[entry.field!] >= 1000000) return false;
       final next = List<int>.from(counts);
       next[entry.field!] += entry.value as int;

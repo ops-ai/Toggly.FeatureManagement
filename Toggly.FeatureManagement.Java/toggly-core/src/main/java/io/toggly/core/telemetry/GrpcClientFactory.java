@@ -207,6 +207,9 @@ public final class GrpcClientFactory {
                                 .setRequestCount(vs.getRequestCount())
                                 .setUsedCount(vs.getUsedCount())
                                 .setViewedCount(vs.getViewedCount())
+                                .setErrorCount(vs.getErrorCount())
+                                .setDurationSumMs(vs.getDurationSumMs())
+                                .setErrorDurationSumMs(vs.getErrorDurationSumMs())
                                 .build());
             }
             builder.addStats(sm);

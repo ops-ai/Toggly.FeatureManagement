@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.0
+
+2026-10-11
+
+### Added
+- `Client.Use` and usage-scope batching: `errorCount`, `durationSumMs`, and
+  `errorDurationSumMs` on `VariantStats`. Cancellation via `context.Canceled`
+  records attempt only [OPS-1758].
+
 ## 0.12.0
 
 2026-10-04

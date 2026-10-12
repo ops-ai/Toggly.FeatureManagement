@@ -1,9 +1,19 @@
-import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
+import {
+  createTelemetryReporter,
+  runFeatureUsageScope,
+  type FeatureUsageScope,
+  type TelemetryReporter,
+} from '@ops-ai/toggly-client-telemetry';
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
 import type { TogglyConfig } from '../core/types';
 
 export interface FrontendTelemetry {
   recordUsage(featureKey: string, variant?: string): void;
+  use: <T>(
+    featureKey: string,
+    fn: (scope: FeatureUsageScope) => Promise<T>,
+    variant?: string,
+  ) => Promise<T>;
   recordView(featureKey: string, variant?: string): void;
   incrementCounter(metricKey: string, value?: number): void;
   setGauge(metricKey: string, value: number): void;
@@ -100,6 +110,15 @@ export function createBrowserTelemetry(config: TogglyConfig) {
   }
   const api: FrontendTelemetry = {
     recordUsage: (key, variant = 'enabled') => feature(key, variant, 1),
+    use: (key, fn, variant = 'enabled') => {
+      if (!usage) {
+        return runFeatureUsageScope(
+          { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
+          fn,
+        );
+      }
+      return getReporter().use(key, fn, variant);
+    },
     recordView: (key, variant = 'enabled') => feature(key, variant, 2),
     incrementCounter: (key, value = 1) => event({partition, context, key, kind: 'counter', values: [value]}),
     setGauge: (key, value) => event({partition, context, key, kind: 'gauge', values: [value]}),

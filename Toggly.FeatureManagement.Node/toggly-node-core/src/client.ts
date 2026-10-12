@@ -1010,6 +1010,58 @@ export function createTogglyClient(
     telemetry?.recordView(featureKey, identity ?? config.identity, variant)
   }
 
+  function recordUsageError(
+    featureKey: string,
+    identity?: string,
+    variant?: string,
+    count?: number,
+  ): void {
+    telemetry?.recordUsageError(featureKey, identity ?? config.identity, variant, count)
+  }
+
+  function recordUsageDuration(
+    featureKey: string,
+    durationMs: number,
+    identity?: string,
+    variant?: string,
+    failed?: boolean,
+  ): void {
+    telemetry?.recordUsageDuration(
+      featureKey,
+      durationMs,
+      identity ?? config.identity,
+      variant,
+      failed,
+    )
+  }
+
+  function recordUsageScopeOutcome(
+    featureKey: string,
+    outcome: { failed?: boolean; cancelled?: boolean; durationMs?: number },
+    identity?: string,
+    variant?: string,
+  ): void {
+    telemetry?.recordUsageScopeOutcome(
+      featureKey,
+      outcome,
+      identity ?? config.identity,
+      variant,
+    )
+  }
+
+  async function use<T>(
+    featureKey: string,
+    fn: (scope: import('./telemetry/usage-scope.js').FeatureUsageScope) => Promise<T>,
+    identity?: string,
+    variant?: string,
+  ): Promise<T> {
+    if (!telemetry) {
+      const scope = { fail() {} }
+      return fn(scope)
+    }
+    return telemetry.use(featureKey, fn, identity ?? config.identity, variant)
+  }
+
   function measure(
     metricKey: string,
     value: number,
@@ -1111,6 +1163,10 @@ export function createTogglyClient(
     removeHook,
     recordUsage,
     recordView,
+    recordUsageError,
+    recordUsageDuration,
+    recordUsageScopeOutcome,
+    use,
     measure,
     incrementCounter,
     observe,

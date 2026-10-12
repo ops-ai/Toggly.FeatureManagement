@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0 - 2026-10-11
+
+### Added
+- Feature usage scope APIs (`use`, `run_use`, `use_async`) with attempt,
+  `errorCount`, `durationSumMs`, and `errorDurationSumMs` on `VariantStats`
+  (wire fields 5–7). Cancellation via `asyncio.CancelledError` records attempt
+  only [OPS-1758].
+
 ## 1.2.0 - 2026-10-04
 
 ### Added

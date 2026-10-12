@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { UsageBatcher } from '../../src/telemetry/usage-batcher'
 import { hashIdentity } from '../../src/telemetry/grpc-clients'
+import { runFeatureUsageScope } from '../../src/telemetry/usage-scope'
 
 describe('UsageBatcher', () => {
   it('aggregates checks into variantStats enabled/disabled', () => {
@@ -131,6 +132,72 @@ describe('UsageBatcher', () => {
     expect(payload!.definitionCacheMisses).toBe(1)
     expect(payload!.stats[0].variantStats.enabled.checkCount).toBe(2)
     expect(payload!.stats[0].uniqueContextIdentifierEnabledCount).toBe(2)
+  })
+
+  it('aggregates usage scope error and duration metrics in variantStats', () => {
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
+
+    batcher.recordUsage('FeatureA')
+    batcher.recordUsageError('FeatureA')
+    batcher.recordUsageDuration('FeatureA', 100)
+    batcher.recordUsageDuration('FeatureA', 50, undefined, 'enabled', true)
+
+    const payload = batcher.buildAndReset()
+    const enabled = payload!.stats[0].variantStats.enabled
+    expect(enabled.usedCount).toBe(1)
+    expect(enabled.errorCount).toBe(1)
+    expect(enabled.durationSumMs).toBe(100)
+    expect(enabled.errorDurationSumMs).toBe(50)
+  })
+
+  it('runFeatureUsageScope records attempt, success duration, and failures', async () => {
+    vi.useFakeTimers()
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
+    const handlers = {
+      recordAttempt: () => batcher.recordUsage('FeatureA'),
+      recordSuccessDuration: (ms: number) => batcher.recordUsageDuration('FeatureA', ms),
+      recordFailure: (ms: number) => {
+        batcher.recordUsageError('FeatureA')
+        batcher.recordUsageDuration('FeatureA', ms, undefined, 'enabled', true)
+      },
+    }
+
+    await runFeatureUsageScope(handlers, async () => {
+      vi.advanceTimersByTime(12)
+    })
+
+    const abort = new DOMException('Aborted', 'AbortError')
+    await expect(
+      runFeatureUsageScope(handlers, async () => {
+        throw abort
+      }),
+    ).rejects.toBe(abort)
+
+    await expect(
+      runFeatureUsageScope(handlers, async (scope) => {
+        vi.advanceTimersByTime(8)
+        scope.fail()
+      }),
+    ).resolves.toBeUndefined()
+
+    await expect(
+      runFeatureUsageScope(handlers, async () => {
+        vi.advanceTimersByTime(5)
+        throw new Error('boom')
+      }),
+    ).rejects.toThrow('boom')
+
+    const payload = batcher.buildAndReset()!
+    const enabled = payload.stats[0].variantStats.enabled
+    expect(enabled.usedCount).toBe(4)
+    expect(enabled.errorCount).toBe(2)
+    expect(enabled.durationSumMs).toBe(12)
+    expect(enabled.errorDurationSumMs).toBeGreaterThan(0)
+    vi.useRealTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('restorePayload merges wire payload fields into pending state', () => {

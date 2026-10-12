@@ -2,6 +2,14 @@
 
 All notable changes to the Toggly iOS SDK are documented in this file.
 
+## 1.8.0
+
+2026-10-11
+
+### Added
+- Feature usage scopes via `TogglyService.use` and telemetry compact-array slots
+  for `errorCount`, `durationSumMs`, and `errorDurationSumMs` [OPS-1758].
+
 ## 1.7.1
 
 2026-09-27

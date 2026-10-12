@@ -293,6 +293,23 @@ public actor TogglyService {
         if !disposed { await telemetry?.recordUsage(featureKey, variant: variant, attribution: attribution) }
     }
 
+    /// Run `action` inside a usage scope (used count, duration, errors).
+    public func use<T>(
+        _ featureKey: String,
+        variant: String = "enabled",
+        action: @escaping (_ fail: @escaping () -> Void) async throws -> T
+    ) async rethrows -> T {
+        guard !disposed, let telemetry else {
+            return try await action {}
+        }
+        return try await telemetry.use(
+            featureKey,
+            variant: variant,
+            attribution: attribution,
+            action: action
+        )
+    }
+
     /// Record an explicit feature view without evaluating the feature again.
     public func recordView(_ featureKey: String, variant: String = "enabled") async {
         if !disposed { await telemetry?.recordView(featureKey, variant: variant, attribution: attribution) }

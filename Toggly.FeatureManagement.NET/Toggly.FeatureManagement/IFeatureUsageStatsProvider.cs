@@ -1,4 +1,5 @@
-﻿using System.Threading.Tasks;
+﻿using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Toggly.FeatureManagement
 {
@@ -37,6 +38,28 @@ namespace Toggly.FeatureManagement
         /// <param name="context"></param>
         /// <returns></returns>
         Task RecordUsageAsync<TContext>(string featureKey, TContext context);
+
+        /// <summary>
+        /// Begin a usage scope that records one attempt and, on dispose, success or error duration.
+        /// Does not evaluate the feature flag.
+        /// </summary>
+        /// <param name="featureKeys">One or more feature keys sharing the same clock and outcome</param>
+        Task<IFeatureUsageScope> BeginUsageAsync(params string[] featureKeys);
+
+        /// <summary>
+        /// Begin a usage scope with context for unique-user tracking on the attempt.
+        /// </summary>
+        Task<IFeatureUsageScope> BeginUsageAsync<TContext>(TContext context, params string[] featureKeys);
+
+        /// <summary>
+        /// Run <paramref name="action"/> inside a usage scope (attempt, duration, failure propagation).
+        /// </summary>
+        Task UseAsync(string featureKey, System.Func<Task> action);
+
+        /// <summary>
+        /// Run <paramref name="action"/> inside a usage scope with an explicit <see cref="IFeatureUsageScope"/> for <c>Fail()</c>.
+        /// </summary>
+        Task UseAsync(string featureKey, System.Func<IFeatureUsageScope, Task> action);
 
         /// <summary>
         /// Record a feature being viewed (e.g., UI component was rendered/displayed to user)

@@ -88,16 +88,42 @@ defmodule Toggly.Client do
 
   @impl true
   def handle_cast({:usage, key, enabled, kind, variant}, state) do
+    {:noreply, track_usage(state, key, enabled, kind, variant, 1)}
+  end
+
+  def handle_cast({:usage_scope, key, enabled, variant, outcome, duration_ms}, state) do
+    label = variant || if(enabled, do: "enabled", else: "disabled")
+
+    state =
+      case outcome do
+        :success ->
+          if duration_ms > 0,
+            do: track_usage(state, key, enabled, :duration_ms, label, duration_ms),
+            else: state
+
+        :failure ->
+          state
+          |> track_usage(key, enabled, :error, label, 1)
+          |> then(fn s ->
+            if duration_ms > 0,
+              do: track_usage(s, key, enabled, :error_duration_ms, label, duration_ms),
+              else: s
+          end)
+      end
+
+    {:noreply, state}
+  end
+
+  defp track_usage(state, key, enabled, kind, variant, amount) do
     label = variant || if(enabled, do: "enabled", else: "disabled")
     bucket = {key, label, kind}
 
-    # Bound cardinality to configured features/defaults; never retain identity.
     usage =
       if Map.has_key?(state.definitions, key) or Map.has_key?(state.defaults, key),
-        do: Map.update(state.usage, bucket, 1, &(&1 + 1)),
+        do: Map.update(state.usage, bucket, amount, &(&1 + amount)),
         else: state.usage
 
-    {:noreply, %{state | usage: usage}}
+    %{state | usage: usage}
   end
 
   @impl true
@@ -338,7 +364,16 @@ defmodule Toggly.Client do
         |> Enum.map(fn {key, items} ->
           variants =
             Enum.reduce(items, %{}, fn {{_, variant, kind}, count}, acc ->
-              field = %{check: "checkCount", used: "usedCount", viewed: "viewedCount"}[kind]
+              field =
+                %{
+                  check: "checkCount",
+                  used: "usedCount",
+                  viewed: "viewedCount",
+                  error: "errorCount",
+                  duration_ms: "durationSumMs",
+                  error_duration_ms: "errorDurationSumMs"
+                }[kind]
+
               Map.update(acc, variant, %{field => count}, &Map.put(&1, field, count))
             end)
 

@@ -5,6 +5,9 @@ export interface VariantStatsAgg {
   requestCount: number
   usedCount: number
   viewedCount: number
+  errorCount: number
+  durationSumMs: number
+  errorDurationSumMs: number
 }
 
 export interface FeatureUsageAgg {
@@ -61,7 +64,15 @@ export interface UsageBatchSnapshot {
 }
 
 function emptyVariant(): VariantStatsAgg {
-  return { checkCount: 0, requestCount: 0, usedCount: 0, viewedCount: 0 }
+  return {
+    checkCount: 0,
+    requestCount: 0,
+    usedCount: 0,
+    viewedCount: 0,
+    errorCount: 0,
+    durationSumMs: 0,
+    errorDurationSumMs: 0,
+  }
 }
 
 function emptyFeature(): FeatureUsageAgg {
@@ -223,6 +234,47 @@ export class UsageBatcher {
     }
   }
 
+  recordUsageError(feature: string, _identity?: string, variant = 'enabled', count = 1): void {
+    if (count <= 0) return
+    const agg = this.get(feature)
+    this.getVariant(agg, variant).errorCount += count
+  }
+
+  recordUsageDuration(
+    feature: string,
+    durationMs: number,
+    _identity?: string,
+    variant = 'enabled',
+    failed = false,
+  ): void {
+    if (!Number.isFinite(durationMs) || durationMs <= 0) return
+    const ms = Math.floor(durationMs)
+    const agg = this.get(feature)
+    const stats = this.getVariant(agg, variant)
+    if (failed) {
+      stats.errorDurationSumMs += ms
+    } else {
+      stats.durationSumMs += ms
+    }
+  }
+
+  recordUsageScopeOutcome(
+    feature: string,
+    outcome: { failed?: boolean; cancelled?: boolean; durationMs?: number },
+    identity?: string,
+    variant = 'enabled',
+  ): void {
+    if (outcome.cancelled) return
+    if (outcome.failed) {
+      this.recordUsageError(feature, identity, variant)
+      if (outcome.durationMs != null) {
+        this.recordUsageDuration(feature, outcome.durationMs, identity, variant, true)
+      }
+    } else if (outcome.durationMs != null) {
+      this.recordUsageDuration(feature, outcome.durationMs, identity, variant, false)
+    }
+  }
+
   isEmpty(): boolean {
     return (
       this.perFeature.size === 0 &&
@@ -278,7 +330,10 @@ export class UsageBatcher {
           stats.checkCount > 0 ||
           stats.requestCount > 0 ||
           stats.usedCount > 0 ||
-          stats.viewedCount > 0
+          stats.viewedCount > 0 ||
+          stats.errorCount > 0 ||
+          stats.durationSumMs > 0 ||
+          stats.errorDurationSumMs > 0
         ) {
           variantStats[name] = { ...stats }
         }
@@ -327,6 +382,9 @@ export class UsageBatcher {
         stats.requestCount += snapStats.requestCount
         stats.usedCount += snapStats.usedCount
         stats.viewedCount += snapStats.viewedCount
+        stats.errorCount += snapStats.errorCount
+        stats.durationSumMs += snapStats.durationSumMs
+        stats.errorDurationSumMs += snapStats.errorDurationSumMs
       }
       for (const hash of snapAgg.uniqueUsersEnabled) {
         agg.uniqueUsersEnabled.add(hash)
@@ -370,6 +428,9 @@ export class UsageBatcher {
         stats.requestCount += snapStats.requestCount
         stats.usedCount += snapStats.usedCount
         stats.viewedCount += snapStats.viewedCount
+        stats.errorCount += snapStats.errorCount
+        stats.durationSumMs += snapStats.durationSumMs
+        stats.errorDurationSumMs += snapStats.errorDurationSumMs
       }
       for (const hash of stat.uniqueUserHashes) {
         agg.uniqueUserHashes.add(hash)

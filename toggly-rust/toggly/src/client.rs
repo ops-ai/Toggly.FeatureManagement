@@ -356,6 +356,27 @@ impl TogglyClient {
         }
     }
 
+    /// Run `action` inside a usage scope; records used count, duration, and errors.
+    ///
+    /// Every `Err` is counted as a failure. Call [`crate::FeatureUsageScope::fail`] for
+    /// soft failure without returning `Err`.
+    pub fn use_feature<F, T, E>(
+        &self,
+        feature_key: &str,
+        identity: Option<&str>,
+        variant: &str,
+        action: F,
+    ) -> Result<T, E>
+    where
+        F: FnOnce(&crate::FeatureUsageScope<'_>) -> Result<T, E>,
+    {
+        if let Some(tel) = &self.telemetry {
+            tel.use_feature(feature_key, identity, variant, action)
+        } else {
+            action(&crate::FeatureUsageScope::noop())
+        }
+    }
+
     /// Record a feature viewed/rendered event.
     pub fn record_view(&self, feature_key: &str, identity: Option<&str>, variant: &str) {
         if let Some(tel) = &self.telemetry {

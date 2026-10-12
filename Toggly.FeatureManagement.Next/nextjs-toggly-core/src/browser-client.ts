@@ -1,4 +1,9 @@
-import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry'
+import {
+  createTelemetryReporter,
+  runFeatureUsageScope,
+  type FeatureUsageScope,
+  type TelemetryReporter,
+} from '@ops-ai/toggly-client-telemetry'
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser'
 import { createClient } from './client-base'
 import type { ClientTelemetry } from './telemetry-policy'
@@ -41,6 +46,15 @@ function browserTelemetry(config: TogglyConfig): ClientTelemetry | null {
     async flushAll() {await reporter?.flush()},
     recordCheck(key, enabled, _identity, variant) {if (usage) getReporter().recordCheck(key, variant ?? (enabled ? 'enabled' : 'disabled'))},
     recordUsage(key, _identity, variant = 'enabled') {if (usage) getReporter().recordUsage(key, variant)},
+    use(key, fn, _identity, variant = 'enabled') {
+      if (!usage) {
+        return runFeatureUsageScope(
+          { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
+          fn,
+        )
+      }
+      return getReporter().use(key, fn, variant)
+    },
     recordView(key, _identity, variant = 'enabled') {if (usage) getReporter().recordView(key, variant)},
     recordDefinitionCacheHit() {},
     recordDefinitionCacheMiss() {},

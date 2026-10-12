@@ -184,7 +184,7 @@ public class FeatureUsageAttributeTests
         featureManagerMock.Setup(m => m.IsEnabledAsync("enabled-feature"))
             .ReturnsAsync(true);
 
-        var statsProviderMock = new Mock<IFeatureUsageStatsProvider>();
+        var statsProviderMock = CreateUsageStatsMock();
 
         var services = new ServiceCollection();
         services.AddSingleton(featureManagerMock.Object);
@@ -207,7 +207,7 @@ public class FeatureUsageAttributeTests
 
         // Assert
         nextCalled.Should().BeTrue();
-        statsProviderMock.Verify(m => m.RecordUsageAsync("enabled-feature"), Times.Once);
+        statsProviderMock.Verify(m => m.BeginUsageAsync("enabled-feature"), Times.Once);
     }
 
     [Fact]
@@ -243,7 +243,7 @@ public class FeatureUsageAttributeTests
         // Assert
         nextCalled.Should().BeFalse();
         actionContext.Result.Should().BeOfType<NotFoundResult>();
-        statsProviderMock.Verify(m => m.RecordUsageAsync(It.IsAny<string>()), Times.Never);
+        statsProviderMock.Verify(m => m.BeginUsageAsync(It.IsAny<string[]>()), Times.Never);
     }
 
     [Fact]
@@ -404,7 +404,7 @@ public class FeatureUsageAttributeTests
         var featureManagerMock = new Mock<IFeatureManagerSnapshot>();
         featureManagerMock.Setup(m => m.IsEnabledAsync(It.IsAny<string>())).ReturnsAsync(true);
 
-        var statsProviderMock = new Mock<IFeatureUsageStatsProvider>();
+        var statsProviderMock = CreateUsageStatsMock();
 
         var services = new ServiceCollection();
         services.AddSingleton(featureManagerMock.Object);
@@ -424,9 +424,7 @@ public class FeatureUsageAttributeTests
         });
 
         // Assert
-        statsProviderMock.Verify(m => m.RecordUsageAsync("feature1"), Times.Once);
-        statsProviderMock.Verify(m => m.RecordUsageAsync("feature2"), Times.Once);
-        statsProviderMock.Verify(m => m.RecordUsageAsync("feature3"), Times.Once);
+        statsProviderMock.Verify(m => m.BeginUsageAsync("feature1", "feature2", "feature3"), Times.Once);
     }
 
     [Fact]
@@ -442,7 +440,7 @@ public class FeatureUsageAttributeTests
         featureManagerMock.Setup(m => m.IsEnabledAsync("feature1")).ReturnsAsync(true);
         featureManagerMock.Setup(m => m.IsEnabledAsync("feature2")).ReturnsAsync(true);
 
-        var statsProviderMock = new Mock<IFeatureUsageStatsProvider>();
+        var statsProviderMock = CreateUsageStatsMock();
 
         var services = new ServiceCollection();
         services.AddSingleton(featureManagerMock.Object);
@@ -465,8 +463,7 @@ public class FeatureUsageAttributeTests
 
         // Assert
         nextCalled.Should().BeTrue();
-        statsProviderMock.Verify(m => m.RecordUsageAsync("feature1"), Times.Once);
-        statsProviderMock.Verify(m => m.RecordUsageAsync("feature2"), Times.Once);
+        statsProviderMock.Verify(m => m.BeginUsageAsync("feature1", "feature2"), Times.Once);
     }
 
     #endregion
@@ -491,6 +488,17 @@ public class FeatureUsageAttributeTests
     #endregion
 
     #region Helper Methods
+
+    private static Mock<IFeatureUsageStatsProvider> CreateUsageStatsMock()
+    {
+        var scope = new Mock<IFeatureUsageScope>();
+        scope.Setup(s => s.DisposeAsync()).Returns(ValueTask.CompletedTask);
+        var statsProviderMock = new Mock<IFeatureUsageStatsProvider>();
+        statsProviderMock
+            .Setup(m => m.BeginUsageAsync(It.IsAny<string[]>()))
+            .ReturnsAsync(scope.Object);
+        return statsProviderMock;
+    }
 
     private static ActionExecutingContext CreateActionExecutingContext(HttpContext httpContext)
     {

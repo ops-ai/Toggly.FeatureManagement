@@ -176,6 +176,25 @@ export function registerTogglyIpc(
     true,
   )
   sync(
+    IPC_CHANNELS.recordUsageScopeCompletion,
+    ([key, variant, failed, durationMs]) =>
+      client.recordUsageScopeCompletion(
+        key as string,
+        (variant as string | undefined) ?? 'enabled',
+        Boolean(failed),
+        typeof durationMs === 'number' && Number.isFinite(durationMs) ? durationMs : 0,
+      ),
+    (args) =>
+      eventArgs(args.slice(0, 2)) &&
+      (args[2] === undefined || typeof args[2] === 'boolean') &&
+      (args[3] === undefined ||
+        (typeof args[3] === 'number' &&
+          Number.isFinite(args[3]) &&
+          args[3] >= 0 &&
+          args[3] <= 86_400_000)),
+    true,
+  )
+  sync(
     IPC_CHANNELS.recordView,
     ([key, variant]) =>
       client.recordView(key as string, variant as string | undefined),

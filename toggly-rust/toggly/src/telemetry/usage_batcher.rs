@@ -16,6 +16,12 @@ pub struct VariantStatsAgg {
     pub used_count: i32,
     /// Feature "viewed" / rendered count.
     pub viewed_count: i32,
+    /// Failed usage scopes for this variant.
+    pub error_count: i32,
+    /// Sum of successful usage-scope durations (ms).
+    pub duration_sum_ms: i64,
+    /// Sum of failed usage-scope durations (ms).
+    pub error_duration_sum_ms: i64,
 }
 
 impl VariantStatsAgg {
@@ -26,6 +32,9 @@ impl VariantStatsAgg {
             request_count: self.request_count,
             used_count: self.used_count,
             viewed_count: self.viewed_count,
+            error_count: self.error_count,
+            duration_sum_ms: self.duration_sum_ms,
+            error_duration_sum_ms: self.error_duration_sum_ms,
         }
     }
 
@@ -34,6 +43,9 @@ impl VariantStatsAgg {
             && self.request_count == 0
             && self.used_count == 0
             && self.viewed_count == 0
+            && self.error_count == 0
+            && self.duration_sum_ms == 0
+            && self.error_duration_sum_ms == 0
     }
 }
 
@@ -48,6 +60,12 @@ pub struct VariantStatsWire {
     pub used_count: i32,
     /// viewedCount
     pub viewed_count: i32,
+    /// errorCount
+    pub error_count: i32,
+    /// durationSumMs
+    pub duration_sum_ms: i64,
+    /// errorDurationSumMs
+    pub error_duration_sum_ms: i64,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -205,6 +223,28 @@ impl UsageBatcher {
         }
     }
 
+    /// Record successful usage-scope duration for a variant.
+    pub fn record_usage_scope_success(&self, feature: &str, variant: &str, duration_ms: i64) {
+        if duration_ms <= 0 {
+            return;
+        }
+        let mut guard = self.inner.lock();
+        let agg = guard.per_feature.entry(feature.to_string()).or_default();
+        let stats = agg.variant_stats.entry(variant.to_string()).or_default();
+        stats.duration_sum_ms = stats.duration_sum_ms.saturating_add(duration_ms);
+    }
+
+    /// Record failed usage-scope error count and duration for a variant.
+    pub fn record_usage_scope_failure(&self, feature: &str, variant: &str, duration_ms: i64) {
+        let mut guard = self.inner.lock();
+        let agg = guard.per_feature.entry(feature.to_string()).or_default();
+        let stats = agg.variant_stats.entry(variant.to_string()).or_default();
+        stats.error_count = stats.error_count.saturating_add(1);
+        if duration_ms > 0 {
+            stats.error_duration_sum_ms = stats.error_duration_sum_ms.saturating_add(duration_ms);
+        }
+    }
+
     /// Record a feature viewed/rendered event.
     pub fn record_view(&self, feature: &str, identity: Option<&str>, variant: &str) {
         let hashed = identity.filter(|s| !s.is_empty()).map(hash_identity);
@@ -340,6 +380,10 @@ impl UsageBatcher {
                 dest.request_count = dest.request_count.saturating_add(vs.request_count);
                 dest.used_count = dest.used_count.saturating_add(vs.used_count);
                 dest.viewed_count = dest.viewed_count.saturating_add(vs.viewed_count);
+                dest.error_count = dest.error_count.saturating_add(vs.error_count);
+                dest.duration_sum_ms = dest.duration_sum_ms.saturating_add(vs.duration_sum_ms);
+                dest.error_duration_sum_ms =
+                    dest.error_duration_sum_ms.saturating_add(vs.error_duration_sum_ms);
             }
             agg.unique_users_enabled
                 .extend(snap_agg.unique_users_enabled);
@@ -469,5 +513,21 @@ mod tests {
         batcher.record_definition_cache_hit();
         assert!(!batcher.is_empty());
         assert!(batcher.build_and_reset().is_some());
+    }
+
+    #[test]
+    fn usage_scope_records_used_duration_and_errors() {
+        let batcher = UsageBatcher::new("app", "Production", None, None, None);
+        batcher.record_usage("Checkout", Some("user-1"), "enabled");
+        batcher.record_usage_scope_success("Checkout", "enabled", 120);
+        batcher.record_usage("Checkout", Some("user-1"), "enabled");
+        batcher.record_usage_scope_failure("Checkout", "enabled", 50);
+
+        let (payload, _) = batcher.build_and_reset().expect("payload");
+        let enabled = payload.stats[0].variant_stats.get("enabled").unwrap();
+        assert_eq!(enabled.used_count, 2);
+        assert_eq!(enabled.duration_sum_ms, 120);
+        assert_eq!(enabled.error_count, 1);
+        assert_eq!(enabled.error_duration_sum_ms, 50);
     }
 }

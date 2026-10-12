@@ -1,4 +1,5 @@
 import { compareCacheKeyParts, createBrowserSnapshots } from './browser-snapshots'
+import { runFeatureUsageScope } from './telemetry/usage-scope.js'
 import type {
   TogglyConfig,
   TogglyClient,
@@ -1296,6 +1297,19 @@ export function createTogglyClient(
     recordUsage(featureKey: string, identity?: string, variant?: string): void {
       if (frontendTelemetry?.usageEnabled) frontendTelemetry.recordUsage(featureKey, variant)
       else telemetry?.recordUsage(featureKey, identity ?? config.identity, variant)
+    },
+
+    use(featureKey, fn, identity, variant) {
+      if (frontendTelemetry?.usageEnabled) {
+        return frontendTelemetry.use(featureKey, fn, variant)
+      }
+      if (telemetry) {
+        return telemetry.use(featureKey, fn, identity ?? config.identity, variant)
+      }
+      return runFeatureUsageScope(
+        { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
+        fn,
+      )
     },
 
     recordView(featureKey: string, identity?: string, variant?: string): void {

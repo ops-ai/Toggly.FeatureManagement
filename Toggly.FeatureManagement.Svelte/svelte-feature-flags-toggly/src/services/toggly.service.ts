@@ -33,7 +33,12 @@ import {
   type WsSyncMessage,
 } from '../utils/ws-sync';
 import { buildDefinitionFetchHeaders } from '../utils/sdk-identity'
-import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry'
+import {
+  createTelemetryReporter,
+  runFeatureUsageScope,
+  type FeatureUsageScope,
+  type TelemetryReporter,
+} from '@ops-ai/toggly-client-telemetry'
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser'
 import {
   InMemoryJwksCache,
@@ -344,6 +349,11 @@ export interface TogglyService {
   setContext: (context: TogglyContext) => Promise<void>
   getEffectiveFlagValue: (featureKey: string) => boolean
   recordUsage: (featureKey: string, variant?: string) => void
+  use: <T>(
+    featureKey: string,
+    fn: (scope: FeatureUsageScope) => Promise<T>,
+    variant?: string,
+  ) => Promise<T>
   recordView: (featureKey: string, variant?: string) => void
   incrementCounter: (metricKey: string, value?: number) => void
   setGauge: (metricKey: string, value: number) => void
@@ -1169,6 +1179,19 @@ export class Toggly implements TogglyService {
   /** Explicit events never evaluate a flag. */
   recordUsage(featureKey: string, variant = 'enabled'): void {
     try { this._ensureTelemetry()?.recordUsage(featureKey, variant) } catch { /* best effort */ }
+  }
+
+  use<T>(
+    featureKey: string,
+    fn: (scope: FeatureUsageScope) => Promise<T>,
+    variant = 'enabled',
+  ): Promise<T> {
+    const reporter = this._ensureTelemetry()
+    if (reporter) return reporter.use(featureKey, fn, variant)
+    return runFeatureUsageScope(
+      { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
+      fn,
+    )
   }
 
   recordView(featureKey: string, variant = 'enabled'): void {

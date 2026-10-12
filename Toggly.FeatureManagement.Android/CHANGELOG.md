@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.10.0
+
+2026-10-11
+
+### Added
+- Feature usage scopes via `TogglyService.use` and telemetry compact-array slots
+  for `errorCount`, `durationSumMs`, and `errorDurationSumMs` [OPS-1758].
+
 ## 1.9.0
 
 2026-09-25

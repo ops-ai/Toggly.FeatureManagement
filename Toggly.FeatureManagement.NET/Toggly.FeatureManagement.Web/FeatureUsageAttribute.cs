@@ -102,14 +102,23 @@ namespace Toggly.FeatureManagement
                 return;
             }
 
-            // Feature is enabled - record the usage
+            // Feature is enabled - wrap the action in a usage scope (attempt + duration + errors)
             var statsProvider = context.HttpContext.RequestServices.GetRequiredService<IFeatureUsageStatsProvider>();
-            foreach (var feature in Features)
+            await using var scope = await statsProvider.BeginUsageAsync(Features.ToArray()).ConfigureAwait(false);
+            try
             {
-                await statsProvider.RecordUsageAsync(feature).ConfigureAwait(false);
+                await next().ConfigureAwait(false);
             }
-
-            await next().ConfigureAwait(false);
+            catch (OperationCanceledException)
+            {
+                scope.MarkCancelled();
+                throw;
+            }
+            catch
+            {
+                scope.Fail();
+                throw;
+            }
         }
 
         /// <summary>
@@ -133,14 +142,23 @@ namespace Toggly.FeatureManagement
                 return;
             }
 
-            // Feature is enabled - record the usage
+            // Feature is enabled - wrap the handler in a usage scope (attempt + duration + errors)
             var statsProvider = context.HttpContext.RequestServices.GetRequiredService<IFeatureUsageStatsProvider>();
-            foreach (var feature in Features)
+            await using var scope = await statsProvider.BeginUsageAsync(Features.ToArray()).ConfigureAwait(false);
+            try
             {
-                await statsProvider.RecordUsageAsync(feature).ConfigureAwait(false);
+                await next.Invoke().ConfigureAwait(false);
             }
-
-            await next.Invoke().ConfigureAwait(false);
+            catch (OperationCanceledException)
+            {
+                scope.MarkCancelled();
+                throw;
+            }
+            catch
+            {
+                scope.Fail();
+                throw;
+            }
         }
 
         /// <summary>

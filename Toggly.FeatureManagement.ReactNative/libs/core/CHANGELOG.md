@@ -1,3 +1,9 @@
+## 1.11.0 — 2026-10-11
+
+### Added
+- Feature usage scopes via `TogglyService.use` (delegates to client telemetry
+  `use`) [OPS-1758].
+
 ## 1.10.2 — 2026-09-28
 
 ### Fixed

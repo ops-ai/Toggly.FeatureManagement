@@ -3,10 +3,22 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Mapping, Optional
+import time
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
+from contextlib import asynccontextmanager, contextmanager
+from typing import Any, Mapping, Optional, TypeVar
 
 from toggly.config import TogglyConfig
 from toggly.telemetry.runtime import TelemetryRuntime
+from toggly.telemetry.usage_scope import (
+    FeatureUsageScope,
+    is_usage_cancellation,
+    run_usage_scope,
+    run_usage_scope_async,
+)
+from toggly.telemetry.usage_scope import _ScopeImpl as _UsageScopeImpl
+
+T = TypeVar("T")
 
 
 class TelemetryClientMixin:
@@ -48,6 +60,117 @@ class TelemetryClientMixin:
             identity if identity is not None else self._identity,
             variant,
         )
+
+    def _usage_scope_handlers(
+        self,
+        feature_key: str,
+        identity: Optional[str],
+        variant: str,
+    ) -> tuple[Callable[[], None], Callable[[int], None], Callable[[int], None]]:
+        resolved = identity if identity is not None else self._identity
+
+        def record_attempt() -> None:
+            if self._telemetry is None or not self._telemetry.usage_enabled:
+                return
+            self._telemetry.record_usage(feature_key, resolved, variant)
+
+        def record_success(duration_ms: int) -> None:
+            if self._telemetry is None or not self._telemetry.usage_enabled:
+                return
+            self._telemetry.record_usage_scope_success(
+                feature_key, duration_ms, variant=variant
+            )
+
+        def record_failure(duration_ms: int) -> None:
+            if self._telemetry is None or not self._telemetry.usage_enabled:
+                return
+            self._telemetry.record_usage_scope_failure(
+                feature_key, duration_ms, variant=variant
+            )
+
+        return record_attempt, record_success, record_failure
+
+    @contextmanager
+    def use(
+        self,
+        feature_key: str,
+        *,
+        identity: Optional[str] = None,
+        variant: str = "enabled",
+    ) -> Iterator[FeatureUsageScope]:
+        """Usage scope: attempt on enter, duration/errors on exit (no flag eval)."""
+        handlers = self._usage_scope_handlers(feature_key, identity, variant)
+        handlers[0]()
+        scope = _UsageScopeImpl()
+        start = time.monotonic()
+        try:
+            yield scope
+        except BaseException as exc:
+            if is_usage_cancellation(exc):
+                raise
+            handlers[2](max(0, int(round((time.monotonic() - start) * 1000))))
+            raise
+        else:
+            duration_ms = max(0, int(round((time.monotonic() - start) * 1000)))
+            if scope._state.failed:
+                handlers[2](duration_ms)
+            else:
+                handlers[1](duration_ms)
+
+    def run_use(
+        self,
+        feature_key: str,
+        fn: Callable[[FeatureUsageScope], T],
+        *,
+        identity: Optional[str] = None,
+        variant: str = "enabled",
+    ) -> T:
+        """Run *fn* inside a usage scope (sync)."""
+        return run_usage_scope(
+            self._usage_scope_handlers(feature_key, identity, variant),
+            fn,
+        )
+
+    async def run_use_async(
+        self,
+        feature_key: str,
+        fn: Callable[[FeatureUsageScope], Awaitable[T]],
+        *,
+        identity: Optional[str] = None,
+        variant: str = "enabled",
+    ) -> T:
+        """Run async *fn* inside a usage scope."""
+        return await run_usage_scope_async(
+            self._usage_scope_handlers(feature_key, identity, variant),
+            fn,
+        )
+
+    @asynccontextmanager
+    async def use_async(
+        self,
+        feature_key: str,
+        *,
+        identity: Optional[str] = None,
+        variant: str = "enabled",
+    ) -> AsyncIterator[FeatureUsageScope]:
+        """Async usage scope context manager."""
+        handlers = self._usage_scope_handlers(feature_key, identity, variant)
+        handlers[0]()
+        scope = _UsageScopeImpl()
+        start = time.monotonic()
+        try:
+            yield scope
+        except BaseException as exc:
+            if is_usage_cancellation(exc):
+                raise
+            handlers[2](max(0, int(round((time.monotonic() - start) * 1000))))
+            raise
+        else:
+            duration_ms = max(0, int(round((time.monotonic() - start) * 1000)))
+            if scope._state.failed:
+                handlers[2](duration_ms)
+            else:
+                handlers[1](duration_ms)
 
     def measure(
         self,

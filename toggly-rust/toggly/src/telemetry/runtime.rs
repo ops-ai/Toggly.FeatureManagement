@@ -303,6 +303,37 @@ impl TelemetryRuntime {
         }
     }
 
+    /// Run an action inside a feature usage scope (used count, duration, errors).
+    pub fn use_feature<F, T, E>(
+        &self,
+        feature: &str,
+        identity: Option<&str>,
+        variant: &str,
+        f: F,
+    ) -> Result<T, E>
+    where
+        F: FnOnce(&super::FeatureUsageScope<'_>) -> Result<T, E>,
+    {
+        if !self.usage_enabled() {
+            return f(&super::FeatureUsageScope::noop());
+        }
+        let guard = self.inner.usage_batcher.lock();
+        let Some(batcher) = guard.as_ref() else {
+            return f(&super::FeatureUsageScope::noop());
+        };
+        let scope = super::FeatureUsageScope::begin(batcher, feature, identity, variant);
+        match f(&scope) {
+            Ok(value) => {
+                scope.complete_from_outcome();
+                Ok(value)
+            }
+            Err(error) => {
+                scope.complete_failure();
+                Err(error)
+            }
+        }
+    }
+
     /// Count a definition-refresh served from local cache / unchanged revision.
     pub fn record_definition_cache_hit(&self) {
         if !self.usage_enabled() {

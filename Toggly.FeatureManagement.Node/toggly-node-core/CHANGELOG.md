@@ -1,3 +1,14 @@
+## 0.13.0
+
+2026-10-11
+
+### Added
+- Usage scope metrics on `VariantStats`: `errorCount`, `durationSumMs`,
+  `errorDurationSumMs` (aligned with `Usage.proto`).
+- `recordUsageError`, `recordUsageDuration`, `recordUsageScopeOutcome`, and
+  `use()` on the client and `TelemetryRuntime` for timed usage scopes with
+  `scope.fail()` and `AbortError` cancellation handling.
+
 ## 0.12.0
 
 2026-10-04

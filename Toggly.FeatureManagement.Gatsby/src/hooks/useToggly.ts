@@ -15,6 +15,7 @@ import {
   getVariant as storeGetVariant,
   getVariantValue as storeGetVariantValue,
   recordUsage,
+  useFeatureUsageScope,
   recordView,
   incrementCounter,
   setGauge,
@@ -69,6 +70,7 @@ export function useToggly(): UseTogglyResult & {
     clearIdentity: storeClearIdentity,
     telemetry: {
       recordUsage,
+      use: useFeatureUsageScope,
       recordView,
       incrementCounter,
       setGauge,

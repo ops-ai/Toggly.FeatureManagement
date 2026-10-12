@@ -180,12 +180,29 @@ public final class FeatureStatPayload {
         private final int requestCount;
         private final int usedCount;
         private final int viewedCount;
+        private final int errorCount;
+        private final long durationSumMs;
+        private final long errorDurationSumMs;
 
-        public VariantStats(int checkCount, int requestCount, int usedCount, int viewedCount) {
+        public VariantStats(
+                int checkCount,
+                int requestCount,
+                int usedCount,
+                int viewedCount,
+                int errorCount,
+                long durationSumMs,
+                long errorDurationSumMs) {
             this.checkCount = checkCount;
             this.requestCount = requestCount;
             this.usedCount = usedCount;
             this.viewedCount = viewedCount;
+            this.errorCount = errorCount;
+            this.durationSumMs = durationSumMs;
+            this.errorDurationSumMs = errorDurationSumMs;
+        }
+
+        public VariantStats(int checkCount, int requestCount, int usedCount, int viewedCount) {
+            this(checkCount, requestCount, usedCount, viewedCount, 0, 0L, 0L);
         }
 
         public int getCheckCount() {
@@ -202,6 +219,18 @@ public final class FeatureStatPayload {
 
         public int getViewedCount() {
             return viewedCount;
+        }
+
+        public int getErrorCount() {
+            return errorCount;
+        }
+
+        public long getDurationSumMs() {
+            return durationSumMs;
+        }
+
+        public long getErrorDurationSumMs() {
+            return errorDurationSumMs;
         }
     }
 }

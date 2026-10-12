@@ -18,6 +18,9 @@ class VariantStatsAgg:
     request_count: int = 0
     used_count: int = 0
     viewed_count: int = 0
+    error_count: int = 0
+    duration_sum_ms: int = 0
+    error_duration_sum_ms: int = 0
 
     def to_wire(self) -> dict[str, int]:
         """Serialize counters to the Usage wire shape."""
@@ -26,6 +29,9 @@ class VariantStatsAgg:
             "requestCount": self.request_count,
             "usedCount": self.used_count,
             "viewedCount": self.viewed_count,
+            "errorCount": self.error_count,
+            "durationSumMs": self.duration_sum_ms,
+            "errorDurationSumMs": self.error_duration_sum_ms,
         }
 
     def clone(self) -> VariantStatsAgg:
@@ -35,6 +41,9 @@ class VariantStatsAgg:
             request_count=self.request_count,
             used_count=self.used_count,
             viewed_count=self.viewed_count,
+            error_count=self.error_count,
+            duration_sum_ms=self.duration_sum_ms,
+            error_duration_sum_ms=self.error_duration_sum_ms,
         )
 
 
@@ -191,6 +200,36 @@ class UsageBatcher:
                 self._app_unique.add(hashed)
                 agg.unique_viewed_user_hashes.add(hashed)
 
+    def record_usage_error(
+        self,
+        feature: str,
+        variant: str = "enabled",
+        count: int = 1,
+    ) -> None:
+        """Increment failed usage-scope count for a variant."""
+        if count <= 0:
+            return
+        with self._lock:
+            self._get_variant(self._get(feature), variant).error_count += count
+
+    def record_usage_duration(
+        self,
+        feature: str,
+        duration_ms: int,
+        *,
+        variant: str = "enabled",
+        failed: bool = False,
+    ) -> None:
+        """Add usage-scope elapsed milliseconds (success or error sum)."""
+        if duration_ms <= 0:
+            return
+        with self._lock:
+            stats = self._get_variant(self._get(feature), variant)
+            if failed:
+                stats.error_duration_sum_ms += duration_ms
+            else:
+                stats.duration_sum_ms += duration_ms
+
     def is_empty(self) -> bool:
         """Return True when no usage or cache-hit samples are buffered."""
         with self._lock:
@@ -239,6 +278,9 @@ class UsageBatcher:
                     or vs.request_count > 0
                     or vs.used_count > 0
                     or vs.viewed_count > 0
+                    or vs.error_count > 0
+                    or vs.duration_sum_ms > 0
+                    or vs.error_duration_sum_ms > 0
                 ):
                     variant_stats[name] = vs.to_wire()
             stats_out.append(
@@ -298,6 +340,9 @@ class UsageBatcher:
                     stats.request_count += snap_stats.request_count
                     stats.used_count += snap_stats.used_count
                     stats.viewed_count += snap_stats.viewed_count
+                    stats.error_count += snap_stats.error_count
+                    stats.duration_sum_ms += snap_stats.duration_sum_ms
+                    stats.error_duration_sum_ms += snap_stats.error_duration_sum_ms
                 agg.unique_users_enabled.update(snap_agg.unique_users_enabled)
                 agg.unique_users_disabled.update(snap_agg.unique_users_disabled)
                 agg.unique_users_used.update(snap_agg.unique_users_used)

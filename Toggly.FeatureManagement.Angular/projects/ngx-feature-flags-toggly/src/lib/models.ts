@@ -84,6 +84,11 @@ export interface ITogglyService {
   getVariant: (featureKey: string) => Promise<VariantResult | null>
   getVariantValue: <T = unknown>(featureKey: string, isT?: (v: unknown) => v is T) => Promise<T | null>
   recordUsage: (featureKey: string, variant?: string) => void
+  use: <T>(
+    featureKey: string,
+    fn: (scope: import('@ops-ai/toggly-client-telemetry').FeatureUsageScope) => Promise<T>,
+    variant?: string,
+  ) => Promise<T>
   recordView: (featureKey: string, variant?: string) => void
   incrementCounter: (metricKey: string, value?: number) => void
   setGauge: (metricKey: string, value: number) => void

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.11.0
+
+2026-10-11
+
+### Added
+- Feature usage scopes: `TogglyClient::use_feature`, `FeatureUsageScope::fail`, and
+  `VariantStats` wire fields `errorCount`, `durationSumMs`, and `errorDurationSumMs`
+  [OPS-1758].
+
 ## 0.10.0
 
 2026-10-04

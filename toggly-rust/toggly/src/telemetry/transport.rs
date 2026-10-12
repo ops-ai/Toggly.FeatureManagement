@@ -156,6 +156,9 @@ mod native {
                         request_count: vs.request_count,
                         used_count: vs.used_count,
                         viewed_count: vs.viewed_count,
+                        error_count: vs.error_count,
+                        duration_sum_ms: vs.duration_sum_ms,
+                        error_duration_sum_ms: vs.error_duration_sum_ms,
                     },
                 );
             }
@@ -273,6 +276,9 @@ mod tests {
                 request_count: 1,
                 used_count: 3,
                 viewed_count: 4,
+                error_count: 5,
+                duration_sum_ms: 6,
+                error_duration_sum_ms: 7,
             },
         );
         let payload = FeatureStatPayload {

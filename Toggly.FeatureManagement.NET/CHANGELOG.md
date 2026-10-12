@@ -1,5 +1,15 @@
 # Changelog
 
+## All .NET SDK packages 3.14.0 - 2026-10-12
+
+### Added
+- Usage scope API on `IFeatureUsageStatsProvider`: `BeginUsageAsync`, `UseAsync`,
+  and `IFeatureUsageScope` with `Fail()` / `MarkCancelled()`. Records one usage
+  attempt, success or error duration (ms), and error counts; cancellation keeps
+  the attempt without duration or error. `[FeatureUsage]` wraps the action in
+  that scope. Wire fields: `VariantStats.errorCount`, `durationSumMs`,
+  `errorDurationSumMs`.
+
 ## All .NET SDK packages 3.13.3 - 2026-10-05
 
 ### Changed

@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.3.0
+
+2026-10-11
+
+### Added
+- Feature usage scope on `TogglyClient` (`beginUsage`, `use`) with
+  `FeatureUsageScope.fail()` / `markCancelled()`. Usage batches send
+  `errorCount`, `durationSumMs`, and `errorDurationSumMs` on `VariantStats`
+  [OPS-1758].
+
 ## 2.2.1
 
 2026-10-06

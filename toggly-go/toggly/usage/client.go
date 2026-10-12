@@ -72,6 +72,22 @@ func (c *Client) RecordView(feature, identity string) {
 	c.batcher.RecordView(feature, identity)
 }
 
+// RunUsageScope records attempt, duration, and errors for fn without evaluating flags.
+func (c *Client) RunUsageScope(featureKey, identity string, fn func(FeatureUsageScope) error) error {
+	if c == nil || c.batcher == nil {
+		return RunUsageScope(func() {}, func(int64) {}, func(int64) {}, fn)
+	}
+	return RunUsageScope(
+		func() { c.batcher.RecordUsageAttempt(featureKey, identity) },
+		func(ms int64) { c.batcher.RecordUsageDuration(featureKey, ms, false) },
+		func(ms int64) {
+			c.batcher.RecordUsageError(featureKey, 1)
+			c.batcher.RecordUsageDuration(featureKey, ms, true)
+		},
+		fn,
+	)
+}
+
 // RecordDefinitionCacheHit counts a definition-refresh served from local cache.
 func (c *Client) RecordDefinitionCacheHit() {
 	if c == nil || c.batcher == nil {

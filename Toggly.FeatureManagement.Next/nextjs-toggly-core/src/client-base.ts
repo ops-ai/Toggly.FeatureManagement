@@ -61,6 +61,7 @@ import {
   type FeatureDefinitionModel,
 } from '@ops-ai/toggly-eval'
 import type { ClientTelemetry, TelemetryPolicy } from './telemetry-policy'
+import { runFeatureUsageScope } from '@ops-ai/toggly-client-telemetry'
 
 function normalizeRevision(revision: string | null | undefined): string | null {
   if (!revision) {
@@ -1556,6 +1557,22 @@ export function createClient(
       ensureTelemetry()?.recordUsage(featureKey, identity ?? config.identity, variant)
     },
 
+    use<T>(
+      featureKey: string,
+      fn: (scope: import('@ops-ai/toggly-client-telemetry').FeatureUsageScope) => Promise<T>,
+      identity?: string,
+      variant?: string,
+    ): Promise<T> {
+      const telemetry = ensureTelemetry()
+      if (telemetry?.use) {
+        return telemetry.use(featureKey, fn, identity ?? config.identity, variant)
+      }
+      return runFeatureUsageScope(
+        { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
+        fn,
+      )
+    },
+
     recordView(featureKey: string, identity?: string, variant?: string): void {
       ensureTelemetry()?.recordView(featureKey, identity ?? config.identity, variant)
     },
@@ -1590,6 +1607,7 @@ export function createClient(
 
     telemetry: policy.frontend ? {
       recordUsage: (key, variant = 'enabled') => client.recordUsage(key, undefined, variant),
+      use: (key, fn, variant = 'enabled') => client.use(key, fn, undefined, variant),
       recordView: (key, variant = 'enabled') => client.recordView(key, undefined, variant),
       incrementCounter: (key, value = 1) => client.incrementCounter(key, value),
       setGauge: (key, value) => { ensureTelemetry()?.setGauge?.(key, value) },

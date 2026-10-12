@@ -128,6 +128,33 @@ public final class UsageBatcher {
         }
     }
 
+    public void recordUsageError(String feature, String variant, int count) {
+        if (count <= 0) {
+            return;
+        }
+        Objects.requireNonNull(feature, "feature");
+        String v = variant != null && !variant.isEmpty() ? variant : "enabled";
+        synchronized (lock) {
+            getVariant(get(feature), v).errorCount += count;
+        }
+    }
+
+    public void recordUsageDuration(String feature, long durationMs, String variant, boolean failed) {
+        if (durationMs <= 0) {
+            return;
+        }
+        Objects.requireNonNull(feature, "feature");
+        String v = variant != null && !variant.isEmpty() ? variant : "enabled";
+        synchronized (lock) {
+            UsageBatchSnapshot.VariantStatsAgg stats = getVariant(get(feature), v);
+            if (failed) {
+                stats.errorDurationSumMs += durationMs;
+            } else {
+                stats.durationSumMs += durationMs;
+            }
+        }
+    }
+
     public boolean isEmpty() {
         synchronized (lock) {
             return perFeature.isEmpty()
@@ -158,11 +185,23 @@ public final class UsageBatcher {
                 for (Map.Entry<String, UsageBatchSnapshot.VariantStatsAgg> vs :
                         agg.variantStats.entrySet()) {
                     UsageBatchSnapshot.VariantStatsAgg s = vs.getValue();
-                    if (s.checkCount > 0 || s.requestCount > 0 || s.usedCount > 0 || s.viewedCount > 0) {
+                    if (s.checkCount > 0
+                            || s.requestCount > 0
+                            || s.usedCount > 0
+                            || s.viewedCount > 0
+                            || s.errorCount > 0
+                            || s.durationSumMs > 0
+                            || s.errorDurationSumMs > 0) {
                         variantStats.put(
                                 vs.getKey(),
                                 new FeatureStatPayload.VariantStats(
-                                        s.checkCount, s.requestCount, s.usedCount, s.viewedCount));
+                                        s.checkCount,
+                                        s.requestCount,
+                                        s.usedCount,
+                                        s.viewedCount,
+                                        s.errorCount,
+                                        s.durationSumMs,
+                                        s.errorDurationSumMs));
                     }
                 }
                 stats.add(new FeatureStatPayload.StatMessage(
@@ -227,6 +266,9 @@ public final class UsageBatcher {
                     stats.requestCount += snapStats.requestCount;
                     stats.usedCount += snapStats.usedCount;
                     stats.viewedCount += snapStats.viewedCount;
+                    stats.errorCount += snapStats.errorCount;
+                    stats.durationSumMs += snapStats.durationSumMs;
+                    stats.errorDurationSumMs += snapStats.errorDurationSumMs;
                 }
                 agg.uniqueUsersEnabled.addAll(snapAgg.uniqueUsersEnabled);
                 agg.uniqueUsersDisabled.addAll(snapAgg.uniqueUsersDisabled);

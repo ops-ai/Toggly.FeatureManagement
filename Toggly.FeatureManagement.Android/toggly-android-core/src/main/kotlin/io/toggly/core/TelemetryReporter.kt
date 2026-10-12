@@ -39,14 +39,31 @@ internal class TelemetryReporter(
     private val transport: (suspend (Request) -> TelemetryResponse)? = null
 ) {
     private data class FeatureKey(val name: String, val variant: String)
-    private data class Feature(val checks: Long = 0, val used: Long = 0, val viewed: Long = 0) {
-        val pieces get() = ((maxOf(checks, used, viewed) - 1) / VALUE_LIMIT + 1).toInt()
-        fun first() = Feature(minOf(checks, VALUE_LIMIT), minOf(used, VALUE_LIMIT), minOf(viewed, VALUE_LIMIT))
-        fun json() = JsonArray(when {
-            viewed > 0 -> listOf(checks, used, viewed)
-            used > 0 -> listOf(checks, used)
-            else -> listOf(checks)
-        }.map(::JsonPrimitive))
+    private data class Feature(
+        val checks: Long = 0,
+        val used: Long = 0,
+        val viewed: Long = 0,
+        val errorCount: Long = 0,
+        val durationSumMs: Long = 0,
+        val errorDurationSumMs: Long = 0,
+    ) {
+        val pieces get() = (
+            (maxOf(checks, used, viewed, errorCount, durationSumMs, errorDurationSumMs) - 1) /
+                VALUE_LIMIT + 1
+            ).toInt()
+        fun first() = Feature(
+            minOf(checks, VALUE_LIMIT),
+            minOf(used, VALUE_LIMIT),
+            minOf(viewed, VALUE_LIMIT),
+            minOf(errorCount, VALUE_LIMIT),
+            minOf(durationSumMs, VALUE_LIMIT),
+            minOf(errorDurationSumMs, VALUE_LIMIT),
+        )
+        fun json(): JsonArray {
+            val trimmed = listOf(checks, used, viewed, errorCount, durationSumMs, errorDurationSumMs)
+                .dropLastWhile { it == 0L }
+            return JsonArray((if (trimmed.isEmpty()) listOf(0L) else trimmed).map(::JsonPrimitive))
+        }
     }
     private data class Metric(val value: Double, val counter: Boolean) {
         val pieces get() = if (counter) maxOf(1, ceil(value / VALUE_LIMIT).toInt()) else 1
@@ -117,7 +134,34 @@ internal class TelemetryReporter(
     fun recordUsage(key: String, variant: String = "enabled") = recordFeature(key, variant, 1)
     fun recordView(key: String, variant: String = "enabled") = recordFeature(key, variant, 2)
 
-    private fun recordFeature(key: String, variant: String, index: Int) = synchronized(lock) {
+    suspend fun <T> use(
+        key: String,
+        variant: String = "enabled",
+        action: suspend (fail: () -> Unit) -> T,
+    ): T {
+        recordUsage(key, variant)
+        val started = wallNow()
+        var failed = false
+        val fail = { failed = true }
+        return try {
+            val result = action(fail)
+            val durationMs = max(0, wallNow() - started)
+            if (failed) {
+                recordFeature(key, variant, 3)
+                if (durationMs > 0) recordFeature(key, variant, 5, durationMs)
+            } else if (durationMs > 0) {
+                recordFeature(key, variant, 4, durationMs)
+            }
+            result
+        } catch (error: Throwable) {
+            val durationMs = max(0, wallNow() - started)
+            recordFeature(key, variant, 3)
+            if (durationMs > 0) recordFeature(key, variant, 5, durationMs)
+            throw error
+        }
+    }
+
+    private fun recordFeature(key: String, variant: String, index: Int, amount: Long = 1) = synchronized(lock) {
         if (!enabled || disposed) return@synchronized
         if (key.isBlank() || variant.length !in 1..64 || !variant.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '_' || it == '-' }) {
             diagnose("invalid-event"); return@synchronized
@@ -126,9 +170,12 @@ internal class TelemetryReporter(
         val old = features[name]
         val before = old?.value ?: Feature()
         val value = when (index) {
-            0 -> before.copy(checks = before.checks + 1)
-            1 -> before.copy(used = before.used + 1)
-            else -> before.copy(viewed = before.viewed + 1)
+            0 -> before.copy(checks = before.checks + amount)
+            1 -> before.copy(used = before.used + amount)
+            2 -> before.copy(viewed = before.viewed + amount)
+            3 -> before.copy(errorCount = before.errorCount + amount)
+            4 -> before.copy(durationSumMs = before.durationSumMs + amount)
+            else -> before.copy(errorDurationSumMs = before.errorDurationSumMs + amount)
         }
         val size = encode(mapOf(key to mapOf(variant to value.first().json())), emptyMap()).size
         if (size > ENVELOPE_LIMIT) { diagnose("oversized-entry"); return@synchronized }
@@ -198,7 +245,14 @@ internal class TelemetryReporter(
             repeat(stored.entries) {
                 val piece = remaining.first()
                 items += Item(feature = key, delta = piece)
-                remaining = Feature(remaining.checks - piece.checks, remaining.used - piece.used, remaining.viewed - piece.viewed)
+                remaining = Feature(
+                    remaining.checks - piece.checks,
+                    remaining.used - piece.used,
+                    remaining.viewed - piece.viewed,
+                    remaining.errorCount - piece.errorCount,
+                    remaining.durationSumMs - piece.durationSumMs,
+                    remaining.errorDurationSumMs - piece.errorDurationSumMs,
+                )
             }
         }
         metrics.toSortedMap().forEach { (key, stored) ->

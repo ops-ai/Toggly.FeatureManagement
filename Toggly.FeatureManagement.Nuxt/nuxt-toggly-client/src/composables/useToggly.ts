@@ -109,6 +109,7 @@ export function createToggly(config: TogglyClientConfig): UseTogglyReturn {
     identity,
     telemetry: {
       recordUsage: (featureKey, variant) => client.recordUsage(featureKey, undefined, variant),
+      use: (featureKey, fn, variant) => client.use(featureKey, fn, undefined, variant),
       recordView: (featureKey, variant) => client.recordView(featureKey, undefined, variant),
       incrementCounter: (metricKey, value) => client.incrementCounter(metricKey, value),
       setGauge: (metricKey, value) => client.setGauge(metricKey, value),

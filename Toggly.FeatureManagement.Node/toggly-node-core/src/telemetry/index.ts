@@ -9,6 +9,9 @@ import {
 } from './grpc-clients.js'
 import { MetricsBatcher, type MetricsFeatureOptions } from './metrics-batcher.js'
 import { UsageBatcher } from './usage-batcher.js'
+import { runFeatureUsageScope, type FeatureUsageScope } from './usage-scope.js'
+
+export type { FeatureUsageScope } from './usage-scope.js'
 
 export interface TelemetryConfig {
   appKey: string
@@ -240,6 +243,50 @@ export class TelemetryRuntime {
 
   recordView(feature: string, identity?: string, variant?: string): void {
     this.usageBatcher?.recordView(feature, identity, variant)
+  }
+
+  recordUsageError(feature: string, identity?: string, variant?: string, count?: number): void {
+    this.usageBatcher?.recordUsageError(feature, identity, variant, count)
+  }
+
+  recordUsageDuration(
+    feature: string,
+    durationMs: number,
+    identity?: string,
+    variant?: string,
+    failed?: boolean,
+  ): void {
+    this.usageBatcher?.recordUsageDuration(feature, durationMs, identity, variant, failed)
+  }
+
+  recordUsageScopeOutcome(
+    feature: string,
+    outcome: { failed?: boolean; cancelled?: boolean; durationMs?: number },
+    identity?: string,
+    variant?: string,
+  ): void {
+    this.usageBatcher?.recordUsageScopeOutcome(feature, outcome, identity, variant)
+  }
+
+  async use<T>(
+    featureKey: string,
+    fn: (scope: FeatureUsageScope) => Promise<T>,
+    identity?: string,
+    variant = 'enabled',
+  ): Promise<T> {
+    const id = identity
+    return runFeatureUsageScope(
+      {
+        recordAttempt: () => this.recordUsage(featureKey, id, variant),
+        recordSuccessDuration: (durationMs) =>
+          this.recordUsageDuration(featureKey, durationMs, id, variant, false),
+        recordFailure: (durationMs) => {
+          this.recordUsageError(featureKey, id, variant)
+          this.recordUsageDuration(featureKey, durationMs, id, variant, true)
+        },
+      },
+      fn,
+    )
   }
 
   recordDefinitionCacheHit(): void {

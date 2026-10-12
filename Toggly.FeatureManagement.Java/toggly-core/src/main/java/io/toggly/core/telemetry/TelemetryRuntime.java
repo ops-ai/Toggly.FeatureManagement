@@ -2,6 +2,7 @@ package io.toggly.core.telemetry;
 
 import java.lang.reflect.Method;
 import java.time.Duration;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -207,6 +208,33 @@ public final class TelemetryRuntime implements AutoCloseable, DefinitionCacheRec
         if (usageBatcher != null) {
             usageBatcher.recordView(feature, identity, variant);
         }
+    }
+
+    public void recordUsageScopeSuccess(String feature, long durationMs, String variant) {
+        if (usageBatcher != null) {
+            usageBatcher.recordUsageDuration(feature, durationMs, variant, false);
+        }
+    }
+
+    public void recordUsageScopeFailure(String feature, long durationMs, String variant) {
+        if (usageBatcher != null) {
+            usageBatcher.recordUsageError(feature, variant, 1);
+            usageBatcher.recordUsageDuration(feature, durationMs, variant, true);
+        }
+    }
+
+    public FeatureUsageScope beginUsage(String identity, String variant, String... featureKeys) {
+        if (featureKeys == null || featureKeys.length == 0) {
+            throw new IllegalArgumentException("At least one feature key is required.");
+        }
+        for (String featureKey : featureKeys) {
+            if (variant != null) {
+                recordUsage(featureKey, identity, variant);
+            } else {
+                recordUsage(featureKey, identity);
+            }
+        }
+        return new FeatureUsageScope(this, List.of(featureKeys), variant);
     }
 
     @Override

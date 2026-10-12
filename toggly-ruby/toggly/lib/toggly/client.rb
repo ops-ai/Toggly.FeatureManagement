@@ -273,6 +273,25 @@ module Toggly
       @telemetry.record_usage(feature_key.to_s, identity, variant: variant)
     end
 
+    # Run a block inside a usage scope (attempt + duration + errors). Does not evaluate the flag.
+    #
+    # @yieldparam scope [Telemetry::FeatureUsageScope]
+    def use(feature_key, identity: nil, variant: "enabled")
+      key = feature_key.to_s
+      resolved_identity = identity.nil? ? variant_user_id(nil) : identity
+      handlers = [
+        -> { @telemetry&.record_usage(key, resolved_identity, variant: variant) },
+        ->(ms) { @telemetry&.record_usage_scope_success(key, ms, variant: variant) },
+        ->(ms) { @telemetry&.record_usage_scope_failure(key, ms, variant: variant) }
+      ]
+      if @telemetry.nil? || !@telemetry.usage_enabled?
+        scope = Telemetry::FeatureUsageScope.new
+        yield scope
+        return
+      end
+      Telemetry::UsageScopeRunner.run(handlers) { |scope| yield scope }
+    end
+
     # Record a feature viewed/rendered event
     #
     # @param feature_key [String, Symbol]

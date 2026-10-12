@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0 — 2026-10-11
+
+### Added
+- Optional feature value slots 3–5 for usage-scope `errorCount`,
+  `durationSumMs`, and `errorDurationSumMs` (indices match server ingest).
+- `recordUsageError`, `recordUsageDuration`, `recordUsageScopeOutcome`, and
+  `use()` async helper on `TelemetryReporter`.
+
 ## 1.1.2 — 2026-09-27
 
 ### Changed

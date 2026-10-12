@@ -203,6 +203,56 @@ defmodule Toggly do
   def record_usage(client, key, enabled \\ true, variant \\ nil),
     do: GenServer.cast(client, {:usage, key, enabled, :used, variant})
 
+  @doc """
+  Runs `fun` inside a feature usage scope.
+
+  Records `usedCount` on enter. On success adds elapsed ms to `durationSumMs`.
+  On raised exceptions adds `errorCount` and `errorDurationSumMs`, then re-raises.
+
+  When `fun` has arity 1, it receives a zero-argument fail callback for soft failure.
+  """
+  def with_usage(client, key, enabled \\ true, variant \\ nil, fun)
+      when is_function(fun, 0) or is_function(fun, 1) do
+    record_usage(client, key, enabled, variant)
+    started = System.monotonic_time(:millisecond)
+    failed = :atomics.new(1, [])
+
+    fail = fn ->
+      :atomics.put(failed, 1, 1, 1)
+    end
+
+    try do
+      case :erlang.fun_info(fun)[:arity] do
+        0 -> fun.()
+        1 -> fun.(fail)
+      end
+    rescue
+      exception ->
+        duration = max(System.monotonic_time(:millisecond) - started, 0)
+
+        GenServer.cast(
+          client,
+          {:usage_scope, key, enabled, variant, :failure, duration}
+        )
+
+        reraise exception, __STACKTRACE__
+    else
+      result ->
+        duration = max(System.monotonic_time(:millisecond) - started, 0)
+        outcome = if :atomics.get(failed, 1) == 1, do: :failure, else: :success
+
+        GenServer.cast(
+          client,
+          {:usage_scope, key, enabled, variant, outcome, duration}
+        )
+
+        result
+    end
+  end
+
+  def use(client, key, enabled \\ true, variant \\ nil, fun),
+    do: with_usage(client, key, enabled, variant, fun)
+
   @doc "Records a feature view in the current in-memory usage batch."
   def record_view(client, key, enabled \\ true, variant \\ nil),
     do: GenServer.cast(client, {:usage, key, enabled, :viewed, variant})

@@ -32,10 +32,13 @@ public actor TelemetryReporter {
         var checks: Int64 = 0
         var used: Int64 = 0
         var viewed: Int64 = 0
+        var errorCount: Int64 = 0
+        var durationSumMs: Int64 = 0
+        var errorDurationSumMs: Int64 = 0
         var values: [Int64] {
-            if viewed > 0 { return [checks, used, viewed] }
-            if used > 0 { return [checks, used] }
-            return [checks]
+            var arr = [checks, used, viewed, errorCount, durationSumMs, errorDurationSumMs]
+            while arr.count > 1, arr.last == 0 { arr.removeLast() }
+            return arr
         }
     }
 
@@ -311,8 +314,14 @@ public actor TelemetryReporter {
 
     private func singleFeatureFits(_ key: String, variant: String, delta: Delta) -> Bool {
         var packet = Packet()
-        packet.features = [key: [variant: Delta(checks: min(delta.checks, 1_000_000),
-                                              used: min(delta.used, 1_000_000), viewed: min(delta.viewed, 1_000_000))]]
+        packet.features = [key: [variant: Delta(
+            checks: min(delta.checks, 1_000_000),
+            used: min(delta.used, 1_000_000),
+            viewed: min(delta.viewed, 1_000_000),
+            errorCount: min(delta.errorCount, 1_000_000),
+            durationSumMs: min(delta.durationSumMs, 1_000_000),
+            errorDurationSumMs: min(delta.errorDurationSumMs, 1_000_000)
+        )]]
         return packetBytes(packet) <= 49_152
     }
 
@@ -339,7 +348,10 @@ public actor TelemetryReporter {
         switch index {
         case 0: guard updated.checks < Int64.max else { return }; updated.checks += 1
         case 1: guard updated.used < Int64.max else { return }; updated.used += 1
-        default: guard updated.viewed < Int64.max else { return }; updated.viewed += 1
+        case 2: guard updated.viewed < Int64.max else { return }; updated.viewed += 1
+        case 3: guard updated.errorCount < Int64.max else { return }; updated.errorCount += 1
+        case 4: guard updated.durationSumMs < Int64.max else { return }; updated.durationSumMs += 1
+        default: guard updated.errorDurationSumMs < Int64.max else { return }; updated.errorDurationSumMs += 1
         }
         guard singleFeatureFits(key, variant: variant, delta: updated) else {
             diagnose("telemetry_oversized_entry")
@@ -363,6 +375,71 @@ public actor TelemetryReporter {
     }
     public func recordView(_ featureKey: String, variant: String = "enabled") {
         recordFeature(featureKey, variant: variant, index: 2)
+    }
+
+    /// Runs `action` inside a usage scope (used count, duration, errors).
+    public func use<T>(
+        _ featureKey: String,
+        variant: String = "enabled",
+        action: (_ fail: @escaping () -> Void) async throws -> T
+    ) async rethrows -> T {
+        recordUsage(featureKey, variant: variant)
+        let started = clock()
+        var failed = false
+        func fail() { failed = true }
+        do {
+            let result = try await action(fail)
+            let durationMs = max(0, Int64((clock() - started) * 1000))
+            if failed {
+                recordFeature(featureKey, variant: variant, index: 3)
+                if durationMs > 0 { addFeatureAmount(featureKey, variant: variant, index: 5, amount: durationMs) }
+            } else if durationMs > 0 {
+                addFeatureAmount(featureKey, variant: variant, index: 4, amount: durationMs)
+            }
+            return result
+        } catch {
+            let durationMs = max(0, Int64((clock() - started) * 1000))
+            recordFeature(featureKey, variant: variant, index: 3)
+            if durationMs > 0 { addFeatureAmount(featureKey, variant: variant, index: 5, amount: durationMs) }
+            throw error
+        }
+    }
+
+    private func addFeatureAmount(_ key: String, variant: String, index: Int, amount: Int64) {
+        guard amount > 0 else { return }
+        var remaining = amount
+        while remaining > 0 {
+            let piece = min(remaining, 1_000_000)
+            addFeatureDelta(key, variant: variant, index: index, amount: piece)
+            remaining -= piece
+        }
+    }
+
+    private func addFeatureDelta(_ key: String, variant: String, index: Int, amount: Int64) {
+        guard !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, amount > 0 else { return }
+        let old = features[key]?[variant]
+        var updated = old ?? Delta()
+        switch index {
+        case 4:
+            guard updated.durationSumMs <= Int64.max - amount else { return }
+            updated.durationSumMs += amount
+        case 5:
+            guard updated.errorDurationSumMs <= Int64.max - amount else { return }
+            updated.errorDurationSumMs += amount
+        default: return
+        }
+        guard singleFeatureFits(key, variant: variant, delta: updated) else {
+            diagnose("telemetry_oversized_entry")
+            return
+        }
+        accept({ features[key, default: [:]][variant] = updated }, undo: {
+            if let old {
+                features[key, default: [:]][variant] = old
+            } else {
+                features[key]?.removeValue(forKey: variant)
+                if features[key]?.isEmpty == true { features.removeValue(forKey: key) }
+            }
+        })
     }
 
     public func incrementCounter(_ metricKey: String, value: Double = 1) {
@@ -410,6 +487,15 @@ public actor TelemetryReporter {
     }
     func recordView(_ key: String, variant: String, attribution: Attribution) {
         useAttribution(attribution); recordView(key, variant: variant)
+    }
+    func use<T>(
+        _ key: String,
+        variant: String,
+        attribution: Attribution,
+        action: @escaping (_ fail: @escaping () -> Void) async throws -> T
+    ) async rethrows -> T {
+        useAttribution(attribution)
+        return try await use(key, variant: variant, action: action)
     }
     func incrementCounter(_ key: String, value: Double, attribution: Attribution) {
         useAttribution(attribution); incrementCounter(key, value: value)
@@ -569,14 +655,23 @@ public actor TelemetryReporter {
             var previousVariant: String?
             while let variant = nextKey(features[key] ?? [:], after: previousVariant) {
                 guard var delta = features[key]?[variant] else { return false }
-                while delta.checks > 0 || delta.used > 0 || delta.viewed > 0 {
+                while delta.checks > 0 || delta.used > 0 || delta.viewed > 0
+                    || delta.errorCount > 0 || delta.durationSumMs > 0 || delta.errorDurationSumMs > 0 {
                     let piece = Delta(
                         checks: min(delta.checks, 1_000_000),
                         used: min(delta.used, 1_000_000),
-                        viewed: min(delta.viewed, 1_000_000)
+                        viewed: min(delta.viewed, 1_000_000),
+                        errorCount: min(delta.errorCount, 1_000_000),
+                        durationSumMs: min(delta.durationSumMs, 1_000_000),
+                        errorDurationSumMs: min(delta.errorDurationSumMs, 1_000_000)
                     )
                     guard visit(.feature(key, variant, piece)) else { return false }
-                    delta.checks -= piece.checks; delta.used -= piece.used; delta.viewed -= piece.viewed
+                    delta.checks -= piece.checks
+                    delta.used -= piece.used
+                    delta.viewed -= piece.viewed
+                    delta.errorCount -= piece.errorCount
+                    delta.durationSumMs -= piece.durationSumMs
+                    delta.errorDurationSumMs -= piece.errorDurationSumMs
                 }
                 previousVariant = variant
             }
@@ -604,8 +699,20 @@ public actor TelemetryReporter {
         for (key, variants) in packet.features {
             for (variant, delta) in variants {
                 guard var original = features[key]?[variant] else { continue }
-                original.checks -= delta.checks; original.used -= delta.used; original.viewed -= delta.viewed
-                if max(original.checks, original.used, original.viewed) == 0 {
+                original.checks -= delta.checks
+                original.used -= delta.used
+                original.viewed -= delta.viewed
+                original.errorCount -= delta.errorCount
+                original.durationSumMs -= delta.durationSumMs
+                original.errorDurationSumMs -= delta.errorDurationSumMs
+                if max(
+                    original.checks,
+                    original.used,
+                    original.viewed,
+                    original.errorCount,
+                    original.durationSumMs,
+                    original.errorDurationSumMs
+                ) == 0 {
                     features[key]?.removeValue(forKey: variant)
                 } else {
                     features[key]?[variant] = original
