@@ -1,9 +1,9 @@
 name: Install local client-telemetry
 description: >-
-  Install consumer deps against the latest published client-telemetry, then
-  overlay the in-repo built package so PR CI can exercise unpublished APIs
-  without rewriting dependency ranges to file: (keeps bundlers treating it
-  as an external package).
+  Build/pack in-repo @ops-ai/toggly-client-telemetry, export
+  TOGGLY_CLIENT_TELEMETRY_TARBALL for packed-host fixtures, install consumer
+  deps against a published range, then overlay the local package into
+  node_modules for compile/test.
 
 inputs:
   package-dir:
@@ -27,37 +27,43 @@ runs:
         fi
         telemetry="$GITHUB_WORKSPACE/toggly-client-telemetry"
         pkg_json="$wd/package.json"
+        pack_dir="${RUNNER_TEMP:-/tmp}/toggly-client-telemetry-pack"
+        mkdir -p "$pack_dir"
         if [[ ! -f "$pkg_json" ]]; then
           echo "Missing package.json under $wd" >&2
           exit 1
         fi
+        (cd "$telemetry" && (npm ci || npm install) && npm run build && npm pack --pack-destination "$pack_dir")
+        tgz="$(ls -1 "$pack_dir"/ops-ai-toggly-client-telemetry-*.tgz | head -1)"
+        test -f "$tgz"
+        echo "TOGGLY_CLIENT_TELEMETRY_TARBALL=$tgz" >> "$GITHUB_ENV"
+        echo "Exported TOGGLY_CLIENT_TELEMETRY_TARBALL=$tgz"
         if ! PKG="$pkg_json" node -e "
           const p = require(process.env.PKG);
           const d = { ...p.dependencies, ...p.devDependencies, ...p.peerDependencies, ...p.optionalDependencies };
           process.exit(d['@ops-ai/toggly-client-telemetry'] ? 0 : 1);
         "; then
-          echo "Skip local client-telemetry (not a dependency of $wd)"
+          echo "Skip node_modules overlay (not a direct dependency of $wd)"
           (cd "$wd" && (npm ci || npm install))
           exit 0
         fi
-        (cd "$telemetry" && (npm ci || npm install) && npm run build)
-        # Pin to a published range for install, then overlay in-repo dist/API.
+        cp "$pkg_json" "$pkg_json.ops1758.bak"
         PKG="$pkg_json" node -e "
           const fs = require('fs');
           const pkg = JSON.parse(fs.readFileSync(process.env.PKG, 'utf8'));
           for (const key of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
             if (pkg[key] && pkg[key]['@ops-ai/toggly-client-telemetry']) {
-              pkg[key]['@ops-ai/toggly-client-telemetry'] = '^1.1.2';
+              pkg[key]['@ops-ai/toggly-client-telemetry'] = '^1.1.0';
             }
           }
           fs.writeFileSync(process.env.PKG, JSON.stringify(pkg, null, 2) + '\n');
         "
         (cd "$wd" && (npm ci || npm install))
+        mv "$pkg_json.ops1758.bak" "$pkg_json"
         dest="$wd/node_modules/@ops-ai/toggly-client-telemetry"
         mkdir -p "$(dirname "$dest")"
         rm -rf "$dest"
         mkdir -p "$dest"
-        # Copy package without nested node_modules.
         tar -C "$telemetry" -cf - \
           --exclude=node_modules --exclude=.git --exclude=coverage --exclude=tests \
           . | tar -C "$dest" -xf -

@@ -21,7 +21,13 @@ runs:
           wd="$GITHUB_WORKSPACE/$wd"
         fi
         telemetry="$GITHUB_WORKSPACE/toggly-client-telemetry"
-        (cd "$telemetry" && (npm ci || npm install) && npm run build)
+        pack_dir="${RUNNER_TEMP:-/tmp}/toggly-client-telemetry-pack"
+        mkdir -p "$pack_dir"
+        (cd "$telemetry" && (npm ci || npm install) && npm run build && npm pack --pack-destination "$pack_dir")
+        tgz="$(ls -1 "$pack_dir"/ops-ai-toggly-client-telemetry-*.tgz | head -1)"
+        test -f "$tgz"
+        echo "TOGGLY_CLIENT_TELEMETRY_TARBALL=$tgz" >> "$GITHUB_ENV"
+        echo "Exported TOGGLY_CLIENT_TELEMETRY_TARBALL=$tgz"
         WD="$wd" node -e "
           const fs = require('fs');
           const path = require('path');
