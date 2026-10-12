@@ -90,6 +90,28 @@ class TelemetryClientMixin:
 
         return record_attempt, record_success, record_failure
 
+    @staticmethod
+    def _elapsed_ms(start: float) -> int:
+        return max(0, int(round((time.monotonic() - start) * 1000)))
+
+    @staticmethod
+    def _finish_usage_scope(
+        handlers: tuple[Callable[[], None], Callable[[int], None], Callable[[int], None]],
+        scope: _UsageScopeImpl,
+        start: float,
+        error: Optional[BaseException] = None,
+    ) -> None:
+        if error is not None:
+            if is_usage_cancellation(error):
+                return
+            handlers[2](TelemetryClientMixin._elapsed_ms(start))
+            return
+        duration_ms = TelemetryClientMixin._elapsed_ms(start)
+        if scope._state.failed:
+            handlers[2](duration_ms)
+        else:
+            handlers[1](duration_ms)
+
     @contextmanager
     def use(
         self,
@@ -106,16 +128,10 @@ class TelemetryClientMixin:
         try:
             yield scope
         except BaseException as exc:
-            if is_usage_cancellation(exc):
-                raise
-            handlers[2](max(0, int(round((time.monotonic() - start) * 1000))))
+            self._finish_usage_scope(handlers, scope, start, exc)
             raise
         else:
-            duration_ms = max(0, int(round((time.monotonic() - start) * 1000)))
-            if scope._state.failed:
-                handlers[2](duration_ms)
-            else:
-                handlers[1](duration_ms)
+            self._finish_usage_scope(handlers, scope, start)
 
     def run_use(
         self,
@@ -161,16 +177,10 @@ class TelemetryClientMixin:
         try:
             yield scope
         except BaseException as exc:
-            if is_usage_cancellation(exc):
-                raise
-            handlers[2](max(0, int(round((time.monotonic() - start) * 1000))))
+            self._finish_usage_scope(handlers, scope, start, exc)
             raise
         else:
-            duration_ms = max(0, int(round((time.monotonic() - start) * 1000)))
-            if scope._state.failed:
-                handlers[2](duration_ms)
-            else:
-                handlers[1](duration_ms)
+            self._finish_usage_scope(handlers, scope, start)
 
     def measure(
         self,
