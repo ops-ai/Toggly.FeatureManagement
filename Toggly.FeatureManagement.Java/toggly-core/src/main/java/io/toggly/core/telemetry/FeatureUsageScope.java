@@ -25,7 +25,7 @@ public final class FeatureUsageScope implements AutoCloseable {
     public FeatureUsageScope(
             TelemetryRuntime telemetry, List<String> featureKeys, String variant) {
         this.telemetry = telemetry;
-        this.featureKeys = featureKeys;
+        this.featureKeys = featureKeys == null ? List.of() : List.copyOf(featureKeys);
         this.variant = variant == null || variant.isEmpty() ? "enabled" : variant;
         this.startNanos = System.nanoTime();
     }
