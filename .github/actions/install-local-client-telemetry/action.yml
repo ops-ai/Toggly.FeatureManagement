@@ -1,26 +1,23 @@
 name: Install local client-telemetry
 description: >-
-  Build and pack in-repo @ops-ai/toggly-client-telemetry, then install it into
-  a package directory so PR CI can resolve unpublished manifest versions
-  (same pattern as NestJS toggly-node-core packing).
+  Install consumer deps against the latest published client-telemetry, then
+  overlay the in-repo built package so PR CI can exercise unpublished APIs
+  without rewriting dependency ranges to file: (keeps bundlers treating it
+  as an external package).
 
 inputs:
   package-dir:
-    description: >-
-      Package directory containing package.json / node_modules (relative to
-      repo root, or absolute).
+    description: Package directory containing package.json (relative or absolute)
     required: true
   use-npm-ci:
-    description: >-
-      When true (default), run npm ci first then overlay the packed tarball
-      with npm install --no-save. When false, skip npm ci (caller installs).
+    description: Unused; kept for call-site compatibility.
     required: false
     default: 'true'
 
 runs:
   using: composite
   steps:
-    - name: Pack and install local @ops-ai/toggly-client-telemetry
+    - name: Install with overlaid local @ops-ai/toggly-client-telemetry
       shell: bash
       run: |
         set -euo pipefail
@@ -28,33 +25,40 @@ runs:
         if [[ "$wd" != /* ]]; then
           wd="$GITHUB_WORKSPACE/$wd"
         fi
-        TELEMETRY_DIR="$GITHUB_WORKSPACE/toggly-client-telemetry"
-        PACK_DIR="${RUNNER_TEMP:-/tmp}/toggly-client-telemetry-pack"
-        mkdir -p "$PACK_DIR"
-        (
-          cd "$TELEMETRY_DIR"
-          if [[ -f package-lock.json ]]; then
-            npm ci || npm install
-          else
-            npm install
-          fi
-          npm run build
-          npm pack --pack-destination "$PACK_DIR"
-        )
-        TGZ="$(ls -1 "$PACK_DIR"/ops-ai-toggly-client-telemetry-*.tgz | head -1)"
-        test -f "$TGZ"
-        cd "$wd"
-        if ! node -e "const p=require('./package.json'); const d={...p.dependencies,...p.devDependencies,...p.peerDependencies}; process.exit(d['@ops-ai/toggly-client-telemetry']?0:1)"; then
+        telemetry="$GITHUB_WORKSPACE/toggly-client-telemetry"
+        pkg_json="$wd/package.json"
+        if [[ ! -f "$pkg_json" ]]; then
+          echo "Missing package.json under $wd" >&2
+          exit 1
+        fi
+        if ! PKG="$pkg_json" node -e "
+          const p = require(process.env.PKG);
+          const d = { ...p.dependencies, ...p.devDependencies, ...p.peerDependencies, ...p.optionalDependencies };
+          process.exit(d['@ops-ai/toggly-client-telemetry'] ? 0 : 1);
+        "; then
           echo "Skip local client-telemetry (not a dependency of $wd)"
-          if [[ "${{ inputs.use-npm-ci }}" == "true" ]]; then
-            npm ci || npm install
-          fi
+          (cd "$wd" && (npm ci || npm install))
           exit 0
         fi
-        if [[ "${{ inputs.use-npm-ci }}" == "true" ]]; then
-          # Prefer install when lockfile still pins an older telemetry range
-          # than package.json (common while 1.x.y is unpublished).
-          npm ci || npm install
-        fi
-        # --no-save: do not rewrite package.json to file: temp paths.
-        npm install --no-save "$TGZ"
+        (cd "$telemetry" && (npm ci || npm install) && npm run build)
+        # Pin to a published range for install, then overlay in-repo dist/API.
+        PKG="$pkg_json" node -e "
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync(process.env.PKG, 'utf8'));
+          for (const key of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
+            if (pkg[key] && pkg[key]['@ops-ai/toggly-client-telemetry']) {
+              pkg[key]['@ops-ai/toggly-client-telemetry'] = '^1.1.2';
+            }
+          }
+          fs.writeFileSync(process.env.PKG, JSON.stringify(pkg, null, 2) + '\n');
+        "
+        (cd "$wd" && (npm ci || npm install))
+        dest="$wd/node_modules/@ops-ai/toggly-client-telemetry"
+        mkdir -p "$(dirname "$dest")"
+        rm -rf "$dest"
+        mkdir -p "$dest"
+        # Copy package without nested node_modules.
+        tar -C "$telemetry" -cf - \
+          --exclude=node_modules --exclude=.git --exclude=coverage --exclude=tests \
+          . | tar -C "$dest" -xf -
+        echo "Overlaid local toggly-client-telemetry into $dest"

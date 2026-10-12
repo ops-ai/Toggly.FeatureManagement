@@ -37,7 +37,8 @@ permissions:
   security-events: write
 
 concurrency:
-  group: client-telemetry-sdk-release
+  # Suffixed so a new dispatch is not blocked by a stuck pre-cancel-in-progress run.
+  group: client-telemetry-sdk-release-v2
   cancel-in-progress: true
 
 env:

@@ -1,7 +1,8 @@
 name: Install local client-telemetry (pnpm)
 description: >-
-  Build in-repo @ops-ai/toggly-client-telemetry and force a pnpm override so
-  workspace installs resolve unpublished manifest versions.
+  Install the pnpm workspace against published client-telemetry, then overlay
+  the in-repo built package into every store copy so unpublished APIs are
+  available without file: overrides that force unbuild to bundle the package.
 
 inputs:
   workspace-dir:
@@ -11,7 +12,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Override and install with local client-telemetry
+    - name: Install and overlay local client-telemetry
       shell: bash
       run: |
         set -euo pipefail
@@ -21,15 +22,51 @@ runs:
         fi
         telemetry="$GITHUB_WORKSPACE/toggly-client-telemetry"
         (cd "$telemetry" && (npm ci || npm install) && npm run build)
-        WD="$wd" TELEMETRY_DIR="$telemetry" node -e "
+        WD="$wd" node -e "
           const fs = require('fs');
-          const pkgPath = require('path').join(process.env.WD, 'package.json');
+          const path = require('path');
+          const pkgPath = path.join(process.env.WD, 'package.json');
           const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-          pkg.pnpm = pkg.pnpm || {};
-          pkg.pnpm.overrides = {
-            ...(pkg.pnpm.overrides || {}),
-            '@ops-ai/toggly-client-telemetry': process.env.TELEMETRY_DIR,
+          const pin = (obj) => {
+            if (obj && obj['@ops-ai/toggly-client-telemetry']) {
+              obj['@ops-ai/toggly-client-telemetry'] = '^1.1.2';
+            }
           };
+          pin(pkg.dependencies);
+          pin(pkg.devDependencies);
+          if (pkg.pnpm && pkg.pnpm.overrides) {
+            delete pkg.pnpm.overrides['@ops-ai/toggly-client-telemetry'];
+          }
           fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+          // Also pin workspace package manifests that declare the dependency.
+          const walk = (dir) => {
+            for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+              if (ent.name === 'node_modules' || ent.name === '.git') continue;
+              const full = path.join(dir, ent.name);
+              if (ent.isDirectory()) walk(full);
+              else if (ent.name === 'package.json') {
+                const p = JSON.parse(fs.readFileSync(full, 'utf8'));
+                let changed = false;
+                for (const key of ['dependencies', 'devDependencies', 'peerDependencies']) {
+                  if (p[key] && p[key]['@ops-ai/toggly-client-telemetry']) {
+                    p[key]['@ops-ai/toggly-client-telemetry'] = '^1.1.2';
+                    changed = true;
+                  }
+                }
+                if (changed) fs.writeFileSync(full, JSON.stringify(p, null, 2) + '\n');
+              }
+            }
+          };
+          walk(process.env.WD);
         "
         (cd "$wd" && pnpm install --no-frozen-lockfile)
+        # Overlay every pnpm store copy + any flat node_modules link.
+        while IFS= read -r dest; do
+          [[ -e "$dest" ]] || continue
+          rm -rf "$dest"
+          mkdir -p "$dest"
+          tar -C "$telemetry" -cf - \
+            --exclude=node_modules --exclude=.git --exclude=coverage --exclude=tests \
+            . | tar -C "$dest" -xf -
+          echo "Overlaid local toggly-client-telemetry into $dest"
+        done < <(find "$wd" -type d -path '*/node_modules/@ops-ai/toggly-client-telemetry' 2>/dev/null || true)

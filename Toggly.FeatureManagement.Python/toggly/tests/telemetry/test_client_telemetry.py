@@ -112,7 +112,7 @@ class TestClientTelemetry:
 
         assert len(usage.calls) == 1
         stats = {
-            s["featureName"]: s["variantStats"]["enabled"]
+            s["feature"]: s["variantStats"]["enabled"]
             for s in usage.calls[0]["stats"]
         }
         assert stats["FeatureA"]["usedCount"] == 1
@@ -221,7 +221,7 @@ class TestAsyncClientTelemetry:
 
         client.flush_telemetry()
         stats = {
-            s["featureName"]: s["variantStats"]["enabled"]
+            s["feature"]: s["variantStats"]["enabled"]
             for s in usage.calls[0]["stats"]
         }
         assert stats["FeatureA"]["usedCount"] == 1
