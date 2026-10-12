@@ -64,7 +64,8 @@ runs:
         mkdir -p "$(dirname "$dest")"
         rm -rf "$dest"
         mkdir -p "$dest"
-        tar -C "$telemetry" -cf - \
-          --exclude=node_modules --exclude=.git --exclude=coverage --exclude=tests \
-          . | tar -C "$dest" -xf -
+        # Copy only the publishable surface (package.json + dist). Including src/
+        # makes unbuild treat the package as local source and fail on implicit bundling.
+        cp "$telemetry/package.json" "$dest/package.json"
+        cp -R "$telemetry/dist" "$dest/dist"
         echo "Overlaid local toggly-client-telemetry into $dest"

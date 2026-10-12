@@ -71,8 +71,8 @@ runs:
           [[ -e "$dest" ]] || continue
           rm -rf "$dest"
           mkdir -p "$dest"
-          tar -C "$telemetry" -cf - \
-            --exclude=node_modules --exclude=.git --exclude=coverage --exclude=tests \
-            . | tar -C "$dest" -xf -
+          cp "$telemetry/package.json" "$dest/package.json"
+          rm -rf "$dest/dist"
+          cp -R "$telemetry/dist" "$dest/dist"
           echo "Overlaid local toggly-client-telemetry into $dest"
         done < <(find "$wd" -type d -path '*/node_modules/@ops-ai/toggly-client-telemetry' 2>/dev/null || true)

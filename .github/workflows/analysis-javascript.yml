@@ -1006,4 +1006,11 @@ jobs:
         with:
           package-dir: Toggly.FeatureManagement.Solid
       - run: npm run build
-      - run: node tests/install-host.mjs
+      # Registry packed-host gate: unset local tarball so install-host.mjs
+      # resolves @ops-ai/toggly-client-telemetry from public npm.
+      - name: Verify packed SolidStart host against public registry
+        env:
+          TOGGLY_CLIENT_TELEMETRY_TARBALL: ''
+        run: |
+          unset TOGGLY_CLIENT_TELEMETRY_TARBALL
+          node tests/install-host.mjs

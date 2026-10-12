@@ -428,7 +428,7 @@ test('classifies the JavaScript packed browser harness as test code in both scan
 
 test('installs the packed Solid host browser with its own resolved Playwright CLI before verification', () => {
   const job = workflow.match(/\n  solidstart-host:[\s\S]*?(?=\n  [a-z][\w-]*:|$)/)?.[0] ?? '';
-  assert.match(job, /run: node tests\/install-host\.mjs/);
+  assert.match(job, /node tests\/install-host\.mjs/);
   assert.doesNotMatch(job, /npx|cd tests\/host/);
   assertRequiredHost('SolidJS', 'solidstart-host');
   const installer = readFileSync(new URL('../../Toggly.FeatureManagement.Solid/tests/install-host.mjs', import.meta.url), 'utf8');
