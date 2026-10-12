@@ -52,7 +52,7 @@ export interface FrontendTelemetryRuntime {
   recordUsage(featureKey: string, variant?: string): void
   use: <T>(
     featureKey: string,
-    fn: (scope: import('@ops-ai/toggly-client-telemetry').FeatureUsageScope) => Promise<T>,
+    fn: (scope: import('./telemetry/usage-scope.js').FeatureUsageScope) => Promise<T>,
     variant?: string,
   ) => Promise<T>
   recordView(featureKey: string, variant?: string): void

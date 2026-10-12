@@ -8,7 +8,8 @@ import {
 import { MetricsBatcher, type MetricsFeatureOptions } from './metrics-batcher.js'
 import { UsageBatcher, type UsageFlushBundle } from './usage-batcher.js'
 import type { MetricStatPayload } from './metrics-batcher.js'
-import { runFeatureUsageScope, type FeatureUsageScope } from './usage-scope.js'
+import { runFeatureUsageScope } from './usage-scope.js'
+import type { FeatureUsageScope } from './usage-scope.js'
 
 export type { FeatureUsageScope } from './usage-scope.js'
 
