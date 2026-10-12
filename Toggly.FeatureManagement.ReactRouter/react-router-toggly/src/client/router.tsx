@@ -2,17 +2,17 @@
  * React Router-specific utilities for Toggly
  */
 
-import { useLoaderData, useRouteLoaderData } from 'react-router';
-
-// SerializeFrom was removed in React Router v2 — define a compatible alias
-type SerializeFrom<T> = T;
+import { useLoaderData, useRouteLoaderData, useInRouterContext } from 'react-router';
+import type { ReactElement } from 'react';
 import {
   TOGGLY_LOADER_KEY,
 } from '../core';
-import type { ReactElement } from 'react';
 import type { ServerFeatureContext, TogglyConfig } from '../core';
 import { serializeJsonForInlineScript } from '@ops-ai/toggly-hooks-types';
 import { TogglyProvider, type TogglyProviderProps } from './context';
+
+// SerializeFrom was removed in React Router v2 — define a compatible alias
+type SerializeFrom<T> = T;
 
 /**
  * Props for RouterTogglyProvider
@@ -22,6 +22,116 @@ export interface RouterTogglyProviderProps extends Omit<TogglyProviderProps, 'se
   routeId?: string;
   /** Fallback server context if not in loader data */
   fallbackContext?: ServerFeatureContext;
+}
+
+function resolveServerContext(
+  data: Record<string, unknown> | undefined,
+  fallbackContext?: ServerFeatureContext,
+): ServerFeatureContext | undefined {
+  const serverContext = data?.[TOGGLY_LOADER_KEY] as ServerFeatureContext | undefined;
+  return serverContext ?? fallbackContext;
+}
+
+function buildMergedConfig(
+  config: TogglyConfig | undefined,
+  serverContext: ServerFeatureContext | undefined,
+): TogglyConfig | undefined {
+  return (
+    config ??
+    (serverContext
+      ? {
+          appKey: serverContext.appKey,
+          environment: serverContext.environment,
+        }
+      : undefined)
+  );
+}
+
+function RouterTogglyProviderInner({
+  children,
+  serverContext,
+  config,
+  ...props
+}: Readonly<TogglyProviderProps & { serverContext?: ServerFeatureContext }>): ReactElement {
+  const mergedConfig = buildMergedConfig(config, serverContext);
+
+  return (
+    <TogglyProvider serverContext={serverContext} config={mergedConfig} {...props}>
+      {children}
+    </TogglyProvider>
+  );
+}
+
+function RouterTogglyProviderWithData({
+  children,
+  data,
+  fallbackContext,
+  config,
+  ...props
+}: Readonly<RouterTogglyProviderProps & { data: Record<string, unknown> | undefined }>): ReactElement {
+  const serverContext = resolveServerContext(data, fallbackContext);
+
+  return (
+    <RouterTogglyProviderInner serverContext={serverContext} config={config} {...props}>
+      {children}
+    </RouterTogglyProviderInner>
+  );
+}
+
+function RouterTogglyProviderFromRoute({
+  children,
+  routeId,
+  fallbackContext,
+  config,
+  ...props
+}: Readonly<RouterTogglyProviderProps & { routeId: string }>): ReactElement {
+  const routeData = useRouteLoaderData(routeId) as Record<string, unknown> | undefined;
+
+  return (
+    <RouterTogglyProviderWithData
+      data={routeData}
+      fallbackContext={fallbackContext}
+      config={config}
+      {...props}
+    >
+      {children}
+    </RouterTogglyProviderWithData>
+  );
+}
+
+function RouterTogglyProviderFromLoader({
+  children,
+  fallbackContext,
+  config,
+  ...props
+}: Readonly<RouterTogglyProviderProps>): ReactElement {
+  const loaderData = useLoaderData() as Record<string, unknown> | undefined;
+
+  return (
+    <RouterTogglyProviderWithData
+      data={loaderData}
+      fallbackContext={fallbackContext}
+      config={config}
+      {...props}
+    >
+      {children}
+    </RouterTogglyProviderWithData>
+  );
+}
+
+function RouterTogglyProviderStatic({
+  children,
+  fallbackContext,
+  config,
+  ...props
+}: Readonly<RouterTogglyProviderProps>): ReactElement {
+  const serverContext = fallbackContext ?? getWindowTogglyData();
+
+  return (
+    <RouterTogglyProviderInner serverContext={serverContext} config={config} {...props}>
+      {children}
+    </RouterTogglyProviderInner>
+  );
 }
 
 /**
@@ -43,34 +153,29 @@ export function RouterTogglyProvider({
   fallbackContext,
   config,
   ...props
-}: RouterTogglyProviderProps): ReactElement {
-  // Call both hooks on every render. An empty route id safely produces no
-  // route data and keeps the hook order stable when routeId changes.
-  // Router context errors are surfaced to the application's Error Boundary.
-  const routeData = useRouteLoaderData(routeId ?? '') as Record<string, unknown> | undefined;
-  const loaderData = useLoaderData() as Record<string, unknown> | undefined;
-  const data = routeId ? routeData : loaderData;
-  const serverContext = data?.[TOGGLY_LOADER_KEY] as
-    | ServerFeatureContext
-    | undefined;
+}: Readonly<RouterTogglyProviderProps>): ReactElement {
+  const inRouter = useInRouterContext();
 
-  // Use fallback if no server context
-  const resolvedServerContext = serverContext ?? fallbackContext;
+  if (routeId && inRouter) {
+    return (
+      <RouterTogglyProviderFromRoute routeId={routeId} fallbackContext={fallbackContext} config={config} {...props}>
+        {children}
+      </RouterTogglyProviderFromRoute>
+    );
+  }
 
-  // Merge config with server context
-  const mergedConfig: TogglyConfig | undefined = config ?? (resolvedServerContext ? {
-    appKey: resolvedServerContext.appKey,
-    environment: resolvedServerContext.environment,
-  } : undefined);
+  if (inRouter) {
+    return (
+      <RouterTogglyProviderFromLoader fallbackContext={fallbackContext} config={config} {...props}>
+        {children}
+      </RouterTogglyProviderFromLoader>
+    );
+  }
 
   return (
-    <TogglyProvider
-      serverContext={resolvedServerContext}
-      config={mergedConfig}
-      {...props}
-    >
+    <RouterTogglyProviderStatic fallbackContext={fallbackContext} config={config} {...props}>
       {children}
-    </TogglyProvider>
+    </RouterTogglyProviderStatic>
   );
 }
 

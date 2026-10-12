@@ -14,17 +14,19 @@ import {
   useTogglyRouteLoaderData,
 } from '../../src/client/router';
 import { TOGGLY_LOADER_KEY, type ServerFeatureContext } from '../../src/core';
-import { useLoaderData, useRouteLoaderData } from 'react-router';
+import { useLoaderData, useRouteLoaderData, useInRouterContext } from 'react-router';
 import { useTogglyContext } from '../../src/client/context';
 
 // Mock react-router
 jest.mock('react-router', () => ({
   useLoaderData: jest.fn(),
   useRouteLoaderData: jest.fn(),
+  useInRouterContext: jest.fn(),
 }));
 
 const mockUseLoaderData = useLoaderData as jest.Mock;
 const mockUseRouteLoaderData = useRouteLoaderData as jest.Mock;
+const mockUseInRouterContext = useInRouterContext as jest.Mock;
 
 function ContextProbe(): React.ReactElement {
   const { flags, isReady } = useTogglyContext();
@@ -212,6 +214,8 @@ describe('RouterTogglyProvider', () => {
   beforeEach(() => {
     mockUseLoaderData.mockReset();
     mockUseRouteLoaderData.mockReset();
+    mockUseInRouterContext.mockReset();
+    mockUseInRouterContext.mockReturnValue(true);
   });
 
   it('should render with loader data context', () => {
@@ -251,7 +255,7 @@ describe('RouterTogglyProvider', () => {
     );
 
     expect(mockUseRouteLoaderData).toHaveBeenCalledWith('root');
-    expect(mockUseLoaderData).toHaveBeenCalledTimes(1);
+    expect(mockUseLoaderData).not.toHaveBeenCalled();
     expect(screen.getByTestId('child')).toHaveTextContent('Hello');
   });
 
@@ -338,7 +342,68 @@ describe('RouterTogglyProvider', () => {
     );
 
     expect(screen.getByTestId('child')).toHaveTextContent('Hello');
-    expect(mockUseRouteLoaderData).toHaveBeenCalledWith('');
+    expect(mockUseRouteLoaderData).not.toHaveBeenCalled();
+  });
+
+  it('should ignore routeId outside a data router and use static hydration', () => {
+    mockUseInRouterContext.mockReturnValue(false);
+    const fallbackContext: ServerFeatureContext = {
+      flags: { static: true },
+      fetchedAt: Date.now(),
+    };
+
+    render(
+      <RouterTogglyProvider routeId="root" fallbackContext={fallbackContext}>
+        <ContextProbe />
+      </RouterTogglyProvider>,
+    );
+
+    expect(mockUseRouteLoaderData).not.toHaveBeenCalled();
+    expect(screen.getByTestId('context-probe')).toHaveTextContent(
+      JSON.stringify({ flags: { static: true }, isReady: true }),
+    );
+  });
+
+  it('should hydrate from fallbackContext outside a data router (SSR)', () => {
+    mockUseInRouterContext.mockReturnValue(false);
+    const fallbackContext: ServerFeatureContext = {
+      flags: { ssr: true },
+      fetchedAt: Date.now(),
+    };
+
+    render(
+      <RouterTogglyProvider fallbackContext={fallbackContext}>
+        <ContextProbe />
+      </RouterTogglyProvider>
+    );
+
+    expect(mockUseLoaderData).not.toHaveBeenCalled();
+    expect(mockUseRouteLoaderData).not.toHaveBeenCalled();
+    expect(screen.getByTestId('context-probe')).toHaveTextContent(
+      JSON.stringify({ flags: { ssr: true }, isReady: true }),
+    );
+  });
+
+  it('should hydrate from window data outside a data router when fallback is absent', () => {
+    mockUseInRouterContext.mockReturnValue(false);
+    const windowContext: ServerFeatureContext = {
+      flags: { window: true },
+      fetchedAt: Date.now(),
+    };
+    (global.window as unknown as { __TOGGLY_DATA__: ServerFeatureContext }).__TOGGLY_DATA__ =
+      windowContext;
+
+    render(
+      <RouterTogglyProvider>
+        <ContextProbe />
+      </RouterTogglyProvider>,
+    );
+
+    expect(mockUseLoaderData).not.toHaveBeenCalled();
+    expect(mockUseRouteLoaderData).not.toHaveBeenCalled();
+    expect(screen.getByTestId('context-probe')).toHaveTextContent(
+      JSON.stringify({ flags: { window: true }, isReady: true }),
+    );
   });
 });
 

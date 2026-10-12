@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.1] - 2026-10-11
+
+### Fixed
+- Only call `useRouteLoaderData` when `routeId` is set and use `useInRouterContext` so SSR and non-data-router apps hydrate from `fallbackContext` / `TogglyScript` without invoking data-router hooks [OPS-1756].
+
 ## [1.3.0] - 2026-10-04
 
 ### Added

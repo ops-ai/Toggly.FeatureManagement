@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.2 — 2026-10-11
+
+### Fixed
+
+- After restoring verified signed envelopes from persistence, always attempt the network refresh so cold offline browsers still observe denied transport while serving cached flags [OPS-1756].
+- Skip browser lifecycle telemetry flushes when `storage` is configured so signed envelopes commit to origin `localStorage` across headless profile restarts (fixes live-acceptance cold signed persistence) [OPS-1756].
+
+### Changed
+
+- Widen `@ops-ai/toggly-node-core` dependency to `^0.11.0 || ^0.12.0` so apps can use 0.11.x or 0.12.x without npm overrides [OPS-1756].
+
 ## 0.5.1 — 2026-09-27
 
 ### Fixed

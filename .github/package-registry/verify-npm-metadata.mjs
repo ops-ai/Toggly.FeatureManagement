@@ -103,6 +103,14 @@ function forbiddenUrl(value) {
 const CARET_RANGE =
   /^\^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*)?(?:\+[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*)?$/;
 
+/** Single caret range, or `^a.b.c || ^d.e.f` when 0.x minors must both be accepted. */
+function isAllowedCaretDependencyRange(value) {
+  if (CARET_RANGE.test(value)) return true;
+  const parts = value.split(' || ');
+  if (parts.length !== 2) return false;
+  return parts.every((part) => CARET_RANGE.test(part.trim()));
+}
+
 /**
  * Nearest pnpm workspace root above a manifest, relative to the repo root.
  * Returns null when the package is not inside any pnpm workspace.
@@ -165,7 +173,7 @@ export function validateIntraRepoDependencies(pkg, workspaceIndex) {
         continue;
       }
 
-      if (value === 'workspace:^' || CARET_RANGE.test(value)) continue;
+      if (value === 'workspace:^' || isAllowedCaretDependencyRange(value)) continue;
 
       errors.push(
         `${section}.${depName}: repo deps must use workspace:^ or a caret range so installs dedupe, got ${value}`,

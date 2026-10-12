@@ -179,7 +179,6 @@ export function connectBrowser(
     try {
       const restored = restoreCached(ownRequest);
       if (restored) await restored;
-      if (!isCurrentRequest(ownRequest)) return;
       await fetchAndPublish(ownRequest, unconditional, pin, controller);
     } catch (cause) {
       if (isCurrentRequest(ownRequest)) report(cause);

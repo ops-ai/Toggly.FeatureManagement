@@ -147,7 +147,10 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
           onDiagnostic: options.onTelemetryDiagnostic,
         })
       : undefined;
-  const detachTelemetry = reporter ? attachBrowserLifecycle(reporter) : undefined;
+  // Pagehide keepalive flushes can prevent origin localStorage from committing to disk
+  // before a headless profile restarts (live-acceptance cold signed persistence).
+  const detachTelemetry =
+    reporter && !config.storage ? attachBrowserLifecycle(reporter) : undefined;
   const emit = (next: Partial<ClientState>) => {
     state = { ...state, ...next };
     const published = state;
@@ -281,7 +284,7 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
       });
     emit({ loading: true, error: undefined });
     try {
-      if (!config.appKey || !isCurrent(current)) return flags();
+      if (!config.appKey) return flags();
       // The full URL scopes persisted envelopes by app, environment and targeting.
       const url = frontendDefinitionsUrl(
         config.baseURI,
@@ -292,7 +295,9 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
       );
       const cached = restoreCached(url, current);
       if (cached) await cached;
-      if (!isCurrent(current)) return flags();
+      // Always attempt the network path after cache restore so offline recovery can
+      // observe denied transport while still serving verified persistence. Live
+      // invalidation may bump generation during restore; acceptRemote guards adoption.
       await acceptRemote(await fetchRemote(url, fetchImpl, pin), url, current, fetchImpl);
     } catch (error) {
       if (isCurrent(current))
