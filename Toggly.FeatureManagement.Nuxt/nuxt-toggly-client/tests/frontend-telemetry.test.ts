@@ -62,6 +62,29 @@ describe('browser telemetry facade', () => {
     expect(json.f.Flag.green).toEqual([0, 0, 1])
   })
 
+  it('use() records attempt and soft-fail error slots on the browser reporter', async () => {
+    const toggly = createToggly({
+      appKey: 'app',
+      environment: 'Test',
+      metricsBaseUrl: 'https://collector.example',
+      refreshInterval: 0,
+      enableLiveUpdates: false,
+    })
+    await toggly.init()
+
+    await toggly.telemetry.use('Scoped', async () => undefined)
+    await toggly.telemetry.use('Scoped', async (scope) => {
+      scope.fail()
+    })
+    await toggly.telemetry.flushTelemetry()
+
+    const calls = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('/api/frontend/telemetry'))
+    expect(calls).toHaveLength(1)
+    const json = await payloadFrom(calls[0][1])
+    expect(json.f.Scoped.enabled[1]).toBe(2)
+    expect(json.f.Scoped.enabled[3]).toBe(1)
+  })
+
   it('disposes the old browser owner when createToggly replaces it', async () => {
     const first = createToggly({ appKey: 'old', refreshInterval: 0, enableLiveUpdates: false })
     await first.init()
