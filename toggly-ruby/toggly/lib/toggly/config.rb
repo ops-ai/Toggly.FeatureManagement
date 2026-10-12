@@ -75,6 +75,9 @@ module Toggly
     # @return [Boolean] Enable business metrics (Metrics.SendMetrics)
     attr_reader :enable_metrics
 
+    # @return [Boolean] Opt-in process metrics every 10s (requires enable_metrics)
+    attr_reader :system_metrics
+
     # @return [String] Base URL for usage/metrics gRPC (default app.toggly.io)
     attr_accessor :metrics_base_url
 
@@ -120,8 +123,10 @@ module Toggly
 
       @usage_tracking_explicit = options.key?(:enable_usage_tracking)
       @metrics_explicit = options.key?(:enable_metrics)
+      @system_metrics_explicit = options.key?(:system_metrics)
       @enable_usage_tracking = options[:enable_usage_tracking] if @usage_tracking_explicit
       @enable_metrics = options[:enable_metrics] if @metrics_explicit
+      @system_metrics = options.fetch(:system_metrics, false)
       apply_telemetry_defaults!
       @metrics_base_url = normalize_url(options[:metrics_base_url] || DEFAULT_METRICS_BASE_URL)
       @usage_flush_interval = options.fetch(:usage_flush_interval, DEFAULT_TELEMETRY_FLUSH_SECONDS)
@@ -162,6 +167,11 @@ module Toggly
     def enable_metrics=(value)
       @metrics_explicit = true
       @enable_metrics = value
+    end
+
+    def system_metrics=(value)
+      @system_metrics_explicit = true
+      @system_metrics = value ? true : false
     end
 
     # Apply usage/metrics defaults from the current +app_key+ and
@@ -214,6 +224,7 @@ module Toggly
         use_signed_definitions: @use_signed_definitions,
         enable_usage_tracking: @enable_usage_tracking,
         enable_metrics: @enable_metrics,
+        system_metrics: @system_metrics,
         metrics_base_url: @metrics_base_url,
         usage_flush_interval: @usage_flush_interval,
         metrics_flush_interval: @metrics_flush_interval

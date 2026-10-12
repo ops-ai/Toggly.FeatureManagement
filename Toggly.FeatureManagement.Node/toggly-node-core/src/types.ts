@@ -127,6 +127,12 @@ export interface TogglyServerConfig extends TogglyConfig {
    * Defaults to true when `appKey` is set.
    */
   enableMetrics?: boolean
+  /**
+   * Opt-in automatic process metrics (CpuUsage, MemoryWorkingSet, GCHeapSize,
+   * ExceptionCount, TimeInGC, EventLoopDelay). Default false. Requires
+   * `enableMetrics`.
+   */
+  systemMetrics?: boolean
   /** Usage flush interval in ms (default: 60000). 0 disables the timer. */
   usageFlushInterval?: number
   /** Metrics flush interval in ms (default: 60000). 0 disables the timer. */

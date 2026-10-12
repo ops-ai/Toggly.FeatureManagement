@@ -1,3 +1,12 @@
+## 0.13.0
+
+2026-10-12
+
+### Added
+- Opt-in `systemMetrics: true` collects process CpuUsage, MemoryWorkingSet,
+  GCHeapSize, ExceptionCount (uncaught only), TimeInGC, and EventLoopDelay
+  every 10s when metrics telemetry is enabled [OPS-1765].
+
 ## 0.12.0
 
 2026-10-04

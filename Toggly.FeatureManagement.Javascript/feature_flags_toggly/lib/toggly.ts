@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
+import { attachClientSystemMetrics, createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
 import { FeatureRequirement, StorageKeys, TogglyConfig, VariantResult, EvaluatedVariantDef } from './models';
 import { decodeVariantValue } from './decode-variant-value';
@@ -94,6 +94,7 @@ export class Toggly {
   private static _telemetry: TelemetryReporter | undefined;
   private static _retiredTelemetry: TelemetryReporter | undefined;
   private static _detachTelemetry: (() => void) | undefined;
+  private static _detachSystemMetrics: (() => void) | undefined;
 
   static _ws: WebSocket | null = null;
   static _wsConnected: boolean = false;
@@ -291,6 +292,7 @@ export class Toggly {
       (Toggly._config.metricsBaseUrl ?? 'https://metrics.toggly.io') === (config.metricsBaseUrl ?? 'https://metrics.toggly.io') &&
       (Toggly._config.telemetryFlushIntervalMs ?? 45000) === (config.telemetryFlushIntervalMs ?? 45000) &&
       (Toggly._config.enableTelemetry !== false) === (config.enableTelemetry !== false) &&
+      (Toggly._config.systemMetrics === true) === (config.systemMetrics === true) &&
       Toggly._config.onError === config.onError;
     Toggly.stopDefinitionResources();
     if (!reusableTelemetry) Toggly.stopTelemetry(false);
@@ -347,6 +349,15 @@ export class Toggly {
   private static startTelemetry(): void {
     if (Toggly._telemetry) {
       Toggly.updateTelemetryContext();
+      if (Toggly._config.systemMetrics === true && !Toggly._detachSystemMetrics) {
+        Toggly._detachSystemMetrics = attachClientSystemMetrics(Toggly._telemetry, {
+          systemMetrics: true,
+          enableTelemetry: Toggly._config.enableTelemetry,
+        });
+      } else if (Toggly._config.systemMetrics !== true && Toggly._detachSystemMetrics) {
+        Toggly._detachSystemMetrics();
+        Toggly._detachSystemMetrics = undefined;
+      }
       return;
     }
     if (!Toggly._config.appKey || Toggly._config.enableTelemetry === false ||
@@ -367,6 +378,11 @@ export class Toggly {
       });
       Toggly._telemetry = reporter;
       Toggly._detachTelemetry = attachBrowserLifecycle(reporter);
+      Toggly._detachSystemMetrics?.();
+      Toggly._detachSystemMetrics = attachClientSystemMetrics(reporter, {
+        systemMetrics: Toggly._config.systemMetrics,
+        enableTelemetry: Toggly._config.enableTelemetry,
+      });
     } catch {
       try { onError?.('Frontend telemetry: invalid-option'); } catch { /* Keep evaluation independent. */ }
     }
@@ -384,6 +400,8 @@ export class Toggly {
   }
 
   private static stopTelemetry(flush = true): void {
+    try { Toggly._detachSystemMetrics?.(); } catch { /* Best-effort teardown. */ }
+    Toggly._detachSystemMetrics = undefined;
     try { Toggly._detachTelemetry?.(); } catch { /* Best-effort teardown. */ }
     Toggly._detachTelemetry = undefined;
     // Repeated public cleanup is idempotent; replacement explicitly discards.

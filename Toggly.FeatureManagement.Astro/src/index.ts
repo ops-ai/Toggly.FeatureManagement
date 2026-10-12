@@ -30,9 +30,10 @@ export {
   allFeaturesEnabled,
 } from './server/utils.js';
 
-// Usage telemetry (HTTPS api/usage/stats; Metrics.SendMetrics deferred)
+// Usage + metrics telemetry (HTTPS api/usage/stats + api/metrics)
 export {
   UsageBatcher,
+  MetricsBatcher,
   UsageTelemetryRuntime,
   HttpsTelemetryClient,
   resolveTelemetryEnableFlag,
@@ -44,9 +45,12 @@ export {
 } from './telemetry/index.js';
 export type {
   UsageSender,
+  MetricsSender,
   UsageTelemetryConfig,
   FeatureStatPayload,
+  MetricStatPayload,
   UsageFlushBundle,
+  MetricsFeatureOptions,
 } from './telemetry/index.js';
 
 // Client-side

@@ -1,5 +1,13 @@
 # Changelog
 
+## All .NET SDK packages 3.13.4 - 2026-10-12
+
+### Added
+- `AddDefaultSystemMetrics()` on `Toggly.Metrics.SystemMetrics` registers the six
+  default `System.Runtime` event counters (`TimeInGC`, `AllocationRate`,
+  `CpuUsage`, `ExceptionCount`, `GCHeapSize`, `MemoryWorkingSet`). Custom
+  counter maps remain available through `AddPerformanceMetrics`.
+
 ## All .NET SDK packages 3.13.3 - 2026-10-05
 
 ### Changed

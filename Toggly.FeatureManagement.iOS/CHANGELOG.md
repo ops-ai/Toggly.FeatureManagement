@@ -2,6 +2,14 @@
 
 All notable changes to the Toggly iOS SDK are documented in this file.
 
+## 1.7.2
+
+2026-10-12
+
+### Added
+- Opt-in `systemMetrics` on `TogglyConfig` publishes `CpuUsage` and chained
+  uncaught `ExceptionCount` gauges every 10 seconds when telemetry is enabled.
+
 ## 1.7.1
 
 2026-09-27

@@ -67,6 +67,7 @@ await Toggly.init({
   // Optional: enableTelemetry: false,
   // Optional: metricsBaseUrl: 'https://your-metrics-host.example',
   // Optional: telemetryFlushIntervalMs: 45000, // 30000 to 60000
+  // Optional: systemMetrics: true, // ExceptionCount + LongTaskCount every 10s
 });
 
 Toggly.isFeatureOn('NewDashboard');

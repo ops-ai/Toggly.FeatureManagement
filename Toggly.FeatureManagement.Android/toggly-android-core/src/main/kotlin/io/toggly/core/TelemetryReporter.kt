@@ -55,6 +55,7 @@ internal class TelemetryReporter(
     private data class Stored<T>(val value: T, val entries: Int, val upperBytes: Long)
     private data class Batch(val bytes: ByteArray, val entries: Int, val createdAt: Long)
     private data class Item(val feature: FeatureKey? = null, val delta: Feature? = null, val metric: String? = null, val value: Double = 0.0)
+    var onBatchAccepted: (() -> Unit)? = null
     private val lock = Any()
     private var currentInstanceId = instanceId?.trim()?.takeIf { it.isNotEmpty() }
     private var currentIdentity = identity?.trim()?.takeIf { it.isNotEmpty() }
@@ -305,7 +306,10 @@ internal class TelemetryReporter(
                 diagnose("transport-failure"); return
             } catch (cancelled: CancellationException) { throw cancelled
             } catch (_: Exception) { diagnose("transport-failure"); return }
-            if (response.status == 202) return
+            if (response.status == 202) {
+                onBatchAccepted?.invoke()
+                return
+            }
             if (response.status !in listOf(429, 503) || attempt == 2 || synchronized(lock) { disposed }) {
                 diagnose("http-failure"); return
             }

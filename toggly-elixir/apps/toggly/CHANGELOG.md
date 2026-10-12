@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.0
+
+2026-10-12
+
+### Added
+- `Toggly.metric/5` now batches measurements, counters, and observations and
+  uploads them on flush via `POST api/metrics` (same JSON shape as Next/Nuxt).
+  Set `metrics: false` to keep only the `[:toggly, :metric, kind]` Telemetry
+  event. Failed metrics uploads retain the batch independently of usage uploads
+  [OPS-1765].
+- Opt-in `system_metrics: true` (default `false`, requires `metrics: true`) samples
+  `CpuUsage`, `GCHeapSize`, `ProcessCount`, `ExceptionCount`, and Linux
+  `MemoryWorkingSet` every 10s into the metrics batch. Override with
+  `:system_metrics_sampler` for tests.
+
 ## 0.6.0
 
 2026-10-04

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.3.0
+
+2026-10-12
+
+### Added
+
+- Opt-in `systemMetrics(true)` on `TogglyConfig` collects JVM CpuUsage,
+  MemoryWorkingSet (Linux VmRSS), GCHeapSize, AllocationRate, TimeInGC, and
+  uncaught ExceptionCount every 10s when metrics telemetry is enabled
+  [OPS-1765].
+
 ## 2.2.1
 
 2026-10-06

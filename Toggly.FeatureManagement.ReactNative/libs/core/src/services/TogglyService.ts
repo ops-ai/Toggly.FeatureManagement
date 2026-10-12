@@ -1,4 +1,4 @@
-import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
+import { attachClientSystemMetrics, createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
 import {
   appendEvaluationContext,
   isCacheLruEnabled,
@@ -244,6 +244,7 @@ export class TogglyService {
   private initialization: Promise<TogglyInitResponse> | null = null;
   private disposed = false;
   private readonly telemetry: TelemetryReporter;
+  private detachSystemMetrics: (() => void) | undefined;
   private activeRequest?: AbortController;
   private requestTimer?: ReturnType<typeof setTimeout>;
   private networkState: NetworkState | null = null;
@@ -451,6 +452,11 @@ export class TogglyService {
       enableTelemetry: config.enableTelemetry, metricsBaseUrl: config.metricsBaseUrl,
       telemetryFlushIntervalMs: config.telemetryFlushIntervalMs,
       onDiagnostic: config.onTelemetryDiagnostic,
+    });
+    this.detachSystemMetrics = attachClientSystemMetrics(this.telemetry, {
+      systemMetrics: config.systemMetrics,
+      enableTelemetry: config.enableTelemetry,
+      reactNativeExceptions: true,
     });
     // Snapshot startup targeting before native subscriptions or asynchronous storage.
     this.groups = [...(config.groups ?? [])];
@@ -1628,6 +1634,8 @@ export class TogglyService {
     this.generation++;
     this.refreshOperation++;
     this.contextIntent++;
+    this.detachSystemMetrics?.();
+    this.detachSystemMetrics = undefined;
     this.telemetry.dispose(options);
     this.activeRequest?.abort();
     if (this.requestTimer) clearTimeout(this.requestTimer);

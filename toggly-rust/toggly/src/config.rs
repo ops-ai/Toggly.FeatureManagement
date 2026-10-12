@@ -80,6 +80,10 @@ pub struct TogglyConfig {
     /// Metrics flush interval (default 60s).
     pub metrics_flush_interval: Option<Duration>,
 
+    /// Opt-in process metrics (`CpuUsage`, `MemoryWorkingSet`, `ExceptionCount`)
+    /// every 10s. Requires business metrics. Default false.
+    pub system_metrics: bool,
+
     /// Case-insensitive user/group matching for variant allocation.
     ///
     /// Mirrors `Microsoft.FeatureManagement`'s
@@ -121,6 +125,7 @@ impl Default for TogglyConfig {
             metrics_base_url: None,
             usage_flush_interval: None,
             metrics_flush_interval: None,
+            system_metrics: false,
             variant_ignore_case: false,
             identity: None,
         }
@@ -154,6 +159,7 @@ impl fmt::Debug for TogglyConfig {
             .field("metrics_base_url", &self.metrics_base_url)
             .field("usage_flush_interval", &self.usage_flush_interval)
             .field("metrics_flush_interval", &self.metrics_flush_interval)
+            .field("system_metrics", &self.system_metrics)
             .field("variant_ignore_case", &self.variant_ignore_case)
             .field("identity", &self.identity)
             .finish()
@@ -349,6 +355,12 @@ impl TogglyConfigBuilder {
     /// Set the metrics flush interval.
     pub fn metrics_flush_interval(mut self, interval: Duration) -> Self {
         self.config.metrics_flush_interval = Some(interval);
+        self
+    }
+
+    /// Opt-in process metrics every 10s (requires business metrics).
+    pub fn system_metrics(mut self, enabled: bool) -> Self {
+        self.config.system_metrics = enabled;
         self
     }
 

@@ -9,6 +9,7 @@ import {
 } from './grpc-clients.js'
 import { MetricsBatcher, type MetricsFeatureOptions } from './metrics-batcher.js'
 import { UsageBatcher } from './usage-batcher.js'
+import { SystemMetricsCollector, type SystemMetricsSampler } from './system-metrics.js'
 
 export interface TelemetryConfig {
   appKey: string
@@ -16,6 +17,11 @@ export interface TelemetryConfig {
   metricsBaseUrl?: string
   enableUsageTracking?: boolean
   enableMetrics?: boolean
+  /**
+   * Opt-in automatic process metrics (CpuUsage, MemoryWorkingSet, …).
+   * Requires `enableMetrics`. Default false.
+   */
+  systemMetrics?: boolean
   usageFlushInterval?: number
   metricsFlushInterval?: number
   instanceName?: string
@@ -24,6 +30,9 @@ export interface TelemetryConfig {
   /** Injected clients for tests. */
   usageClient?: UsageGrpcClient | null
   metricsClient?: MetricsGrpcClient | null
+  /** Injected system-metrics sampler for tests. */
+  systemMetricsSampler?: SystemMetricsSampler
+  systemMetricsIntervalMs?: number
 }
 
 export interface TelemetryLogger {
@@ -38,6 +47,7 @@ export interface TelemetryLogger {
 export class TelemetryRuntime {
   private usageBatcher: UsageBatcher | null = null
   private metricsBatcher: MetricsBatcher | null = null
+  private systemMetrics: SystemMetricsCollector | null = null
   private clients: GrpcClients | null = null
   private usageTimer: ReturnType<typeof setInterval> | null = null
   private metricsTimer: ReturnType<typeof setInterval> | null = null
@@ -56,11 +66,20 @@ export class TelemetryRuntime {
       | 'metricsBaseUrl'
       | 'enableUsageTracking'
       | 'enableMetrics'
+      | 'systemMetrics'
       | 'usageFlushInterval'
       | 'metricsFlushInterval'
     >
   > &
-    Pick<TelemetryConfig, 'instanceName' | 'appVersion' | 'usageClient' | 'metricsClient'>
+    Pick<
+      TelemetryConfig,
+      | 'instanceName'
+      | 'appVersion'
+      | 'usageClient'
+      | 'metricsClient'
+      | 'systemMetricsSampler'
+      | 'systemMetricsIntervalMs'
+    >
 
   constructor(config: TelemetryConfig, logger?: TelemetryLogger) {
     const hasAppKey = Boolean(config.appKey)
@@ -72,12 +91,15 @@ export class TelemetryRuntime {
       enableUsageTracking:
         config.enableUsageTracking ?? (hasAppKey && !telemetryEnvDisabled),
       enableMetrics: config.enableMetrics ?? (hasAppKey && !telemetryEnvDisabled),
+      systemMetrics: config.systemMetrics === true,
       usageFlushInterval: config.usageFlushInterval ?? DEFAULT_TELEMETRY_FLUSH_MS,
       metricsFlushInterval: config.metricsFlushInterval ?? DEFAULT_TELEMETRY_FLUSH_MS,
       instanceName: config.instanceName,
       appVersion: config.appVersion,
       usageClient: config.usageClient,
       metricsClient: config.metricsClient,
+      systemMetricsSampler: config.systemMetricsSampler,
+      systemMetricsIntervalMs: config.systemMetricsIntervalMs,
     }
     this.logger = logger ?? {
       debug: () => {},
@@ -103,7 +125,18 @@ export class TelemetryRuntime {
     this.initializeClients()
     this.startUsageBatcher()
     this.startMetricsBatcher()
+    this.startSystemMetrics()
     this.attachProcessHandlers()
+  }
+
+  private startSystemMetrics(): void {
+    if (!this.config.enableMetrics || !this.config.systemMetrics) return
+    this.systemMetrics = new SystemMetricsCollector({
+      observe: (metric, value, options) => this.observe(metric, value, options),
+      sampler: this.config.systemMetricsSampler,
+      intervalMs: this.config.systemMetricsIntervalMs,
+    })
+    this.systemMetrics.start()
   }
 
   private initializeClients(): void {
@@ -307,6 +340,7 @@ export class TelemetryRuntime {
     this.sendingMetrics = true
     try {
       await client.sendMetrics(payload as unknown as Record<string, unknown>)
+      this.systemMetrics?.onFlushed()
     } catch (error) {
       this.logger.error('Failed to send metrics:', error)
     } finally {
@@ -331,6 +365,8 @@ export class TelemetryRuntime {
       this.metricsTimer = null
     }
 
+    this.systemMetrics?.stop()
+    this.systemMetrics = null
     this.detachProcessHandlers()
 
     try {
@@ -352,3 +388,6 @@ export class TelemetryRuntime {
     }
   }
 }
+
+export { SystemMetricsCollector, SYSTEM_METRICS_INTERVAL_MS } from './system-metrics.js'
+export type { SystemMetricObservation, SystemMetricsSampler } from './system-metrics.js'

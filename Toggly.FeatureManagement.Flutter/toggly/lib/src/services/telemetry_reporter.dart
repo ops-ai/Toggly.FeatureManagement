@@ -78,6 +78,8 @@ class TelemetryReporter {
   static const int _maxServerValue = 1000000;
   static final RegExp _allowedVariant = RegExp(r'[A-Za-z0-9_-]+');
 
+  void Function()? onBatchAccepted;
+
   late TelemetryContext _context;
   String? _appKey;
   String _environment;
@@ -366,7 +368,10 @@ class TelemetryReporter {
         } catch (_) {
           _diagnostic('transport_failure');
         }
-        if (status == 202) break;
+        if (status == 202) {
+          onBatchAccepted?.call();
+          break;
+        }
         if (_disposed || (status != 429 && status != 503) || retries >= 2) {
           _diagnostic('batch_dropped');
           break;

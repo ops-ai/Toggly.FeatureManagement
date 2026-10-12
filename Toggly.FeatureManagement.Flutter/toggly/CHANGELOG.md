@@ -1,3 +1,11 @@
+## 1.13.2
+
+2026-10-12
+
+### Added
+- Opt-in `TogglyConfig.systemMetrics` publishes chained `ExceptionCount` gauges
+  every 10 seconds when frontend telemetry is enabled.
+
 ## 1.13.1
 
 2026-09-27

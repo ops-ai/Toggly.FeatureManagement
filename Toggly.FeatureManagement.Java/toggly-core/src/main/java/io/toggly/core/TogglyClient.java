@@ -145,6 +145,7 @@ public final class TogglyClient implements AutoCloseable {
                     .metricsBaseUrl(config.getMetricsBaseUrl())
                     .enableUsageTracking(config.isEnableUsageTracking())
                     .enableMetrics(config.isEnableMetrics())
+                    .systemMetrics(config.isSystemMetrics())
                     .usageFlushInterval(config.getUsageFlushInterval())
                     .metricsFlushInterval(config.getMetricsFlushInterval())
                     .instanceName(config.getInstanceName())

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import time
 from typing import Any, Dict, List, Optional
 
@@ -315,4 +316,81 @@ class TestTelemetryRuntime:
         assert restored is not None
         assert restored["definitionCacheHits"] == 1
         assert restored["stats"][0]["variantStats"]["enabled"]["checkCount"] == 1
+        runtime.close()
+
+
+class TestTelemetryRuntimeSystemMetrics:
+    def test_does_not_sample_when_system_metrics_disabled(self) -> None:
+        calls = {"count": 0}
+
+        def sampler() -> list:
+            calls["count"] += 1
+            return []
+
+        runtime = TelemetryRuntime(
+            app_key="app",
+            environment="Production",
+            enable_usage_tracking=False,
+            enable_metrics=True,
+            metrics_flush_interval=0,
+            system_metrics=False,
+            system_metrics_interval_seconds=0.03,
+            system_metrics_sampler=sampler,
+            metrics_client=FakeMetricsClient(),
+            metrics_client_provided=True,
+        )
+        runtime.start()
+        time.sleep(0.08)
+        assert calls["count"] == 0
+        runtime.close()
+
+    def test_samples_and_flushes_when_enabled(self) -> None:
+        sampled = threading.Event()
+        metrics = FakeMetricsClient()
+
+        def sampler() -> list:
+            from toggly.telemetry.system_metrics import SystemMetricObservation
+
+            sampled.set()
+            return [SystemMetricObservation("CpuUsage", 9.0)]
+
+        runtime = TelemetryRuntime(
+            app_key="app",
+            environment="Production",
+            enable_usage_tracking=False,
+            enable_metrics=True,
+            metrics_flush_interval=0,
+            system_metrics=True,
+            system_metrics_interval_seconds=0.03,
+            system_metrics_sampler=sampler,
+            metrics_client=metrics,
+            metrics_client_provided=True,
+        )
+        runtime.start()
+        assert sampled.wait(timeout=2.0)
+        runtime.flush_metrics()
+        assert len(metrics.calls) == 1
+        observations = metrics.calls[0]["request"].get("observations", [])
+        assert any(o.get("metric") == "CpuUsage" for o in observations)
+        runtime.close()
+
+    def test_does_not_start_when_metrics_disabled(self) -> None:
+        calls = {"count": 0}
+
+        def sampler() -> list:
+            calls["count"] += 1
+            return []
+
+        runtime = TelemetryRuntime(
+            app_key="app",
+            environment="Production",
+            enable_usage_tracking=False,
+            enable_metrics=False,
+            system_metrics=True,
+            system_metrics_interval_seconds=0.03,
+            system_metrics_sampler=sampler,
+        )
+        runtime.start()
+        time.sleep(0.08)
+        assert calls["count"] == 0
         runtime.close()

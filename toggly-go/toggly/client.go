@@ -9,6 +9,7 @@ import (
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/eval"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/metrics"
+	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/metrics/systemmetrics"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/usage"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/variant"
 )
@@ -45,8 +46,9 @@ type Client struct {
 	identityMu sync.RWMutex
 	identity   string
 
-	usage   *usage.Client
-	metrics *metrics.Client
+	usage        *usage.Client
+	metrics      *metrics.Client
+	systemMetrics *systemmetrics.Collector
 }
 
 // NewClient creates a new Toggly client.
@@ -109,6 +111,20 @@ func (c *Client) configureMetrics() error {
 		c.metrics = m
 	}
 	c.metrics.StartAutoFlush(cfg.MetricsFlushInterval)
+	if cfg.SystemMetrics {
+		opts := []systemmetrics.Option{}
+		if cfg.SystemMetricsInterval > 0 {
+			opts = append(opts, systemmetrics.WithInterval(cfg.SystemMetricsInterval))
+		}
+		if cfg.SystemMetricsSampler != nil {
+			opts = append(opts, systemmetrics.WithSampler(cfg.SystemMetricsSampler))
+		}
+		collector := systemmetrics.New(func(metric string, value float64) {
+			c.metrics.Observe(metric, value, nil, "")
+		}, opts...)
+		collector.Start()
+		c.systemMetrics = collector
+	}
 	return nil
 }
 
@@ -259,6 +275,10 @@ func (c *Client) Close() error {
 	}
 	if c.usage != nil {
 		_ = c.usage.Close()
+	}
+	if c.systemMetrics != nil {
+		c.systemMetrics.Stop()
+		c.systemMetrics = nil
 	}
 	if c.metrics != nil {
 		_ = c.metrics.Close()

@@ -1,6 +1,21 @@
 import type { TelemetryOptions, TelemetryReporter, TelemetryDiagnostic, TelemetryResponse, TelemetryContext } from './types.js';
 import { registerOwner, removeOwner } from './lifecycle.js';
 export type { TelemetryOptions, TelemetryReporter, TelemetryDiagnostic, TelemetryFetch, TelemetryResponse, TelemetryRequestInit, TelemetryAbortSignal, TelemetryContext } from './types.js';
+export {
+  attachClientSystemMetrics,
+  attachBrowserExceptionSources,
+  attachReactNativeExceptionSources,
+  ClientSystemMetricsCollector,
+  CLIENT_SYSTEM_METRICS_INTERVAL_MS,
+  CLIENT_SYSTEM_METRICS_MAX_PENDING,
+} from './client-system-metrics.js';
+export type {
+  AttachClientSystemMetricsOptions,
+  ClientSystemMetricObservation,
+  ClientSystemMetricsCollectorOptions,
+  ClientSystemMetricsSampler,
+  ClientSystemMetricsSetGauge,
+} from './client-system-metrics.js';
 
 type Context = Pick<Envelope, 'k' | 'e' | 'i' | 'u'>;
 type Entry = { context: Context; key: string; variant?: string; kind: 'feature' | 'counter' | 'gauge'; values: number[] };

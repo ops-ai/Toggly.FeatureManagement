@@ -30,6 +30,7 @@ public final class TelemetryRuntime implements AutoCloseable, DefinitionCacheRec
     private final String metricsBaseUrl;
     private final boolean enableUsageTracking;
     private final boolean enableMetrics;
+    private final boolean systemMetrics;
     private final Duration usageFlushInterval;
     private final Duration metricsFlushInterval;
     private final String instanceName;
@@ -41,6 +42,9 @@ public final class TelemetryRuntime implements AutoCloseable, DefinitionCacheRec
     private ScheduledExecutorService scheduler;
     private ScheduledFuture<?> usageFuture;
     private ScheduledFuture<?> metricsFuture;
+    private SystemMetricsCollector systemMetricsCollector;
+    private SystemMetricsCollector.Sampler systemMetricsSampler;
+    private long systemMetricsIntervalMs = SystemMetricsCollector.SYSTEM_METRICS_INTERVAL_MS;
     private final AtomicBoolean sendingUsage = new AtomicBoolean(false);
     private final AtomicBoolean sendingMetrics = new AtomicBoolean(false);
     private final AtomicBoolean closed = new AtomicBoolean(false);
@@ -57,6 +61,11 @@ public final class TelemetryRuntime implements AutoCloseable, DefinitionCacheRec
                 : defaultMetricsBaseUrl();
         this.enableUsageTracking = builder.enableUsageTracking;
         this.enableMetrics = builder.enableMetrics;
+        this.systemMetrics = builder.systemMetrics;
+        this.systemMetricsSampler = builder.systemMetricsSampler;
+        if (builder.systemMetricsIntervalMs != null) {
+            this.systemMetricsIntervalMs = builder.systemMetricsIntervalMs;
+        }
         this.usageFlushInterval = builder.usageFlushInterval != null
                 ? builder.usageFlushInterval
                 : DEFAULT_FLUSH_INTERVAL;
@@ -117,9 +126,11 @@ public final class TelemetryRuntime implements AutoCloseable, DefinitionCacheRec
             metricsBatcher = new MetricsBatcher(appKey, environment, instanceName);
         }
 
+        boolean needSystemMetrics = enableMetrics && systemMetrics;
         boolean needScheduler =
                 (enableUsageTracking && usageFlushInterval.toMillis() > 0)
-                        || (enableMetrics && metricsFlushInterval.toMillis() > 0);
+                        || (enableMetrics && metricsFlushInterval.toMillis() > 0)
+                        || needSystemMetrics;
         if (needScheduler) {
             scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
                 Thread t = new Thread(r, "toggly-telemetry");
@@ -142,7 +153,23 @@ public final class TelemetryRuntime implements AutoCloseable, DefinitionCacheRec
             }
         }
 
+        if (needSystemMetrics) {
+            startSystemMetrics();
+        }
         attachShutdownHook();
+    }
+
+    private void startSystemMetrics() {
+        if (!enableMetrics || !systemMetrics || closed.get()) {
+            return;
+        }
+        systemMetricsCollector = new SystemMetricsCollector(
+                (metric, value) -> observe(metric, value, null),
+                systemMetricsIntervalMs,
+                systemMetricsSampler,
+                null,
+                scheduler);
+        systemMetricsCollector.start();
     }
 
     private void attachShutdownHook() {
@@ -287,6 +314,9 @@ public final class TelemetryRuntime implements AutoCloseable, DefinitionCacheRec
                 return;
             }
             client.sendMetrics(payload);
+            if (systemMetricsCollector != null) {
+                systemMetricsCollector.onFlushed();
+            }
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Failed to send metrics", e);
         } finally {
@@ -328,6 +358,10 @@ public final class TelemetryRuntime implements AutoCloseable, DefinitionCacheRec
         if (metricsFuture != null) {
             metricsFuture.cancel(false);
             metricsFuture = null;
+        }
+        if (systemMetricsCollector != null) {
+            systemMetricsCollector.stop();
+            systemMetricsCollector = null;
         }
         if (scheduler != null) {
             scheduler.shutdown();
@@ -380,6 +414,9 @@ public final class TelemetryRuntime implements AutoCloseable, DefinitionCacheRec
         private String metricsBaseUrl;
         private boolean enableUsageTracking = true;
         private boolean enableMetrics = true;
+        private boolean systemMetrics;
+        private SystemMetricsCollector.Sampler systemMetricsSampler;
+        private Long systemMetricsIntervalMs;
         private Duration usageFlushInterval;
         private Duration metricsFlushInterval;
         private String instanceName;
@@ -409,6 +446,26 @@ public final class TelemetryRuntime implements AutoCloseable, DefinitionCacheRec
 
         public Builder enableMetrics(boolean enableMetrics) {
             this.enableMetrics = enableMetrics;
+            return this;
+        }
+
+        /**
+         * Opt-in automatic JVM process metrics. Requires {@link #enableMetrics(boolean)}.
+         */
+        public Builder systemMetrics(boolean systemMetrics) {
+            this.systemMetrics = systemMetrics;
+            return this;
+        }
+
+        /** Injected sampler for tests. */
+        public Builder systemMetricsSampler(SystemMetricsCollector.Sampler systemMetricsSampler) {
+            this.systemMetricsSampler = systemMetricsSampler;
+            return this;
+        }
+
+        /** Sample interval in milliseconds (default 10s). */
+        public Builder systemMetricsIntervalMs(long systemMetricsIntervalMs) {
+            this.systemMetricsIntervalMs = systemMetricsIntervalMs;
             return this;
         }
 

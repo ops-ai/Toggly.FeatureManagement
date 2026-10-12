@@ -95,7 +95,13 @@ Returning to a retired context fetches a full body. Cold starts remove legacy
 persisted revision-only entries and never send an orphan validator. No persistent
 body cache is introduced.
 
-SSR/build imports create no frontend telemetry resources. Server `Feature.astro`,
+SSR/build imports create no frontend telemetry resources. The trusted server
+client uploads usage to `api/usage/stats` and business metrics
+(`measure` / `incrementCounter` / `observe`) to `api/metrics` when
+`enableUsageTracking` / `enableMetrics` are on (default with an app key).
+Set `systemMetrics: true` (default false, requires `enableMetrics`) for automatic
+Node process metrics on the server client only.
+Server `Feature.astro`,
 SSG behavior, middleware and trusted server telemetry retain their existing
 ownership and APIs.
 

@@ -1053,6 +1053,7 @@ export function createTogglyClient(
         metricsBaseUrl: config.metricsBaseUrl,
         enableUsageTracking: config.enableUsageTracking,
         enableMetrics: config.enableMetrics,
+        systemMetrics: config.systemMetrics,
         usageFlushInterval: config.usageFlushInterval,
         metricsFlushInterval: config.metricsFlushInterval,
         instanceName: config.instanceName,

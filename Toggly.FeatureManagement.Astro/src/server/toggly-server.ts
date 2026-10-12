@@ -94,7 +94,8 @@ export class TogglyServer implements TogglyClient {
       this.config.enableUsageTracking,
       true,
     );
-    if (!enableUsageTracking) {
+    const enableMetrics = resolveTelemetryEnableFlag(this.config.enableMetrics, true);
+    if (!enableUsageTracking && !enableMetrics) {
       return;
     }
 
@@ -102,8 +103,11 @@ export class TogglyServer implements TogglyClient {
       appKey: this.config.appKey,
       environment: this.config.environment ?? 'Production',
       metricsBaseUrl: this.config.metricsBaseUrl,
-      enableUsageTracking: true,
+      enableUsageTracking,
+      enableMetrics,
+      systemMetrics: this.config.systemMetrics === true,
       usageFlushInterval: this.config.usageFlushInterval,
+      metricsFlushInterval: this.config.metricsFlushInterval,
       instanceName: this.config.instanceName ?? 'astro-ssr',
       // Consuming-app version only; SDK identity is User-Agent / X-Toggly-Sdk-*.
       appVersion: this.config.appVersion,
@@ -111,6 +115,7 @@ export class TogglyServer implements TogglyClient {
       restoreOnSendFailure: true,
       fetchImpl: this.config.telemetryFetch,
       usageClient: this.config.usageClient as UsageSender | null | undefined,
+      metricsClient: this.config.metricsClient ?? undefined,
     });
     this.telemetry.start();
   }
@@ -131,12 +136,40 @@ export class TogglyServer implements TogglyClient {
     }
   }
 
-  /** Flush pending usage stats (including cache-only batches). */
+  /** Flush pending usage stats and business metrics. */
   async flushTelemetry(): Promise<void> {
     await this.telemetry?.flush();
   }
 
-  /** Flush and tear down usage telemetry. */
+  measure(metricKey: string, value: number, options?: { feature?: string; variant?: string }): void {
+    try {
+      this.telemetry?.measure(metricKey, value, options);
+    } catch {
+      // Telemetry must never break the host.
+    }
+  }
+
+  incrementCounter(
+    metricKey: string,
+    value = 1,
+    options?: { feature?: string; variant?: string },
+  ): void {
+    try {
+      this.telemetry?.incrementCounter(metricKey, value, options);
+    } catch {
+      // Telemetry must never break the host.
+    }
+  }
+
+  observe(metricKey: string, value: number, options?: { feature?: string; variant?: string }): void {
+    try {
+      this.telemetry?.observe(metricKey, value, options);
+    } catch {
+      // Telemetry must never break the host.
+    }
+  }
+
+  /** Flush and tear down usage/metrics telemetry. */
   async close(options?: { timeoutMs?: number }): Promise<void> {
     await this.telemetry?.close(options);
     this.telemetry = null;

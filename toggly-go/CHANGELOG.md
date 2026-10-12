@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.13.0
+
+2026-10-12
+
+### Added
+- Opt-in `SystemMetrics` on `toggly.Config` publishes process observations
+  (`CpuUsage`, `MemoryWorkingSet`, `GCHeapSize`, `AllocationRate`,
+  `GoroutineCount`) every 10s via `Observe` when `EnableMetrics` is on.
+  Uses stdlib `runtime/metrics`, `Getrusage`, and Linux `/proc/self/statm`
+  [OPS-1765].
+
+### Changed
+- User-Agent and live-update `sdkVersion` report `toggly-go/0.13.0`.
+
 ## 0.12.0
 
 2026-10-04

@@ -12,6 +12,7 @@ import 'package:uuid/uuid.dart';
 import 'package:rxdart/rxdart.dart';
 
 import 'entity_gate.dart' as entity_gate;
+import 'services/system_metrics_collector.dart';
 import 'services/telemetry_reporter.dart';
 
 enum _CachedFlagsVerification {
@@ -63,6 +64,7 @@ class Toggly with WidgetsBindingObserver {
   static final _http = HttpService.getInstance.http;
   static final _sync = SyncService.getInstance;
   static TelemetryReporter? _telemetry;
+  static SystemMetricsCollector? _systemMetricsCollector;
 
   /// Optional persistence backend supplied via [TogglyConfig.cacheProvider].
   /// When null the SDK is memory-only.
@@ -235,7 +237,8 @@ class Toggly with WidgetsBindingObserver {
       config.enableTelemetry &&
       _config.metricsBaseUrl == config.metricsBaseUrl &&
       _config.telemetryFlushIntervalMs == config.telemetryFlushIntervalMs &&
-      _config.onTelemetryDiagnostic == config.onTelemetryDiagnostic;
+      _config.onTelemetryDiagnostic == config.onTelemetryDiagnostic &&
+      _config.systemMetrics == config.systemMetrics;
 
   static void _configureLocalState(TogglyConfig config, String? identity) {
     final cacheProvider = config.cacheProvider;
@@ -297,6 +300,7 @@ class Toggly with WidgetsBindingObserver {
     }
     final reuseTelemetry = _canReuseTelemetry(appKey, config);
     if (!reuseTelemetry) {
+      _stopSystemMetrics();
       _telemetry?.dispose(flush: false);
       _telemetry = null;
     }
@@ -331,6 +335,7 @@ class Toggly with WidgetsBindingObserver {
         telemetryFlushIntervalMs: config.telemetryFlushIntervalMs,
         onDiagnostic: config.onTelemetryDiagnostic,
       );
+      _startSystemMetrics(config);
     }
     Toggly._groups = groups != null ? List<String>.from(groups) : [];
     Toggly._claims = claims != null ? Map<String, String>.from(claims) : {};
@@ -1964,10 +1969,31 @@ class Toggly with WidgetsBindingObserver {
     return assignment?.name ?? 'enabled';
   }
 
+  static void _startSystemMetrics(TogglyConfig config) {
+    _stopSystemMetrics();
+    final reporter = _telemetry;
+    if (!config.systemMetrics || reporter == null || !reporter.isEnabled) {
+      return;
+    }
+    final collector = SystemMetricsCollector(
+      observe: (metric, value) => reporter.setGauge(metric, value),
+    );
+    reporter.onBatchAccepted = collector.onFlushed;
+    collector.start();
+    _systemMetricsCollector = collector;
+  }
+
+  static void _stopSystemMetrics() {
+    _systemMetricsCollector?.stop();
+    _systemMetricsCollector = null;
+    _telemetry?.onBatchAccepted = null;
+  }
+
   /// Cancels registered timers and closes the feature flags stream.
   static void dispose() {
     _generation++;
     _instanceId = null;
+    _stopSystemMetrics();
     _telemetry?.dispose();
     _telemetry = null;
     cancelTimers();

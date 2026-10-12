@@ -4,6 +4,10 @@ Dependency-free telemetry transport shared by Toggly frontend SDKs. The package
 aggregates feature checks, explicit usage/views, and application metrics. It
 runs in browsers, React Native and Electron without requiring browser globals.
 Version 1.1.1 constructs its endpoint path without relying on mutable `URL.pathname`, so React Native Hermes hosts do not need an app-level URL polyfill for telemetry.
+
+Set `systemMetrics: true` on SDK config (or call `attachClientSystemMetrics`) to
+publish `ExceptionCount` and browser `LongTaskCount` gauges every 10 seconds.
+Memory and GC heap metrics are omitted on the frontend ingest path.
 Use one reporter per client instance; server and build-time clients should not
 create a frontend reporter.
 

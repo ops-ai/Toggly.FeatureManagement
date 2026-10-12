@@ -2,7 +2,7 @@ defmodule Toggly.Client do
   @moduledoc false
   use GenServer
 
-  alias Toggly.{JSON, Signature, Snapshot, Transport}
+  alias Toggly.{JSON, MetricsBatcher, Signature, Snapshot, SystemMetrics, Transport}
 
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts, name: Keyword.fetch!(opts, :name))
@@ -19,6 +19,7 @@ defmodule Toggly.Client do
       opts: opts,
       subscribers: %{},
       usage: %{},
+      metrics: MetricsBatcher.new(),
       definition_cache_hits: 0,
       definition_cache_misses: 0,
       revision: nil,
@@ -28,7 +29,9 @@ defmodule Toggly.Client do
       defaults: Keyword.get(opts, :defaults, %{}),
       source: :defaults,
       jwks: Keyword.get(opts, :jwks),
-      identity: normalize_identity(Keyword.get(opts, :identity))
+      identity: normalize_identity(Keyword.get(opts, :identity)),
+      system_metrics_exceptions: 0,
+      system_metrics_pending: %{}
     }
 
     # Restore and reverify before any refresh can reach the network. Groups and
@@ -48,7 +51,17 @@ defmodule Toggly.Client do
     interval = Keyword.get(opts, :refresh_interval, 60_000)
     if interval > 0, do: send(self(), :refresh)
     schedule(:flush, Keyword.get(opts, :flush_interval, 60_000))
+    state = start_system_metrics(state)
     {:ok, state}
+  end
+
+  @impl true
+  def terminate(_reason, state) do
+    if system_metrics_enabled?(state) do
+      SystemMetrics.detach_exception_handler(state.name)
+    end
+
+    :ok
   end
 
   @impl true
@@ -100,6 +113,30 @@ defmodule Toggly.Client do
     {:noreply, %{state | usage: usage}}
   end
 
+  def handle_cast(:system_metrics_exception, state) do
+    {:noreply, %{state | system_metrics_exceptions: state.system_metrics_exceptions + 1}}
+  end
+
+  def handle_cast({:metric, kind, key, value, metadata}, state) do
+    if Keyword.get(state.opts, :metrics, true) do
+      opts = %{
+        feature: metadata[:feature] || metadata["feature"],
+        variant: metadata[:variant] || metadata["variant"]
+      }
+
+      metrics =
+        case kind do
+          :measurement -> MetricsBatcher.measure(state.metrics, key, value, opts)
+          :counter -> MetricsBatcher.increment_counter(state.metrics, key, value, opts)
+          :observation -> MetricsBatcher.observe(state.metrics, key, value, opts)
+        end
+
+      {:noreply, %{state | metrics: metrics}}
+    else
+      {:noreply, state}
+    end
+  end
+
   @impl true
   def handle_info(:refresh, state) do
     {_, state} = refresh(state)
@@ -123,6 +160,16 @@ defmodule Toggly.Client do
     {_, state} = flush(state)
     schedule(:flush, Keyword.get(state.opts, :flush_interval, 60_000))
     {:noreply, state}
+  end
+
+  def handle_info(:system_metrics_sample, state) do
+    if system_metrics_enabled?(state) do
+      state = sample_system_metrics(state)
+      schedule(:system_metrics_sample, SystemMetrics.interval_ms(state.opts))
+      {:noreply, state}
+    else
+      {:noreply, state}
+    end
   end
 
   def handle_info({:DOWN, _, :process, pid, _}, state),
@@ -325,6 +372,20 @@ defmodule Toggly.Client do
     do: Enum.find_value(headers, fn {k, v} -> if String.downcase(k) == key, do: v end)
 
   defp flush(state) do
+    {usage_result, state} = flush_usage(state)
+    {metrics_result, state} = flush_metrics(state)
+
+    result =
+      case {usage_result, metrics_result} do
+        {:ok, :ok} -> :ok
+        {{:error, _} = err, _} -> err
+        {_, {:error, _} = err} -> err
+      end
+
+    {result, state}
+  end
+
+  defp flush_usage(state) do
     hits = state.definition_cache_hits
     misses = state.definition_cache_misses
 
@@ -370,6 +431,98 @@ defmodule Toggly.Client do
       end
     end
   end
+
+  defp flush_metrics(state) do
+    if MetricsBatcher.empty?(state.metrics) or state.opts[:app_key] in [nil, ""] or
+         not Keyword.get(state.opts, :metrics, true) do
+      {:ok, state}
+    else
+      {packet, cleared} =
+        MetricsBatcher.build_and_reset(
+          state.metrics,
+          state.opts[:app_key],
+          Keyword.get(state.opts, :environment, "Production"),
+          Keyword.get(state.opts, :instance_name)
+        )
+
+      case request(
+             state,
+             :post,
+             "api/metrics",
+             [{"content-type", "application/json"}],
+             IO.iodata_to_binary(:json.encode(packet))
+           ) do
+        {:ok, %{status: status}} when status in 200..299 ->
+          {:ok, %{state | metrics: cleared, system_metrics_pending: %{}}}
+
+        _ ->
+          {{:error, :metrics_upload}, state}
+      end
+    end
+  end
+
+  defp start_system_metrics(state) do
+    if system_metrics_enabled?(state) do
+      SystemMetrics.attach_exception_handler(state.name, self())
+      _ = :erlang.statistics(:runtime)
+      schedule(:system_metrics_sample, SystemMetrics.interval_ms(state.opts))
+      state
+    else
+      state
+    end
+  end
+
+  defp system_metrics_enabled?(%{opts: opts}) do
+    Keyword.get(opts, :metrics, true) and Keyword.get(opts, :system_metrics, false)
+  end
+
+  defp sample_system_metrics(state) do
+    sampler = Keyword.get(state.opts, :system_metrics_sampler)
+
+    {exception_count, samples} =
+      if sampler do
+        {state.system_metrics_exceptions, sampler.()}
+      else
+        SystemMetrics.default_sample(state.system_metrics_exceptions)
+      end
+
+    state = %{state | system_metrics_exceptions: exception_count}
+
+    Enum.reduce(samples, state, fn {metric, value}, acc ->
+      emit_system_metric_observation(acc, metric, value)
+    end)
+  rescue
+    _ -> state
+  end
+
+  defp emit_system_metric_observation(state, metric, value)
+       when is_binary(metric) and is_number(value) do
+    if not finite_number?(value) or value < 0 do
+      state
+    else
+      pending = Map.get(state.system_metrics_pending, metric, 0)
+
+      if pending >= SystemMetrics.max_pending() do
+        state
+      else
+        state =
+          state
+          |> Map.update!(:system_metrics_pending, &Map.put(&1, metric, pending + 1))
+          |> then(fn s ->
+            case MetricsBatcher.observe(s.metrics, metric, value * 1.0, %{}) do
+              metrics -> %{s | metrics: metrics}
+            end
+          end)
+
+        state
+      end
+    end
+  end
+
+  defp emit_system_metric_observation(state, _metric, _value), do: state
+
+  defp finite_number?(value) when is_integer(value), do: true
+  defp finite_number?(value) when is_float(value), do: value == value
 
   # GenServer handle_call serializes refresh; there is no in-flight skip to count.
   defp record_revision(state, previous, etag) when is_binary(etag) and etag == previous,

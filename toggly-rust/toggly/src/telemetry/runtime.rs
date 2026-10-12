@@ -2,6 +2,7 @@
 
 use super::hash::{DEFAULT_METRICS_BASE_URL, DEFAULT_TELEMETRY_FLUSH_SECS};
 use super::metrics_batcher::{MetricsBatcher, MetricsFeatureOptions};
+use super::system_metrics::SystemMetricsCollector;
 use super::transport::TelemetrySenders;
 use super::usage_batcher::UsageBatcher;
 use crate::TogglyConfig;
@@ -38,6 +39,8 @@ pub struct TelemetryRuntimeConfig {
     pub senders: TelemetrySenders,
     /// When true, senders were provided by the caller (skip native dial).
     pub senders_provided: bool,
+    /// Opt-in process metrics every 10s (requires metrics).
+    pub system_metrics: bool,
 }
 
 impl TelemetryRuntimeConfig {
@@ -64,6 +67,7 @@ impl TelemetryRuntimeConfig {
             app_version: config.app_version.clone(),
             senders: TelemetrySenders::default(),
             senders_provided: false,
+            system_metrics: config.system_metrics,
         }
     }
 }
@@ -141,6 +145,7 @@ struct Inner {
     warned_missing_transport: AtomicBool,
     cancel_tx: watch::Sender<bool>,
     tasks: Mutex<Vec<JoinHandle<()>>>,
+    system_metrics: Mutex<Option<Arc<SystemMetricsCollector>>>,
 }
 
 impl TelemetryRuntime {
@@ -178,6 +183,7 @@ impl TelemetryRuntime {
             warned_missing_transport: AtomicBool::new(false),
             cancel_tx,
             tasks: Mutex::new(Vec::new()),
+            system_metrics: Mutex::new(None),
         });
 
         let runtime = Self {
@@ -213,6 +219,18 @@ impl TelemetryRuntime {
             ));
             if !config.metrics_flush_interval.is_zero() {
                 runtime.spawn_flush_loop(cancel_rx, config.metrics_flush_interval, false);
+            }
+            if config.system_metrics {
+                let inner = runtime.inner.clone();
+                let observe = Arc::new(
+                    move |metric: &str, value: f64, options: Option<&MetricsFeatureOptions>| {
+                        if let Some(batcher) = inner.metrics_batcher.lock().as_ref() {
+                            batcher.observe(metric, value, options);
+                        }
+                    },
+                );
+                *runtime.inner.system_metrics.lock() =
+                    Some(SystemMetricsCollector::start(observe, None));
             }
         }
 
@@ -366,6 +384,9 @@ impl TelemetryRuntime {
             return;
         }
         let _ = self.inner.cancel_tx.send(true);
+        if let Some(collector) = self.inner.system_metrics.lock().take() {
+            collector.stop();
+        }
         let tasks: Vec<_> = std::mem::take(&mut *self.inner.tasks.lock());
         for task in &tasks {
             task.abort();

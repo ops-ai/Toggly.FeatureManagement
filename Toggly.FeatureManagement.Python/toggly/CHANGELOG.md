@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0 - 2026-10-12
+
+### Added
+
+- Opt-in `system_metrics=True` collects process CpuUsage, MemoryWorkingSet
+  (`resource.getrusage`), and uncaught ExceptionCount every 10s when metrics
+  telemetry is enabled [OPS-1765].
+
 ## 1.2.0 - 2026-10-04
 
 ### Added

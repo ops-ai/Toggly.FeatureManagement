@@ -1,3 +1,22 @@
+## 1.21.0
+
+2026-10-12
+
+### Added
+- Opt-in `systemMetrics: true` on server `TogglyServer` / `UsageTelemetryRuntime`
+  samples Node process metrics every 10s when `enableMetrics` is on (default
+  false). Browser telemetry unchanged [OPS-1765].
+
+## 1.20.0
+
+2026-10-12
+
+### Added
+- Server `measure`, `incrementCounter`, and `observe` on `TogglyServer`, batched
+  and posted to `api/metrics` (same JSON shape as Next). `enableMetrics`
+  defaults on with an app key; `TOGGLY_DISABLE_TELEMETRY=1` still wins. Soft-fail
+  restore keeps the batch on network errors [OPS-1765].
+
 ## 1.19.0
 
 2026-10-04

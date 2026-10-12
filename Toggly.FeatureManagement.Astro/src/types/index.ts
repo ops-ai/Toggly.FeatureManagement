@@ -79,10 +79,23 @@ export interface TogglyConfig {
    * `TOGGLY_DISABLE_TELEMETRY=1` always wins over an explicit `true`.
    */
   enableUsageTracking?: boolean;
-  /** Gateway base URL for usage flush (default: `https://metrics.toggly.io/`). */
+  /**
+   * When true, report business metrics via HTTPS `POST api/metrics`.
+   * Defaults to true when `appKey` is set (same as usage).
+   * `TOGGLY_DISABLE_TELEMETRY=1` always wins over an explicit `true`.
+   */
+  enableMetrics?: boolean;
+  /**
+   * Opt-in Node process metrics on the server client (`CpuUsage`, `MemoryWorkingSet`, …).
+   * Requires `enableMetrics`. Default false.
+   */
+  systemMetrics?: boolean;
+  /** Gateway base URL for usage/metrics flush (default: `https://metrics.toggly.io/`). */
   metricsBaseUrl?: string;
   /** Usage flush interval in ms (default: 60000). Set `0` to disable the timer. */
   usageFlushInterval?: number;
+  /** Metrics flush interval in ms (default: 60000). Set `0` to disable the timer. */
+  metricsFlushInterval?: number;
   /** Optional instance name included on usage payloads. */
   instanceName?: string;
   /**
@@ -105,6 +118,14 @@ export interface TogglyConfig {
    */
   usageClient?: {
     sendStats(request: Record<string, unknown>): Promise<unknown>;
+    close?(): void;
+  } | null;
+  /**
+   * Injected metrics sender for tests. When unset and metrics are enabled, the
+   * server client builds a soft-fail HTTPS client to `api/metrics`.
+   */
+  metricsClient?: {
+    sendMetrics(request: Record<string, unknown>): Promise<unknown>;
     close?(): void;
   } | null;
 }
