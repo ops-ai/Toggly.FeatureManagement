@@ -218,7 +218,7 @@ defmodule Toggly do
     failed = :atomics.new(1, [])
 
     fail = fn ->
-      :atomics.put(failed, 1, 1, 1)
+      :atomics.put(failed, 1, 1)
     end
 
     try do

@@ -17,6 +17,7 @@ import java.util.zip.GZIPOutputStream
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.ceil
+import kotlin.math.max
 import kotlin.random.Random
 
 internal data class TelemetryResponse(val status: Int, val retryAfter: String? = null)

@@ -151,8 +151,7 @@ class TelemetryReporter {
     void fail() => failed = true;
     try {
       final result = await action(fail);
-      final durationMs =
-          max(0, _clock().difference(started).inMilliseconds);
+      final durationMs = max(0, _clock().difference(started).inMilliseconds);
       if (failed) {
         _recordFeature(featureKey, variant, 3, null, 1);
         if (durationMs > 0) {
@@ -163,8 +162,7 @@ class TelemetryReporter {
       }
       return result;
     } catch (error, stack) {
-      final durationMs =
-          max(0, _clock().difference(started).inMilliseconds);
+      final durationMs = max(0, _clock().difference(started).inMilliseconds);
       _recordFeature(featureKey, variant, 3, null, 1);
       if (durationMs > 0) {
         _recordFeature(featureKey, variant, 5, null, durationMs);

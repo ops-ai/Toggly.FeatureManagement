@@ -57,3 +57,33 @@ class TestUsageScope:
         assert vs["usedCount"] == 1
         assert vs.get("errorCount", 0) == 0
         assert vs.get("durationSumMs", 0) == 0
+
+    def test_fail_then_throw_counts_error_once(self):
+        batcher = UsageBatcher("app", "Production")
+
+        def fn(scope):
+            scope.fail()
+            raise RuntimeError("after fail")
+
+        with pytest.raises(RuntimeError):
+            run_usage_scope(_handlers(batcher, "Double"), fn)
+
+        vs = batcher.build_and_reset()["stats"][0]["variantStats"]["enabled"]
+        assert vs["usedCount"] == 1
+        assert vs["errorCount"] == 1
+        assert vs.get("errorDurationSumMs", 0) >= 0
+
+    @pytest.mark.asyncio
+    async def test_async_success_records_duration(self):
+        batcher = UsageBatcher("app", "Production")
+
+        async def fn(_scope):
+            await asyncio.sleep(0.01)
+            return "ok"
+
+        result = await run_usage_scope_async(_handlers(batcher, "AsyncOk"), fn)
+        assert result == "ok"
+        vs = batcher.build_and_reset()["stats"][0]["variantStats"]["enabled"]
+        assert vs["usedCount"] == 1
+        assert vs.get("errorCount", 0) == 0
+        assert vs.get("durationSumMs", 0) >= 0

@@ -276,7 +276,7 @@ module Toggly
     # Run a block inside a usage scope (attempt + duration + errors). Does not evaluate the flag.
     #
     # @yieldparam scope [Telemetry::FeatureUsageScope]
-    def use(feature_key, identity: nil, variant: "enabled")
+    def use(feature_key, identity: nil, variant: "enabled", &)
       key = feature_key.to_s
       resolved_identity = identity.nil? ? variant_user_id(nil) : identity
       handlers = [
@@ -289,7 +289,7 @@ module Toggly
         yield scope
         return
       end
-      Telemetry::UsageScopeRunner.run(handlers) { |scope| yield scope }
+      Telemetry::UsageScopeRunner.run(handlers, &)
     end
 
     # Record a feature viewed/rendered event

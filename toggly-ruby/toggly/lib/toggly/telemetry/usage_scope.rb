@@ -17,6 +17,7 @@ module Toggly
       end
     end
 
+    # Runs a usage-scope block and records attempt, duration, and errors.
     module UsageScopeRunner
       module_function
 

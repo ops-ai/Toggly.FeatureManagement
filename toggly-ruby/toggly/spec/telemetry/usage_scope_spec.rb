@@ -9,10 +9,10 @@ RSpec.describe Toggly::Telemetry::UsageScopeRunner do
     [
       -> { batcher.record_usage(feature) },
       ->(ms) { batcher.record_usage_duration(feature, ms) },
-      ->(ms) do
+      lambda { |ms|
         batcher.record_usage_error(feature)
         batcher.record_usage_duration(feature, ms, failed: true)
-      end
+      }
     ]
   end
 
@@ -34,7 +34,7 @@ RSpec.describe Toggly::Telemetry::UsageScopeRunner do
   end
 
   it "records error on explicit fail" do
-    described_class.run(handlers("Soft")) { |scope| scope.fail }
+    described_class.run(handlers("Soft"), &:fail)
     vs = batcher.build_and_reset[:stats].first[:variantStats]["enabled"]
     expect(vs[:errorCount]).to eq(1)
   end

@@ -382,8 +382,9 @@ impl UsageBatcher {
                 dest.viewed_count = dest.viewed_count.saturating_add(vs.viewed_count);
                 dest.error_count = dest.error_count.saturating_add(vs.error_count);
                 dest.duration_sum_ms = dest.duration_sum_ms.saturating_add(vs.duration_sum_ms);
-                dest.error_duration_sum_ms =
-                    dest.error_duration_sum_ms.saturating_add(vs.error_duration_sum_ms);
+                dest.error_duration_sum_ms = dest
+                    .error_duration_sum_ms
+                    .saturating_add(vs.error_duration_sum_ms);
             }
             agg.unique_users_enabled
                 .extend(snap_agg.unique_users_enabled);

@@ -43,7 +43,7 @@ namespace Toggly.FeatureManagement
         {
             Complete();
             GC.SuppressFinalize(this);
-            return ValueTask.CompletedTask;
+            return default;
         }
 
         private void Complete()

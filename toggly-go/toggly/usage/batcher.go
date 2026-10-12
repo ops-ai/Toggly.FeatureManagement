@@ -363,7 +363,7 @@ func cloneFeatureAgg(agg *featureAgg) *featureAgg {
 		viewedCount:         agg.viewedCount,
 		errorCount:          agg.errorCount,
 		durationSumMs:       agg.durationSumMs,
-		errorDurSumMs:         agg.errorDurSumMs,
+		errorDurSumMs:       agg.errorDurSumMs,
 		uniqueUsersEnabled:  cloneIntSet(agg.uniqueUsersEnabled),
 		uniqueUsersDisabled: cloneIntSet(agg.uniqueUsersDisabled),
 		uniqueUsersUsed:     cloneIntSet(agg.uniqueUsersUsed),

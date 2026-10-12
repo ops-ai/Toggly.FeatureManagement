@@ -8,6 +8,7 @@ on:
     paths:
       - 'Toggly.FeatureManagement.Electron/**'
       - 'toggly-segments/**'
+      - 'toggly-client-telemetry/**'
       - '.github/workflows/analysis-electron.yml'
   workflow_dispatch:
   workflow_call:
@@ -44,9 +45,19 @@ jobs:
           set -euo pipefail
           (cd toggly-segments && (npm ci || npm install) && npm run build)
 
+      - name: Build and pack local toggly-client-telemetry
+        run: |
+          set -euo pipefail
+          (cd toggly-client-telemetry && (npm ci || npm install) && npm run build && npm pack)
+          mkdir -p /tmp/toggly-local-packs
+          mv toggly-client-telemetry/ops-ai-toggly-client-telemetry-*.tgz /tmp/toggly-local-packs/
+
       - name: Install dependencies
         working-directory: Toggly.FeatureManagement.Electron
-        run: npm ci || npm install
+        run: |
+          set -euo pipefail
+          npm ci || npm install
+          npm install --no-save /tmp/toggly-local-packs/ops-ai-toggly-client-telemetry-*.tgz
 
       - name: Build package
         working-directory: Toggly.FeatureManagement.Electron
