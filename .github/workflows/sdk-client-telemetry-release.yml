@@ -38,7 +38,7 @@ permissions:
 
 concurrency:
   group: client-telemetry-sdk-release
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   SDK_DIR: toggly-client-telemetry

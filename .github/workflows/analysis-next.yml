@@ -10,7 +10,10 @@ on:
       - 'toggly-eval/**'
       - 'toggly-segments/**'
       - 'toggly-signed-defs/**'
+      - 'toggly-client-telemetry/**'
       - '.github/workflows/analysis-next.yml'
+      - '.github/actions/install-local-client-telemetry/**'
+      - '.github/actions/install-local-client-telemetry-pnpm/**'
       - '.github/actions/build-shared-js-deps/**'
       - '.github/actions/upload-shared-js-deps/**'
       - '.github/actions/download-shared-js-deps/**'
@@ -77,9 +80,10 @@ jobs:
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
 
-      - name: Install dependencies
-        working-directory: ${{ env.SDK_ROOT }}
-        run: pnpm install
+      - name: Install dependencies with local client-telemetry
+        uses: ./.github/actions/install-local-client-telemetry-pnpm
+        with:
+          workspace-dir: ${{ env.SDK_ROOT }}
 
       - name: Build all packages
         working-directory: ${{ env.SDK_ROOT }}
@@ -123,9 +127,10 @@ jobs:
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
 
-      - name: Install dependencies
-        working-directory: ${{ env.SDK_ROOT }}
-        run: pnpm install
+      - name: Install dependencies with local client-telemetry
+        uses: ./.github/actions/install-local-client-telemetry-pnpm
+        with:
+          workspace-dir: ${{ env.SDK_ROOT }}
 
       - name: Build (for lint)
         working-directory: ${{ env.SDK_ROOT }}
@@ -161,9 +166,10 @@ jobs:
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
 
-      - name: Install dependencies
-        working-directory: ${{ env.SDK_ROOT }}
-        run: pnpm install
+      - name: Install dependencies with local client-telemetry
+        uses: ./.github/actions/install-local-client-telemetry-pnpm
+        with:
+          workspace-dir: ${{ env.SDK_ROOT }}
 
       - name: Build
         working-directory: ${{ env.SDK_ROOT }}
@@ -211,9 +217,10 @@ jobs:
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
 
-      - name: Install dependencies
-        working-directory: ${{ env.SDK_ROOT }}
-        run: pnpm install
+      - name: Install dependencies with local client-telemetry
+        uses: ./.github/actions/install-local-client-telemetry-pnpm
+        with:
+          workspace-dir: ${{ env.SDK_ROOT }}
 
       - name: Build packages
         working-directory: ${{ env.SDK_ROOT }}

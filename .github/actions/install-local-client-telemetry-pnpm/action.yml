@@ -1,0 +1,35 @@
+name: Install local client-telemetry (pnpm)
+description: >-
+  Build in-repo @ops-ai/toggly-client-telemetry and force a pnpm override so
+  workspace installs resolve unpublished manifest versions.
+
+inputs:
+  workspace-dir:
+    description: pnpm workspace root (relative to repo root, or absolute)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Override and install with local client-telemetry
+      shell: bash
+      run: |
+        set -euo pipefail
+        wd="${{ inputs.workspace-dir }}"
+        if [[ "$wd" != /* ]]; then
+          wd="$GITHUB_WORKSPACE/$wd"
+        fi
+        telemetry="$GITHUB_WORKSPACE/toggly-client-telemetry"
+        (cd "$telemetry" && (npm ci || npm install) && npm run build)
+        WD="$wd" TELEMETRY_DIR="$telemetry" node -e "
+          const fs = require('fs');
+          const pkgPath = require('path').join(process.env.WD, 'package.json');
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+          pkg.pnpm = pkg.pnpm || {};
+          pkg.pnpm.overrides = {
+            ...(pkg.pnpm.overrides || {}),
+            '@ops-ai/toggly-client-telemetry': process.env.TELEMETRY_DIR,
+          };
+          fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+        "
+        (cd "$wd" && pnpm install --no-frozen-lockfile)

@@ -175,18 +175,26 @@ jobs:
 
       - name: Install locked SolidJS or SvelteKit dependencies
         if: matrix.sdk == 'SolidJS' || matrix.sdk == 'SvelteKit'
-        working-directory: ${{ matrix.path }}
-        run: npm ci
+        uses: ./.github/actions/install-local-client-telemetry
+        with:
+          package-dir: ${{ matrix.path }}
 
       - name: Install locked standalone package dependencies
-        if: matrix.sdk == 'Gatsby' || matrix.sdk == 'Client-Telemetry' || matrix.sdk == 'Client-Core' || matrix.sdk == 'Evaluator' || matrix.sdk == 'Local-Gates'
+        if: matrix.sdk == 'Gatsby' || matrix.sdk == 'Client-Core'
+        uses: ./.github/actions/install-local-client-telemetry
+        with:
+          package-dir: ${{ matrix.path }}
+
+      - name: Install locked Client-Telemetry / Evaluator / Local-Gates dependencies
+        if: matrix.sdk == 'Client-Telemetry' || matrix.sdk == 'Evaluator' || matrix.sdk == 'Local-Gates'
         working-directory: ${{ matrix.path }}
         run: npm ci
 
       - name: Install dependencies
         if: matrix.sdk != 'SolidJS' && matrix.sdk != 'SvelteKit' && matrix.sdk != 'Gatsby' && matrix.sdk != 'Client-Telemetry' && matrix.sdk != 'Client-Core' && matrix.sdk != 'Evaluator' && matrix.sdk != 'Local-Gates' && matrix.sdk != 'NestJS'
-        working-directory: ${{ matrix.path }}
-        run: npm ci || npm install
+        uses: ./.github/actions/install-local-client-telemetry
+        with:
+          package-dir: ${{ matrix.path }}
 
       # NestJS depends on unpublished @ops-ai/toggly-node-core from this PR.
       # OPS-1696 packed tarball paths use absolute RUNNER_TEMP artifacts
@@ -428,9 +436,10 @@ jobs:
           (cd toggly-eval && (npm ci || npm install) && npm run build)
           (cd Toggly.FeatureManagement.Node && pnpm install --frozen-lockfile && pnpm --filter @ops-ai/toggly-node-core build)
 
-      - name: Install locked dependencies
-        working-directory: ${{ matrix.host.path }}
-        run: npm ci
+      - name: Install locked dependencies with local client-telemetry
+        uses: ./.github/actions/install-local-client-telemetry
+        with:
+          package-dir: ${{ matrix.host.path }}
 
       - name: Install Chromium for packed SvelteKit host
         if: matrix.host.browser
@@ -992,6 +1001,9 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - run: npm ci
+      - name: Install locked dependencies with local client-telemetry
+        uses: ./.github/actions/install-local-client-telemetry
+        with:
+          package-dir: Toggly.FeatureManagement.Solid
       - run: npm run build
       - run: node tests/install-host.mjs

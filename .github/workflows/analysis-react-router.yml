@@ -75,9 +75,10 @@ jobs:
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
 
-      - name: Install dependencies
-        working-directory: ${{ env.SDK_ROOT }}/${{ env.PKG }}
-        run: npm ci || npm install
+      - name: Install dependencies with local client-telemetry
+        uses: ./.github/actions/install-local-client-telemetry
+        with:
+          package-dir: ${{ env.SDK_ROOT }}/${{ env.PKG }}
 
       - name: Type check
         working-directory: ${{ env.SDK_ROOT }}/${{ env.PKG }}
@@ -128,9 +129,10 @@ jobs:
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
 
-      - name: Install dependencies
-        working-directory: ${{ env.SDK_ROOT }}/${{ env.PKG }}
-        run: npm ci || npm install
+      - name: Install dependencies with local client-telemetry
+        uses: ./.github/actions/install-local-client-telemetry
+        with:
+          package-dir: ${{ env.SDK_ROOT }}/${{ env.PKG }}
 
       - name: Verify packed host
         working-directory: ${{ env.SDK_ROOT }}/${{ env.PKG }}

@@ -1,0 +1,60 @@
+name: Install local client-telemetry
+description: >-
+  Build and pack in-repo @ops-ai/toggly-client-telemetry, then install it into
+  a package directory so PR CI can resolve unpublished manifest versions
+  (same pattern as NestJS toggly-node-core packing).
+
+inputs:
+  package-dir:
+    description: >-
+      Package directory containing package.json / node_modules (relative to
+      repo root, or absolute).
+    required: true
+  use-npm-ci:
+    description: >-
+      When true (default), run npm ci first then overlay the packed tarball
+      with npm install --no-save. When false, skip npm ci (caller installs).
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Pack and install local @ops-ai/toggly-client-telemetry
+      shell: bash
+      run: |
+        set -euo pipefail
+        wd="${{ inputs.package-dir }}"
+        if [[ "$wd" != /* ]]; then
+          wd="$GITHUB_WORKSPACE/$wd"
+        fi
+        TELEMETRY_DIR="$GITHUB_WORKSPACE/toggly-client-telemetry"
+        PACK_DIR="${RUNNER_TEMP:-/tmp}/toggly-client-telemetry-pack"
+        mkdir -p "$PACK_DIR"
+        (
+          cd "$TELEMETRY_DIR"
+          if [[ -f package-lock.json ]]; then
+            npm ci || npm install
+          else
+            npm install
+          fi
+          npm run build
+          npm pack --pack-destination "$PACK_DIR"
+        )
+        TGZ="$(ls -1 "$PACK_DIR"/ops-ai-toggly-client-telemetry-*.tgz | head -1)"
+        test -f "$TGZ"
+        cd "$wd"
+        if ! node -e "const p=require('./package.json'); const d={...p.dependencies,...p.devDependencies,...p.peerDependencies}; process.exit(d['@ops-ai/toggly-client-telemetry']?0:1)"; then
+          echo "Skip local client-telemetry (not a dependency of $wd)"
+          if [[ "${{ inputs.use-npm-ci }}" == "true" ]]; then
+            npm ci || npm install
+          fi
+          exit 0
+        fi
+        if [[ "${{ inputs.use-npm-ci }}" == "true" ]]; then
+          # Prefer install when lockfile still pins an older telemetry range
+          # than package.json (common while 1.x.y is unpublished).
+          npm ci || npm install
+        fi
+        # --no-save: do not rewrite package.json to file: temp paths.
+        npm install --no-save "$TGZ"
