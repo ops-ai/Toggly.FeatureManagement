@@ -122,6 +122,23 @@ it.each(contract.endpointScenarios)('uses shared endpoint policy: $name', async 
   expect(packets.map(packet => packet.url)).toEqual(expectedUrl ? [expectedUrl] : []);
   t.dispose();
 });
+it('use() records attempt and soft-fail error slots', async () => {
+  const t = client();
+  await t.init();
+  await t.use('scoped', async () => undefined);
+  await expect(
+    t.use('scoped', async (scope) => {
+      scope.fail();
+    }),
+  ).resolves.toBeUndefined();
+  await t.flushTelemetry();
+  expect(packets).toHaveLength(1);
+  // Compact slots: [check, used, viewed, error, durationMs, errorDurationMs]
+  expect(packets[0].body.f.scoped.enabled[1]).toBe(2);
+  expect(packets[0].body.f.scoped.enabled[3]).toBe(1);
+  t.dispose();
+});
+
 it('forwards all shared explicit-event variant cases without coercion', async () => {
   const scenario = contract.scenarios.find((item: any) => item.name === 'invalid-variants-preserve-valid-queue');
   const t = client({ appKey: 'test-app', environment: 'Production' });
