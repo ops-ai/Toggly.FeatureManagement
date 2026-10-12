@@ -85,8 +85,8 @@ importers:
         specifier: workspace:^
         version: link:../nuxt-toggly-core
       '@ops-ai/toggly-client-telemetry':
-        specifier: ^1.1.0
-        version: 1.1.0
+        specifier: ^1.2.0
+        version: 1.2.0
     devDependencies:
       '@types/node':
         specifier: ^22.13.1
@@ -1195,8 +1195,8 @@ packages:
   '@one-ini/wasm@0.1.1':
     resolution: {integrity: sha512-XuySG1E38YScSJoMlqovLru4KTUNSjgVTIjyh7qMX6aNN5HY5Ct5LhRJdxO79JtTzKfzV/bnWpz+zquYrISsvw==}
 
-  '@ops-ai/toggly-client-telemetry@1.1.0':
-    resolution: {integrity: sha512-E3J9B+Hk8blxfU49xjJer/7gYoacBMjAoGQmosn99TVxK9Mpr5cpS2mTP2PJ5PF7edRgcdvTBoeXv+hIKriTgw==}
+  '@ops-ai/toggly-client-telemetry@1.2.0':
+    resolution: {integrity: sha512-3UwLcpNQuVIjyevEoeBlwrTelr+9o/KX7t06BnyzCuXDCcP9tuswMV8QtGWWbKZqhdr5g7pG+K4o7PYhZ3y/eA==}
     engines: {node: '>=18.0.0'}
 
   '@ops-ai/toggly-eval@2.0.3':
@@ -5730,7 +5730,7 @@ snapshots:
 
   '@one-ini/wasm@0.1.1': {}
 
-  '@ops-ai/toggly-client-telemetry@1.1.0': {}
+  '@ops-ai/toggly-client-telemetry@1.2.0': {}
 
   '@ops-ai/toggly-eval@2.0.3':
     dependencies:

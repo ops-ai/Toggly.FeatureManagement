@@ -36,7 +36,7 @@
     "@angular-eslint/template-parser": "^22.0.0",
     "@angular/cli": "^22.0.0",
     "@angular/compiler-cli": "^22.0.0",
-    "@ops-ai/toggly-client-telemetry": "^1.1.0",
+    "@ops-ai/toggly-client-telemetry": "^1.2.0",
     "@ops-ai/toggly-hooks-types": "file:../toggly-hooks-types",
     "@ops-ai/toggly-local-gates": "file:../toggly-local-gates",
     "@ops-ai/toggly-signed-defs": "file:../toggly-signed-defs",
@@ -45,6 +45,7 @@
     "@typescript-eslint/eslint-plugin": "^8.70.0",
     "@typescript-eslint/parser": "^8.70.0",
     "angular-eslint": "^22.0.0",
+    "c8": "12.0.0",
     "eslint": "^9.0.0",
     "jasmine-core": "~5.1.0",
     "karma": "~6.4.0",
@@ -53,9 +54,8 @@
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.1.0",
     "ng-packagr": "^22.0.0",
-    "typescript": "~6.0.0",
-    "typescript-eslint": "^8.70.0",
     "playwright": "1.58.2",
-    "c8": "12.0.0"
+    "typescript": "~6.0.0",
+    "typescript-eslint": "^8.70.0"
   }
 }
