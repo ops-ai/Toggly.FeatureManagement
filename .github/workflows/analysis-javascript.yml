@@ -77,7 +77,10 @@ jobs:
       - name: Resolve SDK filter
         id: filter
         env:
-          SDKS: ${{ github.event_name == 'workflow_call' && inputs.sdks || 'all' }}
+          # inputs.sdks is set on workflow_call (release gates). Do not key off
+          # github.event_name == 'workflow_call' — nested reusable runs keep the
+          # caller's event (e.g. workflow_dispatch), which incorrectly forced "all".
+          SDKS: ${{ inputs.sdks || 'all' }}
         run: node .github/package-registry/analysis-js-filter.mjs "$SDKS"
 
   build-shared-js-deps:
