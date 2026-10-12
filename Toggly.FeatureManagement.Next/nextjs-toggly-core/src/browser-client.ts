@@ -1,7 +1,6 @@
 import {
   createTelemetryReporter,
   runFeatureUsageScope,
-  type FeatureUsageScope,
   type TelemetryReporter,
 } from '@ops-ai/toggly-client-telemetry'
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser'

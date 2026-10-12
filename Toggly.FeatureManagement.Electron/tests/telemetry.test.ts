@@ -72,6 +72,26 @@ async function owner(extra: any = {}) {
   await client.init()
   return { client, ...wire }
 }
+it('records usage scope attempts with duration and error slots', async () => {
+  const { client, packets } = await owner()
+  const pause = () => new Promise((resolve) => setTimeout(resolve, 5))
+  await client.use('Checkout', async () => {
+    await pause()
+    return 'ok'
+  })
+  await client.use('Checkout', async (scope) => {
+    scope.fail()
+    await pause()
+    return 'soft'
+  })
+  await client.flushTelemetry()
+  const enabled = packets[0].f.Checkout.enabled as number[]
+  expect(enabled[1]).toBe(2)
+  expect(enabled[3]).toBe(1)
+  expect(enabled[4]).toBeGreaterThan(0)
+  expect(enabled[5]).toBeGreaterThan(0)
+})
+
 it('records effective cached leaves once after gates and before negation, and keeps explicit events private', async () => {
   const { client, packets, requests } = await owner()
   client.getFlags()

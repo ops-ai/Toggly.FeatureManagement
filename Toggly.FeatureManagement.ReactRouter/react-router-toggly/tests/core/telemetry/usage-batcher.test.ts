@@ -321,7 +321,15 @@ describe('UsageBatcher', () => {
 
     const bundle = batcher.buildAndReset()!
     expect(bundle.payload.stats[0].variantStats).toEqual({
-      enabled: { checkCount: 1, requestCount: 0, usedCount: 0, viewedCount: 0 },
+      enabled: {
+        checkCount: 1,
+        requestCount: 0,
+        usedCount: 0,
+        viewedCount: 0,
+        errorCount: 0,
+        durationSumMs: 0,
+        errorDurationSumMs: 0,
+      },
     })
     expect(bundle.uniqueUsersEnabled).toEqual({ Checkout: [7] })
     expect(bundle.uniqueUsersDisabled).toEqual({ Checkout: [8] })

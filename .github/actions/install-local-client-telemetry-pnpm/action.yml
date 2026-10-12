@@ -35,7 +35,7 @@ runs:
           const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
           const pin = (obj) => {
             if (obj && obj['@ops-ai/toggly-client-telemetry']) {
-              obj['@ops-ai/toggly-client-telemetry'] = '^1.1.2';
+              obj['@ops-ai/toggly-client-telemetry'] = '^1.2.0';
             }
           };
           pin(pkg.dependencies);
@@ -55,7 +55,7 @@ runs:
                 let changed = false;
                 for (const key of ['dependencies', 'devDependencies', 'peerDependencies']) {
                   if (p[key] && p[key]['@ops-ai/toggly-client-telemetry']) {
-                    p[key]['@ops-ai/toggly-client-telemetry'] = '^1.1.2';
+                    p[key]['@ops-ai/toggly-client-telemetry'] = '^1.2.0';
                     changed = true;
                   }
                 }
