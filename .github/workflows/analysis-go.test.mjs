@@ -23,12 +23,37 @@ const outcomes = [
   ['sonar', 'SONAR_RESULT', 'Core Sonar'], ['sonar-mongodb-v2', 'MONGODB_V2_SONAR_RESULT', 'MongoDB Driver v2 Sonar'],
 ];
 
-function job(name) {
-  const start = workflow.indexOf(`\n  ${name}:\n`);
+function job(name, source = workflow) {
+  const start = source.indexOf(`\n  ${name}:\n`);
   assert.notEqual(start, -1, `missing ${name} job`);
-  const next = workflow.slice(start + 1).search(/\n  [a-z][a-z-]*:\n/);
-  return next === -1 ? workflow.slice(start) : workflow.slice(start, start + 1 + next);
+  const next = source.slice(start + 1).search(/\n  [A-Za-z_][A-Za-z0-9_-]*:\n/);
+  return next === -1 ? source.slice(start) : source.slice(start, start + 1 + next);
 }
+
+test('job slices stop at consecutive digit-bearing identifiers instead of borrowing adjacent checks', () => {
+  const source = 'jobs:\n  mongodb-v2:\n    marker: adapter-tests\n  mongodb-v2-consumer:\n    marker: packed-consumer\n  sonar-mongodb-v2:\n    marker: fatal-gates\n';
+  assert.equal(job('mongodb-v2', source), '\n  mongodb-v2:\n    marker: adapter-tests');
+  assert.doesNotMatch(job('mongodb-v2', source), /packed-consumer|fatal-gates/);
+  assert.equal(job('mongodb-v2-consumer', source), '\n  mongodb-v2-consumer:\n    marker: packed-consumer');
+  assert.doesNotMatch(job('mongodb-v2-consumer', source), /fatal-gates/);
+});
+
+test('job boundaries support uppercase and underscore identifiers without matching nested properties', () => {
+  for (const next of ['Build2', '_consumer2', 'consumer_v2']) {
+    const source = `jobs:\n  target:\n    env:\n      NESTED_KEY2: keep-in-target\n    marker: target-check\n  ${next}:\n    marker: adjacent-check\n`;
+    assert.equal(job('target', source), '\n  target:\n    env:\n      NESTED_KEY2: keep-in-target\n    marker: target-check');
+    assert.doesNotMatch(job('target', source), /adjacent-check/);
+    assert.equal(job(next, source), `\n  ${next}:\n    marker: adjacent-check\n`);
+  }
+});
+
+test('final digit-bearing job retains its full body with or without a trailing newline', () => {
+  for (const ending of ['', '\n']) {
+    const source = `jobs:\n  first:\n    marker: preceding-check\n  final_v2:\n    marker: final-check${ending}`;
+    assert.equal(job('final_v2', source), `\n  final_v2:\n    marker: final-check${ending}`);
+    assert.doesNotMatch(job('final_v2', source), /preceding-check/);
+  }
+});
 
 function step(source, name) {
   const start = source.indexOf(`      - name: ${name}\n`);
@@ -253,7 +278,7 @@ test('gate regressions execute in the existing normal test job and trigger their
 test('MongoDB v2 fatal scanner bodies and the entire main baseline remain preserved', () => {
   const hash = source => createHash('sha256').update(source).digest('hex');
   assert.equal(hash(step(job('sonar-mongodb-v2'), 'SonarCloud Scan - MongoDB Driver v2')), '7aa4f072a094a8769da65e9083b55ec3c8e424409b1f06e69569e7bfd118d0af');
-  assert.equal(hash(step(job('sonar-mongodb-v2'), 'SonarQube Server Scan - MongoDB Driver v2')), 'a697079af3d887a7a0a19d61f662690aa3ecaffc71bc24ac9bfe09b4ac15a42a');
+  assert.equal(hash(step(job('sonar-mongodb-v2'), 'SonarQube Server Scan - MongoDB Driver v2')), '2e10afbcde2547ad329df102577d45054d202e034c65d3a91501e4958f57a27e');
   assert.equal(hash(job('mongodb-v2-sonar-main')), '998407b4d018f245c1be7587dc871cf9d178ec99bfac02bd676c96e91508cc9a');
   for (const name of requiredJobs) {
     assert.equal(evaluate(expression(job(name), 'if'), { inputs: { bootstrap_mongodb_v2_main: true } }), false, name);
