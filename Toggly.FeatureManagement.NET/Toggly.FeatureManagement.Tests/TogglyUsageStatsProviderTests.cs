@@ -2803,8 +2803,10 @@ public class TogglyUsageStatsProviderTests : IDisposable
     public async Task BeginUsageAsync_WithContext_RecordsUsageForEachKey()
     {
         _provider = CreateProvider();
-        await using var scope = await _provider.BeginUsageAsync("ctx-user", "A", "B");
-        scope.Fail();
+        await using (var scope = await _provider.BeginUsageAsync("ctx-user", "A", "B"))
+        {
+            scope.Fail();
+        }
 
         var stats = GetPendingStats(_provider);
         Assert.Equal(1, stats[("A", (byte)TogglyUsageStatsProvider.StatType.Used)]);
