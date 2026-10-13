@@ -48,8 +48,10 @@ namespace Toggly.FeatureManagement
 
         /// <summary>
         /// Begin a usage scope with context for unique-user tracking on the attempt.
+        /// Named distinctly from <see cref="BeginUsageAsync"/> so a string context is not
+        /// swallowed by the <c>params string[]</c> overload.
         /// </summary>
-        Task<IFeatureUsageScope> BeginUsageAsync<TContext>(TContext context, params string[] featureKeys);
+        Task<IFeatureUsageScope> BeginUsageWithContextAsync<TContext>(TContext context, params string[] featureKeys);
 
         /// <summary>
         /// Run <paramref name="action"/> inside a usage scope (attempt, duration, failure propagation).

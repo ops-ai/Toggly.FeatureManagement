@@ -2817,10 +2817,10 @@ public class TogglyUsageStatsProviderTests : IDisposable
     }
 
     [Fact]
-    public async Task BeginUsageAsync_WithContext_RecordsUsageForEachKey()
+    public async Task BeginUsageWithContextAsync_RecordsUsageForEachKey()
     {
         _provider = CreateProvider();
-        await using (var scope = await _provider.BeginUsageAsync("ctx-user", "A", "B"))
+        await using (var scope = await _provider.BeginUsageWithContextAsync("ctx-user", "A", "B"))
         {
             scope.Fail();
         }
@@ -2830,6 +2830,7 @@ public class TogglyUsageStatsProviderTests : IDisposable
         Assert.Equal(1, stats[("B", (byte)TogglyUsageStatsProvider.StatType.Used)]);
         Assert.Equal(1, stats[("A", (byte)TogglyUsageStatsProvider.StatType.Error)]);
         Assert.Equal(1, stats[("B", (byte)TogglyUsageStatsProvider.StatType.Error)]);
+        Assert.False(stats.ContainsKey(("ctx-user", (byte)TogglyUsageStatsProvider.StatType.Used)));
     }
 
     [Fact]
@@ -2838,7 +2839,7 @@ public class TogglyUsageStatsProviderTests : IDisposable
         _provider = CreateProvider();
         await Assert.ThrowsAsync<ArgumentException>(() => _provider.BeginUsageAsync());
         await Assert.ThrowsAsync<ArgumentException>(() =>
-            _provider.BeginUsageAsync("ctx", Array.Empty<string>()));
+            _provider.BeginUsageWithContextAsync("ctx", Array.Empty<string>()));
     }
 
     #endregion

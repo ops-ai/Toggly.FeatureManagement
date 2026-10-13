@@ -3,12 +3,16 @@
 ## All .NET SDK packages 3.14.0 - 2026-10-12
 
 ### Added
-- Usage scope API on `IFeatureUsageStatsProvider`: `BeginUsageAsync`, `UseAsync`,
-  and `IFeatureUsageScope` with `Fail()` / `MarkCancelled()`. Records one usage
-  attempt, success or error duration (ms), and error counts; cancellation keeps
-  the attempt without duration or error. `[FeatureUsage]` wraps the action in
-  that scope. Wire fields: `VariantStats.errorCount`, `durationSumMs`,
-  `errorDurationSumMs`.
+- Usage scope API on `IFeatureUsageStatsProvider`: `BeginUsageAsync`,
+  `BeginUsageWithContextAsync`, `UseAsync`, and `IFeatureUsageScope` with
+  `Fail()` / `MarkCancelled()`. Records one usage attempt, success or error
+  duration (ms), and error counts; cancellation keeps the attempt without
+  duration or error. `[FeatureUsage]` wraps the action in that scope. Wire
+  fields: `VariantStats.errorCount`, `durationSumMs`, `errorDurationSumMs`.
+
+### Fixed
+- Renamed context overload to `BeginUsageWithContextAsync` so a string context
+  is not bound by `BeginUsageAsync(params string[])` [OPS-1758].
 
 ## All .NET SDK packages 3.13.3 - 2026-10-05
 

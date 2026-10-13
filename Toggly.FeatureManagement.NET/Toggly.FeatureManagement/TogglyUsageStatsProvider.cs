@@ -607,7 +607,7 @@ namespace Toggly.FeatureManagement
         }
 
         /// <inheritdoc/>
-        public async Task<IFeatureUsageScope> BeginUsageAsync<TContext>(TContext context, params string[] featureKeys)
+        public async Task<IFeatureUsageScope> BeginUsageWithContextAsync<TContext>(TContext context, params string[] featureKeys)
         {
             if (featureKeys == null || featureKeys.Length == 0)
                 throw new ArgumentException("At least one feature key is required.", nameof(featureKeys));

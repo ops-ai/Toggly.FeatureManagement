@@ -45,7 +45,7 @@ public sealed class NoOpTelemetryTests
             scope.MarkCancelled();
         }
 
-        await using (var scoped = await usage.BeginUsageAsync(new { Id = 1 }, "Feature"))
+        await using (var scoped = await usage.BeginUsageWithContextAsync(new { Id = 1 }, "Feature"))
         {
             scoped.Dispose();
         }

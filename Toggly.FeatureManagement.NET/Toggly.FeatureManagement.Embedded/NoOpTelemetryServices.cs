@@ -8,7 +8,7 @@ internal sealed class NoOpUsageStatsProvider : IFeatureUsageStatsProvider, IUsag
     public Task RecordUsageAsync<TContext>(string featureKey, TContext context) => Task.CompletedTask;
     public Task<IFeatureUsageScope> BeginUsageAsync(params string[] featureKeys) =>
         Task.FromResult<IFeatureUsageScope>(NoOpFeatureUsageScope.Instance);
-    public Task<IFeatureUsageScope> BeginUsageAsync<TContext>(TContext context, params string[] featureKeys) =>
+    public Task<IFeatureUsageScope> BeginUsageWithContextAsync<TContext>(TContext context, params string[] featureKeys) =>
         Task.FromResult<IFeatureUsageScope>(NoOpFeatureUsageScope.Instance);
     public Task UseAsync(string featureKey, Func<Task> action) => action();
     public Task UseAsync(string featureKey, Func<IFeatureUsageScope, Task> action) =>
