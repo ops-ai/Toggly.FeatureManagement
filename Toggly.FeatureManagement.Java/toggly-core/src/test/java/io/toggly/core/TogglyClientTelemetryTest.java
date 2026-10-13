@@ -146,6 +146,26 @@ class TogglyClientTelemetryTest {
     }
 
     @Test
+    void useCallableInterruptedIsCancellation() throws Exception {
+        assertThatThrownBy(() -> client.useCallable("always-on", () -> {
+            throw new InterruptedException("stop");
+        })).isInstanceOf(InterruptedException.class);
+        assertThat(Thread.interrupted()).isTrue();
+        client.flushTelemetry();
+
+        var vs = usageSent.get(0).getStats().stream()
+                .filter(s -> "always-on".equals(s.getFeature()))
+                .findFirst()
+                .orElseThrow()
+                .getVariantStats()
+                .get("enabled");
+        assertThat(vs.getUsedCount()).isEqualTo(1);
+        assertThat(vs.getErrorCount()).isZero();
+        assertThat(vs.getDurationSumMs()).isZero();
+        assertThat(vs.getErrorDurationSumMs()).isZero();
+    }
+
+    @Test
     void beginUsageNoopForBlankFeature() {
         try (var scope = client.beginUsage("")) {
             scope.fail();

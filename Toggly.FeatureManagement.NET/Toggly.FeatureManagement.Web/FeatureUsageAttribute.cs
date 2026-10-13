@@ -107,7 +107,10 @@ namespace Toggly.FeatureManagement
             await using var scope = await statsProvider.BeginUsageAsync(Features.ToArray()).ConfigureAwait(false);
             try
             {
-                await next().ConfigureAwait(false);
+                // ASP.NET Core stores action exceptions on the executed context and rethrows
+                // only after this filter returns — inspect Exception, do not rely on throw alone.
+                var executed = await next().ConfigureAwait(false);
+                ApplyScopeOutcome(scope, executed.Exception);
             }
             catch (OperationCanceledException)
             {
@@ -147,7 +150,9 @@ namespace Toggly.FeatureManagement
             await using var scope = await statsProvider.BeginUsageAsync(Features.ToArray()).ConfigureAwait(false);
             try
             {
-                await next.Invoke().ConfigureAwait(false);
+                // PageActionInvoker stores handler exceptions on the executed context the same way.
+                var executed = await next.Invoke().ConfigureAwait(false);
+                ApplyScopeOutcome(scope, executed.Exception);
             }
             catch (OperationCanceledException)
             {
@@ -167,6 +172,19 @@ namespace Toggly.FeatureManagement
         /// <param name="context">The <see cref="PageHandlerSelectedContext"/>.</param>
         /// <returns>A <see cref="Task"/> that on completion indicates the filter has executed.</returns>
         public Task OnPageHandlerSelectionAsync(PageHandlerSelectedContext context) => Task.CompletedTask;
+
+        /// <summary>
+        /// Maps an exception stored on the MVC/Razor executed context to scope outcome.
+        /// </summary>
+        private static void ApplyScopeOutcome(IFeatureUsageScope scope, Exception exception)
+        {
+            if (exception == null)
+                return;
+            if (exception is OperationCanceledException)
+                scope.MarkCancelled();
+            else
+                scope.Fail();
+        }
 
         /// <summary>
         /// Checks if the required features are enabled based on the RequirementType.

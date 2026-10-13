@@ -704,6 +704,8 @@ public final class TogglyClient implements AutoCloseable {
 
     /**
      * Run an action with an explicit scope (for {@link FeatureUsageScope#fail()}).
+     * Prefer {@link #useCallable(String, java.util.concurrent.Callable)} when the work can
+     * throw checked {@link InterruptedException} (treated as cancellation).
      */
     public <T> T use(String featureKey, java.util.function.Function<FeatureUsageScope, T> action) {
         if (action == null) {
@@ -716,10 +718,54 @@ public final class TogglyClient implements AutoCloseable {
             try {
                 return action.apply(scope);
             } catch (RuntimeException e) {
+                if (isInterrupted(e)) {
+                    scope.markCancelled();
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
                 scope.fail();
                 throw e;
             }
         }
+    }
+
+    /**
+     * Run callable work inside a usage scope. {@link InterruptedException} is cancellation
+     * (attempt only); other failures call {@link FeatureUsageScope#fail()}.
+     */
+    public <T> T useCallable(String featureKey, java.util.concurrent.Callable<T> action) throws Exception {
+        if (action == null) {
+            throw new IllegalArgumentException("action");
+        }
+        if (featureKey == null || featureKey.isEmpty() || telemetry == null) {
+            return action.call();
+        }
+        try (FeatureUsageScope scope = beginUsage(featureKey)) {
+            try {
+                return action.call();
+            } catch (InterruptedException e) {
+                scope.markCancelled();
+                Thread.currentThread().interrupt();
+                throw e;
+            } catch (Exception e) {
+                if (isInterrupted(e)) {
+                    scope.markCancelled();
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+                scope.fail();
+                throw e;
+            }
+        }
+    }
+
+    private static boolean isInterrupted(Throwable error) {
+        for (Throwable cursor = error; cursor != null; cursor = cursor.getCause()) {
+            if (cursor instanceof InterruptedException) {
+                return true;
+            }
+        }
+        return Thread.currentThread().isInterrupted();
     }
 
     /**

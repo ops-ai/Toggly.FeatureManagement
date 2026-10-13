@@ -52,8 +52,8 @@ namespace Toggly.FeatureManagement
                 return;
             _completed = true;
             _stopwatch.Stop();
-            // Clamp to at least 1ms so completed scopes always contribute duration metrics.
-            var durationMs = Math.Max(1, _stopwatch.ElapsedMilliseconds);
+            // Whole milliseconds; sub-ms scopes contribute 0 and skip the duration add (matches other SDKs).
+            var durationMs = Math.Max(0, _stopwatch.ElapsedMilliseconds);
 
             foreach (var featureKey in _featureKeys)
             {

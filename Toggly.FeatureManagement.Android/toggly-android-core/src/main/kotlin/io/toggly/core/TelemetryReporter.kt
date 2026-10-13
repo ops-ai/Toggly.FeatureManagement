@@ -154,6 +154,9 @@ internal class TelemetryReporter(
                 recordFeature(key, variant, 4, durationMs)
             }
             result
+        } catch (error: CancellationException) {
+            // Attempt already recorded; cancellation is not an error and has no duration.
+            throw error
         } catch (error: Throwable) {
             val durationMs = max(0, wallNow() - started)
             recordFeature(key, variant, 3)

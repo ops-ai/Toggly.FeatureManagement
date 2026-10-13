@@ -397,6 +397,9 @@ public actor TelemetryReporter {
                 addFeatureAmount(featureKey, variant: variant, index: 4, amount: durationMs)
             }
             return result
+        } catch let error as CancellationError {
+            // Attempt already recorded; cancellation is not an error and has no duration.
+            throw error
         } catch {
             let durationMs = max(0, Int64((clock() - started) * 1000))
             recordFeature(featureKey, variant: variant, index: 3)
