@@ -286,8 +286,7 @@ module Toggly
       ]
       if @telemetry.nil? || !@telemetry.usage_enabled?
         scope = Telemetry::FeatureUsageScope.new
-        yield scope
-        return
+        return yield scope
       end
       Telemetry::UsageScopeRunner.run(handlers, &)
     end

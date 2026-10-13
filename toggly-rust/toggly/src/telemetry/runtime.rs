@@ -132,7 +132,7 @@ struct Inner {
     enable_metrics: bool,
     metrics_base_url: String,
     senders_provided: bool,
-    usage_batcher: Mutex<Option<UsageBatcher>>,
+    usage_batcher: Mutex<Option<Arc<UsageBatcher>>>,
     metrics_batcher: Mutex<Option<MetricsBatcher>>,
     senders: Mutex<TelemetrySenders>,
     sending_usage: AtomicBool,
@@ -193,13 +193,13 @@ impl TelemetryRuntime {
         }
 
         if enable_usage {
-            *inner.usage_batcher.lock() = Some(UsageBatcher::new(
+            *inner.usage_batcher.lock() = Some(Arc::new(UsageBatcher::new(
                 config.app_key.clone(),
                 config.environment.clone(),
                 config.instance_name.clone(),
                 config.app_version.clone(),
                 None,
-            ));
+            )));
             if !config.usage_flush_interval.is_zero() {
                 runtime.spawn_flush_loop(cancel_rx.clone(), config.usage_flush_interval, true);
             }
@@ -312,14 +312,19 @@ impl TelemetryRuntime {
         f: F,
     ) -> Result<T, E>
     where
-        F: FnOnce(&super::FeatureUsageScope<'_>) -> Result<T, E>,
+        F: FnOnce(&super::FeatureUsageScope) -> Result<T, E>,
     {
         if !self.usage_enabled() {
             return f(&super::FeatureUsageScope::noop());
         }
-        let guard = self.inner.usage_batcher.lock();
-        let Some(batcher) = guard.as_ref() else {
-            return f(&super::FeatureUsageScope::noop());
+        // Clone Arc under a short lock so nested telemetry (and other threads) can
+        // re-enter the batcher without deadlocking on this mutex.
+        let batcher = {
+            let guard = self.inner.usage_batcher.lock();
+            match guard.as_ref() {
+                Some(batcher) => Arc::clone(batcher),
+                None => return f(&super::FeatureUsageScope::noop()),
+            }
         };
         let scope = super::FeatureUsageScope::begin(batcher, feature, identity, variant);
         match f(&scope) {

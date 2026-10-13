@@ -23,7 +23,8 @@ RSpec.describe Toggly::Telemetry::UsageScopeRunner do
   end
 
   it "records duration on success" do
-    described_class.run(handlers("Feat")) { |_scope| :ok }
+    result = described_class.run(handlers("Feat")) { |_scope| :ok }
+    expect(result).to eq(:ok)
     stat = batcher.build_and_reset[:stats].first
     vs = stat[:variantStats]["enabled"]
     expect(vs[:usedCount]).to eq(1)

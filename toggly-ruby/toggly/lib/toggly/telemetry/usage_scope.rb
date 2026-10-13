@@ -26,13 +26,14 @@ module Toggly
         record_attempt.call
         start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         scope = FeatureUsageScope.new
-        block.call(scope)
+        result = block.call(scope)
         duration_ms = elapsed_ms(start)
         if scope.failed?
           record_failure.call(duration_ms)
         else
           record_success.call(duration_ms)
         end
+        result
       rescue StandardError => e
         record_failure.call(elapsed_ms(start))
         raise e

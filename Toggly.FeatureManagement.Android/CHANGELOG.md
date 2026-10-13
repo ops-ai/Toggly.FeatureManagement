@@ -8,6 +8,10 @@
 - Feature usage scopes via `TogglyService.use` and telemetry compact-array slots
   for `errorCount`, `durationSumMs`, and `errorDurationSumMs` [OPS-1758].
 
+### Fixed
+- `TogglyService.use` no longer re-invokes `action` when a nullable success
+  returns `null` (elvis fallback) [OPS-1758].
+
 ## 1.9.0
 
 2026-09-25

@@ -115,13 +115,21 @@ RSpec.describe "Client telemetry wiring" do
   it "use without usage tracking still yields a scope" do
     client = build_client(enable_usage_tracking: false, enable_metrics: false)
     ran = false
-    client.use("offline") do |scope|
+    result = client.use("offline") do |scope|
       scope.fail
       ran = true
+      :offline-ok
     end
     expect(ran).to be true
+    expect(result).to eq(:offline-ok)
     client.flush_telemetry
     expect(usage_client.payloads).to be_empty
+    client.close
+  end
+
+  it "use returns the block value when telemetry is enabled" do
+    client = build_client
+    expect(client.use("scoped-feature") { |_scope| :payload }).to eq(:payload)
     client.close
   end
 

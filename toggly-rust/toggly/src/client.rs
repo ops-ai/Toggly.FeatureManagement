@@ -368,7 +368,7 @@ impl TogglyClient {
         action: F,
     ) -> Result<T, E>
     where
-        F: FnOnce(&crate::FeatureUsageScope<'_>) -> Result<T, E>,
+        F: FnOnce(&crate::FeatureUsageScope) -> Result<T, E>,
     {
         if let Some(tel) = &self.telemetry {
             tel.use_feature(feature_key, identity, variant, action)

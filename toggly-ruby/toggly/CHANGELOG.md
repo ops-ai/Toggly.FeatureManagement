@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Client#use` usage scope (attempt + duration + errors) and `VariantStats`
   wire fields `errorCount`, `durationSumMs`, `errorDurationSumMs` [OPS-1758].
 
+### Fixed
+- `Client#use` and `UsageScopeRunner.run` return the block's value [OPS-1758].
+
 ## [1.3.0] - 2026-10-04
 
 ### Added

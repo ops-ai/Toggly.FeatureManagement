@@ -666,7 +666,12 @@ class TogglyService(
         action: suspend (fail: () -> Unit) -> T,
     ): T {
         val reporter = synchronized(lifecycleLock) { telemetry }
-        return reporter?.use(featureKey, variant, action) ?: action {}
+        // Prefer an explicit branch: `?: action {}` re-runs when T is nullable and action returns null.
+        return if (reporter != null) {
+            reporter.use(featureKey, variant, action)
+        } else {
+            action {}
+        }
     }
     /** Record an explicit feature view. */
     fun recordView(featureKey: String, variant: String = "enabled") { synchronized(lifecycleLock) { telemetry?.recordView(featureKey, variant) } }
