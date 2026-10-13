@@ -623,8 +623,7 @@ namespace Toggly.FeatureManagement
         /// <inheritdoc/>
         public async Task UseAsync(string featureKey, Func<IFeatureUsageScope, Task> action)
         {
-            if (action == null)
-                throw new ArgumentNullException(nameof(action));
+            ArgumentNullException.ThrowIfNull(action);
             await using var scope = await BeginUsageAsync(featureKey).ConfigureAwait(false);
             try
             {
@@ -635,8 +634,9 @@ namespace Toggly.FeatureManagement
                 scope.MarkCancelled();
                 throw;
             }
-            catch
+            catch (Exception)
             {
+                // Mark soft-fail so dispose records error duration, then rethrow for the caller.
                 scope.Fail();
                 throw;
             }

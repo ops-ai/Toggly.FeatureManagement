@@ -2799,6 +2799,29 @@ public class TogglyUsageStatsProviderTests : IDisposable
         Assert.Equal(1, stats[("DoubleFail", (byte)TogglyUsageStatsProvider.StatType.Error)]);
     }
 
+    [Fact]
+    public async Task BeginUsageAsync_WithContext_RecordsUsageForEachKey()
+    {
+        _provider = CreateProvider();
+        await using var scope = await _provider.BeginUsageAsync("ctx-user", "A", "B");
+        scope.Fail();
+
+        var stats = GetPendingStats(_provider);
+        Assert.Equal(1, stats[("A", (byte)TogglyUsageStatsProvider.StatType.Used)]);
+        Assert.Equal(1, stats[("B", (byte)TogglyUsageStatsProvider.StatType.Used)]);
+        Assert.Equal(1, stats[("A", (byte)TogglyUsageStatsProvider.StatType.Error)]);
+        Assert.Equal(1, stats[("B", (byte)TogglyUsageStatsProvider.StatType.Error)]);
+    }
+
+    [Fact]
+    public async Task BeginUsageAsync_EmptyKeys_Throws()
+    {
+        _provider = CreateProvider();
+        await Assert.ThrowsAsync<ArgumentException>(() => _provider.BeginUsageAsync());
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            _provider.BeginUsageAsync("ctx", Array.Empty<string>()));
+    }
+
     #endregion
 
     [Fact]
