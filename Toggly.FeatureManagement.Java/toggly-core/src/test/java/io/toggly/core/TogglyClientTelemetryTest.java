@@ -146,7 +146,7 @@ class TogglyClientTelemetryTest {
     }
 
     @Test
-    void useCallableInterruptedIsCancellation() throws Exception {
+    void useCallableInterruptedIsCancellation() {
         assertThatThrownBy(() -> client.useCallable("always-on", () -> {
             throw new InterruptedException("stop");
         })).isInstanceOf(InterruptedException.class);
@@ -163,6 +163,45 @@ class TogglyClientTelemetryTest {
         assertThat(vs.getErrorCount()).isZero();
         assertThat(vs.getDurationSumMs()).isZero();
         assertThat(vs.getErrorDurationSumMs()).isZero();
+    }
+
+    @Test
+    void useCallableSuccessAndFailurePaths() throws Exception {
+        assertThat(client.useCallable("always-on", () -> "ok")).isEqualTo("ok");
+        assertThatThrownBy(() -> client.useCallable("always-on", () -> {
+            throw new IllegalStateException("boom");
+        })).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> client.useCallable("always-on", null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(client.useCallable("", () -> 7)).isEqualTo(7);
+        client.flushTelemetry();
+
+        var vs = usageSent.get(0).getStats().stream()
+                .filter(s -> "always-on".equals(s.getFeature()))
+                .findFirst()
+                .orElseThrow()
+                .getVariantStats()
+                .get("enabled");
+        assertThat(vs.getUsedCount()).isGreaterThanOrEqualTo(2);
+        assertThat(vs.getErrorCount()).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
+    void useTreatsWrappedInterruptedAsCancellation() {
+        assertThatThrownBy(() -> client.use("always-on", scope -> {
+            throw new RuntimeException(new InterruptedException("wrapped"));
+        })).isInstanceOf(RuntimeException.class);
+        assertThat(Thread.interrupted()).isTrue();
+        client.flushTelemetry();
+
+        var vs = usageSent.get(0).getStats().stream()
+                .filter(s -> "always-on".equals(s.getFeature()))
+                .findFirst()
+                .orElseThrow()
+                .getVariantStats()
+                .get("enabled");
+        assertThat(vs.getUsedCount()).isEqualTo(1);
+        assertThat(vs.getErrorCount()).isZero();
     }
 
     @Test
