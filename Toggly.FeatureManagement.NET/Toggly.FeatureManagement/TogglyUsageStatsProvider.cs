@@ -623,7 +623,8 @@ namespace Toggly.FeatureManagement
         /// <inheritdoc/>
         public async Task UseAsync(string featureKey, Func<IFeatureUsageScope, Task> action)
         {
-            ArgumentNullException.ThrowIfNull(action);
+            if (action == null)
+                throw new ArgumentNullException(nameof(action));
             await using var scope = await BeginUsageAsync(featureKey).ConfigureAwait(false);
             try
             {
