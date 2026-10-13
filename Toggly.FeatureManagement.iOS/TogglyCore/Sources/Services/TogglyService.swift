@@ -300,8 +300,9 @@ public actor TogglyService {
         action: @escaping (_ fail: @escaping () -> Void) async throws -> T
     ) async rethrows -> T {
         guard !disposed, let telemetry else {
-            // No-op fail callback when telemetry is unavailable.
-            return try await action { }
+            return try await action {
+                // No-op fail callback when telemetry is unavailable.
+            }
         }
         return try await telemetry.use(
             featureKey,
