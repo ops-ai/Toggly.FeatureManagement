@@ -205,6 +205,43 @@ class TogglyClientTelemetryTest {
     }
 
     @Test
+    void useTreatsThreadInterruptFlagAsCancellation() {
+        assertThatThrownBy(() -> client.use("always-on", scope -> {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("flagged");
+        })).isInstanceOf(IllegalStateException.class);
+        assertThat(Thread.interrupted()).isTrue();
+        client.flushTelemetry();
+
+        var vs = usageSent.get(0).getStats().stream()
+                .filter(s -> "always-on".equals(s.getFeature()))
+                .findFirst()
+                .orElseThrow()
+                .getVariantStats()
+                .get("enabled");
+        assertThat(vs.getUsedCount()).isEqualTo(1);
+        assertThat(vs.getErrorCount()).isZero();
+    }
+
+    @Test
+    void useCallableTreatsWrappedInterruptedAsCancellation() {
+        assertThatThrownBy(() -> client.useCallable("always-on", () -> {
+            throw new Exception(new InterruptedException("wrapped"));
+        })).isInstanceOf(Exception.class);
+        assertThat(Thread.interrupted()).isTrue();
+        client.flushTelemetry();
+
+        var vs = usageSent.get(0).getStats().stream()
+                .filter(s -> "always-on".equals(s.getFeature()))
+                .findFirst()
+                .orElseThrow()
+                .getVariantStats()
+                .get("enabled");
+        assertThat(vs.getUsedCount()).isEqualTo(1);
+        assertThat(vs.getErrorCount()).isZero();
+    }
+
+    @Test
     void beginUsageNoopForBlankFeature() {
         try (var scope = client.beginUsage("")) {
             scope.fail();
