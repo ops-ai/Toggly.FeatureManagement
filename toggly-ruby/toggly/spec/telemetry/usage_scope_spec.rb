@@ -2,6 +2,12 @@
 
 require "spec_helper"
 
+RSpec.describe "Toggly::VERSION" do
+  it "exposes the package version string" do
+    expect(Toggly::VERSION).to match(/\A\d+\.\d+\.\d+\z/)
+  end
+end
+
 RSpec.describe Toggly::Telemetry::UsageScopeRunner do
   let(:batcher) { Toggly::Telemetry::UsageBatcher.new("app", "Production") }
 

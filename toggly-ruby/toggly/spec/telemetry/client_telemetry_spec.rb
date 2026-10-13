@@ -93,6 +93,38 @@ RSpec.describe "Client telemetry wiring" do
     client.close
   end
 
+  it "use records attempt, success duration, and soft-fail errors" do
+    client = build_client
+    client.use("scoped-feature", identity: "user-1") { |_scope| :ok }
+    client.use("scoped-feature", identity: "user-1", &:fail)
+    expect do
+      client.use("scoped-feature", identity: "user-1") { raise "boom" }
+    end.to raise_error(RuntimeError, "boom")
+    client.flush_telemetry
+
+    expect(usage_client.payloads.size).to eq(1)
+    vs = usage_client.payloads.first[:stats]
+      .find { |s| s[:feature] == "scoped-feature" }[:variantStats]["enabled"]
+    expect(vs[:usedCount]).to eq(3)
+    expect(vs[:errorCount]).to eq(2)
+    expect(vs[:durationSumMs]).to be >= 0
+    expect(vs[:errorDurationSumMs]).to be >= 0
+    client.close
+  end
+
+  it "use without usage tracking still yields a scope" do
+    client = build_client(enable_usage_tracking: false, enable_metrics: false)
+    ran = false
+    client.use("offline") do |scope|
+      scope.fail
+      ran = true
+    end
+    expect(ran).to be true
+    client.flush_telemetry
+    expect(usage_client.payloads).to be_empty
+    client.close
+  end
+
   it "skips telemetry when explicitly disabled" do
     client = build_client(enable_usage_tracking: false, enable_metrics: false)
     client.enabled?("enabled-feature")

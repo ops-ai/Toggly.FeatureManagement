@@ -50,6 +50,43 @@ describe('edge telemetry', () => {
     await client.close()
   })
 
+  it('use() records attempt and soft-fail errors on the edge client', async () => {
+    const sendStats = vi.fn().mockResolvedValue({})
+    const usageClient: UsageSender = { sendStats, close: vi.fn() }
+
+    const client = createEdgeClient({
+      appKey: 'app',
+      environment: 'Production',
+      featureDefaults: { FeatureA: true },
+      enableUsageTracking: true,
+      enableMetrics: false,
+      usageFlushInterval: 0,
+      usageClient,
+      cache: false,
+    })
+
+    vi.spyOn(client, 'fetchDefinitions').mockResolvedValue({ FeatureA: true })
+    await client.init()
+
+    await client.use('Scoped', async () => undefined)
+    await client.use('Scoped', async (scope) => {
+      scope.fail()
+    })
+    await client.flushTelemetry()
+
+    const usagePayload = sendStats.mock.calls[0][0] as {
+      stats: Array<{
+        feature: string
+        variantStats: Record<string, { usedCount: number; errorCount: number }>
+      }>
+    }
+    const enabled = usagePayload.stats.find((s) => s.feature === 'Scoped')!.variantStats.enabled
+    expect(enabled.usedCount).toBe(2)
+    expect(enabled.errorCount).toBe(1)
+
+    await client.close()
+  })
+
   it('does not start telemetry when TOGGLY_DISABLE_TELEMETRY=1 even if explicitly enabled', async () => {
     vi.stubEnv('TOGGLY_DISABLE_TELEMETRY', '1')
 
