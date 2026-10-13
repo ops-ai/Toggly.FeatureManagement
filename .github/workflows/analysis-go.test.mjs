@@ -62,6 +62,75 @@ function step(source, name) {
   return next === -1 ? source.slice(start) : source.slice(start, next);
 }
 
+function preservationSignature(source) {
+  // Ignore only a uses ref; retain action identity and every other byte.
+  const normalized = source.replace(/^([ \t]*uses:[ \t]+[^\s@]+)@[^\s#]+/gm, '$1@<ref>');
+  return createHash('sha256').update(normalized).digest('hex');
+}
+
+test('preservation signatures tolerate version and SHA ref updates for the same actions', () => {
+  for (const source of [
+    step(job('sonar-mongodb-v2'), 'SonarCloud Scan - MongoDB Driver v2'),
+    step(job('sonar-mongodb-v2'), 'SonarQube Server Scan - MongoDB Driver v2'),
+    job('mongodb-v2-sonar-main'),
+    '        uses: example-owner/example-action/nested/path@v1\n        with:\n          argument: stable\n',
+  ]) {
+    for (const ref of ['v99.1.0', '0123456789abcdef0123456789abcdef01234567']) {
+      const updated = source.replace(/^(\s*uses: [^\s@]+)@[^\s#]+/gm, `$1@${ref}`);
+      assert.notEqual(updated, source, 'fixture must update an action ref');
+      assert.equal(preservationSignature(updated), preservationSignature(source));
+    }
+  }
+});
+
+test('preservation signatures retain action owner repository and path identities', () => {
+  const source = '        uses: example-owner/example-action/nested/path@v1\n        with:\n          argument: stable\n';
+  for (const updated of [
+    source.replace('example-owner/', 'other-owner/'),
+    source.replace('/example-action/', '/other-action/'),
+    source.replace('/nested/path@', '/different/path@'),
+  ]) assert.notEqual(preservationSignature(updated), preservationSignature(source));
+});
+
+test('preservation signatures reject gate credential project coverage and baseline mutations', () => {
+  const cloud = step(job('sonar-mongodb-v2'), 'SonarCloud Scan - MongoDB Driver v2');
+  const server = step(job('sonar-mongodb-v2'), 'SonarQube Server Scan - MongoDB Driver v2');
+  const baseline = job('mongodb-v2-sonar-main');
+  const mutations = [
+    [cloud, 'sonar.qualitygate.wait=true', 'sonar.qualitygate.wait=false'],
+    [server, 'sonar.qualitygate.wait=true', 'sonar.qualitygate.wait=false'],
+    [cloud, 'secrets.SONAR_TOKEN', 'secrets.DIFFERENT_TOKEN'],
+    [server, 'secrets.SONAR_SERVER_TOKEN', 'secrets.DIFFERENT_TOKEN'],
+    [server, 'secrets.SONAR_HOST_URL', 'secrets.DIFFERENT_HOST_URL'],
+    [cloud, 'SONAR_HOST_URL: https://sonarcloud.io', 'SONAR_HOST_URL: https://different.invalid'],
+    [cloud, 'sonar.projectKey=toggly-sdks-go-mongodb-v2', 'sonar.projectKey=different-project'],
+    [server, 'sonar.go.coverage.reportPaths=coverage.out', 'sonar.go.coverage.reportPaths=other.out'],
+    [cloud, 'projectBaseDir: toggly-go-mongodb-v2', 'projectBaseDir: other-module'],
+    [cloud, 'sonar.exclusions=**/*_test.go,**/examples/**', 'sonar.exclusions=**/*'],
+    [cloud, 'sonar.test.inclusions=**/*_test.go', 'sonar.test.inclusions=**/*.go'],
+    [cloud, 'sonar.projectVersion=${{ steps.sonar_version.outputs.version }}', 'sonar.projectVersion=fixed-version'],
+    [cloud, 'SonarSource/sonarqube-scan-action', 'other-owner/sonarqube-scan-action'],
+    [server, 'SonarSource/sonarqube-scan-action', 'SonarSource/other-action'],
+    [baseline, 'uses: ./.github/actions/sonar-project-version', 'uses: ./.github/actions/other-version'],
+    [baseline, '- name: Verify baseline revision', '- name: Skip baseline revision'],
+    [baseline, 'fetch-depth: 0', 'fetch-depth: 1'],
+    [baseline, 'suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}', 'suffix: different-suffix'],
+    [baseline, 'inputs.bootstrap_mongodb_v2_main', 'inputs.other_bootstrap'],
+    [baseline, 'ref: develop', 'ref: main'],
+    [baseline, 'go-version: \'1.25.x\'', 'go-version: \'1.27.x\''],
+    [baseline, 'steps.coverage.outcome == \'success\'', 'steps.coverage.outcome == \'failure\''],
+    [baseline, 'sonar.branch.name=main', 'sonar.branch.name=develop'],
+    [baseline, 'sonar.scm.revision=${{ steps.baseline.outputs.sha }}', 'sonar.scm.revision=${{ github.sha }}'],
+    [baseline, 'git rev-parse origin/develop', 'git rev-parse origin/main'],
+    [baseline, '-race -count=1', '-count=1'],
+  ];
+  for (const [source, before, after] of mutations) {
+    const updated = source.replace(before, after);
+    assert.notEqual(updated, source, `mutation target must exist: ${before}`);
+    assert.notEqual(preservationSignature(updated), preservationSignature(source), before);
+  }
+});
+
 function expression(source, key) {
   const match = source.match(new RegExp(`^\\s*${key}: \\$\\{\\{ (.*) \\}\\}$`, 'm'));
   assert.ok(match, `missing ${key} expression`);
@@ -273,13 +342,14 @@ test('gate regressions execute in the existing normal test job and trigger their
   assert.match(step(job('test'), 'Setup Node for workflow tests'), /node-version: '24'/);
 });
 
-// These hashes freeze the explicitly excluded scanner and main-baseline bodies
-// from the OPS-1772 base a0535a5. They guard the independent bootstrap boundary.
+// Independently bounded bodies from OPS-1772 base a0535a5 match the candidate
+// byte-for-byte. These signatures normalize only mutable uses refs, preserving
+// action identities and the scanner/main-baseline semantic boundaries.
 test('MongoDB v2 fatal scanner bodies and the entire main baseline remain preserved', () => {
-  const hash = source => createHash('sha256').update(source).digest('hex');
-  assert.equal(hash(step(job('sonar-mongodb-v2'), 'SonarCloud Scan - MongoDB Driver v2')), '7aa4f072a094a8769da65e9083b55ec3c8e424409b1f06e69569e7bfd118d0af');
-  assert.equal(hash(step(job('sonar-mongodb-v2'), 'SonarQube Server Scan - MongoDB Driver v2')), '2e10afbcde2547ad329df102577d45054d202e034c65d3a91501e4958f57a27e');
-  assert.equal(hash(job('mongodb-v2-sonar-main')), '998407b4d018f245c1be7587dc871cf9d178ec99bfac02bd676c96e91508cc9a');
+  const hash = preservationSignature;
+  assert.equal(hash(step(job('sonar-mongodb-v2'), 'SonarCloud Scan - MongoDB Driver v2')), '5f9c27c5f6c315374d31ade407299586aa0b86582fb4c7fbe3f287f0171efa9e');
+  assert.equal(hash(step(job('sonar-mongodb-v2'), 'SonarQube Server Scan - MongoDB Driver v2')), '20f036b6c640a598eebc7c212ccc94ab1f22585d53093bf74829d4fad1a0ccb1');
+  assert.equal(hash(job('mongodb-v2-sonar-main')), '7a8074483c9209c08f22f0da44561a7c934a514dac366a0c825f4300beddc087');
   for (const name of requiredJobs) {
     assert.equal(evaluate(expression(job(name), 'if'), { inputs: { bootstrap_mongodb_v2_main: true } }), false, name);
   }
