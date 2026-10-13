@@ -76,7 +76,14 @@ public final class UsageBatcher {
         Objects.requireNonNull(feature, FEATURE_PARAM);
         synchronized (lock) {
             UsageBatchSnapshot.FeatureUsageAgg agg = get(feature);
-            String name = variant != null ? variant : (enabled ? DEFAULT_VARIANT : DISABLED_VARIANT);
+            String name;
+            if (variant != null) {
+                name = variant;
+            } else if (enabled) {
+                name = DEFAULT_VARIANT;
+            } else {
+                name = DISABLED_VARIANT;
+            }
             UsageBatchSnapshot.VariantStatsAgg stats = getVariant(agg, name);
             stats.checkCount++;
             if (uniqueRequest) {
