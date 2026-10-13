@@ -781,4 +781,63 @@ final class TelemetryReporterTests: XCTestCase {
         XCTAssertNil(json["f"])
         XCTAssertEqual((json["m"] as? [String: Int])?["sales"], 2)
     }
+    func testUseScopeRecordsDurationAndErrors() async throws {
+        struct Boom: Error {}
+        let clock = TestClock()
+        let requests = Requests()
+        let reporter = TelemetryReporter(
+            appKey: "test-app",
+            sleep: { _ in },
+            clock: { clock.now() }
+        ) { request in
+            await requests.append(request)
+            return HTTPURLResponse(url: request.url!, statusCode: 202, httpVersion: nil, headerFields: nil)!
+        }
+        let value: Int = try await reporter.use("checkout", variant: "enabled") { _ in
+            clock.advance(0.05)
+            return 7
+        }
+        XCTAssertEqual(value, 7)
+        let soft: Int = try await reporter.use("checkout", variant: "enabled") { fail in
+            fail()
+            clock.advance(0.02)
+            return 1
+        }
+        XCTAssertEqual(soft, 1)
+        do {
+            _ = try await reporter.use("checkout", variant: "enabled") { _ -> Int in
+                clock.advance(0.01)
+                throw Boom()
+            }
+            XCTFail("expected throw")
+        } catch is Boom {
+        }
+        await reporter.flushTelemetry()
+        let captured = await requests.requests
+        XCTAssertEqual(captured.count, 1)
+        let body = try XCTUnwrap(captured[0].httpBody)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        // May be gzipped
+        let decoded: [String: Any]
+        if captured[0].value(forHTTPHeaderField: "Content-Encoding") == "gzip" {
+            decoded = try XCTUnwrap(JSONSerialization.jsonObject(with: try gunzip(body)) as? [String: Any])
+        } else {
+            decoded = json
+        }
+        let features = try XCTUnwrap(decoded["f"] as? [String: [String: [Int]]])
+        let enabled = try XCTUnwrap(features["checkout"]?["enabled"])
+        // used=3, errors/duration slots present
+        XCTAssertGreaterThanOrEqual(enabled.count, 2)
+        XCTAssertEqual(enabled[1], 3)
+    }
+
+    func testTogglyServiceUseNoOpWhenTelemetryDisabled() async throws {
+        let service = TogglyService(config: TogglyConfig(appKey: "test-app", enableTelemetry: false))
+        let value = try await service.use("checkout") { fail in
+            fail()
+            return 9
+        }
+        XCTAssertEqual(value, 9)
+    }
+
 }

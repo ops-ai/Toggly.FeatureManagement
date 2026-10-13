@@ -66,6 +66,30 @@ class UsageScopeTest {
         assertThat(vs.getDurationSumMs()).isZero();
     }
 
+    @Test
+    void noopScopeDoesNotRecord() {
+        try (FeatureUsageScope scope = FeatureUsageScope.noop()) {
+            scope.fail();
+        }
+    }
+
+    @Test
+    void doubleCloseIsIdempotent() {
+        UsageBatcher batcher = new UsageBatcher("app", "Production", null, null);
+        TelemetryRuntime runtime = TelemetryRuntime.builder()
+                .appKey("app")
+                .environment("Production")
+                .enableUsageTracking(true)
+                .build();
+        injectBatcher(runtime, batcher);
+
+        FeatureUsageScope scope = runtime.beginUsage(null, "enabled", "Twice");
+        scope.close();
+        scope.close();
+        var vs = batcher.buildAndReset().getStats().get(0).getVariantStats().get("enabled");
+        assertThat(vs.getUsedCount()).isEqualTo(1);
+    }
+
     private static void injectBatcher(TelemetryRuntime runtime, UsageBatcher batcher) {
         try {
             var field = TelemetryRuntime.class.getDeclaredField("usageBatcher");

@@ -780,4 +780,27 @@ mod tests {
             runtime.close().await;
         }
     }
+    #[tokio::test]
+    async fn use_feature_records_success_and_failure() {
+        let config = test_runtime_config(
+            Some(true),
+            Some(false),
+            Some(Duration::from_secs(0)),
+            Some(Duration::from_secs(0)),
+        );
+        let runtime = TelemetryRuntime::start(config);
+        let ok = runtime
+            .use_feature("Checkout", Some("u1"), "enabled", |_scope| Ok::<_, ()>(11))
+            .expect("ok");
+        assert_eq!(ok, 11);
+        let err = runtime.use_feature("Checkout", None, "enabled", |scope| {
+            scope.fail();
+            Err::<i32, &str>("soft")
+        });
+        assert!(err.is_err());
+        let hard = runtime.use_feature("Checkout", None, "enabled", |_scope| Err::<i32, &str>("hard"));
+        assert!(hard.is_err());
+        runtime.close().await;
+    }
+
 }

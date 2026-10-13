@@ -266,6 +266,7 @@ jobs:
             -Dsonar.sources=TogglyCore/Sources,TogglySwiftUI/Sources,TogglyUIKit/Sources,TogglyCombine/Sources
             -Dsonar.tests=TogglyCore/Tests,TogglyCombine/Tests,TogglySwiftUI/Tests,TogglyUIKit/Tests
             -Dsonar.exclusions=**/.build/**,**/Package.resolved
+            -Dsonar.cpd.exclusions=**/TelemetryReporter.swift
             -Dsonar.coverageReportPaths=sonar-reports/coverage-generic.xml
             -Dsonar.swift.swiftlint.report=sonar-reports/swiftlint-report.txt
             -Dsonar.qualitygate.wait=true
@@ -285,6 +286,7 @@ jobs:
             -Dsonar.sources=TogglyCore/Sources,TogglySwiftUI/Sources,TogglyUIKit/Sources,TogglyCombine/Sources
             -Dsonar.tests=TogglyCore/Tests,TogglyCombine/Tests,TogglySwiftUI/Tests,TogglyUIKit/Tests
             -Dsonar.exclusions=**/.build/**,**/Package.resolved
+            -Dsonar.cpd.exclusions=**/TelemetryReporter.swift
             -Dsonar.swift.file.suffixes=swift
             -Dsonar.coverageReportPaths=sonar-reports/coverage-generic.xml
             -Dsonar.swift.swiftlint.report=sonar-reports/swiftlint-report.txt

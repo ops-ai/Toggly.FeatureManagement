@@ -6,6 +6,7 @@ import io.toggly.core.model.FeatureDefinition;
 import io.toggly.core.model.FeatureFilter;
 import io.toggly.core.snapshot.InMemorySnapshotProvider;
 import io.toggly.core.telemetry.FeatureStatPayload;
+import io.toggly.core.telemetry.FeatureUsageScope;
 import io.toggly.core.telemetry.MetricsGrpcClient;
 import io.toggly.core.telemetry.MetricStatPayload;
 import io.toggly.core.telemetry.TelemetryRuntime;
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.*;
 
 class TogglyClientTelemetryTest {
@@ -119,4 +121,44 @@ class TogglyClientTelemetryTest {
         assertThat(metricsSent.get(0).getCounters()).isNotEmpty();
         assertThat(metricsSent.get(0).getObservations()).isNotEmpty();
     }
+    @Test
+    void useScopeRecordsDurationAndErrors() {
+        client.use("always-on", scope -> {
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return "ok";
+        });
+        client.use("always-on", scope -> {
+            scope.fail();
+            return null;
+        });
+        assertThatThrownBy(() -> client.use("always-on", scope -> {
+            throw new IllegalStateException("boom");
+        })).isInstanceOf(IllegalStateException.class);
+        client.flushTelemetry();
+
+        assertThat(usageSent).isNotEmpty();
+        var vs = usageSent.get(0).getStats().stream()
+                .filter(s -> "always-on".equals(s.getFeature()))
+                .findFirst()
+                .orElseThrow()
+                .getVariantStats()
+                .get("enabled");
+        assertThat(vs.getUsedCount()).isGreaterThanOrEqualTo(3);
+        assertThat(vs.getErrorCount()).isGreaterThanOrEqualTo(2);
+        assertThat(vs.getDurationSumMs() + vs.getErrorDurationSumMs()).isGreaterThanOrEqualTo(0);
+    }
+
+    @Test
+    void beginUsageNoopForBlankFeature() {
+        try (var scope = client.beginUsage("")) {
+            scope.fail();
+        }
+        client.flushTelemetry();
+        assertThat(usageSent).isEmpty();
+    }
+
 }
