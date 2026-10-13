@@ -2747,12 +2747,29 @@ public class TogglyUsageStatsProviderTests : IDisposable
     {
         _provider = CreateProvider();
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _provider.UseAsync("FailFeature", () => throw new InvalidOperationException("boom")));
+            _provider.UseAsync("FailFeature", async () =>
+            {
+                await Task.Delay(5);
+                throw new InvalidOperationException("boom");
+            }));
 
         var stats = GetPendingStats(_provider);
         Assert.Equal(1, stats[("FailFeature", (byte)TogglyUsageStatsProvider.StatType.Used)]);
         Assert.Equal(1, stats[("FailFeature", (byte)TogglyUsageStatsProvider.StatType.Error)]);
-        Assert.True(GetErrorDurationSums(_provider).ContainsKey("FailFeature"));
+        Assert.True(GetErrorDurationSums(_provider)["FailFeature"] > 0);
+    }
+
+    [Fact]
+    public async Task UseAsync_OnInstantException_SkipsZeroErrorDuration()
+    {
+        _provider = CreateProvider();
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _provider.UseAsync("InstantFail", () => throw new InvalidOperationException("boom")));
+
+        var stats = GetPendingStats(_provider);
+        Assert.Equal(1, stats[("InstantFail", (byte)TogglyUsageStatsProvider.StatType.Used)]);
+        Assert.Equal(1, stats[("InstantFail", (byte)TogglyUsageStatsProvider.StatType.Error)]);
+        Assert.False(GetErrorDurationSums(_provider).ContainsKey("InstantFail"));
     }
 
     [Fact]
