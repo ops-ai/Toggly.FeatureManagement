@@ -432,6 +432,7 @@ class TelemetryReporterTest {
             "test-app",
             scope = backgroundScope,
             now = { testScheduler.currentTime },
+            wallNow = { testScheduler.currentTime },
             transport = { requests += it; TelemetryResponse(202) },
         )
         assertEquals("ok", reporter.use("Scoped") {
