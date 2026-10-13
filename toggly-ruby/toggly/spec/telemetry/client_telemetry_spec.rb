@@ -104,7 +104,7 @@ RSpec.describe "Client telemetry wiring" do
 
     expect(usage_client.payloads.size).to eq(1)
     vs = usage_client.payloads.first[:stats]
-      .find { |s| s[:feature] == "scoped-feature" }[:variantStats]["enabled"]
+                     .find { |s| s[:feature] == "scoped-feature" }[:variantStats]["enabled"]
     expect(vs[:usedCount]).to eq(3)
     expect(vs[:errorCount]).to eq(2)
     expect(vs[:durationSumMs]).to be >= 0
