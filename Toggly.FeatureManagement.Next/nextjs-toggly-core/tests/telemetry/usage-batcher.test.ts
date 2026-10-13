@@ -55,15 +55,19 @@ describe('UsageBatcher', () => {
 
     batcher.recordUsage('FeatureA')
     batcher.recordUsageError('FeatureA')
+    batcher.recordUsageError('FeatureA', undefined, 'enabled', 0)
     batcher.recordUsageDuration('FeatureA', 100)
+    batcher.recordUsageDuration('FeatureA', Number.NaN)
     batcher.recordUsageDuration('FeatureA', 50, undefined, 'enabled', true)
     batcher.recordUsageScopeOutcome('FeatureA', { failed: true, durationMs: 12 })
+    batcher.recordUsageScopeOutcome('FeatureA', { cancelled: true, durationMs: 99 })
+    batcher.recordUsageScopeOutcome('FeatureA', { durationMs: 7 })
 
     const payload = batcher.buildAndReset()!.payload
     const enabled = payload.stats[0].variantStats.enabled
     expect(enabled.usedCount).toBe(1)
     expect(enabled.errorCount).toBe(2)
-    expect(enabled.durationSumMs).toBe(100)
+    expect(enabled.durationSumMs).toBe(107)
     expect(enabled.errorDurationSumMs).toBe(62)
   })
 
