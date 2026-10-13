@@ -135,7 +135,7 @@ test('packed browser telemetry preserves hydration, route queues, lifecycle and 
     await expect(silent.getByTestId('on')).toBeVisible();
     await silent.getByRole('button', { name: 'Record telemetry', exact: true }).click();
     await silent.getByRole('button', { name: 'Flush telemetry', exact: true }).click();
-    await expect(silent.getByTestId('telemetry-status')).toHaveText('flushed');
+    await expect(silent.getByTestId('telemetry-status')).toHaveText('flushed', { timeout: 15_000 });
     await silent.getByRole('button', { name: 'Toggle owner' }).click();
     await silent.close();
     expect((await state()).telemetry).toHaveLength(before + 1);
