@@ -123,14 +123,7 @@ class TogglyClientTelemetryTest {
     }
     @Test
     void useScopeRecordsDurationAndErrors() {
-        client.use("always-on", scope -> {
-            try {
-                Thread.sleep(5);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            return "ok";
-        });
+        client.use("always-on", scope -> "ok");
         client.use("always-on", scope -> {
             scope.fail();
             return null;
