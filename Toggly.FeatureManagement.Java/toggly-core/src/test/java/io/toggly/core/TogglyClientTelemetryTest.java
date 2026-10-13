@@ -186,10 +186,11 @@ class TogglyClientTelemetryTest {
                 .enableMetrics(false)
                 .build();
         try (TogglyClient disabled = new TogglyClient(config, snapshotProvider)) {
-            assertThat(disabled.use("always-on", scope -> {
+            Integer value = disabled.use("always-on", scope -> {
                 scope.fail();
                 return 42;
-            })).isEqualTo(42);
+            });
+            assertThat(value).isEqualTo(42);
         }
     }
 
@@ -197,8 +198,10 @@ class TogglyClientTelemetryTest {
     void useRejectsNullAction() {
         assertThatThrownBy(() -> client.use("always-on", (java.util.function.Function<FeatureUsageScope, Object>) null))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThat(client.use((String) null, scope -> 1)).isEqualTo(1);
-        assertThat(client.use("", scope -> 2)).isEqualTo(2);
+        Integer nullKey = client.use((String) null, scope -> 1);
+        Integer emptyKey = client.use("", scope -> 2);
+        assertThat(nullKey).isEqualTo(1);
+        assertThat(emptyKey).isEqualTo(2);
     }
 
 }
