@@ -161,4 +161,44 @@ class TogglyClientTelemetryTest {
         assertThat(usageSent).isEmpty();
     }
 
+    @Test
+    void useRunnableAndBeginUsageWithIdentity() {
+        final boolean[] ran = {false};
+        client.use("always-on", () -> ran[0] = true);
+        assertThat(ran[0]).isTrue();
+        try (FeatureUsageScope scope = client.beginUsage("always-on", "user-x", "blue")) {
+            assertThat(scope).isNotNull();
+        }
+        client.flushTelemetry();
+        assertThat(usageSent).isNotEmpty();
+        boolean sawBlue = usageSent.stream()
+                .flatMap(p -> p.getStats().stream())
+                .anyMatch(s -> s.getVariantStats().containsKey("blue"));
+        assertThat(sawBlue).isTrue();
+    }
+
+    @Test
+    void useAppliesActionWhenTelemetryNullPathUsesNoop() {
+        TogglyConfig config = TogglyConfig.builder()
+                .appKey("test-app-key")
+                .environment("Test")
+                .enableUsageTracking(false)
+                .enableMetrics(false)
+                .build();
+        try (TogglyClient disabled = new TogglyClient(config, snapshotProvider)) {
+            assertThat(disabled.use("always-on", scope -> {
+                scope.fail();
+                return 42;
+            })).isEqualTo(42);
+        }
+    }
+
+    @Test
+    void useRejectsNullAction() {
+        assertThatThrownBy(() -> client.use("always-on", (java.util.function.Function<FeatureUsageScope, Object>) null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(client.use((String) null, scope -> 1)).isEqualTo(1);
+        assertThat(client.use("", scope -> 2)).isEqualTo(2);
+    }
+
 }

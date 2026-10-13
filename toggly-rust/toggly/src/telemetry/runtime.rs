@@ -798,9 +798,10 @@ mod tests {
             Err::<i32, &str>("soft")
         });
         assert!(err.is_err());
-        let hard = runtime.use_feature("Checkout", None, "enabled", |_scope| Err::<i32, &str>("hard"));
+        let hard = runtime.use_feature("Checkout", None, "enabled", |_scope| {
+            Err::<i32, &str>("hard")
+        });
         assert!(hard.is_err());
         runtime.close().await;
     }
-
 }

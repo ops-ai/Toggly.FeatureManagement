@@ -90,6 +90,37 @@ class UsageScopeTest {
         assertThat(vs.getUsedCount()).isEqualTo(1);
     }
 
+    @Test
+    void multiFeatureBeginUsageRecordsEachKey() {
+        UsageBatcher batcher = new UsageBatcher("app", "Production", null, null);
+        TelemetryRuntime runtime = TelemetryRuntime.builder()
+                .appKey("app")
+                .environment("Production")
+                .enableUsageTracking(true)
+                .build();
+        injectBatcher(runtime, batcher);
+
+        try (FeatureUsageScope scope = runtime.beginUsage("user-1", "enabled", "A", "B")) {
+            assertThat(scope).isNotNull();
+        }
+        var features = batcher.buildAndReset().getStats().stream()
+                .map(s -> s.getFeature())
+                .toList();
+        assertThat(features).containsExactlyInAnyOrder("A", "B");
+    }
+
+    @Test
+    void beginUsageRequiresFeatureKeys() {
+        TelemetryRuntime runtime = TelemetryRuntime.builder()
+                .appKey("app")
+                .environment("Production")
+                .enableUsageTracking(true)
+                .build();
+        org.junit.jupiter.api.Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> runtime.beginUsage(null, "enabled"));
+    }
+
     private static void injectBatcher(TelemetryRuntime runtime, UsageBatcher batcher) {
         try {
             var field = TelemetryRuntime.class.getDeclaredField("usageBatcher");
