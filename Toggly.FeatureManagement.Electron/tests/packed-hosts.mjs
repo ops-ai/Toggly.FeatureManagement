@@ -321,9 +321,22 @@ async function cleanupControls(hostDirectory) {
     let marker, primary
     try {
       const deadline=Date.now()+6000
-      while (!existsSync(join(root, 'started.json')) && Date.now()<deadline) await new Promise(resolve=>setTimeout(resolve,25))
-      assert.ok(existsSync(join(root,'started.json')), `Actual Electron ${mode} must start: ${existsSync(join(root,'electron.stderr.log')) ? readFileSync(join(root,'electron.stderr.log'),'utf8') : 'no stderr'}`)
-      marker=JSON.parse(readFileSync(join(root,'started.json'),'utf8'))
+      const startedPath=join(root, 'started.json')
+      while (Date.now()<deadline) {
+        if (existsSync(startedPath)) {
+          const raw=readFileSync(startedPath,'utf8').trim()
+          if (raw) {
+            try {
+              marker=JSON.parse(raw)
+              break
+            } catch {
+              // Partial write from abrupt exit — keep polling until deadline.
+            }
+          }
+        }
+        await new Promise(resolve=>setTimeout(resolve,25))
+      }
+      assert.ok(marker, `Actual Electron ${mode} must start: ${existsSync(join(root,'electron.stderr.log')) ? readFileSync(join(root,'electron.stderr.log'),'utf8') : 'no stderr'}`)
       if (mode === 'negative') {
         await assert.rejects(assertNoOwnedElectron(hostDirectory,application), /Owned Electron resources remain/)
         await stopOwnedElectron(hostDirectory,application)
