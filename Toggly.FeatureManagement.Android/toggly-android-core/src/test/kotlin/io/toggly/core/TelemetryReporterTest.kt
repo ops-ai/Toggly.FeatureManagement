@@ -426,4 +426,40 @@ class TelemetryReporterTest {
         assertTrue(requests.isEmpty())
     }
 
+    @Test fun useRecordsAttemptDurationAndSoftFailErrors() = runTest {
+        val requests = mutableListOf<Request>()
+        val reporter = TelemetryReporter(
+            "test-app",
+            scope = backgroundScope,
+            now = { testScheduler.currentTime },
+            transport = { requests += it; TelemetryResponse(202) },
+        )
+        assertEquals("ok", reporter.use("Scoped") {
+            advanceTimeBy(12)
+            "ok"
+        })
+        assertEquals("soft", reporter.use("Scoped") { fail ->
+            fail()
+            advanceTimeBy(9)
+            "soft"
+        })
+        runCatching {
+            reporter.use<Unit>("Scoped") {
+                advanceTimeBy(5)
+                error("boom")
+            }
+        }.onFailure { assertTrue(it is IllegalStateException) }
+        reporter.flushTelemetry()
+        val enabled = body(requests.single()).jsonObject
+            .getValue("f").jsonObject
+            .getValue("Scoped").jsonObject
+            .getValue("enabled").jsonArray
+            .map { it.jsonPrimitive.long }
+        assertEquals(3L, enabled[1])
+        assertEquals(2L, enabled[3])
+        assertEquals(12L, enabled[4])
+        assertEquals(14L, enabled[5])
+        reporter.dispose()
+    }
+
 }
