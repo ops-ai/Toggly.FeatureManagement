@@ -137,6 +137,19 @@ describe('frontend telemetry store facade', () => {
     expect(JSON.stringify(envelopes[0])).not.toMatch(/identity|claims|groups|timestamp/i);
   });
 
+  it('useFeatureUsageScope records attempt and soft-fail error slots', async () => {
+    await initialize({ F1: true });
+    await store.useFeatureUsageScope('Scoped', async () => undefined);
+    await store.useFeatureUsageScope('Scoped', async (scope) => {
+      scope.fail();
+    });
+    await store.flushTelemetry();
+    expect(envelopes).toHaveLength(1);
+    expect(envelopes[0].f?.Scoped.enabled[1]).toBe(2);
+    expect(envelopes[0].f?.Scoped.enabled[3]).toBe(1);
+  });
+
+
   it('counts a cold subscribed evaluation once without counting hydration itself', async () => {
     const pending = deferred<Response>();
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {

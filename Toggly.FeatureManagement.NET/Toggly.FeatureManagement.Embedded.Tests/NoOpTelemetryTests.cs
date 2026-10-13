@@ -34,4 +34,35 @@ public sealed class NoOpTelemetryTests
         }
         return new WeakReference(entity);
     }
+
+    [Fact]
+    public async Task Offline_usage_scope_and_use_complete_without_recording()
+    {
+        var usage = new NoOpUsageStatsProvider();
+        await using (var scope = await usage.BeginUsageAsync("Feature"))
+        {
+            scope.Fail();
+            scope.MarkCancelled();
+        }
+
+        await using (var scoped = await usage.BeginUsageAsync(new { Id = 1 }, "Feature"))
+        {
+            scoped.Dispose();
+        }
+
+        var ran = false;
+        await usage.UseAsync("Feature", () =>
+        {
+            ran = true;
+            return Task.CompletedTask;
+        });
+        Assert.True(ran);
+
+        await usage.UseAsync("Feature", scope =>
+        {
+            scope.Fail();
+            scope.MarkCancelled();
+            return Task.CompletedTask;
+        });
+    }
 }

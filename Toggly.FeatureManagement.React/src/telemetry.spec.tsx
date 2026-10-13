@@ -170,6 +170,23 @@ describe('React frontend telemetry', () => {
     expect(sent[1].url).toBe('https://collector.test/base/api/frontend/telemetry')
     expect(fetchMock.mock.calls.every(([url]) => url.includes('/api/frontend/telemetry'))).toBe(true)
   })
+  it('use() records attempt and soft-fail error slots', async () => {
+    const service = client()
+    await service.use('Scoped', async () => undefined)
+    await service.use('Scoped', async (scope) => { scope.fail() })
+    await service.flushTelemetry()
+    expect(sent).toHaveLength(1)
+    expect(sent[0].body.f.Scoped.enabled[1]).toBe(2)
+    expect(sent[0].body.f.Scoped.enabled[3]).toBe(1)
+  })
+  it('use() without telemetry still invokes the callback', async () => {
+    const service = client({enableTelemetry: false})
+    let ran = false
+    await service.use('Offline', async (scope) => { scope.fail(); ran = true })
+    expect(ran).toBe(true)
+    await service.flushTelemetry()
+    expect(sent).toEqual([])
+  })
   it('does not count cache hydration, internal loads or context refresh', async () => {
     localStorage.setItem('toggly:flags:telemetry-test:Production:v3:evaluated:', JSON.stringify({Cached: true}))
     const service = client({persistCache: true})

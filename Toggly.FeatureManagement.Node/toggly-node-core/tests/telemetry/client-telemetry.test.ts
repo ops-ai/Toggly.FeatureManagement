@@ -137,4 +137,101 @@ describe('client telemetry wiring', () => {
 
     await client.close()
   })
+
+  it('use() and usage-scope APIs record attempt, duration, and errors', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      text: async () => JSON.stringify([def('scoped')]),
+      json: async () => [def('scoped')],
+    })
+
+    const sendStats = vi.fn().mockResolvedValue({ featureCount: 1 })
+    const client = createTogglyClient({
+      appKey: 'test-app',
+      identity: 'scope-user',
+      enableStreaming: false,
+      refreshInterval: 0,
+      enableUsageTracking: true,
+      enableMetrics: false,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      usageClient: { sendStats, close: vi.fn() },
+      metricsClient: { sendMetrics: vi.fn(), close: vi.fn() },
+    })
+
+    await client.init()
+
+    await client.use('scoped', async () => undefined)
+    await client.use('scoped', async (scope) => {
+      scope.fail()
+    })
+    await expect(
+      client.use('scoped', async () => {
+        throw new Error('boom')
+      }),
+    ).rejects.toThrow('boom')
+
+    const abort = new DOMException('Aborted', 'AbortError')
+    await expect(
+      client.use('scoped', async () => {
+        throw abort
+      }),
+    ).rejects.toBe(abort)
+
+    client.recordUsageError('scoped')
+    client.recordUsageDuration('scoped', 25)
+    client.recordUsageDuration('scoped', 10, undefined, 'enabled', true)
+    client.recordUsageScopeOutcome('scoped', { failed: true, durationMs: 12 })
+
+    await client.flushTelemetry()
+
+    const usagePayload = sendStats.mock.calls[0][0] as {
+      stats: Array<{
+        feature: string
+        variantStats: {
+          enabled: {
+            usedCount: number
+            errorCount: number
+            durationSumMs: number
+            errorDurationSumMs: number
+          }
+        }
+      }>
+    }
+    const enabled = usagePayload.stats[0].variantStats.enabled
+    expect(enabled.usedCount).toBeGreaterThanOrEqual(4)
+    expect(enabled.errorCount).toBeGreaterThanOrEqual(3)
+    expect(enabled.durationSumMs).toBeGreaterThan(0)
+    expect(enabled.errorDurationSumMs).toBeGreaterThan(0)
+
+    await client.close()
+  })
+
+  it('use() without telemetry still invokes the callback', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      text: async () => JSON.stringify([def('offline')]),
+      json: async () => [def('offline')],
+    })
+
+    const client = createTogglyClient({
+      appKey: 'test-app',
+      enableStreaming: false,
+      refreshInterval: 0,
+      enableUsageTracking: false,
+      enableMetrics: false,
+    })
+    await client.init()
+    let ran = false
+    await client.use('offline', async (scope) => {
+      scope.fail()
+      ran = true
+    })
+    expect(ran).toBe(true)
+    await client.close()
+  })
 })
