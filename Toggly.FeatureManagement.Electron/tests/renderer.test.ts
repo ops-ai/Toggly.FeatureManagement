@@ -99,5 +99,28 @@ describe('renderer wrappers', () => {
       true,
       expect.any(Number),
     )
+
+    await expect(
+      use('Checkout', async () => {
+        throw new Error('renderer-boom')
+      }),
+    ).rejects.toThrow('renderer-boom')
+    expect(bridge.recordUsageScopeCompletion).toHaveBeenCalledWith(
+      'Checkout',
+      'enabled',
+      true,
+      expect.any(Number),
+    )
+  })
+
+  it('runs usage scope without a bridge', async () => {
+    // @ts-expect-error test global
+    globalThis.window = {}
+    await expect(use('Checkout', async () => 'ok')).resolves.toBe('ok')
+    await expect(
+      use('Checkout', async () => {
+        throw new Error('no-bridge')
+      }),
+    ).rejects.toThrow('no-bridge')
   })
 })

@@ -84,12 +84,29 @@ it('records usage scope attempts with duration and error slots', async () => {
     await pause()
     return 'soft'
   })
+  await expect(
+    client.use('Checkout', async () => {
+      await pause()
+      throw new Error('boom')
+    }),
+  ).rejects.toThrow('boom')
   await client.flushTelemetry()
   const enabled = packets[0].f.Checkout.enabled as number[]
-  expect(enabled[1]).toBe(2)
-  expect(enabled[3]).toBe(1)
+  expect(enabled[1]).toBe(3)
+  expect(enabled[3]).toBe(2)
   expect(enabled[4]).toBeGreaterThan(0)
   expect(enabled[5]).toBeGreaterThan(0)
+})
+
+it('module use without singleton runs noop scope', async () => {
+  closeToggly()
+  const { use: moduleUse } = await import('../src/main/client.js')
+  await expect(moduleUse('Absent', async () => 'ok')).resolves.toBe('ok')
+  await expect(
+    moduleUse('Absent', async () => {
+      throw new Error('no-singleton')
+    }),
+  ).rejects.toThrow('no-singleton')
 })
 
 it('recordUsageScopeCompletion records success, failure, and ignores no-op durations', async () => {
@@ -231,6 +248,12 @@ it('validates IPC sender, main frame and compact arguments without losing accept
     true,
     8,
   )
+  sync.get(IPC_CHANNELS.recordUsageScopeCompletion)!(
+    event,
+    'Action',
+    'enabled',
+    true,
+  )
   for (const invalid of [
     { ...event, sender: {} },
     { ...event, senderFrame: {} },
@@ -243,6 +266,12 @@ it('validates IPC sender, main frame and compact arguments without losing accept
     ['Bad', 'enabled', { appKey: 'evil' }],
   ])
     sync.get(IPC_CHANNELS.recordUsage)!(event, ...args)
+  for (const args of [
+    ['Action', 'enabled', 'yes', 1],
+    ['Action', 'enabled', true, -1],
+    ['Action', 'enabled', true, 86_400_001],
+  ])
+    sync.get(IPC_CHANNELS.recordUsageScopeCompletion)!(event, ...args)
   for (const value of [-1, 1.5, Infinity, 1000001, '2'])
     sync.get(IPC_CHANNELS.incrementCounter)!(event, 'orders', value)
   sync.get(IPC_CHANNELS.incrementCounter)!(event, 'orders', 2)
@@ -254,7 +283,7 @@ it('validates IPC sender, main frame and compact arguments without losing accept
       u: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
       f: {
         On: { enabled: [1] },
-        Action: { enabled: [0, 1, 0, 1, 15, 8] },
+        Action: { enabled: [0, 1, 0, 2, 15, 8] },
       },
       m: { orders: 2 },
     },
