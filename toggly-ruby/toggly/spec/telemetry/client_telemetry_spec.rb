@@ -118,10 +118,10 @@ RSpec.describe "Client telemetry wiring" do
     result = client.use("offline") do |scope|
       scope.fail
       ran = true
-      :offline-ok
+      :offline_ok
     end
     expect(ran).to be true
-    expect(result).to eq(:offline-ok)
+    expect(result).to eq(:offline_ok)
     client.flush_telemetry
     expect(usage_client.payloads).to be_empty
     client.close

@@ -104,7 +104,8 @@ mod tests {
     fn success_scope_records_used_and_duration() {
         let batcher = Arc::new(UsageBatcher::new("app", "Production", None, None, None));
         {
-            let scope = FeatureUsageScope::begin(Arc::clone(&batcher), "Checkout", Some("u1"), "enabled");
+            let scope =
+                FeatureUsageScope::begin(Arc::clone(&batcher), "Checkout", Some("u1"), "enabled");
             std::thread::sleep(std::time::Duration::from_millis(2));
             scope.complete_success();
         }
