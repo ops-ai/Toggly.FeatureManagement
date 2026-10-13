@@ -22,11 +22,11 @@ const outcomes = [
   ['dependency-check-providers', 'PROVIDERS_DEPENDENCY_CHECK_RESULT', 'Provider OWASP'],
 ];
 
-function job(name) {
-  const start = workflow.indexOf(`\n  ${name}:\n`);
+function job(name, source = workflow) {
+  const start = source.indexOf(`\n  ${name}:\n`);
   assert.notEqual(start, -1, `missing ${name} job`);
-  const next = workflow.slice(start + 1).search(/\n  [a-z][a-z-]*:\n/);
-  return next === -1 ? workflow.slice(start) : workflow.slice(start, start + 1 + next);
+  const next = source.slice(start + 1).search(/\n  [a-z][a-z-]*:\n/);
+  return next === -1 ? source.slice(start) : source.slice(start, start + 1 + next);
 }
 
 function step(source, name) {
@@ -116,17 +116,17 @@ test('core and provider validators reject every missing credential without revea
   }
 });
 
-test('core and all four provider scanners wait for fatal gates with existing classification', () => {
+function assertScanners(source = workflow) {
   for (const jobName of ['sonar', 'analyze-providers']) {
-    const source = job(jobName);
-    assert.doesNotMatch(source.split('    steps:')[0], /continue-on-error/);
+    const scannerJob = job(jobName, source);
+    assert.doesNotMatch(scannerJob.split('    steps:')[0], /continue-on-error/);
     const core = jobName === 'sonar';
     for (const name of ['SonarCloud Scan', 'SonarQube Server Scan']) {
-      const scan = step(source, name);
+      const scan = step(scannerJob, name);
       assert.match(scan, /-Dsonar\.qualitygate\.wait=true/);
       assert.doesNotMatch(scan, /continue-on-error|\|\| true/);
+      assert.match(scan, /^        uses: SonarSource\/sonarqube-scan-action@[^\s#]+(?:[ \t]*#.*)?$/m);
       for (const arg of [
-        'SonarSource/sonarqube-scan-action@v8.3.0',
         `projectBaseDir: Toggly.FeatureManagement.Flutter/${core ? 'toggly' : '${{ matrix.dir }}'}`,
         `-Dsonar.projectKey=${core ? 'toggly-sdks-flutter' : '${{ matrix.sonarKey }}'}`,
         '-Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}',
@@ -134,15 +134,17 @@ test('core and all four provider scanners wait for fatal gates with existing cla
         `-Dsonar.exclusions=**/.*/**,**/example/**,${core ? '**/benchmark/**,' : ''}**/*.g.dart,**/*.freezed.dart`,
       ]) assert.ok(scan.includes(arg), `${jobName}/${name}: ${arg}`);
     }
-    assert.match(step(source, 'SonarCloud Scan'), /-Dsonar.organization=ops-ai/);
-    assert.ok(step(source, 'Resolve Sonar project version').includes(`manifest: Toggly.FeatureManagement.Flutter/${core ? 'toggly' : '${{ matrix.dir }}'}/pubspec.yaml`));
+    assert.match(step(scannerJob, 'SonarCloud Scan'), /-Dsonar.organization=ops-ai/);
+    assert.ok(step(scannerJob, 'Resolve Sonar project version').includes(`manifest: Toggly.FeatureManagement.Flutter/${core ? 'toggly' : '${{ matrix.dir }}'}/pubspec.yaml`));
   }
-  assert.match(step(job('sonar'), 'SonarQube Server Scan'), /-Dsonar.dart.analyzer.options.override=false/);
-  assert.match(step(job('sonar'), 'SonarQube Server Scan'), /-Dsonar.dependencyCheck.reportPath=\.\.\/\.\.\/dependency-check-reports\/dependency-check-report.xml/);
-  const providers = job('analyze-providers').split('    steps:')[0];
+  assert.match(step(job('sonar', source), 'SonarQube Server Scan'), /-Dsonar.dart.analyzer.options.override=false/);
+  assert.match(step(job('sonar', source), 'SonarQube Server Scan'), /-Dsonar.dependencyCheck.reportPath=\.\.\/\.\.\/dependency-check-reports\/dependency-check-report.xml/);
+  const providers = job('analyze-providers', source).split('    steps:')[0];
   assert.equal((providers.match(/sonarKey:/g) ?? []).length, 4);
   for (const key of ['secure-storage', 'disk', 'sqlite', 'isar']) assert.ok(providers.includes(`sonarKey: toggly-sdks-flutter-${key}`));
-});
+}
+
+test('core and all four provider scanners wait for fatal gates with existing classification', () => assertScanners());
 
 test('Server diagnostics survive prior failures only after validation and without cancellation', () => {
   for (const jobName of ['sonar', 'analyze-providers']) {
@@ -269,24 +271,96 @@ test('gate regressions run in the existing analyze job and trigger both push and
   assert.match(contract, /run: node --test \.github\/workflows\/analysis-flutter.test.mjs/);
 });
 
-// Freeze excluded jobs from OPS-1773 base a0535a5: changing the main baseline
-// or platform/compatibility runtimes is outside this PR's authorization.
-test('main baseline platform smoke and plugin major jobs stay byte-for-byte preserved', () => {
-  const hash = source => createHash('sha256').update(source).digest('hex');
+function preservationHash(source) {
+  // Only remote action refs on step-level YAML uses fields are mutable.
+  // Preserve owner/repo/path, comments, inputs, shell text and all other bytes.
+  const normalized = source.replace(/^(        uses: [a-zA-Z0-9][\w.-]*\/[\w.-]+(?:\/[\w.-]+)*@)[^\s#]+(?=[ \t]*(?:#.*)?$)/gm, '$1<action-ref>');
+  return createHash('sha256').update(normalized).digest('hex');
+}
+
+function assertPreservedWorkflow(source = workflow) {
+  // Independently derived from the original OPS-1773 base a0535a5, applying
+  // only the remote-action-ref normalization above to the bounded job bodies.
   for (const [name, expected] of [
-    ['provider-server-main', 'c7b672bc590b9af3cedd16e145794a530fe0f0d1f8414b617152ca3e9aa4ce87'],
-    ['build-platforms', '5d699a2a19a5b080ece4ab4267b838b9284e1817a9534ce51e1984b2f897ca17'],
-    ['smoke-test', 'bf0105fcf5cd71216b2cf4918238b9334db243ca84416a5e486d7900f80071ed'],
-    ['secure-storage-version-matrix', '9311d1241e885378c7be7c0c3279e8224efa12dd88ae3be180b337c30465b1f2'],
-  ]) assert.equal(hash(job(name)), expected, name);
-  assert.equal(hash(job('analyze-providers').split('    steps:')[0]), '4fae063b0bcc707f6c9cd3b82d1da514f74219fe3ffe435e51ec10e75e43285a');
-  assert.equal(hash(job('analyze-providers').split('      - name: Resolve Sonar project version\n')[0]), 'ec05b7e9bfb21c5f729cb64fd5102fcf4b726f4bec97b1737f6046550c4e64d9');
+    ['provider-server-main', 'b93385e2f5d3a04f0b7403de9467ed50100614df79b63e208d21037661f5ab94'],
+    ['build-platforms', '61ac8fe87975f67986f441a00c0d4931855ccea0a80884aeafcdebba11b699c2'],
+    ['smoke-test', 'c9dc0174462a463076a0063da63b6a382ed24673ded0d674eebfac0996916c6b'],
+    ['secure-storage-version-matrix', '6c1872adbfc6937e8d1b67ff203940891c2ce16d1aacb890a01919a64ba04fb0'],
+  ]) assert.equal(preservationHash(job(name, source)), expected, name);
+  assert.equal(preservationHash(job('analyze-providers', source).split('    steps:')[0]), '4fae063b0bcc707f6c9cd3b82d1da514f74219fe3ffe435e51ec10e75e43285a');
+  assert.equal(preservationHash(job('analyze-providers', source).split('      - name: Resolve Sonar project version\n')[0]), '826239d2e91af9b369e808dc61392dea6c2a85534e7df67106a9eb3d337d6d5a');
+}
+
+test('main baseline platform smoke and plugin major jobs preserve semantics across action ref updates', () => {
+  assertPreservedWorkflow();
   for (const [eventName, bootstrap, expected] of [['push', false, true], ['workflow_dispatch', true, true], ['workflow_dispatch', false, false], ['pull_request', true, false], ['workflow_call', true, false]]) {
     assert.equal(evaluate(expression(job('provider-server-main'), 'if'), { inputs: { bootstrap_server_main: bootstrap }, github: { event_name: eventName } }), expected);
   }
   for (const context of [{ inputs: { bootstrap_server_main: true } }, { github: { event_name: 'push' } }]) {
     for (const name of [...requiredJobs, 'summary']) assert.equal(evaluate(expression(job(name), 'if'), context), false, name);
   }
+});
+
+test('preservation and scanners accept routine references for the same remote actions', () => {
+  let mutations = 0;
+  for (const reference of ['v99.1.2', '1234567890abcdef1234567890abcdef12345678', 'releases/next']) {
+    const updated = workflow.replace(/^(        uses: [a-zA-Z0-9][\w.-]*\/[\w.-]+(?:\/[\w.-]+)*@)[^\s#]+/gm, `$1${reference}`);
+    if (updated !== workflow) mutations++;
+    assertPreservedWorkflow(updated);
+    assertScanners(updated);
+  }
+  assert.ok(mutations >= 2, 'at least two distinct ref updates must exercise normalization');
+});
+
+test('preservation rejects changed action identities and protected workflow semantics', () => {
+  for (const [name, before, after] of [
+    ['provider-server-main', 'uses: SonarSource/sonarqube-scan-action@', 'uses: OtherOwner/sonarqube-scan-action@'],
+    ['provider-server-main', 'uses: SonarSource/sonarqube-scan-action@', 'uses: SonarSource/different-scan-action@'],
+    ['provider-server-main', 'uses: actions/checkout@', 'uses: actions/checkout/different-path@'],
+    ['provider-server-main', './.github/actions/sonar-project-version', './.github/actions/different-version'],
+    ['provider-server-main', '-Dsonar.qualitygate.wait=true', '-Dsonar.qualitygate.wait=false'],
+    ['provider-server-main', 'SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}', 'SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}'],
+    ['provider-server-main', 'SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}', 'SONAR_HOST_URL: https://unexpected.example'],
+    ['provider-server-main', '-Dsonar.dart.lcov.reportPaths=coverage/lcov.info', '-Dsonar.dart.lcov.reportPaths=wrong/lcov.info'],
+    ['provider-server-main', 'ref: develop', 'ref: main'],
+    ['provider-server-main', '-Dsonar.scm.revision=${{ steps.baseline.outputs.sha }}', '-Dsonar.scm.revision=${{ github.sha }}'],
+    ['provider-server-main', '-Dsonar.branch.name=main', '-Dsonar.branch.name=develop'],
+    ['provider-server-main', "github.event_name == 'push'", "github.event_name == 'pull_request'"],
+    ['provider-server-main', 'fetch-depth: 0', 'fetch-depth: 1'],
+    ['provider-server-main', 'runs-on: ubuntu-latest', 'runs-on: windows-latest'],
+    ['analyze-providers', 'flutter test --coverage', 'flutter test'],
+    ['analyze-providers', 'cp pubspec_overrides.yaml.example pubspec_overrides.yaml', 'cp wrong.yaml pubspec_overrides.yaml'],
+    ['analyze-providers', 'sonarKey: toggly-sdks-flutter-secure-storage', 'sonarKey: wrong-project'],
+    ['secure-storage-version-matrix', "'11.1.1'", "'12.0.0'"],
+  ]) {
+    const original = job(name);
+    assert.ok(original.includes(before), `${name}: missing mutation target ${before}`);
+    const mutated = workflow.replace(original, original.replace(before, after));
+    assert.throws(() => assertPreservedWorkflow(mutated), { code: 'ERR_ASSERTION' }, `${name}: ${before}`);
+  }
+  for (const name of ['sonar', 'analyze-providers']) {
+    for (const [before, after] of [
+      ['uses: SonarSource/sonarqube-scan-action@', 'uses: OtherOwner/sonarqube-scan-action@'],
+      ['uses: SonarSource/sonarqube-scan-action@', 'uses: SonarSource/different-scan-action@'],
+      ['uses: SonarSource/sonarqube-scan-action@', 'uses: SonarSource/sonarqube-scan-action/different-path@'],
+      ['-Dsonar.qualitygate.wait=true', '-Dsonar.qualitygate.wait=false'],
+      ['-Dsonar.dart.lcov.reportPaths=coverage/lcov.info', '-Dsonar.dart.lcov.reportPaths=wrong/lcov.info'],
+    ]) {
+      const original = job(name);
+      assert.ok(original.includes(before), `${name}: missing mutation target ${before}`);
+      const mutated = workflow.replace(original, original.replace(before, after));
+      assert.throws(() => assertScanners(mutated), { code: 'ERR_ASSERTION' }, `${name}: ${before}`);
+    }
+  }
+});
+
+test('normalization retains shell text local action paths trailing comments and step inputs', () => {
+  for (const [before, after] of [
+    ['          uses: actions/checkout@v7', '          uses: actions/checkout@v8'],
+    ['        uses: ./.github/actions/local@v1', '        uses: ./.github/actions/local@v2'],
+    ['        uses: actions/checkout@v7 # required policy', '        uses: actions/checkout@v7 # weakened policy'],
+    ['        uses: actions/checkout@v7\n        with:\n          ref: develop', '        uses: actions/checkout@v8\n        with:\n          ref: main'],
+  ]) assert.notEqual(preservationHash(before), preservationHash(after));
 });
 
 test('core and provider runtime coverage artifacts overrides and trusted OWASP stay intact', () => {
