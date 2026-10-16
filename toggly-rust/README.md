@@ -48,7 +48,8 @@ toggly = "0.5"
 ```
 
 With the `telemetry` feature, set `system_metrics(true)` on `TogglyConfig` (default
-`false`) to observe `CpuUsage`, `MemoryWorkingSet`, and `ExceptionCount` every
+`false`) to observe `CpuUsage`, `MemoryWorkingSet` (Linux `VmRSS` only;
+omitted elsewhere), and `ExceptionCount` every
 10s when business metrics are enabled.
 
 For framework integrations:

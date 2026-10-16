@@ -40,8 +40,9 @@ export class ClientSystemMetricsCollector {
     this.setGauge = options.setGauge;
     this.intervalMs = options.intervalMs ?? CLIENT_SYSTEM_METRICS_INTERVAL_MS;
     this.now = options.now ?? Date.now;
-    this.setIntervalFn = options.setIntervalFn ?? setInterval;
-    this.clearIntervalFn = options.clearIntervalFn ?? clearInterval;
+    // Native browser timers require the Window/WorkerGlobalScope receiver.
+    this.setIntervalFn = options.setIntervalFn ?? globalThis.setInterval.bind(globalThis);
+    this.clearIntervalFn = options.clearIntervalFn ?? globalThis.clearInterval.bind(globalThis);
     this.attachExceptionSources = options.attachExceptionSources;
     this.sampler = options.sampler ?? (() => this.defaultSample());
   }

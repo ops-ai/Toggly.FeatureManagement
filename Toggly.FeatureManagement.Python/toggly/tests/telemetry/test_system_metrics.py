@@ -112,16 +112,18 @@ class TestSystemMetricsCollector:
 
         fake = FakeResource()
         monkeypatch.setattr(sm, "_resource", fake)
+        monkeypatch.setattr(
+            SystemMetricsCollector,
+            "_sample_linux_vm_rss_bytes",
+            staticmethod(lambda: 8192.0),
+        )
         clock = {"t": 100.0}
 
         def mono() -> float:
             return clock["t"]
 
-        observed: list[SystemMetricObservation] = []
         collector = SystemMetricsCollector(
-            lambda metric, value: observed.append(
-                SystemMetricObservation(metric, value)
-            ),
+            lambda _metric, _value: None,
             interval_seconds=60.0,
             monotonic=mono,
         )
@@ -139,8 +141,7 @@ class TestSystemMetricsCollector:
         names = {s.metric: s.value for s in samples}
         assert "CpuUsage" in names
         assert 0.0 <= names["CpuUsage"] <= 100.0
-        assert "MemoryWorkingSet" in names
-        assert names["MemoryWorkingSet"] > 0
+        assert names["MemoryWorkingSet"] == 8192.0
         assert names["ExceptionCount"] == 2.0
         assert collector._exception_count == 0
         collector.stop()
@@ -178,40 +179,25 @@ class TestSystemMetricsCollector:
         assert 0.0 <= pct <= 100.0
         collector.stop()
 
-    def test_memory_sample_darwin_and_errors(
-        self, monkeypatch: pytest.MonkeyPatch
+    def test_memory_sample_linux_vmrss_and_omit_elsewhere(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
     ) -> None:
         import toggly.telemetry.system_metrics as sm
 
-        class FakeResource:
-            RUSAGE_SELF = 0
-
-            def getrusage(self, _who: int) -> SimpleNamespace:
-                return SimpleNamespace(ru_maxrss=1000)
-
-        monkeypatch.setattr(sm, "_resource", FakeResource())
-        monkeypatch.setattr(sm.sys, "platform", "darwin")
-        assert SystemMetricsCollector._sample_memory_working_set_bytes() == 1000.0
-
+        status = tmp_path / "status"
+        status.write_text("Name:\tpython\nVmRSS:\t2048 kB\n", encoding="utf-8")
         monkeypatch.setattr(sm.sys, "platform", "linux")
-        assert SystemMetricsCollector._sample_memory_working_set_bytes() == 1000.0 * 1024.0
+        real_open = open
 
-        class BadResource:
-            RUSAGE_SELF = 0
+        def fake_open(path, *args, **kwargs):
+            if str(path) == "/proc/self/status":
+                return real_open(status, *args, **kwargs)
+            return real_open(path, *args, **kwargs)
 
-            def getrusage(self, _who: int) -> SimpleNamespace:
-                raise OSError("nope")
+        monkeypatch.setattr("builtins.open", fake_open)
+        assert SystemMetricsCollector._sample_memory_working_set_bytes() == 2048.0 * 1024.0
 
-        monkeypatch.setattr(sm, "_resource", BadResource())
-        assert SystemMetricsCollector._sample_memory_working_set_bytes() is None
-
-        class NegResource:
-            RUSAGE_SELF = 0
-
-            def getrusage(self, _who: int) -> SimpleNamespace:
-                return SimpleNamespace(ru_maxrss=-1)
-
-        monkeypatch.setattr(sm, "_resource", NegResource())
+        monkeypatch.setattr(sm.sys, "platform", "darwin")
         assert SystemMetricsCollector._sample_memory_working_set_bytes() is None
 
     def test_exception_hooks_increment_and_restore(

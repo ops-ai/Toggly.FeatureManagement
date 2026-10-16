@@ -227,17 +227,6 @@ mod rusage_ffi {
         })
     }
 
-    pub(super) fn read_maxrss_bytes() -> Option<f64> {
-        let ru = read_rusage()?;
-        if ru.ru_maxrss <= 0 {
-            return None;
-        }
-        let mut rss = ru.ru_maxrss;
-        if cfg!(target_os = "linux") {
-            rss *= 1024;
-        }
-        Some(rss as f64)
-    }
 }
 
 fn read_rusage_cpu() -> Option<ProcessCpu> {
@@ -252,38 +241,24 @@ fn read_rusage_cpu() -> Option<ProcessCpu> {
 }
 
 fn sample_memory_working_set() -> Option<f64> {
-    if let Some(rss) = read_linux_statm_rss() {
-        return Some(rss as f64);
-    }
-    read_rusage_maxrss()
+    // Catalog MemoryWorkingSet is current RSS. Linux exposes VmRSS; rusage
+    // MaxRSS is a peak high-water mark, so omit elsewhere.
+    read_linux_vm_rss_bytes().map(|rss| rss as f64)
 }
 
-fn read_linux_statm_rss() -> Option<u64> {
+fn read_linux_vm_rss_bytes() -> Option<u64> {
     if !cfg!(target_os = "linux") {
         return None;
     }
-    let raw = std::fs::read_to_string("/proc/self/statm").ok()?;
-    let resident_pages: u64 = raw.split_whitespace().nth(1)?.parse().ok()?;
-    let page_size = page_size_bytes();
-    Some(resident_pages * page_size)
-}
-
-fn page_size_bytes() -> u64 {
-    std::env::var("PAGESIZE")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(4096)
-}
-
-fn read_rusage_maxrss() -> Option<f64> {
-    #[cfg(unix)]
-    {
-        rusage_ffi::read_maxrss_bytes()
+    let raw = std::fs::read_to_string("/proc/self/status").ok()?;
+    for line in raw.lines() {
+        let Some(rest) = line.strip_prefix("VmRSS:") else {
+            continue;
+        };
+        let kb: u64 = rest.split_whitespace().next()?.parse().ok()?;
+        return kb.checked_mul(1024);
     }
-    #[cfg(not(unix))]
-    {
-        None
-    }
+    None
 }
 
 fn install_panic_hook() {

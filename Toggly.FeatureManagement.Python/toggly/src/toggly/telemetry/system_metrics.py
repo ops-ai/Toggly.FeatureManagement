@@ -175,18 +175,32 @@ class SystemMetricsCollector:
 
     @staticmethod
     def _sample_memory_working_set_bytes() -> Optional[float]:
-        if _resource is None:
+        # Prefer current RSS (VmRSS). ru_maxrss is a peak high-water mark, so
+        # omit the metric when current RSS cannot be read.
+        linux_rss = SystemMetricsCollector._sample_linux_vm_rss_bytes()
+        if linux_rss is not None:
+            return linux_rss
+        return None
+
+    @staticmethod
+    def _sample_linux_vm_rss_bytes() -> Optional[float]:
+        if sys.platform not in ("linux", "linux2", "android"):
             return None
         try:
-            usage = _resource.getrusage(_resource.RUSAGE_SELF)
-            rss = float(usage.ru_maxrss)
-            if rss < 0:
-                return None
-            if sys.platform == "darwin":
-                return rss
-            return rss * 1024.0
+            with open("/proc/self/status", encoding="utf-8") as handle:
+                for line in handle:
+                    if not line.startswith("VmRSS:"):
+                        continue
+                    parts = line.split()
+                    if len(parts) < 2:
+                        return None
+                    kb = float(parts[1])
+                    if kb < 0 or not math.isfinite(kb):
+                        return None
+                    return kb * 1024.0
         except Exception:
             return None
+        return None
 
     def _attach_exception_hooks(self) -> None:
         previous_sys = sys.excepthook
