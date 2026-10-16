@@ -1,10 +1,18 @@
 import Foundation
 import Darwin
 
+private typealias UncaughtExceptionHandler = @convention(c) (NSException) -> Void
+
+/// C function pointers are not Equatable; compare by bit pattern.
+private func sameUncaughtHandler(_ lhs: UncaughtExceptionHandler?, _ rhs: UncaughtExceptionHandler?) -> Bool {
+    unsafeBitCast(lhs, to: Optional<UnsafeRawPointer>.self)
+        == unsafeBitCast(rhs, to: Optional<UnsafeRawPointer>.self)
+}
+
 private enum UncaughtExceptionBridge {
     static let lock = NSLock()
     static var count = 0
-    static var previous: (@convention(c) (NSException) -> Void)?
+    static var previous: UncaughtExceptionHandler?
     static var installs = 0
     /// Breaks cycles when a later crash reporter wraps our handler and we reinstall.
     static var reentrant = false
@@ -24,7 +32,7 @@ private enum UncaughtExceptionBridge {
         defer { lock.unlock() }
         if installs == 0 {
             let current = NSGetUncaughtExceptionHandler()
-            if current != togglySystemMetricsUncaughtHandler {
+            if !sameUncaughtHandler(current, togglySystemMetricsUncaughtHandler) {
                 previous = current
                 NSSetUncaughtExceptionHandler(togglySystemMetricsUncaughtHandler)
             }
@@ -39,7 +47,7 @@ private enum UncaughtExceptionBridge {
         installs -= 1
         if installs == 0 {
             // Only restore when we still own the slot.
-            if NSGetUncaughtExceptionHandler() == togglySystemMetricsUncaughtHandler {
+            if sameUncaughtHandler(NSGetUncaughtExceptionHandler(), togglySystemMetricsUncaughtHandler) {
                 NSSetUncaughtExceptionHandler(previous)
             }
             previous = nil
