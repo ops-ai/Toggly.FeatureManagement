@@ -19,16 +19,16 @@ public class TogglyHealthIndicator implements HealthIndicator {
 
     @Override
     public Health health() {
-        try {
-            int featureCount = togglyClient.getFeatureKeys().size();
+        TogglyHealthContributorSupport.Snapshot snapshot =
+                TogglyHealthContributorSupport.snapshot(togglyClient);
+        if (snapshot.isUp()) {
             return Health.up()
-                    .withDetail("featureCount", featureCount)
-                    .withDetail("environment", togglyClient.getConfig().getEnvironment())
-                    .build();
-        } catch (Exception e) {
-            return Health.down()
-                    .withException(e)
+                    .withDetail("featureCount", snapshot.featureCount())
+                    .withDetail("environment", snapshot.environment())
                     .build();
         }
+        return Health.down()
+                .withException(snapshot.error())
+                .build();
     }
 }
