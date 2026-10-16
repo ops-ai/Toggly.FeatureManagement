@@ -39,24 +39,35 @@ await withHostResources(async defer => {
       if (locked.version !== '2.8.1') throw new Error('Retained consumer baseline drifted');
       console.log('Retained locked Angular SDK baseline 2.8.1 installed before upgrade');
     }
-    // Pin local integration artifacts via package.json `file:` deps, then
-    // `npm install`. Passing multiple tarball paths on the CLI hits a
-    // deterministic npm 10 `edgesOut` null crash on Angular 21 hosts;
-    // sequential CLI installs can drop the prior file: package.
+    // Install the packed Angular SDK via a single package.json `file:` dep.
+    // Overlay sibling locals (client-telemetry / signed-defs) by extracting
+    // their tarballs into node_modules — Angular 21 + npm 10 crashes with
+    // `edgesOut` null when those locals are also resolved as `file:` / CLI
+    // tarball args alongside the SDK.
     const hostPackagePath = path.join(cwd, 'package.json');
     const hostPackage = JSON.parse(fs.readFileSync(hostPackagePath, 'utf8'));
     hostPackage.dependencies = {
       ...hostPackage.dependencies,
       '@ops-ai/ngx-feature-flags-toggly': `file:${tarball}`,
     };
-    if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
-      hostPackage.dependencies['@ops-ai/toggly-client-telemetry'] = `file:${path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL)}`;
-    }
-    if (process.env.TOGGLY_SIGNED_DEFS_TARBALL) {
-      hostPackage.dependencies['@ops-ai/toggly-signed-defs'] = `file:${path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL)}`;
-    }
     fs.writeFileSync(hostPackagePath, `${JSON.stringify(hostPackage, null, 2)}\n`);
     run(['npm', 'install', '--package-lock=false', '--no-audit', '--no-fund']);
+    const overlayLocalPackage = (tarballPath, packageName) => {
+      const extractRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'toggly-overlay-'));
+      defer(() => fs.rmSync(extractRoot, { recursive: true, force: true }));
+      execFileSync('tar', ['-xzf', tarballPath, '-C', extractRoot], { stdio: 'inherit' });
+      const extracted = path.join(extractRoot, 'package');
+      const destination = path.join(cwd, 'node_modules', ...packageName.split('/'));
+      fs.rmSync(destination, { recursive: true, force: true });
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.cpSync(extracted, destination, { recursive: true });
+    };
+    if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
+      overlayLocalPackage(path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL), '@ops-ai/toggly-client-telemetry');
+    }
+    if (process.env.TOGGLY_SIGNED_DEFS_TARBALL) {
+      overlayLocalPackage(path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL), '@ops-ai/toggly-signed-defs');
+    }
     const installed = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/ngx-feature-flags-toggly/package.json')));
     const reporter = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-client-telemetry/package.json')));
     const signer = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-signed-defs/package.json')));
