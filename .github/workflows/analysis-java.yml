@@ -231,6 +231,7 @@ jobs:
             -Dsonar.issue.ignore.multicriteria.sleepTests.resourceKey=**/src/test/** \
             -Dsonar.issue.ignore.multicriteria.kidSha1.ruleKey=java:S4790 \
             -Dsonar.issue.ignore.multicriteria.kidSha1.resourceKey=**/Es256Verifier.java \
+            -Dsonar.cpd.exclusions=**/toggly-spring-boot4-starter/src/main/java/io/toggly/spring/boot/actuator/** \
             --file pom.xml
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -263,6 +264,7 @@ jobs:
             -Dsonar.issue.ignore.multicriteria.kidSha1.ruleKey=java:S4790 \
             -Dsonar.issue.ignore.multicriteria.kidSha1.resourceKey=**/Es256Verifier.java \
             -Dsonar.dependencyCheck.reportPath="${GITHUB_WORKSPACE}/dependency-check-reports/dependency-check-report.xml" \
+            -Dsonar.cpd.exclusions=**/toggly-spring-boot4-starter/src/main/java/io/toggly/spring/boot/actuator/** \
             --file pom.xml
 
       - name: Report SonarQube Server quality gate
