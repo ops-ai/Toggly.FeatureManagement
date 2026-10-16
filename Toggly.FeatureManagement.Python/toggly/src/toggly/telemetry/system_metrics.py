@@ -68,6 +68,8 @@ class SystemMetricsCollector:
         self._pending_by_metric: dict[str, int] = {}
         self._previous_sys_excepthook: Optional[Callable[..., None]] = None
         self._previous_thread_excepthook: Optional[Callable[..., None]] = None
+        self._sys_excepthook: Optional[Callable[..., None]] = None
+        self._thread_excepthook: Optional[Callable[..., None]] = None
         self._last_cpu_seconds: Optional[float] = None
         self._last_cpu_at: Optional[float] = None
 
@@ -214,6 +216,7 @@ class SystemMetricsCollector:
             previous_sys(exc_type, exc, tb)
 
         self._previous_sys_excepthook = previous_sys
+        self._sys_excepthook = sys_hook
         sys.excepthook = sys_hook
 
         if not hasattr(threading, "excepthook"):
@@ -225,12 +228,21 @@ class SystemMetricsCollector:
             previous_thread(args)
 
         self._previous_thread_excepthook = cast(Optional[Callable[..., None]], previous_thread)
+        self._thread_excepthook = cast(Optional[Callable[..., None]], thread_hook)
         threading.excepthook = thread_hook  # type: ignore[attr-defined, assignment]
 
     def _detach_exception_hooks(self) -> None:
-        if self._previous_sys_excepthook is not None:
-            sys.excepthook = self._previous_sys_excepthook
+        if self._sys_excepthook is not None and sys.excepthook is self._sys_excepthook:
+            if self._previous_sys_excepthook is not None:
+                sys.excepthook = self._previous_sys_excepthook
             self._previous_sys_excepthook = None
-        if self._previous_thread_excepthook is not None:
-            threading.excepthook = self._previous_thread_excepthook  # type: ignore[attr-defined, assignment]
+        self._sys_excepthook = None
+        if (
+            self._thread_excepthook is not None
+            and hasattr(threading, "excepthook")
+            and threading.excepthook is self._thread_excepthook
+        ):
+            if self._previous_thread_excepthook is not None:
+                threading.excepthook = self._previous_thread_excepthook  # type: ignore[attr-defined, assignment]
             self._previous_thread_excepthook = None
+        self._thread_excepthook = None

@@ -237,6 +237,29 @@ class TestSystemMetricsCollector:
         if hasattr(threading, "excepthook"):
             assert threading.excepthook is noop_thread
 
+    def test_detach_skips_when_hooks_replaced(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Stop must not clobber hooks installed after the collector attached."""
+        noop_sys = lambda *_args: None
+        monkeypatch.setattr(sys, "excepthook", noop_sys)
+        collector = SystemMetricsCollector(
+            lambda _metric, _value: None,
+            interval_seconds=60.0,
+            sampler=lambda: [],
+        )
+        collector.start()
+        later_sys = lambda *_args: None
+        sys.excepthook = later_sys
+        later_thread = None
+        if hasattr(threading, "excepthook"):
+            later_thread = lambda *_args: None
+            threading.excepthook = later_thread  # type: ignore[assignment]
+        collector.stop()
+        assert sys.excepthook is later_sys
+        if hasattr(threading, "excepthook") and later_thread is not None:
+            assert threading.excepthook is later_thread
+
 
 def test_start_without_resource_module(monkeypatch: pytest.MonkeyPatch) -> None:
     """Collector starts on hosts without POSIX resource (coverage / Windows)."""

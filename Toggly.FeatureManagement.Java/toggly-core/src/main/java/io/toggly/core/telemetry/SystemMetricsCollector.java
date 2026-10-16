@@ -54,7 +54,8 @@ public final class SystemMetricsCollector {
 
     private CpuSnapshot lastCpu;
     private long lastGcTimeMs = -1L;
-    private long lastHeapUsed = -1L;
+    /** Cumulative allocated-bytes sample for AllocationRate (not live heap used). */
+    private long lastAllocatedBytes = -1L;
     private long lastSampleWallMs = -1L;
 
     public SystemMetricsCollector(Observe observe) {
@@ -91,7 +92,8 @@ public final class SystemMetricsCollector {
         started = true;
         lastCpu = readCpuSnapshot();
         lastGcTimeMs = totalGcCollectionTimeMs();
-        lastHeapUsed = currentHeapUsedBytes();
+        Long allocatedAtStart = readTotalAllocatedBytes();
+        lastAllocatedBytes = allocatedAtStart != null ? allocatedAtStart : -1L;
         lastSampleWallMs = System.currentTimeMillis();
         attachUncaughtHandler();
         future = scheduler.scheduleAtFixedRate(
@@ -178,13 +180,13 @@ public final class SystemMetricsCollector {
 
         Long allocated = readTotalAllocatedBytes();
         if (allocated != null) {
-            if (lastHeapUsed >= 0 && allocated >= lastHeapUsed && intervalSec > 0) {
-                double rate = (allocated - lastHeapUsed) / intervalSec;
+            if (lastAllocatedBytes >= 0 && allocated >= lastAllocatedBytes && intervalSec > 0) {
+                double rate = (allocated - lastAllocatedBytes) / intervalSec;
                 if (Double.isFinite(rate) && rate >= 0) {
                     out.add(new Observation("AllocationRate", rate));
                 }
             }
-            lastHeapUsed = allocated;
+            lastAllocatedBytes = allocated;
         }
 
         Double timeInGc = sampleTimeInGcPercent(intervalSec);
