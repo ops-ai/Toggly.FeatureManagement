@@ -455,4 +455,27 @@ describe('UsageTelemetryRuntime', () => {
     })
     await runtime.close()
   })
+
+  it('preserves observation timestamps across restore so samples do not collide', async () => {
+    const { MetricsBatcher } = await import('../../telemetry/metrics-batcher.js')
+    const batcher = new MetricsBatcher({
+      appKey: 'app',
+      environment: 'Production',
+    })
+    batcher.observe('CpuUsage', 10)
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    batcher.observe('CpuUsage', 20)
+    const payload = batcher.buildAndReset()
+    expect(payload?.observations).toHaveLength(2)
+
+    batcher.restoreFromPayload(payload!)
+    const restored = batcher.buildAndReset()
+    expect(restored?.observations).toHaveLength(2)
+    const values = restored!.observations
+      .map((row) => row.variantValues.enabled)
+      .sort((a, b) => a - b)
+    expect(values).toEqual([10, 20])
+    expect(restored!.observations[0]!.time).toEqual(payload!.observations[0]!.time)
+    expect(restored!.observations[1]!.time).toEqual(payload!.observations[1]!.time)
+  })
 })

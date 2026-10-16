@@ -267,10 +267,9 @@ type rusageCPU struct {
 }
 
 func sampleMemoryWorkingSet() *Observation {
+	// Catalog MemoryWorkingSet is current RSS. Linux/Android expose that via
+	// /proc/self/statm; rusage MaxRSS is a high-water mark, so omit elsewhere.
 	if rss, ok := readLinuxStatmRSS(); ok {
-		return &Observation{Metric: "MemoryWorkingSet", Value: float64(rss)}
-	}
-	if rss, ok := readRusageMaxRSS(); ok {
 		return &Observation{Metric: "MemoryWorkingSet", Value: float64(rss)}
 	}
 	return nil

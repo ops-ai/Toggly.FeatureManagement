@@ -36,7 +36,8 @@ Public usage APIs on `toggly.Client`:
 Checks from `IsEnabled` are recorded automatically when usage is enabled. Wire payloads use multi-variant maps (`variantStats` / `variantValues`) aligned with the .NET SDK.
 
 Set `SystemMetrics: true` (default `false`) on `toggly.Config` to sample process
-observations every 10s when `EnableMetrics` is on: `CpuUsage`, `MemoryWorkingSet`,
+observations every 10s when `EnableMetrics` is on: `CpuUsage`, `MemoryWorkingSet`
+(Linux/Android `/proc/self/statm` current RSS only; omitted elsewhere),
 `GCHeapSize`, `AllocationRate`, and `GoroutineCount` (stdlib only; no
 `ExceptionCount`). Define those metric names in your Toggly app.
 

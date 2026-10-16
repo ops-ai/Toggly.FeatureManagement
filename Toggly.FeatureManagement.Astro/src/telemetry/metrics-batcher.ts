@@ -1,4 +1,4 @@
-import { toProtobufTimestamp } from './hash.js'
+import { protobufTimestampToIso, toProtobufTimestamp } from './hash.js'
 
 /** Max distinct metric keys (metric+feature) retained per measures/counters map. */
 export const MAX_METRIC_KEYS_PER_BATCH = 500
@@ -116,12 +116,21 @@ export class MetricsBatcher {
   }
 
   observe(metric: string, value: number, options?: MetricsFeatureOptions): void {
+    this.pushObservation(metric, value, options, new Date())
+  }
+
+  private pushObservation(
+    metric: string,
+    value: number,
+    options: MetricsFeatureOptions | undefined,
+    time: Date,
+  ): void {
     if (this.observations.length >= this.maxObservations) {
       this.droppedKeys = true
       return
     }
     this.observations.push({
-      time: new Date(),
+      time,
       metric,
       feature: options?.feature,
       variant: options?.variant ?? 'enabled',
@@ -225,8 +234,11 @@ export class MetricsBatcher {
       }
     }
     for (const obs of payload.observations ?? []) {
+      const time = obs.time
+        ? new Date(protobufTimestampToIso(obs.time))
+        : new Date()
       for (const [variant, value] of Object.entries(obs.variantValues ?? {})) {
-        this.observe(obs.metric, value, { feature: obs.feature, variant })
+        this.pushObservation(obs.metric, value, { feature: obs.feature, variant }, time)
       }
     }
   }
