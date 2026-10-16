@@ -6,7 +6,7 @@
 
     <groupId>io.toggly</groupId>
     <artifactId>toggly-parent</artifactId>
-    <version>2.2.1</version>
+    <version>2.2.2</version>
     <packaging>pom</packaging>
 
     <name>Toggly Java SDK</name>
@@ -51,6 +51,7 @@
     <modules>
         <module>toggly-core</module>
         <module>toggly-spring-boot-starter</module>
+        <module>toggly-spring-boot4-starter</module>
         <module>toggly-spring-mvc</module>
         <module>toggly-spring-webflux</module>
         <module>toggly-servlet</module>

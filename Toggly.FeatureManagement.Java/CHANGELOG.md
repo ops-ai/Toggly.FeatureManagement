@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.2.2
+
+2026-10-16
+
+### Added
+
+- `toggly-spring-boot4-starter`, a Spring Boot **4.1** auto-configuration artifact
+  parallel to `toggly-spring-boot-starter` (Boot 3.5). Boot 4 moved health APIs to
+  `spring-boot-health`; the Boot 3 starter is unchanged so existing applications keep
+  working on Spring Boot 3.x.
+
+### Changed
+
+- User-Agent and live-update `sdkVersion` report `toggly-java/2.2.2`.
+
 ## 2.2.1
 
 2026-10-06
