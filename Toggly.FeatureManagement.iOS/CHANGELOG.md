@@ -8,7 +8,9 @@ All notable changes to the Toggly iOS SDK are documented in this file.
 
 ### Fixed
 - Usage-scope timing uses monotonic `systemUptime`; duration paths validate
-  variants; `pendingResources` accounts for all six delta fields [OPS-1758].
+  variants; `pendingResources` accounts for all six delta fields; `use`
+  restores pinned attribution after `await` so mid-scope `setContext` cannot
+  split attempt vs duration metrics [OPS-1758].
 
 ## 1.8.0
 
