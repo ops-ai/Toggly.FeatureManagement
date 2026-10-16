@@ -3,9 +3,15 @@ package io.toggly.core.telemetry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.lang.management.MemoryMXBean;
+import java.lang.management.MemoryUsage;
+import java.lang.management.ThreadMXBean;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -16,6 +22,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class SystemMetricsCollectorTest {
 
@@ -463,5 +471,127 @@ class SystemMetricsCollectorTest {
         collector.stop();
         collector.tick();
         assertThat(observed).hasSize(emitted);
+    }
+
+    @Test
+    void nonPositiveIntervalUsesDefault() {
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        try {
+            SystemMetricsCollector collector = new SystemMetricsCollector(
+                    (metric, value) -> {},
+                    0L,
+                    () -> List.of(),
+                    null,
+                    scheduler);
+            collector.start();
+            collector.stop();
+        } finally {
+            scheduler.shutdownNow();
+        }
+    }
+
+    @Test
+    void readLinuxVmRssBytesParsesStatusFile(@TempDir Path tmp) throws Exception {
+        assertThat(SystemMetricsCollector.readLinuxVmRssBytes("macOS", tmp.resolve("missing")))
+                .isNull();
+        Path status = tmp.resolve("status");
+        Files.writeString(status, "Name:\tjava\nVmRSS:\t2048 kB\n");
+        assertThat(SystemMetricsCollector.readLinuxVmRssBytes("Linux", status))
+                .isEqualTo(2048L * 1024L);
+        Files.writeString(status, "Name:\tjava\nVmRSS:\t-3 kB\n");
+        assertThat(SystemMetricsCollector.readLinuxVmRssBytes("Linux", status)).isNull();
+        Files.writeString(status, "Name:\tjava\n");
+        assertThat(SystemMetricsCollector.readLinuxVmRssBytes("Linux", status)).isNull();
+        assertThat(SystemMetricsCollector.readLinuxVmRssBytes("Linux", tmp.resolve("nope"))).isNull();
+    }
+
+    @Test
+    void readTotalAllocatedBytesHotSpotFallbackAndGuards() {
+        assertThat(SystemMetricsCollector.readTotalAllocatedBytes(mock(ThreadMXBean.class))).isNull();
+
+        com.sun.management.ThreadMXBean unsupported = mock(com.sun.management.ThreadMXBean.class);
+        when(unsupported.isThreadAllocatedMemorySupported()).thenReturn(false);
+        assertThat(SystemMetricsCollector.readTotalAllocatedBytes(unsupported)).isNull();
+
+        // Answer avoids compile-time dependency on JDK 21+ getTotalThreadAllocatedBytes.
+        com.sun.management.ThreadMXBean hotspot = mock(
+                com.sun.management.ThreadMXBean.class,
+                invocation -> {
+                    String name = invocation.getMethod().getName();
+                    return switch (name) {
+                        case "isThreadAllocatedMemorySupported", "isThreadAllocatedMemoryEnabled" -> true;
+                        case "getAllThreadIds" -> new long[] {1L, 2L};
+                        case "getThreadAllocatedBytes" -> new long[] {10L, -5L, 7L};
+                        case "getTotalThreadAllocatedBytes" ->
+                                throw new UnsupportedOperationException("force fallback");
+                        case "toString" -> "hotspot-mock";
+                        default -> null;
+                    };
+                });
+        assertThat(SystemMetricsCollector.readTotalAllocatedBytes(hotspot)).isEqualTo(17L);
+
+        com.sun.management.ThreadMXBean boom = mock(com.sun.management.ThreadMXBean.class);
+        when(boom.isThreadAllocatedMemorySupported()).thenThrow(new RuntimeException("boom"));
+        assertThat(SystemMetricsCollector.readTotalAllocatedBytes(boom)).isNull();
+    }
+
+    @Test
+    void currentHeapUsedBytesHandlesFailures() {
+        MemoryMXBean ok = mock(MemoryMXBean.class);
+        when(ok.getHeapMemoryUsage()).thenReturn(new MemoryUsage(0, 128, 256, 512));
+        assertThat(SystemMetricsCollector.currentHeapUsedBytes(ok)).isEqualTo(128L);
+
+        MemoryMXBean bad = mock(MemoryMXBean.class);
+        when(bad.getHeapMemoryUsage()).thenThrow(new RuntimeException("mxbean"));
+        assertThat(SystemMetricsCollector.currentHeapUsedBytes(bad)).isEqualTo(-1L);
+    }
+
+    @Test
+    void injectedProcessCpuTimeDrivesDefaultCpuSample() {
+        List<SystemMetricsCollector.Observation> observed = new ArrayList<>();
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        AtomicLong cpuNs = new AtomicLong(1_000_000L);
+        AtomicLong wallNs = new AtomicLong(1_000_000_000L);
+        try {
+            SystemMetricsCollector collector = new SystemMetricsCollector(
+                    (metric, value) -> observed.add(new SystemMetricsCollector.Observation(metric, value)),
+                    10_000L,
+                    null,
+                    wallNs::get,
+                    scheduler,
+                    cpuNs::get);
+            collector.start();
+            observed.clear();
+            cpuNs.set(1_000_000L + 50_000_000L);
+            wallNs.set(1_000_000_000L + 100_000_000L);
+            collector.resetLastSampleWallMsForTest(System.currentTimeMillis() - 100);
+            collector.tick();
+            assertThat(observed.stream().anyMatch(o -> o.metric().equals("CpuUsage"))).isTrue();
+            collector.stop();
+        } finally {
+            scheduler.shutdownNow();
+        }
+    }
+
+    @Test
+    void negativeInjectedCpuTimeYieldsNoCpuSample() {
+        List<SystemMetricsCollector.Observation> observed = new ArrayList<>();
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        try {
+            SystemMetricsCollector collector = new SystemMetricsCollector(
+                    (metric, value) -> observed.add(new SystemMetricsCollector.Observation(metric, value)),
+                    10_000L,
+                    null,
+                    System::nanoTime,
+                    scheduler,
+                    () -> -1L);
+            collector.start();
+            observed.clear();
+            collector.tick();
+            assertThat(observed.stream().noneMatch(o -> o.metric().equals("CpuUsage"))).isTrue();
+            collector.stop();
+        } finally {
+            scheduler.shutdownNow();
+        }
     }
 }

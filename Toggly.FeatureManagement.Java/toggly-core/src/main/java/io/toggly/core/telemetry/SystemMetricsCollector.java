@@ -2,7 +2,9 @@ package io.toggly.core.telemetry;
 
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
+import java.lang.management.ThreadMXBean;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,6 +45,8 @@ public final class SystemMetricsCollector {
     private final long intervalMs;
     private final Sampler sampler;
     private final LongSupplier nanoTime;
+    /** When set (tests), bypasses {@link OperatingSystemMXBean#getProcessCpuTime()}. */
+    private final LongSupplier processCpuTimeNs;
     private final ScheduledExecutorService scheduler;
     private final boolean ownsScheduler;
 
@@ -68,10 +72,21 @@ public final class SystemMetricsCollector {
             Sampler sampler,
             LongSupplier nanoTime,
             ScheduledExecutorService scheduler) {
+        this(observe, intervalMs, sampler, nanoTime, scheduler, null);
+    }
+
+    SystemMetricsCollector(
+            Observe observe,
+            long intervalMs,
+            Sampler sampler,
+            LongSupplier nanoTime,
+            ScheduledExecutorService scheduler,
+            LongSupplier processCpuTimeNs) {
         this.observe = observe;
         this.intervalMs = intervalMs > 0 ? intervalMs : SYSTEM_METRICS_INTERVAL_MS;
         this.sampler = sampler != null ? sampler : this::defaultSample;
         this.nanoTime = nanoTime != null ? nanoTime : System::nanoTime;
+        this.processCpuTimeNs = processCpuTimeNs;
         if (scheduler != null) {
             this.scheduler = scheduler;
             this.ownsScheduler = false;
@@ -233,9 +248,14 @@ public final class SystemMetricsCollector {
 
     private CpuSnapshot readCpuSnapshot() {
         try {
-            OperatingSystemMXBean os =
-                    (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
-            long cpuTime = os.getProcessCpuTime();
+            long cpuTime;
+            if (processCpuTimeNs != null) {
+                cpuTime = processCpuTimeNs.getAsLong();
+            } else {
+                OperatingSystemMXBean os =
+                        (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
+                cpuTime = os.getProcessCpuTime();
+            }
             if (cpuTime < 0) {
                 return null;
             }
@@ -246,8 +266,12 @@ public final class SystemMetricsCollector {
     }
 
     private static long currentHeapUsedBytes() {
+        return currentHeapUsedBytes(ManagementFactory.getMemoryMXBean());
+    }
+
+    static long currentHeapUsedBytes(MemoryMXBean memory) {
         try {
-            MemoryUsage heap = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage();
+            MemoryUsage heap = memory.getHeapMemoryUsage();
             long used = heap.getUsed();
             return used >= 0 ? used : -1L;
         } catch (RuntimeException ignored) {
@@ -257,8 +281,11 @@ public final class SystemMetricsCollector {
 
     /** Cumulative allocated bytes from HotSpot ThreadMXBean when supported. */
     private static Long readTotalAllocatedBytes() {
+        return readTotalAllocatedBytes(ManagementFactory.getThreadMXBean());
+    }
+
+    static Long readTotalAllocatedBytes(ThreadMXBean threads) {
         try {
-            var threads = ManagementFactory.getThreadMXBean();
             if (!(threads instanceof com.sun.management.ThreadMXBean hotspot)) {
                 return null;
             }
@@ -325,15 +352,18 @@ public final class SystemMetricsCollector {
     }
 
     static Long readLinuxVmRssBytes() {
-        if (!"Linux".equalsIgnoreCase(System.getProperty("os.name"))) {
+        return readLinuxVmRssBytes(System.getProperty("os.name"), Path.of("/proc/self/status"));
+    }
+
+    static Long readLinuxVmRssBytes(String osName, Path statusPath) {
+        if (!"Linux".equalsIgnoreCase(osName)) {
             return null;
         }
-        Path status = Path.of("/proc/self/status");
         try {
-            if (!Files.isRegularFile(status)) {
+            if (!Files.isRegularFile(statusPath)) {
                 return null;
             }
-            for (String line : Files.readAllLines(status)) {
+            for (String line : Files.readAllLines(statusPath)) {
                 if (!line.startsWith("VmRSS:")) {
                     continue;
                 }
@@ -352,6 +382,16 @@ public final class SystemMetricsCollector {
             return null;
         }
         return null;
+    }
+
+    /** Package-visible for tests: first default sample interval when wall clock was not primed. */
+    void resetLastSampleWallMsForTest(long wallMs) {
+        lastSampleWallMs = wallMs;
+    }
+
+    /** Package-visible for tests: prime GC baseline inside {@link #defaultSample()}. */
+    void resetLastGcTimeMsForTest(long gcTimeMs) {
+        lastGcTimeMs = gcTimeMs;
     }
 
     private Thread.UncaughtExceptionHandler activeUncaughtHandler;
