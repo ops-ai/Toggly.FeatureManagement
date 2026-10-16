@@ -21,8 +21,12 @@ private enum UncaughtExceptionBridge {
         lock.lock()
         defer { lock.unlock() }
         if installs == 0 {
-            previous = NSGetUncaughtExceptionHandler()
-            NSSetUncaughtExceptionHandler(togglySystemMetricsUncaughtHandler)
+            if previous == nil {
+                previous = NSGetUncaughtExceptionHandler()
+            }
+            if NSGetUncaughtExceptionHandler() != togglySystemMetricsUncaughtHandler {
+                NSSetUncaughtExceptionHandler(togglySystemMetricsUncaughtHandler)
+            }
         }
         installs += 1
     }
@@ -33,12 +37,13 @@ private enum UncaughtExceptionBridge {
         guard installs > 0 else { return }
         installs -= 1
         if installs == 0 {
-            // Only restore our saved previous when we still own the slot —
-            // another SDK may have chained after us.
+            // Only restore / clear `previous` when we still own the slot.
+            // If another SDK wrapped us, keep `previous` so a later install
+            // does not lose the original chain or recurse into ourselves.
             if NSGetUncaughtExceptionHandler() == togglySystemMetricsUncaughtHandler {
                 NSSetUncaughtExceptionHandler(previous)
+                previous = nil
             }
-            previous = nil
         }
     }
 

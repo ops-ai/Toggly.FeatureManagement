@@ -243,6 +243,12 @@ def test_start_without_resource_module(monkeypatch: pytest.MonkeyPatch) -> None:
     import toggly.telemetry.system_metrics as sm
 
     monkeypatch.setattr(sm, "_resource", None)
+    # MemoryWorkingSet uses /proc VmRSS independently of resource; force omit.
+    monkeypatch.setattr(
+        SystemMetricsCollector,
+        "_sample_linux_vm_rss_bytes",
+        staticmethod(lambda: None),
+    )
     c = sm.SystemMetricsCollector(lambda m, v: None, interval_seconds=60.0)
     c.start()
     assert c._sample_cpu_percent() is None
