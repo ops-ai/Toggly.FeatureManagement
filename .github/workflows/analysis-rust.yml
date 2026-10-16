@@ -60,6 +60,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-${{ matrix.rust }}-
 
+      # Unlocked resolve of actix-web 4.15 pulls actix-server needing rustc ≥1.89.
+      - name: Cap actix-web for rustc 1.88
+        if: matrix.rust == '1.88.0'
+        run: perl -pi -e 's/actix-web = ">=4.4, <4.16"/actix-web = ">=4.4, <4.13"/' Cargo.toml
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -73,7 +78,6 @@ jobs:
         run: cargo test --all-features --workspace
 
       - name: Verify current framework package artifacts
-        # Skip on MSRV: actix-web 4.15 pulls actix-server that needs rustc ≥1.89.
         if: matrix.rust == 'stable'
         run: |
           cargo update -p actix-web --precise 4.15.0
@@ -185,8 +189,12 @@ jobs:
         with:
           toolchain: 1.88.0
 
+      # Unlocked resolve of actix-web 4.15 pulls actix-server needing rustc ≥1.89.
+      - name: Cap actix-web for MSRV
+        run: perl -pi -e 's/actix-web = ">=4.4, <4.16"/actix-web = ">=4.4, <4.13"/' Cargo.toml
+
       - name: Check MSRV
-        run: cargo check --locked --all-features --workspace
+        run: cargo check --all-features --workspace
 
   security:
     name: Security Audit
