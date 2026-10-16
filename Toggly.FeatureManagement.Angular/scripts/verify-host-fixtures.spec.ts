@@ -39,10 +39,6 @@ await withHostResources(async defer => {
       if (locked.version !== '2.8.1') throw new Error('Retained consumer baseline drifted');
       console.log('Retained locked Angular SDK baseline 2.8.1 installed before upgrade');
     }
-    // Angular 21 + npm 10 crashes with `edgesOut` on `file:` / multi-tarball
-    // installs after `npm ci`. Resolve registry deps first (one at a time),
-    // then tar-overlay the packed SDK and any local integration artifacts
-    // last so npm cannot remove them.
     const overlayLocalPackage = (tarballPath, packageName) => {
       const extractRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'toggly-overlay-'));
       defer(() => fs.rmSync(extractRoot, { recursive: true, force: true }));
@@ -53,29 +49,37 @@ await withHostResources(async defer => {
       fs.mkdirSync(path.dirname(destination), { recursive: true });
       fs.cpSync(extracted, destination, { recursive: true });
     };
-    const installRegistryDependency = (name, versionRange) => {
-      run(['npm', 'install', '--no-save', '--package-lock=false', '--no-audit', '--no-fund', `${name}@${versionRange}`]);
-    };
-    const telemetryRange = metadata.dependencies['@ops-ai/toggly-client-telemetry'];
-    const signedRange = metadata.dependencies['@ops-ai/toggly-signed-defs'];
-    const registryPackages = {
-      ...metadata.dependencies,
-      ...Object.fromEntries(
-        Object.entries(metadata.peerDependencies || {}).filter(([name]) => !name.startsWith('@angular/')),
-      ),
-    };
-    for (const [name, versionRange] of Object.entries(registryPackages)) {
-      if (name === 'tslib') continue;
-      if (name === '@ops-ai/toggly-client-telemetry' && process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) continue;
-      if (name === '@ops-ai/toggly-signed-defs' && process.env.TOGGLY_SIGNED_DEFS_TARBALL) continue;
-      installRegistryDependency(name, versionRange);
-    }
-    overlayLocalPackage(tarball, '@ops-ai/ngx-feature-flags-toggly');
-    if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
-      overlayLocalPackage(path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL), '@ops-ai/toggly-client-telemetry');
-    }
-    if (process.env.TOGGLY_SIGNED_DEFS_TARBALL) {
-      overlayLocalPackage(path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL), '@ops-ai/toggly-signed-defs');
+    // Angular ≤20: classic multi-tarball `npm install` (pulls peers/deps).
+    // Angular 21 + npm 10: that path hits a deterministic `edgesOut` crash;
+    // install registry deps one-by-one, then tar-overlay packed locals last.
+    const useTarOverlay = String(entry.angular || '').startsWith('21.');
+    if (useTarOverlay) {
+      const registryPackages = {
+        ...metadata.dependencies,
+        ...Object.fromEntries(
+          Object.entries(metadata.peerDependencies || {}).filter(([name]) => !name.startsWith('@angular/')),
+        ),
+      };
+      for (const [name, versionRange] of Object.entries(registryPackages)) {
+        if (name === 'tslib') continue;
+        run(['npm', 'install', '--no-save', '--package-lock=false', '--no-audit', '--no-fund', `${name}@${versionRange}`]);
+      }
+      overlayLocalPackage(tarball, '@ops-ai/ngx-feature-flags-toggly');
+      if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
+        overlayLocalPackage(path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL), '@ops-ai/toggly-client-telemetry');
+      }
+      if (process.env.TOGGLY_SIGNED_DEFS_TARBALL) {
+        overlayLocalPackage(path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL), '@ops-ai/toggly-signed-defs');
+      }
+    } else {
+      const install = ['npm', 'install', '--no-save', '--package-lock=false', '--no-audit', '--no-fund', tarball];
+      if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
+        install.push(path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL));
+      }
+      if (process.env.TOGGLY_SIGNED_DEFS_TARBALL) {
+        install.push(path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL));
+      }
+      run(install);
     }
     const installed = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/ngx-feature-flags-toggly/package.json')));
     const reporter = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-client-telemetry/package.json')));
@@ -84,10 +88,11 @@ await withHostResources(async defer => {
       .map(([name, packageName]) => [name, JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules', packageName, 'package.json'))).version]));
     if (Object.entries(host).some(([name, version]) => version !== entry[name])) throw new Error(`Installed host versions drifted: ${JSON.stringify(host)}`);
     console.log(`INSTALLED HOST ${JSON.stringify({ fixture: entry.fixture, ...host })}`);
+    const telemetryRange = installed.dependencies['@ops-ai/toggly-client-telemetry'];
     if (
       installed.version !== metadata.version ||
       (telemetryRange !== '^1.1.0' && telemetryRange !== '^1.2.0') ||
-      signedRange !== '^1.2.6'
+      installed.dependencies['@ops-ai/toggly-signed-defs'] !== '^1.2.6'
     ) {
       throw new Error('Unexpected packed graph');
     }
