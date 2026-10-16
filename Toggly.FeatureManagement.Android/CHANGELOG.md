@@ -11,6 +11,9 @@
 ### Fixed
 - `TogglyService.use` no longer re-invokes `action` when a nullable success
   returns `null` (elvis fallback) [OPS-1758].
+- Usage-scope durations use monotonic `elapsedRealtime` instead of wall-clock
+  `currentTimeMillis`, so NTP / manual clock changes do not skew
+  `durationSumMs` / `errorDurationSumMs` [OPS-1758].
 
 ## 1.9.0
 

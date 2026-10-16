@@ -2,6 +2,15 @@
 
 All notable changes to the Toggly iOS SDK are documented in this file.
 
+## 1.8.2
+
+2026-10-16
+
+### Fixed
+- Telemetry clock uses `CLOCK_MONOTONIC_RAW` so usage durations and the
+  300s batch expiry keep advancing while the device sleeps (parity with
+  Android `elapsedRealtime`), without wall-clock NTP skew [OPS-1758].
+
 ## 1.8.1
 
 2026-10-15

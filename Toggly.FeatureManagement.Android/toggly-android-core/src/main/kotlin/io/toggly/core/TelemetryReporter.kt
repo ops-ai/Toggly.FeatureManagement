@@ -141,12 +141,13 @@ internal class TelemetryReporter(
         action: suspend (fail: () -> Unit) -> T,
     ): T {
         recordUsage(key, variant)
-        val started = wallNow()
+        // Monotonic elapsedRealtime — wall clock is only for HTTP Retry-After parsing.
+        val started = now()
         var failed = false
         val fail = { failed = true }
         return try {
             val result = action(fail)
-            val durationMs = max(0, wallNow() - started)
+            val durationMs = max(0, now() - started)
             if (failed) {
                 recordFeature(key, variant, 3)
                 if (durationMs > 0) recordFeature(key, variant, 5, durationMs)
@@ -158,7 +159,7 @@ internal class TelemetryReporter(
             // Attempt already recorded; cancellation is not an error and has no duration.
             throw error
         } catch (error: Throwable) {
-            val durationMs = max(0, wallNow() - started)
+            val durationMs = max(0, now() - started)
             recordFeature(key, variant, 3)
             if (durationMs > 0) recordFeature(key, variant, 5, durationMs)
             throw error

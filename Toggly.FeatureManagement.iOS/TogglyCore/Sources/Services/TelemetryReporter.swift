@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import zlib
 
@@ -124,8 +125,9 @@ public actor TelemetryReporter {
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
         }
         self.compressor = { Self.gzip($0) }
-        // Monotonic uptime avoids wall-clock jumps skewing usage-scope durations.
-        self.clock = { ProcessInfo.processInfo.systemUptime }
+        // CLOCK_MONOTONIC_RAW advances during sleep (Android elapsedRealtime parity)
+        // and is immune to wall-clock NTP jumps that skew duration / batch age.
+        self.clock = Self.monotonicSeconds
     }
 
     // The transport/sleeper seams allow deterministic tests without making test hooks public.
@@ -140,7 +142,7 @@ public actor TelemetryReporter {
         onDiagnostic: Diagnostic? = nil,
         sleep: @escaping Sleeper = { seconds in try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)) },
         compressor: @escaping Compressor = { _ in nil },
-        clock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+        clock: @escaping @Sendable () -> TimeInterval = Self.monotonicSeconds,
         transport: @escaping Transport
     ) {
         self.appKey = appKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -158,6 +160,13 @@ public actor TelemetryReporter {
         self.compressor = compressor
         self.clock = clock
         self.transport = transport
+    }
+
+    /// Seconds since an arbitrary boot epoch; continues while the device sleeps.
+    private static let monotonicSeconds: @Sendable () -> TimeInterval = {
+        var ts = timespec()
+        clock_gettime(CLOCK_MONOTONIC_RAW, &ts)
+        return TimeInterval(ts.tv_sec) + TimeInterval(ts.tv_nsec) / 1_000_000_000
     }
 
     static func gzip(_ data: Data) -> Data? {
