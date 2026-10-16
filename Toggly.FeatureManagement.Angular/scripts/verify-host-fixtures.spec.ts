@@ -30,9 +30,10 @@ await withHostResources(async defer => {
     const cwd = path.join(temporaryRoot, entry.fixture);
     fs.cpSync(path.join(fixtures, entry.fixture), cwd, { recursive: true });
     fs.copyFileSync(path.join(fixtures, 'host.spec.ts'), path.join(cwd, 'src/host.spec.ts'));
-    // Angular 21's arborist build hits npm 10 `edgesOut` null on any install
-    // after `npm ci`. npm 11 completes the same classic tarball install.
-    const npmVersion = String(entry.angular || '').startsWith('21.') ? '11.6.2' : '10.8.2';
+    // Angular 21+ hits npm 10 `edgesOut` null on any install after `npm ci`.
+    // npm 11 completes the same classic tarball install. Older hosts stay on 10.8.2.
+    const angularMajor = Number(String(entry.angular || '0').split('.')[0]);
+    const npmVersion = angularMajor >= 21 ? '11.6.2' : '10.8.2';
     const run = args => execFileSync(process.execPath, [npmCli, 'exec', '--yes', `--package=node@${entry.node}`, `--package=npm@${npmVersion}`, '--', ...args], { cwd, stdio: 'inherit', env: commandEnvironment });
     console.log(`HOST ${JSON.stringify(entry)}`);
     run(['node', '--version']);
