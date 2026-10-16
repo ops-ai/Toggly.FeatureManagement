@@ -6,6 +6,8 @@ private enum UncaughtExceptionBridge {
     static var count = 0
     static var previous: (@convention(c) (NSException) -> Void)?
     static var installs = 0
+    /// Breaks cycles when a later crash reporter wraps our handler and we reinstall.
+    static var reentrant = false
 
     static func record() {
         lock.lock()
@@ -21,10 +23,9 @@ private enum UncaughtExceptionBridge {
         lock.lock()
         defer { lock.unlock() }
         if installs == 0 {
-            // Always capture the live head on a fresh install so a restart
-            // after a third-party chain does not keep a stale `previous`.
-            previous = NSGetUncaughtExceptionHandler()
-            if previous != togglySystemMetricsUncaughtHandler {
+            let current = NSGetUncaughtExceptionHandler()
+            if current != togglySystemMetricsUncaughtHandler {
+                previous = current
                 NSSetUncaughtExceptionHandler(togglySystemMetricsUncaughtHandler)
             }
         }
@@ -37,12 +38,11 @@ private enum UncaughtExceptionBridge {
         guard installs > 0 else { return }
         installs -= 1
         if installs == 0 {
-            // Only restore / clear `previous` when we still own the slot.
+            // Only restore when we still own the slot.
             if NSGetUncaughtExceptionHandler() == togglySystemMetricsUncaughtHandler {
                 NSSetUncaughtExceptionHandler(previous)
-                previous = nil
             }
-            // If wrapped, leave previous set until a future install refreshes it.
+            previous = nil
         }
     }
 
@@ -56,8 +56,18 @@ private enum UncaughtExceptionBridge {
 }
 
 private func togglySystemMetricsUncaughtHandler(_ exception: NSException) {
+    UncaughtExceptionBridge.lock.lock()
+    if UncaughtExceptionBridge.reentrant {
+        UncaughtExceptionBridge.lock.unlock()
+        return
+    }
+    UncaughtExceptionBridge.reentrant = true
+    UncaughtExceptionBridge.lock.unlock()
     UncaughtExceptionBridge.record()
     UncaughtExceptionBridge.callPrevious(exception)
+    UncaughtExceptionBridge.lock.lock()
+    UncaughtExceptionBridge.reentrant = false
+    UncaughtExceptionBridge.lock.unlock()
 }
 
 /// Opt-in client metrics: CpuUsage and ExceptionCount every 10s via gauges.
@@ -136,9 +146,12 @@ final class SystemMetricsCollector: @unchecked Sendable {
         if let cpu = sampleCpuPercent() {
             out.append(("CpuUsage", cpu))
         }
-        let exceptions = UncaughtExceptionBridge.drainCount()
-        if exceptions > 0 {
-            out.append(("ExceptionCount", Double(exceptions)))
+        let pendingExceptions = pendingByMetric["ExceptionCount", default: 0]
+        if pendingExceptions < Self.maxPending {
+            let exceptions = UncaughtExceptionBridge.drainCount()
+            if exceptions > 0 {
+                out.append(("ExceptionCount", Double(exceptions)))
+            }
         }
         return out
     }

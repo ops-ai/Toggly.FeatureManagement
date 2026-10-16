@@ -145,9 +145,11 @@ class SystemMetricsCollector:
             out.append(SystemMetricObservation("MemoryWorkingSet", memory))
 
         if self._exception_count > 0:
-            count = self._exception_count
-            self._exception_count = 0
-            out.append(SystemMetricObservation("ExceptionCount", float(count)))
+            pending = self._pending_by_metric.get("ExceptionCount", 0)
+            if pending < SYSTEM_METRICS_MAX_PENDING:
+                count = self._exception_count
+                self._exception_count = 0
+                out.append(SystemMetricObservation("ExceptionCount", float(count)))
 
         return out
 

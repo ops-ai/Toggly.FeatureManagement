@@ -181,11 +181,21 @@ module Toggly
         def install_exception_handler
           return if @trace
 
+          # Count threads that died with an unhandled exception. Skip
+          # Thread#kill ("aborting") so intentional kills are not counted.
           @trace = TracePoint.new(:thread_end) do |tp|
             thread = tp.self
-            next unless thread.status == "aborting"
+            next if thread == Thread.main
+            next if thread.status == "aborting"
+            next unless thread.status.nil?
 
-            @mutex.synchronize { @exception_count += 1 }
+            begin
+              thread.join(0)
+            rescue StandardError, ScriptError
+              @mutex.synchronize { @exception_count += 1 }
+            rescue Exception # rubocop:disable Lint/RescueException
+              nil
+            end
           end
           @trace.enable
         end

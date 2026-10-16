@@ -343,6 +343,10 @@ export class TelemetryRuntime {
       this.systemMetrics?.onFlushed()
     } catch (error) {
       this.logger.error('Failed to send metrics:', error)
+      // Batch was already drained; clear system-metrics backpressure so
+      // collection resumes after the endpoint recovers instead of stalling
+      // permanently at the pending cap.
+      this.systemMetrics?.onFlushed()
     } finally {
       this.sendingMetrics = false
     }

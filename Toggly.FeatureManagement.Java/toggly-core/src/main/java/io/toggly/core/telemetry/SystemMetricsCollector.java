@@ -267,7 +267,8 @@ public final class SystemMetricsCollector {
             }
             // Prefer JVM total API when present (not on every JDK compile target).
             try {
-                var method = hotspot.getClass().getMethod("getTotalAllocatedBytes");
+                // JDK 21+: com.sun.management.ThreadMXBean.getTotalThreadAllocatedBytes()
+                var method = hotspot.getClass().getMethod("getTotalThreadAllocatedBytes");
                 Object value = method.invoke(hotspot);
                 if (value instanceof Long total && total >= 0L) {
                     return total;

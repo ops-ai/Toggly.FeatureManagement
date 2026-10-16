@@ -110,7 +110,12 @@ class TogglyService(
     ) else null
     private val systemMetricsCollector = if (config.systemMetrics && telemetry != null) {
         SystemMetricsCollector(observe = { metric, value ->
-            telemetry.setGauge(metric, value)
+            // ExceptionCount is a per-window delta — counters sum across ticks.
+            if (metric == "ExceptionCount") {
+                telemetry.incrementCounter(metric, value)
+            } else {
+                telemetry.setGauge(metric, value)
+            }
         }).also { collector ->
             telemetry.onBatchAccepted = { collector.onFlushed() }
             collector.start()

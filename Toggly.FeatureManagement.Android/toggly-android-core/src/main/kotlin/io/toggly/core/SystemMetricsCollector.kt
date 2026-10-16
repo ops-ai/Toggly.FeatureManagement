@@ -28,6 +28,7 @@ internal class SystemMetricsCollector(
     private val pendingByMetric = ConcurrentHashMap<String, Int>()
     private val exceptionCount = AtomicInteger()
     private var previousHandler: Thread.UncaughtExceptionHandler? = null
+    private var ourHandler: Thread.UncaughtExceptionHandler? = null
     private var scheduler = Executors.newSingleThreadScheduledExecutor { runnable ->
         Thread(runnable, "toggly-system-metrics").apply { isDaemon = true }
     }
@@ -37,8 +38,11 @@ internal class SystemMetricsCollector(
     private val defaultSampler: () -> List<Pair<String, Double>> = {
         val out = mutableListOf<Pair<String, Double>>()
         sampleCpuPercent()?.let { out += "CpuUsage" to it }
-        val exceptions = exceptionCount.getAndSet(0)
-        if (exceptions > 0) out += "ExceptionCount" to exceptions.toDouble()
+        val pendingExceptions = pendingByMetric.getOrDefault("ExceptionCount", 0)
+        if (pendingExceptions < MAX_PENDING) {
+            val exceptions = exceptionCount.getAndSet(0)
+            if (exceptions > 0) out += "ExceptionCount" to exceptions.toDouble()
+        }
         out
     }
 
@@ -125,17 +129,22 @@ internal class SystemMetricsCollector(
     private fun attachUncaughtHandler() {
         runCatching {
             previousHandler = Thread.getDefaultUncaughtExceptionHandler()
-            Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            val handler = Thread.UncaughtExceptionHandler { thread, throwable ->
                 exceptionCount.incrementAndGet()
                 previousHandler?.uncaughtException(thread, throwable)
             }
+            ourHandler = handler
+            Thread.setDefaultUncaughtExceptionHandler(handler)
         }
     }
 
     private fun detachUncaughtHandler() {
         runCatching {
-            Thread.setDefaultUncaughtExceptionHandler(previousHandler)
+            if (Thread.getDefaultUncaughtExceptionHandler() === ourHandler) {
+                Thread.setDefaultUncaughtExceptionHandler(previousHandler)
+            }
         }
+        ourHandler = null
         previousHandler = null
     }
 

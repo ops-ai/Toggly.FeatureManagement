@@ -184,12 +184,16 @@ export function attachReactNativeExceptionSources(onException: () => void): () =
   const utils = globalThis.ErrorUtils;
   if (!utils?.setGlobalHandler) return () => {};
   const previous = utils.getGlobalHandler?.();
-  utils.setGlobalHandler((error, isFatal) => {
+  const ours = (error: unknown, isFatal?: boolean) => {
     onException();
     previous?.(error, isFatal);
-  });
+  };
+  utils.setGlobalHandler(ours);
   return () => {
-    if (utils.setGlobalHandler) utils.setGlobalHandler(previous ?? (() => {}));
+    // Only restore when we still own the handler slot.
+    if (utils.getGlobalHandler?.() === ours && utils.setGlobalHandler) {
+      utils.setGlobalHandler(previous ?? (() => {}));
+    }
   };
 }
 
