@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "english"
+
 module Toggly
   module Telemetry
     # Tracks one usage attempt; call {#fail} to mark failure without raising.
@@ -43,10 +45,10 @@ module Toggly
           raise e
         ensure
           # Non-local exits (return/break/throw) and Exception subclasses that
-          # bypass rescue StandardError still need an outcome; honor fail() and $!.
+          # bypass rescue StandardError still need an outcome; honor fail() and $ERROR_INFO.
           unless outcome_recorded
             duration_ms = elapsed_ms(start)
-            if scope.failed? || $!
+            if scope.failed? || $ERROR_INFO
               record_failure.call(duration_ms)
             else
               record_success.call(duration_ms)
