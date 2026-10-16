@@ -145,6 +145,45 @@ class TestClientTelemetry:
         assert usage.calls == []
         client.close()
 
+    def test_use_context_manager_base_exception_is_attempt_only(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("TOGGLY_DISABLE_TELEMETRY", raising=False)
+        usage = FakeUsageClient()
+        config = TogglyConfig(
+            app_key="app",
+            environment="Production",
+            feature_defaults={"FeatureA": True, "FeatureB": True},
+            enable_usage_tracking=True,
+            enable_metrics=False,
+            usage_flush_interval=0,
+            usage_client=usage,
+            metrics_client=FakeMetricsClient(),
+            disable_background_refresh=True,
+            enable_live_updates=False,
+            register_contexts_on_startup=False,
+        )
+        client = TogglyClient(config)
+
+        with pytest.raises(KeyboardInterrupt):
+            with client.use("FeatureA"):
+                raise KeyboardInterrupt()
+
+        with pytest.raises(SystemExit):
+            with client.use("FeatureB"):
+                raise SystemExit(1)
+
+        client.flush_telemetry()
+        stats = {
+            s["feature"]: s["variantStats"]["enabled"]
+            for s in usage.calls[0]["stats"]
+        }
+        assert stats["FeatureA"]["usedCount"] == 1
+        assert stats["FeatureA"].get("errorCount", 0) == 0
+        assert stats["FeatureB"]["usedCount"] == 1
+        assert stats["FeatureB"].get("errorCount", 0) == 0
+        client.close()
+
 
 class TestAsyncClientTelemetry:
     @pytest.mark.asyncio

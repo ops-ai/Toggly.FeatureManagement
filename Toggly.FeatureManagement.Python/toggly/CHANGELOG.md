@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.2 - 2026-10-16
+
+### Fixed
+- `use` / `use_async` context managers treat `KeyboardInterrupt` and
+  `SystemExit` as attempt-only (same as `run_use` / `run_usage_scope`),
+  not as recorded failures [OPS-1758].
+
 ## 1.3.1 - 2026-10-15
 
 ### Fixed

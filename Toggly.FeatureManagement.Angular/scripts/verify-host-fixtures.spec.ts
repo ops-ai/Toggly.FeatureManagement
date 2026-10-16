@@ -39,10 +39,32 @@ await withHostResources(async defer => {
       if (locked.version !== '2.8.1') throw new Error('Retained consumer baseline drifted');
       console.log('Retained locked Angular SDK baseline 2.8.1 installed before upgrade');
     }
-    const install = ['npm', 'install', '--no-save', '--package-lock=false', '--no-audit', '--no-fund', tarball];
-    if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) install.push(path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL));
-    if (process.env.TOGGLY_SIGNED_DEFS_TARBALL) install.push(path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL));
-    run(install);
+    // Install local tarballs one at a time. npm 10 can throw
+    // "Cannot read properties of null (reading 'edgesOut')" when multiple
+    // file: tarballs are passed in a single install after `npm ci`.
+    run(['npm', 'install', '--no-save', '--package-lock=false', '--no-audit', '--no-fund', tarball]);
+    if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
+      run([
+        'npm',
+        'install',
+        '--no-save',
+        '--package-lock=false',
+        '--no-audit',
+        '--no-fund',
+        path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL),
+      ]);
+    }
+    if (process.env.TOGGLY_SIGNED_DEFS_TARBALL) {
+      run([
+        'npm',
+        'install',
+        '--no-save',
+        '--package-lock=false',
+        '--no-audit',
+        '--no-fund',
+        path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL),
+      ]);
+    }
     const installed = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/ngx-feature-flags-toggly/package.json')));
     const reporter = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-client-telemetry/package.json')));
     const signer = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-signed-defs/package.json')));

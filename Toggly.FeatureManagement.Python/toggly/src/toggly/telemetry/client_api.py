@@ -102,7 +102,9 @@ class TelemetryClientMixin:
         error: Optional[BaseException] = None,
     ) -> None:
         if error is not None:
-            if is_usage_cancellation(error):
+            # Match run_usage_scope: cancel + non-Exception BaseException (e.g.
+            # KeyboardInterrupt/SystemExit) are attempt-only, not failures.
+            if is_usage_cancellation(error) or not isinstance(error, Exception):
                 return
             handlers[2](TelemetryClientMixin._elapsed_ms(start))
             return
