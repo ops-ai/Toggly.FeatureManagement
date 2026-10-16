@@ -51,6 +51,8 @@ defmodule Toggly.Client do
     interval = Keyword.get(opts, :refresh_interval, 60_000)
     if interval > 0, do: send(self(), :refresh)
     schedule(:flush, Keyword.get(opts, :flush_interval, 60_000))
+    # Ensure terminate/2 runs on supervisor shutdown so the logger handler detaches.
+    Process.flag(:trap_exit, true)
     state = start_system_metrics(state)
     {:ok, state}
   end
@@ -119,6 +121,8 @@ defmodule Toggly.Client do
 
   def handle_cast({:metric, kind, key, value, metadata}, state) do
     if Keyword.get(state.opts, :metrics, true) do
+      metric = if is_binary(key), do: key, else: to_string(key)
+
       opts = %{
         feature: metadata[:feature] || metadata["feature"],
         variant: metadata[:variant] || metadata["variant"]
@@ -126,9 +130,9 @@ defmodule Toggly.Client do
 
       metrics =
         case kind do
-          :measurement -> MetricsBatcher.measure(state.metrics, key, value, opts)
-          :counter -> MetricsBatcher.increment_counter(state.metrics, key, value, opts)
-          :observation -> MetricsBatcher.observe(state.metrics, key, value, opts)
+          :measurement -> MetricsBatcher.measure(state.metrics, metric, value, opts)
+          :counter -> MetricsBatcher.increment_counter(state.metrics, metric, value, opts)
+          :observation -> MetricsBatcher.observe(state.metrics, metric, value, opts)
         end
 
       {:noreply, %{state | metrics: metrics}}
@@ -464,7 +468,9 @@ defmodule Toggly.Client do
   defp start_system_metrics(state) do
     if system_metrics_enabled?(state) do
       SystemMetrics.attach_exception_handler(state.name, self())
+      # Prime both counters so the first CpuUsage sample has a real delta window.
       _ = :erlang.statistics(:runtime)
+      _ = :erlang.statistics(:wall_clock)
       schedule(:system_metrics_sample, SystemMetrics.interval_ms(state.opts))
       state
     else

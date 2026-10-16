@@ -180,11 +180,26 @@ mod rusage_ffi {
         tv_usec: i64,
     }
 
+    /// Full `struct rusage` layout (macOS/Linux). Truncating this overflows the stack
+    /// when getrusage writes the remaining fields.
     #[repr(C)]
     pub(super) struct Rusage {
         ru_utime: TimeVal,
         ru_stime: TimeVal,
         ru_maxrss: i64,
+        ru_ixrss: i64,
+        ru_idrss: i64,
+        ru_isrss: i64,
+        ru_minflt: i64,
+        ru_majflt: i64,
+        ru_nswap: i64,
+        ru_inblock: i64,
+        ru_oublock: i64,
+        ru_msgsnd: i64,
+        ru_msgrcv: i64,
+        ru_nsignals: i64,
+        ru_nvcsw: i64,
+        ru_nivcsw: i64,
     }
 
     extern "C" {
@@ -194,17 +209,7 @@ mod rusage_ffi {
     const RUSAGE_SELF: i32 = 0;
 
     fn read_rusage() -> Option<Rusage> {
-        let mut ru = Rusage {
-            ru_utime: TimeVal {
-                tv_sec: 0,
-                tv_usec: 0,
-            },
-            ru_stime: TimeVal {
-                tv_sec: 0,
-                tv_usec: 0,
-            },
-            ru_maxrss: 0,
-        };
+        let mut ru = unsafe { std::mem::zeroed::<Rusage>() };
         if unsafe { getrusage(RUSAGE_SELF, &mut ru) } != 0 {
             return None;
         }

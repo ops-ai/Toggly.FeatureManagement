@@ -532,6 +532,9 @@ impl Inner {
 impl Drop for TelemetryRuntime {
     fn drop(&mut self) {
         let _ = self.inner.cancel_tx.send(true);
+        if let Some(collector) = self.inner.system_metrics.lock().take() {
+            collector.stop();
+        }
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             let inner = self.inner.clone();
             handle.spawn(async move {

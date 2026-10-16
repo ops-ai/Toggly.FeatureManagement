@@ -216,7 +216,8 @@ defmodule Toggly do
   """
   def metric(client, kind, key, value, metadata \\ %{})
       when kind in [:counter, :measurement, :observation] and is_number(value) do
-    meta = Map.merge(metadata, %{client: client, metric: key})
+    metric = if is_binary(key), do: key, else: to_string(key)
+    meta = Map.merge(metadata, %{client: client, metric: metric})
 
     :telemetry.execute(
       [:toggly, :metric, kind],
@@ -224,7 +225,7 @@ defmodule Toggly do
       meta
     )
 
-    GenServer.cast(client, {:metric, kind, key, value, metadata})
+    GenServer.cast(client, {:metric, kind, metric, value, metadata})
     :ok
   end
 

@@ -1,9 +1,29 @@
+defmodule Toggly.SystemMetricsTest.ExceptionClient do
+  @moduledoc false
+  use GenServer
+
+  def start_link(_), do: GenServer.start_link(__MODULE__, 0)
+  def init(n), do: {:ok, n}
+  def handle_cast(:system_metrics_exception, n), do: {:noreply, n + 1}
+  def get(pid), do: :sys.get_state(pid)
+end
+
 defmodule Toggly.SystemMetricsTest do
   use ExUnit.Case
 
   alias Toggly.SystemMetrics
 
+  test "interval_ms and max_pending defaults" do
+    assert SystemMetrics.interval_ms([]) == 10_000
+    assert SystemMetrics.interval_ms(system_metrics_interval_ms: 2500) == 2500
+    assert SystemMetrics.max_pending() == 30
+  end
+
   test "default_sample returns BEAM metrics with finite values" do
+    _ = :erlang.statistics(:runtime)
+    _ = :erlang.statistics(:wall_clock)
+    Process.sleep(2)
+
     {0, samples} = SystemMetrics.default_sample(0)
     metrics = Map.new(samples)
 
@@ -11,6 +31,11 @@ defmodule Toggly.SystemMetricsTest do
     assert Map.has_key?(metrics, "ProcessCount")
     assert metrics["GCHeapSize"] > 0
     assert metrics["ProcessCount"] > 0
+    # CpuUsage is best-effort; when present it must be a finite percentage.
+    if Map.has_key?(metrics, "CpuUsage") do
+      assert metrics["CpuUsage"] >= 0
+      assert metrics["CpuUsage"] <= 100
+    end
   end
 
   test "default_sample emits ExceptionCount once and clears the counter" do
@@ -59,6 +84,72 @@ defmodule Toggly.SystemMetricsTest do
     send(name, :system_metrics_sample)
     assert :ok = Toggly.flush(name)
     refute_metrics_posted()
+
+    Toggly.stop(sup)
+  end
+
+  test "attach and detach exception handler is idempotent" do
+    assert :ok = SystemMetrics.attach_exception_handler(SmHandlerIdempotent, self())
+    assert :ok = SystemMetrics.attach_exception_handler(SmHandlerIdempotent, self())
+    assert :ok = SystemMetrics.detach_exception_handler(SmHandlerIdempotent)
+    assert :ok = SystemMetrics.detach_exception_handler(SmHandlerIdempotent)
+  end
+
+  test "parse_vm_rss extracts kilobytes from /proc status" do
+    assert SystemMetrics.parse_vm_rss("Name:\tfoo\nVmRSS:\t 2048 kB\n") == 2048 * 1024.0
+    assert SystemMetrics.parse_vm_rss("VmRSS:\tnot-a-number\n") == nil
+    assert SystemMetrics.parse_vm_rss("nope\n") == nil
+  end
+
+  test "LogHandler ignores crash reports for dead clients and keyword reports" do
+    {:ok, pid} = Toggly.SystemMetricsTest.ExceptionClient.start_link([])
+    GenServer.stop(pid)
+
+    assert :ok =
+             Toggly.SystemMetrics.LogHandler.log(
+               %{msg: {:report, %{kind: :crash_report}}},
+               %{config: %{client: pid}}
+             )
+
+    assert :ok =
+             Toggly.SystemMetrics.LogHandler.log(
+               %{msg: {:report, [kind: :crash_report]}},
+               %{config: %{client: self()}}
+             )
+  end
+
+  test "LogHandler casts exception on crash_report and ignores other events" do
+    {:ok, pid} = Toggly.SystemMetricsTest.ExceptionClient.start_link([])
+
+    assert :ok =
+             Toggly.SystemMetrics.LogHandler.log(
+               %{msg: {:report, %{kind: :crash_report}}},
+               %{config: %{client: pid}}
+             )
+
+    assert Toggly.SystemMetricsTest.ExceptionClient.get(pid) == 1
+
+    assert :ok =
+             Toggly.SystemMetrics.LogHandler.log(
+               %{msg: {:report, %{label: {:proc_lib, :crash}}}},
+               %{client: pid}
+             )
+
+    assert Toggly.SystemMetricsTest.ExceptionClient.get(pid) == 2
+
+    assert :ok = Toggly.SystemMetrics.LogHandler.log(%{msg: {:string, ~c"hi"}}, %{})
+    assert Toggly.SystemMetricsTest.ExceptionClient.get(pid) == 2
+
+    GenServer.stop(pid)
+  end
+
+  test "atom metric keys are accepted" do
+    {sup, name} = start_client(SystemMetricsAtomKey, system_metrics: false, metrics: true)
+    assert :ok = Toggly.metric(name, :counter, :orders, 1)
+    assert :ok = Toggly.flush(name)
+    [packet] = flush_metrics_packets(name)
+
+    assert Enum.any?(packet["counters"], fn row -> row["metric"] == "orders" end)
 
     Toggly.stop(sup)
   end

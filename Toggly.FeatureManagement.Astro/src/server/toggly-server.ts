@@ -115,7 +115,7 @@ export class TogglyServer implements TogglyClient {
       restoreOnSendFailure: true,
       fetchImpl: this.config.telemetryFetch,
       usageClient: this.config.usageClient as UsageSender | null | undefined,
-      metricsClient: this.config.metricsClient ?? undefined,
+      metricsClient: this.config.metricsClient,
     });
     this.telemetry.start();
   }

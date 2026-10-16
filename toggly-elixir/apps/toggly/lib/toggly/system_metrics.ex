@@ -42,7 +42,9 @@ defmodule Toggly.SystemMetrics do
     :ok
   end
 
-  defp handler_id(name), do: {:toggly_system_metrics, name}
+  # logger handler ids must be atoms
+  defp handler_id(name) when is_atom(name), do: :"toggly.system_metrics.#{name}"
+  defp handler_id(name), do: :"toggly.system_metrics.#{inspect(name)}"
 
   defp maybe_add(samples, _metric, nil), do: samples
   defp maybe_add(samples, metric, value) when is_number(value), do: [{metric, value} | samples]
@@ -85,25 +87,27 @@ defmodule Toggly.SystemMetrics do
 
   defp read_linux_vm_rss do
     case File.read("/proc/self/status") do
-      {:ok, content} ->
-        content
-        |> String.split("\n", trim: true)
-        |> Enum.find_value(fn
-          "VmRSS:" <> rest ->
-            case Integer.parse(String.trim(rest)) do
-              {kb, _} -> kb * 1024.0
-              :error -> nil
-            end
-
-          _ ->
-            nil
-        end)
-
-      _ ->
-        nil
+      {:ok, content} -> parse_vm_rss(content)
+      _ -> nil
     end
   rescue
     _ -> nil
+  end
+
+  @doc false
+  def parse_vm_rss(content) when is_binary(content) do
+    content
+    |> String.split("\n", trim: true)
+    |> Enum.find_value(fn
+      "VmRSS:" <> rest ->
+        case Integer.parse(String.trim(rest)) do
+          {kb, _} -> kb * 1024.0
+          :error -> nil
+        end
+
+      _ ->
+        nil
+    end)
   end
 end
 
@@ -132,10 +136,11 @@ defmodule Toggly.SystemMetrics.LogHandler do
     kind =
       case report do
         %{kind: kind} -> kind
-        report when is_list(report) -> Keyword.get(report, :kind)
+        %{label: {:proc_lib, :crash}} -> :crash_report
+        report when is_list(report) -> Keyword.get(report, :kind) || Keyword.get(report, :label)
         _ -> nil
       end
 
-    kind == :crash_report
+    kind in [:crash_report, {:proc_lib, :crash}]
   end
 end
