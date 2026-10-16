@@ -73,6 +73,8 @@ jobs:
         run: cargo test --all-features --workspace
 
       - name: Verify current framework package artifacts
+        # Skip on MSRV: actix-web 4.15 pulls actix-server that needs rustc ≥1.89.
+        if: matrix.rust == 'stable'
         run: |
           cargo update -p actix-web --precise 4.15.0
           cargo test -p toggly-actix -p toggly-axum -p toggly-axum08 -p toggly-rocket
@@ -184,7 +186,7 @@ jobs:
           toolchain: 1.88.0
 
       - name: Check MSRV
-        run: cargo check --all-features --workspace
+        run: cargo check --locked --all-features --workspace
 
   security:
     name: Security Audit
