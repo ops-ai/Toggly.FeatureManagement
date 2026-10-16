@@ -50,20 +50,10 @@ await withHostResources(async defer => {
       fs.cpSync(extracted, destination, { recursive: true });
     };
     // Angular ≤20: classic multi-tarball `npm install` (pulls peers/deps).
-    // Angular 21 + npm 10: that path hits a deterministic `edgesOut` crash;
-    // install registry deps one-by-one, then tar-overlay packed locals last.
+    // Angular 21 + npm 10: any extra `npm install` after `npm ci` hits
+    // `edgesOut` null. Tar-overlay the packed SDK and local artifacts only.
     const useTarOverlay = String(entry.angular || '').startsWith('21.');
     if (useTarOverlay) {
-      const registryPackages = {
-        ...metadata.dependencies,
-        ...Object.fromEntries(
-          Object.entries(metadata.peerDependencies || {}).filter(([name]) => !name.startsWith('@angular/')),
-        ),
-      };
-      for (const [name, versionRange] of Object.entries(registryPackages)) {
-        if (name === 'tslib') continue;
-        run(['npm', 'install', '--no-save', '--package-lock=false', '--no-audit', '--no-fund', `${name}@${versionRange}`]);
-      }
       overlayLocalPackage(tarball, '@ops-ai/ngx-feature-flags-toggly');
       if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
         overlayLocalPackage(path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL), '@ops-ai/toggly-client-telemetry');
@@ -95,6 +85,10 @@ await withHostResources(async defer => {
       installed.dependencies['@ops-ai/toggly-signed-defs'] !== '^1.2.6'
     ) {
       throw new Error('Unexpected packed graph');
+    }
+    const present = (name) => fs.existsSync(path.join(cwd, 'node_modules', ...name.split('/'), 'package.json'));
+    if (!present('@ops-ai/toggly-hooks-types') || !present('@ops-ai/toggly-local-gates')) {
+      throw new Error('Angular host is missing SDK peer/dependency modules');
     }
     console.log(`PACKED SDK ${installed.version}; reporter ${reporter.version}; signer ${signer.version}; ${(process.env.TOGGLY_SIGNED_DEFS_TARBALL || process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) ? 'LOCAL INTEGRATION ARTIFACT' : 'REGISTRY RESOLUTION'}`);
     run(['npm', 'run', 'typecheck']);
