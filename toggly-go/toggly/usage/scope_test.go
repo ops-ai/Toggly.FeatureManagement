@@ -90,3 +90,58 @@ func TestRunUsageScope_PanicRecordsFailure(t *testing.T) {
 		},
 	)
 }
+
+func TestRunUsageScope_SoftFail(t *testing.T) {
+	b := NewBatcher("app", "Production", "", "")
+	err := RunUsageScope(
+		func() { b.RecordUsageAttempt("Feat", "") },
+		func(ms int64) { b.RecordUsageDuration("Feat", ms, false) },
+		func(ms int64) {
+			b.RecordUsageError("Feat", 1)
+			b.RecordUsageDuration("Feat", ms, true)
+		},
+		func(scope FeatureUsageScope) error {
+			scope.Fail()
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	en := b.buildAndReset().Stats[0].VariantStats["enabled"]
+	if en.UsedCount != 1 || en.ErrorCount != 1 {
+		t.Fatalf("got %+v", en)
+	}
+}
+
+func TestRunUsageScope_DeadlineExceededIsCancellation(t *testing.T) {
+	b := NewBatcher("app", "Production", "", "")
+	err := RunUsageScope(
+		func() { b.RecordUsageAttempt("Feat", "") },
+		func(ms int64) { b.RecordUsageDuration("Feat", ms, false) },
+		func(ms int64) {
+			b.RecordUsageError("Feat", 1)
+			b.RecordUsageDuration("Feat", ms, true)
+		},
+		func(FeatureUsageScope) error { return context.DeadlineExceeded },
+	)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("got %v", err)
+	}
+	en := b.buildAndReset().Stats[0].VariantStats["enabled"]
+	if en.UsedCount != 1 || en.ErrorCount != 0 || en.DurationSumMs != 0 {
+		t.Fatalf("got %+v", en)
+	}
+}
+
+func TestBatcher_RecordUsageDurationAndError(t *testing.T) {
+	b := NewBatcher("app", "Production", "", "")
+	b.RecordUsageAttempt("Feat", "u1")
+	b.RecordUsageDuration("Feat", 12, false)
+	b.RecordUsageError("Feat", 2)
+	b.RecordUsageDuration("Feat", 9, true)
+	en := b.buildAndReset().Stats[0].VariantStats["enabled"]
+	if en.UsedCount != 1 || en.ErrorCount != 2 || en.DurationSumMs != 12 || en.ErrorDurationSumMs != 9 {
+		t.Fatalf("got %+v", en)
+	}
+}

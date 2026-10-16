@@ -24,6 +24,11 @@ type Client struct {
 	flush     *autoflush.Controller
 }
 
+// NewClientWithBatcher constructs a usage client without gRPC (unit tests / local batching).
+func NewClientWithBatcher(b *Batcher) *Client {
+	return &Client{batcher: b}
+}
+
 // Dial creates a gRPC usage client.
 // userAgent is sent as gRPC metadata key "UA" on SendStats (matching .NET).
 func Dial(baseURL, appKey, env, instance, appVersion, userAgent string) (*Client, error) {

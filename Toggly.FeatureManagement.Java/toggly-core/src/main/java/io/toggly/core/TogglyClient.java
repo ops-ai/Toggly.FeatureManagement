@@ -725,7 +725,7 @@ public final class TogglyClient implements AutoCloseable {
                 }
                 scope.fail();
                 throw e;
-            } catch (Error e) {
+            } catch (Error e) { // NOSONAR java:S1181 — usage scopes must not treat Error as success
                 // Must not complete as success when the JVM Error unwinds the scope.
                 scope.fail();
                 throw e;
@@ -759,7 +759,7 @@ public final class TogglyClient implements AutoCloseable {
                 }
                 scope.fail();
                 throw e;
-            } catch (Error e) {
+            } catch (Error e) { // NOSONAR java:S1181 — usage scopes must not treat Error as success
                 scope.fail();
                 throw e;
             }

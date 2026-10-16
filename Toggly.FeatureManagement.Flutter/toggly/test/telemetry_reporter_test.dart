@@ -865,4 +865,56 @@ void main() {
     expect(waits, [const Duration(minutes: 2)]);
     reporter.dispose();
   });
+
+  test('use records attempt, duration, soft-fail, and thrown errors', () async {
+    var now = DateTime.utc(2026, 1, 1);
+    final sent = <dynamic>[];
+    final dio = Dio()
+      ..interceptors.add(InterceptorsWrapper(onRequest: (r, h) {
+        sent.add(jsonDecode(
+            r.data is String ? r.data : utf8.decode(gzip.decode(r.data))));
+        h.resolve(Response(requestOptions: r, statusCode: 202));
+      }));
+    final reporter = TelemetryReporter(
+      appKey: 'key',
+      identity: 'alice',
+      httpClient: dio,
+      clock: () => now,
+    );
+    expect(
+        await reporter.use('Scoped', (fail) async {
+          now = now.add(const Duration(milliseconds: 12));
+          return 'ok';
+        }),
+        'ok');
+    expect(
+        await reporter.use('Scoped', (fail) async {
+          fail();
+          now = now.add(const Duration(milliseconds: 9));
+          return 'soft';
+        }),
+        'soft');
+    await expectLater(
+        reporter.use('Scoped', (fail) async {
+          now = now.add(const Duration(milliseconds: 5));
+          throw StateError('boom');
+        }),
+        throwsA(isA<StateError>()));
+    await reporter.use('Pinned', (fail) async {
+      reporter.setContext(identity: 'bob');
+      now = now.add(const Duration(milliseconds: 8));
+    });
+    await reporter.flushTelemetry();
+    final aliceFeatures = sent
+        .where((b) => b['u'] == 'alice')
+        .expand((b) => (b['f'] as Map).entries)
+        .fold<Map<String, List>>({}, (acc, e) {
+      acc[e.key] = List<num>.from(e.value['enabled'] as List);
+      return acc;
+    });
+    expect(aliceFeatures['Scoped'], [0, 3, 0, 2, 12, 14]);
+    expect(aliceFeatures['Pinned'], [0, 1, 0, 0, 8]);
+    expect(sent.any((b) => b['u'] == 'bob' && b['f'] != null), isFalse);
+    reporter.dispose();
+  });
 }
