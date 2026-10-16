@@ -394,3 +394,47 @@ class TestTelemetryRuntimeSystemMetrics:
         time.sleep(0.08)
         assert calls["count"] == 0
         runtime.close()
+
+    def test_failed_metrics_send_clears_system_metrics_pending(self) -> None:
+        from toggly.telemetry.system_metrics import (
+            SYSTEM_METRICS_MAX_PENDING,
+            SystemMetricObservation,
+        )
+
+        class FailingMetricsClient(FakeMetricsClient):
+            def send_metrics(
+                self,
+                request: Dict[str, Any],
+                metadata: Optional[Dict[str, str]] = None,
+            ) -> Dict[str, Any]:
+                self.calls.append({"request": request, "metadata": metadata})
+                raise RuntimeError("send failed")
+
+        metrics = FailingMetricsClient()
+        runtime = TelemetryRuntime(
+            app_key="app",
+            environment="Production",
+            enable_usage_tracking=False,
+            enable_metrics=True,
+            metrics_flush_interval=0,
+            system_metrics=True,
+            system_metrics_interval_seconds=60.0,
+            system_metrics_sampler=lambda: [
+                SystemMetricObservation("CpuUsage", 1.0)
+            ],
+            metrics_client=metrics,
+            metrics_client_provided=True,
+        )
+        runtime.start()
+        collector = runtime._system_metrics_collector
+        assert collector is not None
+        for _ in range(SYSTEM_METRICS_MAX_PENDING):
+            collector.tick()
+        assert collector._pending_by_metric.get("CpuUsage") == SYSTEM_METRICS_MAX_PENDING
+        runtime.flush_metrics()
+        assert len(metrics.calls) == 1
+        assert collector._pending_by_metric == {}
+        collector.tick()
+        assert collector._pending_by_metric.get("CpuUsage") == 1
+        runtime.close()
+        assert runtime._system_metrics_collector is None

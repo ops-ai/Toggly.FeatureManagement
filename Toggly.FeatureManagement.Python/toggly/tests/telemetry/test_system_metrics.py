@@ -200,6 +200,45 @@ class TestSystemMetricsCollector:
         monkeypatch.setattr(sm.sys, "platform", "darwin")
         assert SystemMetricsCollector._sample_memory_working_set_bytes() is None
 
+        monkeypatch.setattr(sm.sys, "platform", "linux")
+        status.write_text("Name:\tpython\nVmRSS:\n", encoding="utf-8")
+        assert SystemMetricsCollector._sample_linux_vm_rss_bytes() is None
+
+        status.write_text("Name:\tpython\nVmRSS:\t-1 kB\n", encoding="utf-8")
+        assert SystemMetricsCollector._sample_linux_vm_rss_bytes() is None
+
+        def boom_open(*_args, **_kwargs):
+            raise OSError("no proc")
+
+        monkeypatch.setattr("builtins.open", boom_open)
+        assert SystemMetricsCollector._sample_linux_vm_rss_bytes() is None
+
+    def test_exception_count_gated_when_pending_full(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import toggly.telemetry.system_metrics as sm
+
+        monkeypatch.setattr(sm, "_resource", None)
+        monkeypatch.setattr(
+            SystemMetricsCollector,
+            "_sample_linux_vm_rss_bytes",
+            staticmethod(lambda: None),
+        )
+        collector = SystemMetricsCollector(
+            lambda _m, _v: None,
+            interval_seconds=60.0,
+        )
+        collector.start()
+        collector._pending_by_metric["ExceptionCount"] = SYSTEM_METRICS_MAX_PENDING
+        collector._exception_count = 4
+        assert collector._default_sample() == []
+        assert collector._exception_count == 4
+        collector.on_flushed()
+        samples = collector._default_sample()
+        assert samples == [SystemMetricObservation("ExceptionCount", 4.0)]
+        assert collector._exception_count == 0
+        collector.stop()
+
     def test_exception_hooks_increment_and_restore(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
