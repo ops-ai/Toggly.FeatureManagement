@@ -226,7 +226,6 @@ mod rusage_ffi {
             at: Instant::now(),
         })
     }
-
 }
 
 fn read_rusage_cpu() -> Option<ProcessCpu> {

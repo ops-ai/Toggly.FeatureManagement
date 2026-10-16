@@ -28,11 +28,20 @@ defmodule Toggly.SystemMetrics do
 
   def attach_exception_handler(client_name, client_pid) do
     id = handler_id(client_name)
+    config = %{config: %{client: client_pid}}
 
-    case :logger.add_handler(id, Toggly.SystemMetrics.LogHandler, %{config: %{client: client_pid}}) do
-      :ok -> :ok
-      {:error, {:already_exists, _}} -> :ok
-      {:error, _} -> :ok
+    case :logger.add_handler(id, Toggly.SystemMetrics.LogHandler, config) do
+      :ok ->
+        :ok
+
+      {:error, {:already_exists, _}} ->
+        # Client may have crashed without terminate/2; refresh the PID so
+        # ExceptionCount keeps routing to the live GenServer.
+        _ = :logger.update_handler_config(id, config)
+        :ok
+
+      {:error, _} ->
+        :ok
     end
   end
 
