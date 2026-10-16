@@ -90,13 +90,9 @@ class SystemMetricsCollector {
   }
 
   void _detachExceptionHandlers() {
-    if (_previousFlutterHandler != null) {
-      FlutterError.onError = _previousFlutterHandler;
-      _previousFlutterHandler = null;
-    }
-    if (_previousPlatformHandler != null) {
-      PlatformDispatcher.instance.onError = _previousPlatformHandler;
-      _previousPlatformHandler = null;
-    }
+    FlutterError.onError = _previousFlutterHandler;
+    _previousFlutterHandler = null;
+    PlatformDispatcher.instance.onError = _previousPlatformHandler;
+    _previousPlatformHandler = null;
   }
 }

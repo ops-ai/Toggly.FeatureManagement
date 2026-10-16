@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import math
 import os
-import resource
 import sys
 import threading
 import time
-from collections.abc import Callable
 from dataclasses import dataclass
 from types import TracebackType
-from typing import Protocol
+from typing import Callable, Optional, Protocol
+
+try:
+    import resource as _resource
+except ImportError:  # Windows / non-POSIX
+    _resource = None
 
 SYSTEM_METRICS_INTERVAL_SECONDS = 10.0
 SYSTEM_METRICS_MAX_PENDING = 30
@@ -26,7 +29,10 @@ class SystemMetricObservation:
 
 
 class SystemMetricsSampler(Protocol):
+    """Callable that returns the current process metric samples."""
+
     def __call__(self) -> list[SystemMetricObservation]:
+        """Return observations for one sample tick."""
         ...
 
 
@@ -41,9 +47,10 @@ class SystemMetricsCollector:
         observe: ObserveFn,
         *,
         interval_seconds: float = SYSTEM_METRICS_INTERVAL_SECONDS,
-        sampler: SystemMetricsSampler | None = None,
-        monotonic: Callable[[], float] | None = None,
+        sampler: Optional[SystemMetricsSampler] = None,
+        monotonic: Optional[Callable[[], float]] = None,
     ) -> None:
+        """Create a collector that posts samples through ``observe``."""
         self._observe = observe
         self._interval_seconds = (
             interval_seconds
@@ -52,26 +59,29 @@ class SystemMetricsCollector:
         )
         self._sampler = sampler or self._default_sample
         self._monotonic = monotonic or time.monotonic
-        self._timer: threading.Timer | None = None
+        self._timer: Optional[threading.Timer] = None
         self._started = False
         self._exception_count = 0
         self._pending_by_metric: dict[str, int] = {}
-        self._previous_sys_excepthook: Callable[..., None] | None = None
-        self._previous_thread_excepthook: Callable[..., None] | None = None
-        self._last_cpu_seconds: float | None = None
-        self._last_cpu_at: float | None = None
+        self._previous_sys_excepthook: Optional[Callable[..., None]] = None
+        self._previous_thread_excepthook: Optional[Callable[..., None]] = None
+        self._last_cpu_seconds: Optional[float] = None
+        self._last_cpu_at: Optional[float] = None
 
     def start(self) -> None:
+        """Begin periodic sampling and attach uncaught-exception hooks."""
         if self._started:
             return
         self._started = True
-        usage = resource.getrusage(resource.RUSAGE_SELF)
-        self._last_cpu_seconds = usage.ru_utime + usage.ru_stime
-        self._last_cpu_at = self._monotonic()
+        if _resource is not None:
+            usage = _resource.getrusage(_resource.RUSAGE_SELF)
+            self._last_cpu_seconds = usage.ru_utime + usage.ru_stime
+            self._last_cpu_at = self._monotonic()
         self._attach_exception_hooks()
         self._schedule_tick()
 
     def stop(self) -> None:
+        """Stop sampling and restore prior exception hooks."""
         if not self._started:
             return
         self._started = False
@@ -82,6 +92,7 @@ class SystemMetricsCollector:
         self._pending_by_metric.clear()
 
     def tick(self) -> None:
+        """Run one sample cycle (also used by tests)."""
         if not self._started:
             return
         try:
@@ -98,6 +109,7 @@ class SystemMetricsCollector:
             pass
 
     def on_flushed(self) -> None:
+        """Clear pending-observation backpressure after a successful flush."""
         self._pending_by_metric.clear()
 
     def _schedule_tick(self) -> None:
@@ -134,8 +146,10 @@ class SystemMetricsCollector:
 
         return out
 
-    def _sample_cpu_percent(self) -> float | None:
-        usage = resource.getrusage(resource.RUSAGE_SELF)
+    def _sample_cpu_percent(self) -> Optional[float]:
+        if _resource is None:
+            return None
+        usage = _resource.getrusage(_resource.RUSAGE_SELF)
         cpu_seconds = usage.ru_utime + usage.ru_stime
         now = self._monotonic()
         prev_seconds = self._last_cpu_seconds
@@ -157,9 +171,11 @@ class SystemMetricsCollector:
         return min(100.0, pct)
 
     @staticmethod
-    def _sample_memory_working_set_bytes() -> float | None:
+    def _sample_memory_working_set_bytes() -> Optional[float]:
+        if _resource is None:
+            return None
         try:
-            usage = resource.getrusage(resource.RUSAGE_SELF)
+            usage = _resource.getrusage(_resource.RUSAGE_SELF)
             rss = float(usage.ru_maxrss)
             if rss < 0:
                 return None
@@ -175,7 +191,7 @@ class SystemMetricsCollector:
         def sys_hook(
             exc_type: type[BaseException],
             exc: BaseException,
-            tb: TracebackType | None,
+            tb: Optional[TracebackType],
         ) -> None:
             self._exception_count += 1
             previous_sys(exc_type, exc, tb)
@@ -192,13 +208,12 @@ class SystemMetricsCollector:
             previous_thread(args)
 
         self._previous_thread_excepthook = previous_thread
-        # threading.excepthook is typed loosely across Python versions.
-        threading.excepthook = thread_hook  # type: ignore[assignment]
+        setattr(threading, "excepthook", thread_hook)
 
     def _detach_exception_hooks(self) -> None:
         if self._previous_sys_excepthook is not None:
             sys.excepthook = self._previous_sys_excepthook
             self._previous_sys_excepthook = None
         if self._previous_thread_excepthook is not None:
-            threading.excepthook = self._previous_thread_excepthook
+            setattr(threading, "excepthook", self._previous_thread_excepthook)
             self._previous_thread_excepthook = None

@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/autoflush"
@@ -180,8 +179,10 @@ func (c *Collector) sampleCPU(now time.Time) *Observation {
 	if !ok {
 		return nil
 	}
+	c.mu.Lock()
 	prev := c.lastCPU
 	c.lastCPU = &cpuSample{userMicros: cur.user, systemMicros: cur.system, at: now}
+	c.mu.Unlock()
 	if prev == nil {
 		return nil
 	}
@@ -216,10 +217,12 @@ func (c *Collector) sampleAllocationRate(now time.Time) *Observation {
 	if !ok {
 		return nil
 	}
+	c.mu.Lock()
 	prev := c.lastHeapAllocs
 	at := c.lastSampleAt
 	c.lastHeapAllocs = cur
 	c.lastSampleAt = now
+	c.mu.Unlock()
 	if at.IsZero() || cur < prev {
 		return nil
 	}
@@ -263,33 +266,14 @@ type rusageCPU struct {
 	system int64
 }
 
-func readRusageCPU() (rusageCPU, bool) {
-	var ru syscall.Rusage
-	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &ru); err != nil {
-		return rusageCPU{}, false
-	}
-	user := ru.Utime.Sec*1_000_000 + int64(ru.Utime.Usec)
-	system := ru.Stime.Sec*1_000_000 + int64(ru.Stime.Usec)
-	return rusageCPU{user: user, system: system}, true
-}
-
 func sampleMemoryWorkingSet() *Observation {
 	if rss, ok := readLinuxStatmRSS(); ok {
 		return &Observation{Metric: "MemoryWorkingSet", Value: float64(rss)}
 	}
-	// Fallback: ru_maxrss (KB on Linux, bytes on macOS/BSD).
-	var ru syscall.Rusage
-	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &ru); err != nil {
-		return nil
+	if rss, ok := readRusageMaxRSS(); ok {
+		return &Observation{Metric: "MemoryWorkingSet", Value: float64(rss)}
 	}
-	rss := int64(ru.Maxrss)
-	if rss <= 0 {
-		return nil
-	}
-	if runtime.GOOS == "linux" || runtime.GOOS == "android" {
-		rss *= 1024
-	}
-	return &Observation{Metric: "MemoryWorkingSet", Value: float64(rss)}
+	return nil
 }
 
 func readLinuxStatmRSS() (uint64, bool) {
@@ -300,7 +284,7 @@ func readLinuxStatmRSS() (uint64, bool) {
 	if err != nil {
 		return 0, false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	sc := bufio.NewScanner(f)
 	if !sc.Scan() {
 		return 0, false

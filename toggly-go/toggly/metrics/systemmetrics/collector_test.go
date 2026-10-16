@@ -4,7 +4,6 @@ import (
 	"math"
 	"sync"
 	"testing"
-	"time"
 )
 
 func TestCollectorUsesInjectedSampler(t *testing.T) {
@@ -47,12 +46,17 @@ func TestCollectorTickNoOpWhenStopped(t *testing.T) {
 }
 
 func TestSampleCPUProducesPercentAfterSecondTick(t *testing.T) {
-	c := New(func(string, float64) {}, WithInterval(time.Millisecond))
-	c.Start()
-	time.Sleep(5 * time.Millisecond)
+	// Drive ticks synchronously so the background Start loop cannot race -race.
+	c := New(func(string, float64) {})
+	c.mu.Lock()
+	c.started = true
+	c.seedCPU()
+	c.mu.Unlock()
 	c.Tick()
 	c.Tick()
-	c.Stop()
+	c.mu.Lock()
+	c.started = false
+	c.mu.Unlock()
 }
 
 func TestValidValue(t *testing.T) {

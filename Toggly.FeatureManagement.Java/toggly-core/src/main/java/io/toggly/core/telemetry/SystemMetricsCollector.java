@@ -314,6 +314,8 @@ public final class SystemMetricsCollector {
                 exceptionCount.incrementAndGet();
                 if (previous != null) {
                     previous.uncaughtException(thread, ex);
+                } else {
+                    thread.getThreadGroup().uncaughtException(thread, ex);
                 }
             });
         } catch (RuntimeException ignored) {

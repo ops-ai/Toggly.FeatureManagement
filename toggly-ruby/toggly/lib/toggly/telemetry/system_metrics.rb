@@ -75,6 +75,7 @@ module Toggly
 
         def stop
           @mutex.synchronize { @closed = true }
+          @thread&.wakeup
           @thread&.join(2.0)
           @thread = nil
           disable_exception_handler
@@ -136,7 +137,6 @@ module Toggly
           wall_us = [(now - prev[:at]) * 1_000_000, 1].max
           cpu_us = (user_us - prev[:user_us]) + (sys_us - prev[:sys_us])
           return nil if cpu_us.negative?
-
 
           n_cpu = [Etc.nprocessors, 1].max
           pct = (cpu_us.to_f / wall_us / n_cpu) * 100.0

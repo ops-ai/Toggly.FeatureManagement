@@ -5,7 +5,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const middleware = createTogglyMiddleware({
     baseURI: process.env.DEFINITIONS_URL,
     appKey: 'packed-host', environment: 'Test',
-    enableUsageTracking: false, telemetryAttachProcessHandlers: false,
+    enableUsageTracking: false, enableMetrics: false, telemetryAttachProcessHandlers: false,
     metricsBaseUrl: process.env.METRICS_URL,
     identity: context.url.searchParams.get('identity') ?? undefined,
     claims: { role: context.url.searchParams.get('role') ?? 'user' },

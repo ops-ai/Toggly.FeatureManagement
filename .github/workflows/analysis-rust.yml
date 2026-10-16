@@ -60,6 +60,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-${{ matrix.rust }}-
 
+      - name: Pin actix-server for MSRV
+        run: cargo update -p actix-server --precise 2.9.8
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -75,6 +78,7 @@ jobs:
       - name: Verify current framework package artifacts
         run: |
           cargo update -p actix-web --precise 4.15.0
+          cargo update -p actix-server --precise 2.9.8
           cargo test -p toggly-actix -p toggly-axum -p toggly-axum08 -p toggly-rocket
           cargo package -p toggly-axum08 --allow-dirty --no-verify
           ver="$(sed -n 's/^version = "\([^"]*\)"/\1/p' toggly-axum08/Cargo.toml | head -1)"
@@ -184,7 +188,10 @@ jobs:
           toolchain: 1.88.0
 
       - name: Check MSRV
-        run: cargo check --all-features --workspace
+        run: |
+          # actix-server 2.10+ requires rustc 1.89; keep MSRV 1.88 green.
+          cargo update -p actix-server --precise 2.9.8
+          cargo check --all-features --workspace
 
   security:
     name: Security Audit
