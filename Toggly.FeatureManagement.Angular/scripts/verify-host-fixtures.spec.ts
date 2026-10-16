@@ -39,9 +39,10 @@ await withHostResources(async defer => {
       if (locked.version !== '2.8.1') throw new Error('Retained consumer baseline drifted');
       console.log('Retained locked Angular SDK baseline 2.8.1 installed before upgrade');
     }
-    // Drop packed locals straight into node_modules. Angular 21 + npm 10
-    // crashes with `edgesOut` null on any `file:` / multi-tarball install
-    // after `npm ci`; tar overlay keeps the locked host graph intact.
+    // Angular 21 + npm 10 crashes with `edgesOut` on `file:` / multi-tarball
+    // installs after `npm ci`. Resolve registry deps first (one at a time),
+    // then tar-overlay the packed SDK and any local integration artifacts
+    // last so npm cannot remove them.
     const overlayLocalPackage = (tarballPath, packageName) => {
       const extractRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'toggly-overlay-'));
       defer(() => fs.rmSync(extractRoot, { recursive: true, force: true }));
@@ -52,36 +53,35 @@ await withHostResources(async defer => {
       fs.mkdirSync(path.dirname(destination), { recursive: true });
       fs.cpSync(extracted, destination, { recursive: true });
     };
-    overlayLocalPackage(tarball, '@ops-ai/ngx-feature-flags-toggly');
-    const installed = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/ngx-feature-flags-toggly/package.json')));
     const installRegistryDependency = (name, versionRange) => {
       run(['npm', 'install', '--no-save', '--package-lock=false', '--no-audit', '--no-fund', `${name}@${versionRange}`]);
     };
-    // Registry installs first (one at a time). Local tarball overlays last so
-    // npm cannot remove a prior file: overlay when resolving the other dep.
+    const telemetryRange = metadata.dependencies['@ops-ai/toggly-client-telemetry'];
+    const signedRange = metadata.dependencies['@ops-ai/toggly-signed-defs'];
     if (!process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
-      installRegistryDependency('@ops-ai/toggly-client-telemetry', installed.dependencies['@ops-ai/toggly-client-telemetry']);
+      installRegistryDependency('@ops-ai/toggly-client-telemetry', telemetryRange);
     }
     if (!process.env.TOGGLY_SIGNED_DEFS_TARBALL) {
-      installRegistryDependency('@ops-ai/toggly-signed-defs', installed.dependencies['@ops-ai/toggly-signed-defs']);
+      installRegistryDependency('@ops-ai/toggly-signed-defs', signedRange);
     }
+    overlayLocalPackage(tarball, '@ops-ai/ngx-feature-flags-toggly');
     if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
       overlayLocalPackage(path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL), '@ops-ai/toggly-client-telemetry');
     }
     if (process.env.TOGGLY_SIGNED_DEFS_TARBALL) {
       overlayLocalPackage(path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL), '@ops-ai/toggly-signed-defs');
     }
+    const installed = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/ngx-feature-flags-toggly/package.json')));
     const reporter = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-client-telemetry/package.json')));
     const signer = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-signed-defs/package.json')));
     const host = Object.fromEntries(Object.entries({ angular: '@angular/core', cli: '@angular/cli', typescript: 'typescript' })
       .map(([name, packageName]) => [name, JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules', packageName, 'package.json'))).version]));
     if (Object.entries(host).some(([name, version]) => version !== entry[name])) throw new Error(`Installed host versions drifted: ${JSON.stringify(host)}`);
     console.log(`INSTALLED HOST ${JSON.stringify({ fixture: entry.fixture, ...host })}`);
-    const telemetryRange = installed.dependencies['@ops-ai/toggly-client-telemetry'];
     if (
       installed.version !== metadata.version ||
       (telemetryRange !== '^1.1.0' && telemetryRange !== '^1.2.0') ||
-      installed.dependencies['@ops-ai/toggly-signed-defs'] !== '^1.2.6'
+      signedRange !== '^1.2.6'
     ) {
       throw new Error('Unexpected packed graph');
     }
