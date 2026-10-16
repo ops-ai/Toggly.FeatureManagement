@@ -25,7 +25,7 @@ on:
   workflow_call:
     inputs:
       run_reporting:
-        description: 'When false, skip Sonar and OWASP reporting jobs'
+        description: 'When false, skip OWASP dependency reporting only'
         type: boolean
         default: true
 
@@ -138,6 +138,7 @@ jobs:
             /v:"${{ steps.analysis_version.outputs.version }}" \
             /d:sonar.host.url="https://sonarcloud.io" \
             /d:sonar.token="${SONAR_TOKEN}" \
+            /d:sonar.qualitygate.wait=true \
             /d:sonar.projectBaseDir="${GITHUB_WORKSPACE}" \
             /d:sonar.inclusions="${{ steps.dotnet_inventory.outputs.sources }},Toggly.CLI/**,Toggly.CLI.Tests/**" \
             /d:sonar.javascript.lcov.reportPaths="${GITHUB_WORKSPACE}/Toggly.FeatureManagement.*/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.Blazor/coverage/lcov.info,${GITHUB_WORKSPACE}/Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard/coverage/lcov.info" \
@@ -456,14 +457,16 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         if: always()
         run: |
-          echo "## .NET SDK Analysis Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version:** ${{ steps.analysis_version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          node .github/package-registry/dotnet-ci.mjs summary >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "SonarCloud: https://sonarcloud.io/project/overview?id=toggly-sdks-dotnet" >> $GITHUB_STEP_SUMMARY
-          echo "SonarQube Server: ${SONAR_HOST_URL}/dashboard?id=toggly-sdks-dotnet" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## .NET SDK Analysis Summary"
+            echo ""
+            echo "**Version:** ${{ steps.analysis_version.outputs.version }}"
+            echo ""
+            node .github/package-registry/dotnet-ci.mjs summary
+            echo ""
+            echo "SonarCloud: https://sonarcloud.io/project/overview?id=toggly-sdks-dotnet"
+            echo "SonarQube Server: ${SONAR_HOST_URL}/dashboard?id=toggly-sdks-dotnet"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   dependency-check:
     name: OWASP Dependency Check
@@ -546,7 +549,7 @@ jobs:
         run: dotnet build Toggly.CLI/Toggly.CLI.csproj -c Release
 
       - name: CLI Build Summary
-        run: echo "✅ CLI build completed successfully" >> $GITHUB_STEP_SUMMARY
+        run: echo "✅ CLI build completed successfully" >> "$GITHUB_STEP_SUMMARY"
 
   pack-packages:
     name: Pack NuGet packages

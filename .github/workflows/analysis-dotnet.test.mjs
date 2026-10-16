@@ -19,7 +19,11 @@ function step(name) {
 function runScript(name) {
   const lines = step(name).split('\n');
   const start = lines.indexOf('        run: |');
-  assert.notEqual(start, -1, `missing ${name} run script`);
+  if (start === -1) {
+    const inline = lines.find(line => line.startsWith('        run: '));
+    assert.ok(inline, `missing ${name} run script`);
+    return inline.slice('        run: '.length).replaceAll(/\$\{\{[^}]+\}\}/g, 'fixture');
+  }
   return lines.slice(start + 1)
     .filter(line => line === '' || line.startsWith('          '))
     .map(line => line.slice(10))
@@ -27,7 +31,7 @@ function runScript(name) {
     .replaceAll(/\$\{\{[^}]+\}\}/g, 'fixture');
 }
 
-function scan(overrides = {}, withCredentialGuard = false) {
+function scan(overrides = {}, withCredentialGuard = false, scanSteps = ['Begin SonarQube Server Scan']) {
   const directory = mkdtempSync(join(tmpdir(), 'dotnet-sonar-gate-'));
   const log = join(directory, 'scan.log');
   writeFileSync(log, '');
@@ -35,15 +39,18 @@ function scan(overrides = {}, withCredentialGuard = false) {
 printf 'CALL\\n' >> "$SCAN_LOG"
 printf '%s\\n' "$@" >> "$SCAN_LOG"
 if [[ "$SCAN_FAIL" = 1 ]]; then exit 42; fi
+if [[ "$1" = sonarscanner && "$2" = end ]]; then exit "\${SCAN_END_EXIT:-0}"; fi
 `, { mode: 0o755 });
   writeFileSync(join(directory, 'sleep'), '#!/usr/bin/env bash\nexit 0\n', { mode: 0o755 });
   try {
-    const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', (withCredentialGuard ? `${runScript('Validate Sonar credentials')}\n${runScript('Begin SonarCloud Scan')}\n` : '') + runScript('Begin SonarQube Server Scan')], {
+    const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', (withCredentialGuard ? `${runScript('Validate Sonar credentials')}\n${runScript('Begin SonarCloud Scan')}\n` : '') + scanSteps.map(runScript).join('\n')], {
       encoding: 'utf8',
       env: {
         ...process.env,
         PATH: `${directory}:${process.env.PATH}`,
         SCAN_LOG: log,
+        SCAN_FAIL: '0',
+        SCAN_END_EXIT: '0',
         GITHUB_EVENT_NAME: 'pull_request',
         PR_NUMBER: '702',
         PR_SOURCE_BRANCH: 'catalog-updates',
@@ -62,6 +69,64 @@ if [[ "$SCAN_FAIL" = 1 ]]; then exit 42; fi
     rmSync(directory, { recursive: true, force: true });
   }
 }
+
+test('Cloud begin requests a waited quality gate for PR, dispatch and call analyses', () => {
+  for (const eventName of ['pull_request', 'workflow_dispatch', 'workflow_call']) {
+    const { result, calls } = scan({ GITHUB_EVENT_NAME: eventName }, false, ['Begin SonarCloud Scan']);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0].slice(0, 2), ['sonarscanner', 'begin']);
+    assert.ok(calls[0].includes('/d:sonar.host.url=https://sonarcloud.io'));
+    assert.ok(calls[0].includes('/d:sonar.qualitygate.wait=true'), `${eventName} did not request a waited Cloud gate`);
+  }
+});
+
+test('Cloud end succeeds on a passed gate and propagates scanner or gate failure before Server begins', () => {
+  const end = step('End SonarCloud Scan');
+  assert.doesNotMatch(end, /continue-on-error:|if:|\|\| true/);
+  for (const exitCode of [0, 1, 42]) {
+    const { result, calls } = scan({ SCAN_END_EXIT: String(exitCode) }, false, ['End SonarCloud Scan', 'Begin SonarQube Server Scan']);
+    assert.equal(result.status, exitCode, result.stderr);
+    assert.deepEqual(calls[0], ['sonarscanner', 'end', '/d:sonar.token=cloud-test-token']);
+    assert.equal(calls.length, exitCode === 0 ? 2 : 1);
+  }
+});
+
+test('required summary rejects failed analyze even when dependency reporting is intentionally skipped', () => {
+  const summary = workflow.slice(workflow.indexOf('  summary:'));
+  const verifier = summary.slice(summary.indexOf('      - name: Verify required jobs passed'));
+  assert.match(verifier, /uses: \.\/\.github\/actions\/verify-required-jobs/);
+  const requiredJobs = verifier.match(/required-jobs: (.+)/)?.[1];
+  assert.ok(requiredJobs);
+  const action = readFileSync(new URL('../actions/verify-required-jobs/action.yml', import.meta.url), 'utf8');
+  const script = action.match(/      run: (.+)/)?.[1];
+  assert.ok(script);
+  for (const reporting of [true, false]) {
+    for (const analyze of ['success', 'failure']) {
+      const needs = {
+        analyze: { result: analyze },
+        'dependency-check': { result: reporting ? 'success' : 'skipped' },
+        'build-cli': { result: 'success' },
+        'pack-packages': { result: 'success' },
+        'embedded-consumer': { result: 'success' },
+        'smoke-test': { result: 'success' },
+        'blazor-runtime': { result: 'success' },
+      };
+      const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', script], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          GITHUB_ACTION_PATH: join(repoRoot, '.github/actions/verify-required-jobs'),
+          NEEDS_JSON: JSON.stringify(needs),
+          REQUIRED_JOBS: requiredJobs,
+          ALLOW_SKIPPED: reporting ? 'none' : 'dependency-check',
+        },
+      });
+      assert.equal(result.status, analyze === 'success' ? 0 : 1, result.stderr);
+      if (analyze === 'failure') assert.match(result.stderr, /analyze: failure/);
+    }
+  }
+});
 
 test('analyze checks out the PR head and supplies each PR field to Server begin', () => {
   const checkout = step('Checkout code');

@@ -42,8 +42,15 @@ module Toggly
           outcome_recorded = true
           raise e
         ensure
-          # Non-local exits (throw/catch, unexpected jumps) still need an outcome.
-          record_failure.call(elapsed_ms(start)) unless outcome_recorded
+          # Non-local exits (return/break/throw) still need an outcome; honor fail().
+          unless outcome_recorded
+            duration_ms = elapsed_ms(start)
+            if scope.failed?
+              record_failure.call(duration_ms)
+            else
+              record_success.call(duration_ms)
+            end
+          end
         end
       end
 
