@@ -39,12 +39,12 @@ await withHostResources(async defer => {
       if (locked.version !== '2.8.1') throw new Error('Retained consumer baseline drifted');
       console.log('Retained locked Angular SDK baseline 2.8.1 installed before upgrade');
     }
-    const install = ['npm', 'install', '--no-save', '--package-lock=false', '--no-audit', '--no-fund', tarball];
+    // Temp hosts may update their lockfile; avoid --package-lock=false — npm@10
+    // arborist crashes with edgesOut null on Angular 21+ when overlaying a tarball
+    // without a lock update (retries alone do not clear it).
+    const install = ['npm', 'install', '--no-save', '--no-audit', '--no-fund', tarball];
     if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) install.push(path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL));
     if (process.env.TOGGLY_SIGNED_DEFS_TARBALL) install.push(path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL));
-    // npm@10 arborist intermittently crashes with edgesOut null when overlaying a
-    // packed tarball under --package-lock=false (stdio inherit hides the text from
-    // Error.message, so retry any install failure a few times after a clean overlay).
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         run(install);

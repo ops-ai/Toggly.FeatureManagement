@@ -1,4 +1,6 @@
 name: JavaScript/TypeScript SDKs - Tests & Analysis
+# OPS-1765: Angular host script-only pushes still need this workflow path matched.
+# OPS-1765: keep path-filter PR triggers healthy when only Angular scripts change
 
 on:
   pull_request:
