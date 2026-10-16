@@ -60,10 +60,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-${{ matrix.rust }}-
 
-      # Unlocked resolve of actix-web 4.15 pulls actix-server needing rustc ≥1.89.
-      - name: Cap actix-web for rustc 1.88
+      # Unlocked resolve picks actix-server 2.10 (rustc ≥1.89). Cap actix-web and
+      # pin actix-server 2.6 so the 1.88 matrix stays on the declared MSRV.
+      - name: Pin MSRV-compatible actix stack
         if: matrix.rust == '1.88.0'
-        run: perl -pi -e 's/actix-web = ">=4.4, <4.16"/actix-web = ">=4.4, <4.13"/' Cargo.toml
+        run: |
+          perl -pi -e 's/actix-web = ">=4.4, <4.16"/actix-web = ">=4.4, <4.13"/' Cargo.toml
+          cargo generate-lockfile
+          cargo update -p actix-server --precise 2.6.0
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -189,9 +193,11 @@ jobs:
         with:
           toolchain: 1.88.0
 
-      # Unlocked resolve of actix-web 4.15 pulls actix-server needing rustc ≥1.89.
-      - name: Cap actix-web for MSRV
-        run: perl -pi -e 's/actix-web = ">=4.4, <4.16"/actix-web = ">=4.4, <4.13"/' Cargo.toml
+      - name: Pin MSRV-compatible actix stack
+        run: |
+          perl -pi -e 's/actix-web = ">=4.4, <4.16"/actix-web = ">=4.4, <4.13"/' Cargo.toml
+          cargo generate-lockfile
+          cargo update -p actix-server --precise 2.6.0
 
       - name: Check MSRV
         run: cargo check --all-features --workspace
