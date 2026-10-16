@@ -386,7 +386,7 @@ public actor TelemetryReporter {
         variant: String = "enabled",
         action: (_ fail: @escaping () -> Void) async throws -> T
     ) async rethrows -> T {
-        // Pin attribution across await so setContext mid-scope cannot split attempt vs duration.
+        // Pin attribution for completion metrics; restore any mid-await setContext afterward.
         let pinned = attribution
         recordUsage(featureKey, variant: variant)
         let started = clock()
@@ -394,6 +394,7 @@ public actor TelemetryReporter {
         func fail() { failed = true }
         do {
             let result = try await action(fail)
+            let after = attribution
             useAttribution(pinned)
             let durationMs = max(0, Int64((clock() - started) * 1000))
             if failed {
@@ -402,15 +403,18 @@ public actor TelemetryReporter {
             } else if durationMs > 0 {
                 addFeatureAmount(featureKey, variant: variant, index: 4, amount: durationMs)
             }
+            useAttribution(after)
             return result
         } catch let error as CancellationError {
             // Attempt already recorded; cancellation is not an error and has no duration.
             throw error
         } catch {
+            let after = attribution
             useAttribution(pinned)
             let durationMs = max(0, Int64((clock() - started) * 1000))
             recordFeature(featureKey, variant: variant, index: 3)
             if durationMs > 0 { addFeatureAmount(featureKey, variant: variant, index: 5, amount: durationMs) }
+            useAttribution(after)
             throw error
         }
     }
