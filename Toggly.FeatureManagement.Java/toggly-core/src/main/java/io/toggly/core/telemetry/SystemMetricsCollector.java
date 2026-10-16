@@ -250,7 +250,7 @@ public final class SystemMetricsCollector {
         }
     }
 
-    /** Cumulative allocated bytes when the HotSpot ThreadMXBean exposes them. */
+    /** Cumulative allocated bytes from HotSpot ThreadMXBean when supported. */
     private static Long readTotalAllocatedBytes() {
         try {
             var threads = ManagementFactory.getThreadMXBean();
@@ -263,8 +263,25 @@ public final class SystemMetricsCollector {
             if (!hotspot.isThreadAllocatedMemoryEnabled()) {
                 hotspot.setThreadAllocatedMemoryEnabled(true);
             }
-            long total = hotspot.getTotalAllocatedBytes();
-            return total >= 0 ? total : null;
+            // Prefer JVM total API when present (not on every JDK compile target).
+            try {
+                var method = hotspot.getClass().getMethod("getTotalAllocatedBytes");
+                Object value = method.invoke(hotspot);
+                if (value instanceof Long total && total >= 0L) {
+                    return total;
+                }
+            } catch (ReflectiveOperationException ignored) {
+                // Fall through to per-thread sum.
+            }
+            long[] ids = hotspot.getAllThreadIds();
+            long[] bytes = hotspot.getThreadAllocatedBytes(ids);
+            long total = 0L;
+            for (long allocated : bytes) {
+                if (allocated > 0L) {
+                    total += allocated;
+                }
+            }
+            return total;
         } catch (RuntimeException | LinkageError ignored) {
             return null;
         }

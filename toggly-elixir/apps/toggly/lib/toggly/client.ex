@@ -485,14 +485,12 @@ defmodule Toggly.Client do
   defp sample_system_metrics(state) do
     sampler = Keyword.get(state.opts, :system_metrics_sampler)
 
-    {exception_count, samples} =
+    {_exception_count, samples} =
       if sampler do
         {state.system_metrics_exceptions, sampler.()}
       else
         SystemMetrics.default_sample(state.system_metrics_exceptions)
       end
-
-    state = %{state | system_metrics_exceptions: exception_count}
 
     Enum.reduce(samples, state, fn {metric, value}, acc ->
       emit_system_metric_observation(acc, metric, value)
@@ -520,7 +518,11 @@ defmodule Toggly.Client do
             end
           end)
 
-        state
+        if metric == "ExceptionCount" do
+          %{state | system_metrics_exceptions: 0}
+        else
+          state
+        end
       end
     end
   end

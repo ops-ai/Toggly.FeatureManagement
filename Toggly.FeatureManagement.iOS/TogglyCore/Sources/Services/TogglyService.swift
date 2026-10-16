@@ -127,7 +127,14 @@ public actor TogglyService {
               let telemetry else { return }
         let collector = SystemMetricsCollector { [weak self] metric, value in
             guard let self else { return }
-            Task { await self.setGauge(metric, value: value) }
+            Task {
+                // ExceptionCount is a per-window delta — counters sum across ticks.
+                if metric == "ExceptionCount" {
+                    await self.incrementCounter(metric, value: value)
+                } else {
+                    await self.setGauge(metric, value: value)
+                }
+            }
         }
         systemMetricsCollector = collector
         collector.start()

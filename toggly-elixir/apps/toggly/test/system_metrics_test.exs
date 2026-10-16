@@ -38,8 +38,8 @@ defmodule Toggly.SystemMetricsTest do
     end
   end
 
-  test "default_sample emits ExceptionCount once and clears the counter" do
-    {0, samples} = SystemMetrics.default_sample(2)
+  test "default_sample emits ExceptionCount without draining the counter" do
+    {2, samples} = SystemMetrics.default_sample(2)
     assert {"ExceptionCount", 2.0} in samples
     {0, again} = SystemMetrics.default_sample(0)
     refute Enum.any?(again, fn {m, _} -> m == "ExceptionCount" end)

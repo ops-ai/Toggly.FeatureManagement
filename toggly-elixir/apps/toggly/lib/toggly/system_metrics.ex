@@ -23,7 +23,9 @@ defmodule Toggly.SystemMetrics do
       |> maybe_add("MemoryWorkingSet", sample_memory_working_set())
       |> maybe_add_exception(exception_count)
 
-    {0, samples}
+    # Keep the exception count until the client confirms ExceptionCount was
+    # accepted under the pending cap (see Client.sample_system_metrics/1).
+    {exception_count, samples}
   end
 
   def attach_exception_handler(client_name, client_pid) do
