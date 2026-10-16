@@ -315,6 +315,7 @@ mod tests {
             observe,
             custom_sampler: Some(sampler),
             cpu_state: Mutex::new(None),
+            pending_by_metric: Mutex::new(std::collections::HashMap::new()),
             cancel_tx: watch::channel(false).0,
             task: Mutex::new(None),
         };
