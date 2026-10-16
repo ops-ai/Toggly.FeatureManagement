@@ -66,3 +66,27 @@ func TestRunUsageScope_Cancelled(t *testing.T) {
 		t.Fatalf("got %+v", en)
 	}
 }
+
+func TestRunUsageScope_PanicRecordsFailure(t *testing.T) {
+	b := NewBatcher("app", "Production", "", "")
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic")
+		}
+		en := b.buildAndReset().Stats[0].VariantStats["enabled"]
+		if en.UsedCount != 1 || en.ErrorCount != 1 {
+			t.Fatalf("got %+v", en)
+		}
+	}()
+	_ = RunUsageScope(
+		func() { b.RecordUsageAttempt("Feat", "") },
+		func(ms int64) { b.RecordUsageDuration("Feat", ms, false) },
+		func(ms int64) {
+			b.RecordUsageError("Feat", 1)
+			b.RecordUsageDuration("Feat", ms, true)
+		},
+		func(FeatureUsageScope) error {
+			panic("boom")
+		},
+	)
+}

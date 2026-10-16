@@ -236,6 +236,16 @@ defmodule Toggly do
         )
 
         reraise exception, __STACKTRACE__
+    catch
+      kind, reason when kind in [:exit, :throw] ->
+        duration = max(System.monotonic_time(:millisecond) - started, 0)
+
+        GenServer.cast(
+          client,
+          {:usage_scope, key, enabled, variant, :failure, duration}
+        )
+
+        :erlang.raise(kind, reason, __STACKTRACE__)
     else
       result ->
         duration = max(System.monotonic_time(:millisecond) - started, 0)

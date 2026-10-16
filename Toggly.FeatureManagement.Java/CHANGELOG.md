@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.3.1
+
+2026-10-15
+
+### Fixed
+- `use` / `useCallable` mark the scope failed for `Error` throwables so fatal
+  JVM errors are not recorded as successful usage [OPS-1758].
+
 ## 2.3.0
 
 2026-10-11

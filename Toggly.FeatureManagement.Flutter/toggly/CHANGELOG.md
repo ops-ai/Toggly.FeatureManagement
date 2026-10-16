@@ -1,3 +1,11 @@
+## 1.14.1
+
+2026-10-15
+
+### Fixed
+- `use()` pins attribution at scope start so mid-flight `setContext` cannot
+  split attempt vs duration metrics across identities [OPS-1758].
+
 ## 1.14.0
 
 2026-10-11

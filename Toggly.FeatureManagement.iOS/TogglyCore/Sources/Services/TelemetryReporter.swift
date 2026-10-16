@@ -124,7 +124,8 @@ public actor TelemetryReporter {
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
         }
         self.compressor = { Self.gzip($0) }
-        self.clock = { Date().timeIntervalSince1970 }
+        // Monotonic uptime avoids wall-clock jumps skewing usage-scope durations.
+        self.clock = { ProcessInfo.processInfo.systemUptime }
     }
 
     // The transport/sleeper seams allow deterministic tests without making test hooks public.
@@ -139,7 +140,7 @@ public actor TelemetryReporter {
         onDiagnostic: Diagnostic? = nil,
         sleep: @escaping Sleeper = { seconds in try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)) },
         compressor: @escaping Compressor = { _ in nil },
-        clock: @escaping @Sendable () -> TimeInterval = { Date().timeIntervalSince1970 },
+        clock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
         transport: @escaping Transport
     ) {
         self.appKey = appKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -287,13 +288,15 @@ public actor TelemetryReporter {
         for (key, variants) in features {
             let keyBytes = encodedNameLength(key)
             for (variant, delta) in variants {
-                let maximum = max(delta.checks, delta.used, delta.viewed)
+                let maximum = max(
+                    delta.checks, delta.used, delta.viewed,
+                    delta.errorCount, delta.durationSumMs, delta.errorDurationSumMs)
                 let pieces = maximum == 0 ? 1 : Int((maximum - 1) / 1_000_000 + 1)
                 entries += pieces
                 // Each eventual chunk is no larger than an isolated envelope:
-                // escaped header/key/variant plus at most three seven-digit values.
-                // Forty bytes covers all punctuation, commas, and numbers.
-                upperBytes += pieces * (headerBytes + keyBytes + encodedNameLength(variant) + 40)
+                // escaped header/key/variant plus up to six seven-digit values.
+                // Sixty-four bytes covers punctuation, commas, and numbers.
+                upperBytes += pieces * (headerBytes + keyBytes + encodedNameLength(variant) + 64)
             }
         }
         for (key, metric) in metrics {
@@ -420,6 +423,13 @@ public actor TelemetryReporter {
 
     private func addFeatureDelta(_ key: String, variant: String, index: Int, amount: Int64) {
         guard !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, amount > 0 else { return }
+        let bytes = variant.utf8
+        guard !bytes.isEmpty, bytes.count <= 64,
+              bytes.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) ||
+                                    (97...122).contains($0) || $0 == 95 || $0 == 45 }) else {
+            diagnose("telemetry_invalid_variant")
+            return
+        }
         let old = features[key]?[variant]
         var updated = old ?? Delta()
         switch index {

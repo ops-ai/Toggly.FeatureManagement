@@ -26,17 +26,25 @@ module Toggly
         record_attempt.call
         start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         scope = FeatureUsageScope.new
-        result = block.call(scope)
-        duration_ms = elapsed_ms(start)
-        if scope.failed?
-          record_failure.call(duration_ms)
-        else
-          record_success.call(duration_ms)
+        outcome_recorded = false
+        begin
+          result = block.call(scope)
+          duration_ms = elapsed_ms(start)
+          if scope.failed?
+            record_failure.call(duration_ms)
+          else
+            record_success.call(duration_ms)
+          end
+          outcome_recorded = true
+          result
+        rescue StandardError => e
+          record_failure.call(elapsed_ms(start))
+          outcome_recorded = true
+          raise e
+        ensure
+          # Non-local exits (throw/catch, unexpected jumps) still need an outcome.
+          record_failure.call(elapsed_ms(start)) unless outcome_recorded
         end
-        result
-      rescue StandardError => e
-        record_failure.call(elapsed_ms(start))
-        raise e
       end
 
       def elapsed_ms(start)

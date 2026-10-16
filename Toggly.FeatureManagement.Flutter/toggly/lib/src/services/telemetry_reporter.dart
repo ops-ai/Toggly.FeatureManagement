@@ -145,7 +145,9 @@ class TelemetryReporter {
     Future<T> Function(void Function() fail) action, [
     String variant = 'enabled',
   ]) async {
-    recordUsage(featureKey, variant);
+    // Pin attribution for the whole scope so mid-flight setContext cannot split metrics.
+    final attribution = captureContext();
+    _recordFeature(featureKey, variant, 1, attribution);
     final started = _clock();
     var failed = false;
     void fail() => failed = true;
@@ -153,19 +155,19 @@ class TelemetryReporter {
       final result = await action(fail);
       final durationMs = max(0, _clock().difference(started).inMilliseconds);
       if (failed) {
-        _recordFeature(featureKey, variant, 3, null, 1);
+        _recordFeature(featureKey, variant, 3, attribution, 1);
         if (durationMs > 0) {
-          _recordFeature(featureKey, variant, 5, null, durationMs);
+          _recordFeature(featureKey, variant, 5, attribution, durationMs);
         }
       } else if (durationMs > 0) {
-        _recordFeature(featureKey, variant, 4, null, durationMs);
+        _recordFeature(featureKey, variant, 4, attribution, durationMs);
       }
       return result;
     } catch (error, stack) {
       final durationMs = max(0, _clock().difference(started).inMilliseconds);
-      _recordFeature(featureKey, variant, 3, null, 1);
+      _recordFeature(featureKey, variant, 3, attribution, 1);
       if (durationMs > 0) {
-        _recordFeature(featureKey, variant, 5, null, durationMs);
+        _recordFeature(featureKey, variant, 5, attribution, durationMs);
       }
       Error.throwWithStackTrace(error, stack);
     }

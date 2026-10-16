@@ -24,16 +24,23 @@ func isUsageCancellation(err error) bool {
 }
 
 // RunUsageScope records attempt, duration, and errors for fn. Does not evaluate feature flags.
+// Panics are recorded as failures, then re-panicked.
 func RunUsageScope(
 	recordAttempt func(),
 	recordSuccess func(durationMs int64),
 	recordFailure func(durationMs int64),
 	fn func(FeatureUsageScope) error,
-) error {
+) (err error) {
 	recordAttempt()
 	start := time.Now()
 	scope := &scopeImpl{}
-	err := fn(scope)
+	defer func() {
+		if r := recover(); r != nil {
+			recordFailure(elapsedMs(start))
+			panic(r)
+		}
+	}()
+	err = fn(scope)
 	if err != nil {
 		if isUsageCancellation(err) {
 			return err

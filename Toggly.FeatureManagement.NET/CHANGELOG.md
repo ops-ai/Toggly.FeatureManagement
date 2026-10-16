@@ -1,5 +1,12 @@
 # Changelog
 
+## All .NET SDK packages 3.14.1 - 2026-10-15
+
+### Fixed
+- `CaptureBatch` drains usage counters and duration maps with `TryRemove` so
+  concurrent scope completions cannot lose values between snapshot and clear
+  [OPS-1758].
+
 ## All .NET SDK packages 3.14.0 - 2026-10-12
 
 ### Added

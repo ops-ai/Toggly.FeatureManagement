@@ -329,13 +329,10 @@ namespace Toggly.FeatureManagement
             var batch = new UsageStatsBatch();
             try
             {
-                // Keep the capture/clear order and retain each completed snapshot if a later capture fails.
-                batch.Stats = new Dictionary<(string FeatureKey, byte Type), int>(_stats);
-                _stats.Clear();
-                batch.DurationSumMs = new Dictionary<string, long>(_durationSumMs);
-                _durationSumMs.Clear();
-                batch.ErrorDurationSumMs = new Dictionary<string, long>(_errorDurationSumMs);
-                _errorDurationSumMs.Clear();
+                // Drain via TryRemove so AddOrUpdate between snapshot and clear cannot lose values.
+                batch.Stats = DrainIntMap(_stats);
+                batch.DurationSumMs = DrainLongMap(_durationSumMs);
+                batch.ErrorDurationSumMs = DrainLongMap(_errorDurationSumMs);
                 batch.DefinitionCacheHits = Interlocked.Exchange(ref _definitionCacheHits, 0);
                 batch.DefinitionCacheMisses = Interlocked.Exchange(ref _definitionCacheMisses, 0);
                 batch.Enabled = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageEnabledMap);
@@ -461,6 +458,29 @@ namespace Toggly.FeatureManagement
 
         private static int GetStatCount(UsageStatsBatch batch, string featureKey, StatType type) =>
             batch.Stats!.TryGetValue((featureKey, (byte)type), out var count) ? count : 0;
+
+        private static Dictionary<TKey, int> DrainIntMap<TKey>(ConcurrentDictionary<TKey, int> source)
+            where TKey : notnull
+        {
+            var result = new Dictionary<TKey, int>();
+            foreach (var key in source.Keys)
+            {
+                if (source.TryRemove(key, out var value) && value != 0)
+                    result[key] = value;
+            }
+            return result;
+        }
+
+        private static Dictionary<string, long> DrainLongMap(ConcurrentDictionary<string, long> source)
+        {
+            var result = new Dictionary<string, long>();
+            foreach (var key in source.Keys)
+            {
+                if (source.TryRemove(key, out var value) && value != 0)
+                    result[key] = value;
+            }
+            return result;
+        }
 
         private void RestoreBatch(UsageStatsBatch batch)
         {

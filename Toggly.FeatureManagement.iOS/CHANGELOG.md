@@ -2,6 +2,14 @@
 
 All notable changes to the Toggly iOS SDK are documented in this file.
 
+## 1.8.1
+
+2026-10-15
+
+### Fixed
+- Usage-scope timing uses monotonic `systemUptime`; duration paths validate
+  variants; `pendingResources` accounts for all six delta fields [OPS-1758].
+
 ## 1.8.0
 
 2026-10-11

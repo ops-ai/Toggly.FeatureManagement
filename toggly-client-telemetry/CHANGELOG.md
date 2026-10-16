@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.1 — 2026-10-15
+
+### Fixed
+- Round usage-scope duration slots (indices 4 and 5) to whole milliseconds
+  before buffering so fractional `performance.now()` values are not sent on
+  the wire [OPS-1758].
+
 ## 1.2.0 — 2026-10-11
 
 ### Added

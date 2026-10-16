@@ -725,6 +725,10 @@ public final class TogglyClient implements AutoCloseable {
                 }
                 scope.fail();
                 throw e;
+            } catch (Error e) {
+                // Must not complete as success when the JVM Error unwinds the scope.
+                scope.fail();
+                throw e;
             }
         }
     }
@@ -753,6 +757,9 @@ public final class TogglyClient implements AutoCloseable {
                     Thread.currentThread().interrupt();
                     throw e;
                 }
+                scope.fail();
+                throw e;
+            } catch (Error e) {
                 scope.fail();
                 throw e;
             }

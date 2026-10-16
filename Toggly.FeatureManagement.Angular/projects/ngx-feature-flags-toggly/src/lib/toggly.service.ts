@@ -869,13 +869,14 @@ export class TogglyService implements ITogglyService, OnDestroy {
     fn: (scope: FeatureUsageScope) => Promise<T>,
     variant = 'enabled',
   ): Promise<T> {
-    return this._ngZone.runOutsideAngular(() => {
-      if (this._telemetry) return this._telemetry.use(featureKey, fn, variant)
-      return runFeatureUsageScope(
-        { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
-        fn,
-      )
-    })
+    // Keep telemetry bookkeeping outside Angular CD, but run the caller's work
+    // inside the zone so async UI updates still trigger change detection.
+    const runInZone = (scope: FeatureUsageScope) => this._ngZone.run(() => fn(scope))
+    if (this._telemetry) return this._telemetry.use(featureKey, runInZone, variant)
+    return runFeatureUsageScope(
+      { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
+      runInZone,
+    )
   }
 
   /** Record an explicit feature view without evaluating it. */

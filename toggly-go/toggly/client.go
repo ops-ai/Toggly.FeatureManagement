@@ -421,13 +421,27 @@ func (c *Client) RecordUsage(featureKey string, enabled bool, evalCtx Context) {
 }
 
 // Use runs fn inside a usage scope (attempt + duration + errors). Does not evaluate the flag.
-// Pass context.Canceled from fn (or a wrapped error) to record attempt only.
+// Cancellation (ctx.Err() or context.Canceled from fn) records attempt only.
 func (c *Client) Use(ctx context.Context, featureKey string, evalCtx Context, fn func(usage.FeatureUsageScope) error) error {
-	_ = ctx
-	if c == nil || c.usage == nil {
-		return usage.RunUsageScope(func() {}, func(int64) {}, func(int64) {}, fn)
+	wrapped := func(scope usage.FeatureUsageScope) error {
+		if ctx != nil {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+		}
+		err := fn(scope)
+		if err != nil {
+			return err
+		}
+		if ctx != nil {
+			return ctx.Err()
+		}
+		return nil
 	}
-	return c.usage.RunUsageScope(featureKey, evalCtx.Identity, fn)
+	if c == nil || c.usage == nil {
+		return usage.RunUsageScope(func() {}, func(int64) {}, func(int64) {}, wrapped)
+	}
+	return c.usage.RunUsageScope(featureKey, evalCtx.Identity, wrapped)
 }
 
 // RecordView increments the "viewed" counter for a feature (rendered/displayed).

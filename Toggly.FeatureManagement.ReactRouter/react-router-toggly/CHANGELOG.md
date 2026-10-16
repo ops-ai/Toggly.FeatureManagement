@@ -1,3 +1,11 @@
+## 1.5.1
+
+2026-10-15
+
+### Fixed
+- After `dispose()`, `use()` and `captureCheck()` no longer create an
+  unmanaged reporter or attach leftover lifecycle listeners [OPS-1758].
+
 ## 1.5.0
 
 2026-10-11

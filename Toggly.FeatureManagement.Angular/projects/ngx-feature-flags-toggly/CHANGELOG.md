@@ -1,3 +1,12 @@
+## 2.11.1
+
+2026-10-15
+
+### Fixed
+- `use()` runs the caller callback inside `NgZone` so async UI updates still
+  trigger change detection while telemetry bookkeeping stays outside CD
+  [OPS-1758].
+
 ## 2.11.0
 
 2026-10-11

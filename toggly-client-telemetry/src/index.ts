@@ -216,9 +216,11 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
     if (optedOut || disposed || !validName(captured.k)) return;
     if (!validName(featureKey) || !validVariant(variant)) { diagnostic('invalid-event'); return; }
     if (!Number.isFinite(amount) || amount <= 0) return;
-    if (index <= 3 && !Number.isInteger(amount)) { diagnostic('invalid-event'); return; }
+    // Count slots must be whole; duration slots (4/5) round to whole ms for ingest.
+    const normalized = index <= 3 ? amount : Math.round(amount);
+    if (!Number.isInteger(normalized) || normalized <= 0) { diagnostic('invalid-event'); return; }
     const values = [0, 0, 0, 0, 0, 0];
-    values[index] = Math.min(MAX_VALUE, amount);
+    values[index] = Math.min(MAX_VALUE, normalized);
     accept({ context: captured, key: featureKey, variant, kind: 'feature', values });
   }
   function recordUsageScopeOutcome(

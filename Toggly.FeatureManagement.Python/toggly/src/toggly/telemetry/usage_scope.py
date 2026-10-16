@@ -56,7 +56,8 @@ def run_usage_scope(
     try:
         result = fn(scope)
     except BaseException as exc:
-        if is_usage_cancellation(exc):
+        # Cancellation and process-control exceptions: attempt only, no error/duration.
+        if is_usage_cancellation(exc) or not isinstance(exc, Exception):
             raise
         record_failure(_elapsed_ms(start))
         raise
@@ -84,7 +85,7 @@ async def run_usage_scope_async(
     try:
         result = await fn(scope)
     except BaseException as exc:
-        if is_usage_cancellation(exc):
+        if is_usage_cancellation(exc) or not isinstance(exc, Exception):
             raise
         record_failure(_elapsed_ms(start))
         raise

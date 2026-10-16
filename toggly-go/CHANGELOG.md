@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.1
+
+2026-10-15
+
+### Fixed
+- `RunUsageScope` recovers panics and records failure duration before
+  re-panicking; `Client.Use` honors `ctx` cancellation as attempt-only
+  [OPS-1758].
+
 ## 0.13.0
 
 2026-10-11
