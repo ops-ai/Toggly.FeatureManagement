@@ -6,6 +6,8 @@ import (
 	"testing"
 )
 
+const usageScopeGotFmt = "got %+v"
+
 func TestRunUsageScope_Success(t *testing.T) {
 	b := NewBatcher("app", "Production", "", "")
 	err := RunUsageScope(
@@ -23,7 +25,7 @@ func TestRunUsageScope_Success(t *testing.T) {
 	msg := b.buildAndReset()
 	en := msg.Stats[0].VariantStats["enabled"]
 	if en.UsedCount != 1 || en.ErrorCount != 0 {
-		t.Fatalf("got %+v", en)
+		t.Fatalf(usageScopeGotFmt, en)
 	}
 }
 
@@ -43,7 +45,7 @@ func TestRunUsageScope_Failure(t *testing.T) {
 	}
 	en := b.buildAndReset().Stats[0].VariantStats["enabled"]
 	if en.ErrorCount != 1 || en.UsedCount != 1 {
-		t.Fatalf("got %+v", en)
+		t.Fatalf(usageScopeGotFmt, en)
 	}
 }
 
@@ -63,7 +65,7 @@ func TestRunUsageScope_Cancelled(t *testing.T) {
 	}
 	en := b.buildAndReset().Stats[0].VariantStats["enabled"]
 	if en.UsedCount != 1 || en.ErrorCount != 0 || en.DurationSumMs != 0 {
-		t.Fatalf("got %+v", en)
+		t.Fatalf(usageScopeGotFmt, en)
 	}
 }
 
@@ -75,7 +77,7 @@ func TestRunUsageScope_PanicRecordsFailure(t *testing.T) {
 		}
 		en := b.buildAndReset().Stats[0].VariantStats["enabled"]
 		if en.UsedCount != 1 || en.ErrorCount != 1 {
-			t.Fatalf("got %+v", en)
+			t.Fatalf(usageScopeGotFmt, en)
 		}
 	}()
 	_ = RunUsageScope(
@@ -110,7 +112,7 @@ func TestRunUsageScope_SoftFail(t *testing.T) {
 	}
 	en := b.buildAndReset().Stats[0].VariantStats["enabled"]
 	if en.UsedCount != 1 || en.ErrorCount != 1 {
-		t.Fatalf("got %+v", en)
+		t.Fatalf(usageScopeGotFmt, en)
 	}
 }
 
@@ -130,7 +132,7 @@ func TestRunUsageScope_DeadlineExceededIsCancellation(t *testing.T) {
 	}
 	en := b.buildAndReset().Stats[0].VariantStats["enabled"]
 	if en.UsedCount != 1 || en.ErrorCount != 0 || en.DurationSumMs != 0 {
-		t.Fatalf("got %+v", en)
+		t.Fatalf(usageScopeGotFmt, en)
 	}
 }
 
@@ -142,6 +144,6 @@ func TestBatcher_RecordUsageDurationAndError(t *testing.T) {
 	b.RecordUsageDuration("Feat", 9, true)
 	en := b.buildAndReset().Stats[0].VariantStats["enabled"]
 	if en.UsedCount != 1 || en.ErrorCount != 2 || en.DurationSumMs != 12 || en.ErrorDurationSumMs != 9 {
-		t.Fatalf("got %+v", en)
+		t.Fatalf(usageScopeGotFmt, en)
 	}
 }

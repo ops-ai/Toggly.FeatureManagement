@@ -39,19 +39,9 @@ await withHostResources(async defer => {
       if (locked.version !== '2.8.1') throw new Error('Retained consumer baseline drifted');
       console.log('Retained locked Angular SDK baseline 2.8.1 installed before upgrade');
     }
-    // Install the packed Angular SDK via a single package.json `file:` dep.
-    // Overlay sibling locals (client-telemetry / signed-defs) by extracting
-    // their tarballs into node_modules — Angular 21 + npm 10 crashes with
-    // `edgesOut` null when those locals are also resolved as `file:` / CLI
-    // tarball args alongside the SDK.
-    const hostPackagePath = path.join(cwd, 'package.json');
-    const hostPackage = JSON.parse(fs.readFileSync(hostPackagePath, 'utf8'));
-    hostPackage.dependencies = {
-      ...hostPackage.dependencies,
-      '@ops-ai/ngx-feature-flags-toggly': `file:${tarball}`,
-    };
-    fs.writeFileSync(hostPackagePath, `${JSON.stringify(hostPackage, null, 2)}\n`);
-    run(['npm', 'install', '--package-lock=false', '--no-audit', '--no-fund']);
+    // Drop packed locals straight into node_modules. Angular 21 + npm 10
+    // crashes with `edgesOut` null on any `file:` / multi-tarball install
+    // after `npm ci`; tar overlay keeps the locked host graph intact.
     const overlayLocalPackage = (tarballPath, packageName) => {
       const extractRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'toggly-overlay-'));
       defer(() => fs.rmSync(extractRoot, { recursive: true, force: true }));
@@ -62,6 +52,7 @@ await withHostResources(async defer => {
       fs.mkdirSync(path.dirname(destination), { recursive: true });
       fs.cpSync(extracted, destination, { recursive: true });
     };
+    overlayLocalPackage(tarball, '@ops-ai/ngx-feature-flags-toggly');
     if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
       overlayLocalPackage(path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL), '@ops-ai/toggly-client-telemetry');
     }
