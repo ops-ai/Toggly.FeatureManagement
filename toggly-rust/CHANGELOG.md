@@ -26,6 +26,12 @@
 
 ## Unreleased
 
+### Fixed
+
+- Commit the workspace `Cargo.lock` so SonarCloud security analysis sees pinned
+  dependency versions (clears `text:S8570` on member `Cargo.toml` files that
+  blocked the develop quality gate after `toggly-axum08` 0.1.1).
+
 ### Changed
 
 - MSRV raised to **Rust 1.89** so the workspace resolves current
