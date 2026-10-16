@@ -47,7 +47,7 @@ class TogglyHealthContributorSupportTest {
             TogglyHealthContributorSupport.Snapshot snapshot =
                     TogglyHealthContributorSupport.snapshot(client);
             assertThat(snapshot.isUp()).isFalse();
-            assertThat(snapshot.error()).hasMessage("boom");
+            assertThat(snapshot.errorMessage()).isEqualTo("boom");
         }
     }
 

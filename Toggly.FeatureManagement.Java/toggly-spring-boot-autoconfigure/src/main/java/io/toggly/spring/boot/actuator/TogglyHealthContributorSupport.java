@@ -10,10 +10,10 @@ public final class TogglyHealthContributorSupport {
     private TogglyHealthContributorSupport() {
     }
 
-    public record Snapshot(int featureCount, String environment, Throwable error) {
+    public record Snapshot(int featureCount, String environment, String errorMessage) {
 
         public boolean isUp() {
-            return error == null;
+            return errorMessage == null;
         }
 
         public static Snapshot up(TogglyClient client) {
@@ -22,8 +22,8 @@ public final class TogglyHealthContributorSupport {
             return new Snapshot(featureCount, environment, null);
         }
 
-        public static Snapshot down(Throwable error) {
-            return new Snapshot(0, null, error);
+        public static Snapshot down(String errorMessage) {
+            return new Snapshot(0, null, errorMessage);
         }
     }
 
@@ -31,7 +31,7 @@ public final class TogglyHealthContributorSupport {
         try {
             return Snapshot.up(togglyClient);
         } catch (Exception e) {
-            return Snapshot.down(e);
+            return Snapshot.down(e.getMessage());
         }
     }
 }

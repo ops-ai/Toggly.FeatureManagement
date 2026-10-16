@@ -28,7 +28,7 @@ public class TogglyHealthIndicator implements HealthIndicator {
                     .build();
         }
         return Health.down()
-                .withException(snapshot.error())
+                .withDetail("error", snapshot.errorMessage())
                 .build();
     }
 }
