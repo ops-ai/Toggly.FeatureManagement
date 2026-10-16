@@ -100,8 +100,14 @@ defmodule Toggly.SystemMetricsTest do
     assert :ok = SystemMetrics.attach_exception_handler(SmHandlerRefresh, stale)
     assert :ok = SystemMetrics.attach_exception_handler(SmHandlerRefresh, self())
 
-    {:ok, %{config: %{client: client}}} =
+    {:ok, handler_config} =
       :logger.get_handler_config(:"toggly.system_metrics.SmHandlerRefresh")
+
+    client =
+      case handler_config do
+        %{config: %{client: pid}} -> pid
+        %{client: pid} -> pid
+      end
 
     assert client == self()
     assert :ok = SystemMetrics.detach_exception_handler(SmHandlerRefresh)

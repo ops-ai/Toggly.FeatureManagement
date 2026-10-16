@@ -37,7 +37,7 @@ defmodule Toggly.SystemMetrics do
       {:error, {:already_exists, _}} ->
         # Client may have crashed without terminate/2; refresh the PID so
         # ExceptionCount keeps routing to the live GenServer.
-        _ = :logger.update_handler_config(id, config)
+        _ = :logger.update_handler_config(id, :config, %{client: client_pid})
         :ok
 
       {:error, _} ->
