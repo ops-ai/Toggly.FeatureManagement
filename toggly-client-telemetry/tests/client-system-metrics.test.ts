@@ -5,6 +5,8 @@ import {
   attachReactNativeExceptionSources,
   CLIENT_SYSTEM_METRICS_INTERVAL_MS,
   CLIENT_SYSTEM_METRICS_MAX_PENDING,
+  type ClientSystemMetricsClearInterval,
+  type ClientSystemMetricsSetInterval,
 } from '../src/client-system-metrics';
 import { createTelemetryReporter } from '../src/index';
 
@@ -110,9 +112,9 @@ describe('ClientSystemMetricsCollector long tasks', () => {
       attachExceptionSources: () => () => {},
       setIntervalFn: ((fn: () => void) => {
         timers.push(fn);
-        return { unref: () => {} } as unknown as ReturnType<typeof setInterval>;
-      }) as typeof setInterval,
-      clearIntervalFn: (() => {}) as typeof clearInterval,
+        return { unref: () => {} };
+      }) as ClientSystemMetricsSetInterval,
+      clearIntervalFn: (() => {}) as ClientSystemMetricsClearInterval,
     });
     collector.start();
     callback?.({ getEntries: () => [{}, {}] });
@@ -188,9 +190,9 @@ describe('attachClientSystemMetrics', () => {
       sampler: () => [{ metric: 'ExceptionCount', value: 4 }],
       setIntervalFn: ((fn: () => void) => {
         intervalFn = fn;
-        return { unref: () => {} } as unknown as ReturnType<typeof setInterval>;
-      }) as typeof setInterval,
-      clearIntervalFn: (() => {}) as typeof clearInterval,
+        return { unref: () => {} };
+      }) as ClientSystemMetricsSetInterval,
+      clearIntervalFn: (() => {}) as ClientSystemMetricsClearInterval,
     });
     intervalFn?.();
     await reporter.flush();

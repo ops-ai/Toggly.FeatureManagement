@@ -9,13 +9,28 @@ export type ClientSystemMetricsSampler = () => ClientSystemMetricObservation[];
 
 export type ClientSystemMetricsSetGauge = (metric: string, value: number) => void;
 
+/** Timer handle without referencing DOM/Node globals in published .d.ts. */
+export type ClientSystemMetricsTimerHandle = { unref?: () => void };
+
+export type ClientSystemMetricsSetInterval = (
+  handler: () => void,
+  ms: number,
+) => ClientSystemMetricsTimerHandle;
+
+export type ClientSystemMetricsClearInterval = (
+  handle: ClientSystemMetricsTimerHandle,
+) => void;
+
+/** Minimal long-task observer surface (avoids PerformanceObserver in .d.ts). */
+type LongTaskObserver = { disconnect: () => void; observe: (options: { type: string; buffered: boolean }) => void };
+
 export interface ClientSystemMetricsCollectorOptions {
   setGauge: ClientSystemMetricsSetGauge;
   intervalMs?: number;
   sampler?: ClientSystemMetricsSampler;
   now?: () => number;
-  setIntervalFn?: typeof setInterval;
-  clearIntervalFn?: typeof clearInterval;
+  setIntervalFn?: ClientSystemMetricsSetInterval;
+  clearIntervalFn?: ClientSystemMetricsClearInterval;
   attachExceptionSources?: (onException: () => void) => () => void;
 }
 
@@ -25,14 +40,14 @@ export class ClientSystemMetricsCollector {
   private readonly intervalMs: number;
   private readonly sampler: ClientSystemMetricsSampler;
   private readonly now: () => number;
-  private readonly setIntervalFn: typeof setInterval;
-  private readonly clearIntervalFn: typeof clearInterval;
+  private readonly setIntervalFn: ClientSystemMetricsSetInterval;
+  private readonly clearIntervalFn: ClientSystemMetricsClearInterval;
   private readonly attachExceptionSources?: ClientSystemMetricsCollectorOptions['attachExceptionSources'];
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: ClientSystemMetricsTimerHandle | null = null;
   private started = false;
   private exceptionCount = 0;
   private longTaskCount = 0;
-  private longTaskObserver: PerformanceObserver | null = null;
+  private longTaskObserver: LongTaskObserver | null = null;
   private detachExceptionSources: (() => void) | undefined;
   private pendingByMetric = new Map<string, number>();
 
@@ -41,8 +56,12 @@ export class ClientSystemMetricsCollector {
     this.intervalMs = options.intervalMs ?? CLIENT_SYSTEM_METRICS_INTERVAL_MS;
     this.now = options.now ?? Date.now;
     // Native browser timers require the Window/WorkerGlobalScope receiver.
-    this.setIntervalFn = options.setIntervalFn ?? globalThis.setInterval.bind(globalThis);
-    this.clearIntervalFn = options.clearIntervalFn ?? globalThis.clearInterval.bind(globalThis);
+    this.setIntervalFn =
+      options.setIntervalFn ??
+      (globalThis.setInterval.bind(globalThis) as ClientSystemMetricsSetInterval);
+    this.clearIntervalFn =
+      options.clearIntervalFn ??
+      (globalThis.clearInterval.bind(globalThis) as ClientSystemMetricsClearInterval);
     this.attachExceptionSources = options.attachExceptionSources;
     this.sampler = options.sampler ?? (() => this.defaultSample());
   }
@@ -111,9 +130,10 @@ export class ClientSystemMetricsCollector {
   }
 
   private attachLongTaskObserver(): void {
-    if (typeof PerformanceObserver === 'undefined') return;
+    const Observer = (globalThis as { PerformanceObserver?: new (cb: (list: { getEntries: () => unknown[] }) => void) => LongTaskObserver }).PerformanceObserver;
+    if (typeof Observer !== 'function') return;
     try {
-      this.longTaskObserver = new PerformanceObserver((list) => {
+      this.longTaskObserver = new Observer((list) => {
         this.longTaskCount += list.getEntries().length;
       });
       this.longTaskObserver.observe({ type: 'longtask', buffered: true });
@@ -180,8 +200,8 @@ export interface AttachClientSystemMetricsOptions {
   reactNativeExceptions?: boolean;
   sampler?: ClientSystemMetricsSampler;
   now?: () => number;
-  setIntervalFn?: typeof setInterval;
-  clearIntervalFn?: typeof clearInterval;
+  setIntervalFn?: ClientSystemMetricsSetInterval;
+  clearIntervalFn?: ClientSystemMetricsClearInterval;
 }
 
 /** Start sampling when systemMetrics and telemetry are enabled; stop via returned detach. */

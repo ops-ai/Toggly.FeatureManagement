@@ -12,9 +12,12 @@ export {
 export type {
   AttachClientSystemMetricsOptions,
   ClientSystemMetricObservation,
+  ClientSystemMetricsClearInterval,
   ClientSystemMetricsCollectorOptions,
   ClientSystemMetricsSampler,
   ClientSystemMetricsSetGauge,
+  ClientSystemMetricsSetInterval,
+  ClientSystemMetricsTimerHandle,
 } from './client-system-metrics.js';
 
 type Context = Pick<Envelope, 'k' | 'e' | 'i' | 'u'>;

@@ -1,6 +1,19 @@
 import { v4 as uuidv4 } from 'uuid';
-import { attachClientSystemMetrics, createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
+import * as clientTelemetry from '@ops-ai/toggly-client-telemetry';
+import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
+
+// 1.2.1 exports attachClientSystemMetrics; CI/smoke may still resolve public 1.2.0.
+type AttachClientSystemMetrics = (
+  reporter: TelemetryReporter,
+  options: { systemMetrics?: boolean; enableTelemetry?: boolean },
+) => () => void;
+const attachClientSystemMetrics: AttachClientSystemMetrics =
+  typeof (clientTelemetry as { attachClientSystemMetrics?: AttachClientSystemMetrics })
+    .attachClientSystemMetrics === 'function'
+    ? (clientTelemetry as { attachClientSystemMetrics: AttachClientSystemMetrics })
+        .attachClientSystemMetrics
+    : () => () => {};
 import { FeatureRequirement, StorageKeys, TogglyConfig, VariantResult, EvaluatedVariantDef } from './models';
 import { decodeVariantValue } from './decode-variant-value';
 import { HookExecutor } from './hooks';
