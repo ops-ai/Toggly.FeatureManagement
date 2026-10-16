@@ -304,8 +304,10 @@ mod tests {
 
     static TEST_LOCK: TestMutex<()> = TestMutex::new(());
 
-    fn test_observe() -> (ObserveFn, Arc<StdMutex<Vec<(String, f64)>>>) {
-        let seen: Arc<StdMutex<Vec<(String, f64)>>> = Arc::new(StdMutex::new(Vec::new()));
+    type ObservedSamples = Arc<StdMutex<Vec<(String, f64)>>>;
+
+    fn test_observe() -> (ObserveFn, ObservedSamples) {
+        let seen: ObservedSamples = Arc::new(StdMutex::new(Vec::new()));
         let seen2 = seen.clone();
         let observe: ObserveFn = Arc::new(move |metric, value, _| {
             seen2.lock().unwrap().push((metric.to_string(), value));

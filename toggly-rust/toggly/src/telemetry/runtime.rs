@@ -877,15 +877,17 @@ mod tests {
         let runtime = TelemetryRuntime::start(config);
         runtime.tick_system_metrics_for_test();
         runtime.flush_all().await;
-        let payloads = metrics.payloads.lock().unwrap();
-        assert_eq!(payloads.len(), 1);
-        assert!(
-            payloads[0]
-                .observations
-                .iter()
-                .any(|o| o.metric == "CpuUsage"),
-            "expected CpuUsage observation from system metrics wiring"
-        );
+        {
+            let payloads = metrics.payloads.lock().unwrap();
+            assert_eq!(payloads.len(), 1);
+            assert!(
+                payloads[0]
+                    .observations
+                    .iter()
+                    .any(|o| o.metric == "CpuUsage"),
+                "expected CpuUsage observation from system metrics wiring"
+            );
+        }
         runtime.close().await;
     }
 

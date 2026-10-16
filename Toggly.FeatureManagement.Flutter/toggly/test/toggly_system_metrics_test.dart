@@ -29,7 +29,9 @@ void main() {
         request.response.statusCode = 202;
       } else {
         request.response.headers.contentType = ContentType.json;
-        request.response.write(jsonEncode({'defs': {'a': true}}));
+        request.response.write(jsonEncode({
+          'defs': {'a': true}
+        }));
       }
       await request.response.close();
     });
