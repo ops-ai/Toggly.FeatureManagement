@@ -5,9 +5,9 @@ import zlib
 /// Seconds since an arbitrary boot epoch; continues while the device sleeps.
 /// File-level so it can be used as an init default without covariant `Self`.
 private let togglyMonotonicSeconds: @Sendable () -> TimeInterval = {
-    var ts = timespec()
-    clock_gettime(CLOCK_MONOTONIC_RAW, &ts)
-    return TimeInterval(ts.tv_sec) + TimeInterval(ts.tv_nsec) / 1_000_000_000
+    var clock = timespec()
+    clock_gettime(CLOCK_MONOTONIC_RAW, &clock)
+    return TimeInterval(clock.tv_sec) + TimeInterval(clock.tv_nsec) / 1_000_000_000
 }
 
 /// Batches feature and app metric deltas with immutable attribution per admitted batch.
