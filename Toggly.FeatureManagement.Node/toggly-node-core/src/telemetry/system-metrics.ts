@@ -123,8 +123,12 @@ export class SystemMetricsCollector {
     out.push({ metric: 'GCHeapSize', value: mem.heapUsed })
 
     if (this.exceptionCount > 0) {
-      out.push({ metric: 'ExceptionCount', value: this.exceptionCount })
-      this.exceptionCount = 0
+      const pending = this.pendingByMetric.get('ExceptionCount') ?? 0
+      // Only drain after we know the sample will not be dropped by the pending cap.
+      if (pending < SYSTEM_METRICS_MAX_PENDING) {
+        out.push({ metric: 'ExceptionCount', value: this.exceptionCount })
+        this.exceptionCount = 0
+      }
     }
 
     const timeInGc = this.sampleTimeInGc()

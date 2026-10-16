@@ -176,13 +176,16 @@ public final class SystemMetricsCollector {
             out.add(new Observation("GCHeapSize", heapUsed));
         }
 
-        if (lastHeapUsed >= 0 && heapUsed > lastHeapUsed && intervalSec > 0) {
-            double rate = (heapUsed - lastHeapUsed) / intervalSec;
-            if (Double.isFinite(rate) && rate > 0) {
-                out.add(new Observation("AllocationRate", rate));
+        Long allocated = readTotalAllocatedBytes();
+        if (allocated != null) {
+            if (lastHeapUsed >= 0 && allocated >= lastHeapUsed && intervalSec > 0) {
+                double rate = (allocated - lastHeapUsed) / intervalSec;
+                if (Double.isFinite(rate) && rate >= 0) {
+                    out.add(new Observation("AllocationRate", rate));
+                }
             }
+            lastHeapUsed = allocated;
         }
-        lastHeapUsed = heapUsed;
 
         Double timeInGc = sampleTimeInGcPercent(intervalSec);
         if (timeInGc != null) {
@@ -247,6 +250,26 @@ public final class SystemMetricsCollector {
         }
     }
 
+    /** Cumulative allocated bytes when the HotSpot ThreadMXBean exposes them. */
+    private static Long readTotalAllocatedBytes() {
+        try {
+            var threads = ManagementFactory.getThreadMXBean();
+            if (!(threads instanceof com.sun.management.ThreadMXBean hotspot)) {
+                return null;
+            }
+            if (!hotspot.isThreadAllocatedMemorySupported()) {
+                return null;
+            }
+            if (!hotspot.isThreadAllocatedMemoryEnabled()) {
+                hotspot.setThreadAllocatedMemoryEnabled(true);
+            }
+            long total = hotspot.getTotalAllocatedBytes();
+            return total >= 0 ? total : null;
+        } catch (RuntimeException | LinkageError ignored) {
+            return null;
+        }
+    }
+
     private static long totalGcCollectionTimeMs() {
         long total = 0;
         for (GarbageCollectorMXBean gc : ManagementFactory.getGarbageCollectorMXBeans()) {
@@ -306,32 +329,47 @@ public final class SystemMetricsCollector {
         return null;
     }
 
+    private Thread.UncaughtExceptionHandler activeUncaughtHandler;
+
     private void attachUncaughtHandler() {
         try {
             Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
-            previousUncaughtHandler = previous;
-            Thread.setDefaultUncaughtExceptionHandler((thread, ex) -> {
+            if (previousUncaughtHandler == null) {
+                previousUncaughtHandler = previous;
+            }
+            Thread.UncaughtExceptionHandler ours = (thread, ex) -> {
                 exceptionCount.incrementAndGet();
-                if (previous != null) {
-                    previous.uncaughtException(thread, ex);
+                Thread.UncaughtExceptionHandler prior = previousUncaughtHandler;
+                if (prior != null) {
+                    prior.uncaughtException(thread, ex);
                 } else {
                     // Avoid ThreadGroup.uncaughtException — with no prior default handler it
                     // recurses into this handler and overflows the stack.
                     ex.printStackTrace(System.err);
                 }
-            });
+            };
+            activeUncaughtHandler = ours;
+            if (Thread.getDefaultUncaughtExceptionHandler() != ours) {
+                Thread.setDefaultUncaughtExceptionHandler(ours);
+            }
         } catch (RuntimeException ignored) {
             previousUncaughtHandler = null;
+            activeUncaughtHandler = null;
         }
     }
 
     private void detachUncaughtHandler() {
         try {
-            Thread.setDefaultUncaughtExceptionHandler(previousUncaughtHandler);
+            // Only restore when we still own the default handler slot.
+            if (activeUncaughtHandler != null
+                    && Thread.getDefaultUncaughtExceptionHandler() == activeUncaughtHandler) {
+                Thread.setDefaultUncaughtExceptionHandler(previousUncaughtHandler);
+                previousUncaughtHandler = null;
+            }
         } catch (RuntimeException ignored) {
             // ignore
         }
-        previousUncaughtHandler = null;
+        activeUncaughtHandler = null;
     }
 
     private record CpuSnapshot(long processCpuTimeNs, long nanoTime) {}

@@ -1,4 +1,15 @@
-import { attachClientSystemMetrics, createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
+import {
+  createTelemetryReporter,
+  type TelemetryReporter,
+} from '@ops-ai/toggly-client-telemetry';
+import * as clientTelemetry from '@ops-ai/toggly-client-telemetry';
+
+// 1.2.1 exports attachClientSystemMetrics; packed hosts may still resolve
+// public 1.2.0 until that release is on npm.
+const attachClientSystemMetrics: typeof clientTelemetry.attachClientSystemMetrics =
+  typeof clientTelemetry.attachClientSystemMetrics === 'function'
+    ? clientTelemetry.attachClientSystemMetrics
+    : (() => () => {}) as typeof clientTelemetry.attachClientSystemMetrics;
 import {
   appendEvaluationContext,
   isCacheLruEnabled,
