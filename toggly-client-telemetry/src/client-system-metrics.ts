@@ -154,7 +154,7 @@ export class ClientSystemMetricsCollector {
 }
 
 export function attachBrowserExceptionSources(onException: () => void): () => void {
-  if (typeof globalThis.window === 'undefined') return () => {};
+  if (globalThis.window === undefined) return () => {};
   const win = globalThis.window;
   const errorHandler = () => {
     onException();
