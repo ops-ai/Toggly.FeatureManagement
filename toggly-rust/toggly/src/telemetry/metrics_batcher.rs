@@ -424,7 +424,10 @@ mod tests {
         }
         let (payload, _) = batcher.build_and_reset().expect("payload");
         assert_eq!(payload.observations.len(), MAX_OBSERVATIONS_PER_BATCH);
-        assert_eq!(payload.observations[0].variant_values.get("enabled"), Some(&3.0));
+        assert_eq!(
+            payload.observations[0].variant_values.get("enabled"),
+            Some(&3.0)
+        );
         assert_eq!(
             payload.observations[MAX_OBSERVATIONS_PER_BATCH - 1]
                 .variant_values

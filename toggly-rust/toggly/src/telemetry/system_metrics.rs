@@ -380,10 +380,7 @@ mod tests {
         assert_eq!(seen.lock().unwrap().len(), SYSTEM_METRICS_MAX_PENDING);
         collector.on_flushed();
         collector.tick();
-        assert_eq!(
-            seen.lock().unwrap().len(),
-            SYSTEM_METRICS_MAX_PENDING + 1
-        );
+        assert_eq!(seen.lock().unwrap().len(), SYSTEM_METRICS_MAX_PENDING + 1);
     }
 
     #[test]
@@ -404,10 +401,7 @@ mod tests {
         collector.tick();
         collector.tick();
         let rows = seen.lock().unwrap();
-        assert_eq!(
-            rows.iter().filter(|(m, _)| m == "CpuUsage").count(),
-            1
-        );
+        assert_eq!(rows.iter().filter(|(m, _)| m == "CpuUsage").count(), 1);
         assert!(rows.iter().any(|(m, v)| m == "CpuUsage" && *v == 7.0));
     }
 
@@ -435,7 +429,10 @@ mod tests {
         #[cfg(unix)]
         {
             assert!(
-                seen.lock().unwrap().iter().any(|(m, v)| m == "CpuUsage" && *v >= 0.0),
+                seen.lock()
+                    .unwrap()
+                    .iter()
+                    .any(|(m, v)| m == "CpuUsage" && *v >= 0.0),
                 "expected CpuUsage from rusage delta"
             );
         }
@@ -455,9 +452,6 @@ mod tests {
         assert_eq!(seen.lock().unwrap().len(), SYSTEM_METRICS_MAX_PENDING);
         collector.stop();
         collector.tick();
-        assert_eq!(
-            seen.lock().unwrap().len(),
-            SYSTEM_METRICS_MAX_PENDING + 1
-        );
+        assert_eq!(seen.lock().unwrap().len(), SYSTEM_METRICS_MAX_PENDING + 1);
     }
 }

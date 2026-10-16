@@ -861,8 +861,7 @@ mod tests {
             }
         }
 
-        let sampler: SystemMetricsSampler =
-            Arc::new(|| vec![("CpuUsage".into(), 9.0)]);
+        let sampler: SystemMetricsSampler = Arc::new(|| vec![("CpuUsage".into(), 9.0)]);
 
         let metrics = Arc::new(CapturingMetrics {
             payloads: StdMutex::new(Vec::new()),
@@ -893,8 +892,8 @@ mod tests {
     #[tokio::test]
     async fn successful_metrics_flush_clears_system_metrics_pending() {
         use crate::telemetry::metrics_batcher::MetricStatPayload;
-        use crate::telemetry::transport::MetricsSender;
         use crate::telemetry::system_metrics::SYSTEM_METRICS_MAX_PENDING;
+        use crate::telemetry::transport::MetricsSender;
 
         struct OkMetrics;
 
@@ -905,8 +904,7 @@ mod tests {
             }
         }
 
-        let sampler: SystemMetricsSampler =
-            Arc::new(|| vec![("CpuUsage".into(), 1.0)]);
+        let sampler: SystemMetricsSampler = Arc::new(|| vec![("CpuUsage".into(), 1.0)]);
 
         let mut config = test_runtime_config_with_system_metrics(Some(true), true);
         config.system_metrics_sampler = Some(sampler);
