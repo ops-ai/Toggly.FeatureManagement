@@ -1,7 +1,12 @@
 # frozen_string_literal: true
 
 require "etc"
-require "fiddle"
+
+begin
+  require "fiddle"
+rescue LoadError
+  # Optional: getrusage sampling is skipped when fiddle is unavailable.
+end
 
 module Toggly
   module Telemetry

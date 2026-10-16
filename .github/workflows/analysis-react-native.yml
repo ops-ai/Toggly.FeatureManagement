@@ -79,6 +79,14 @@ jobs:
         working-directory: ${{ matrix.path }}
         run: npm ci || npm install
 
+      - name: Overlay local toggly-client-telemetry into package
+        if: matrix.sdk != 'Core'
+        working-directory: ${{ matrix.path }}
+        run: |
+          set -euo pipefail
+          TGZ=$(ls "$RUNNER_TEMP"/ops-ai-toggly-client-telemetry-*.tgz | head -1)
+          npm install --no-save "$TGZ"
+
       - name: Overlay local toggly-client-telemetry (Core)
         if: matrix.sdk == 'Core'
         working-directory: Toggly.FeatureManagement.ReactNative/libs/core

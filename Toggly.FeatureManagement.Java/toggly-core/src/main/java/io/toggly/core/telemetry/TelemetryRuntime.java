@@ -314,8 +314,10 @@ public final class TelemetryRuntime implements AutoCloseable, DefinitionCacheRec
                 return;
             }
             client.sendMetrics(payload);
-            if (systemMetricsCollector != null) {
-                systemMetricsCollector.onFlushed();
+            // Local copy: close() may null the field while a flush is in flight.
+            SystemMetricsCollector collector = systemMetricsCollector;
+            if (collector != null) {
+                collector.onFlushed();
             }
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Failed to send metrics", e);

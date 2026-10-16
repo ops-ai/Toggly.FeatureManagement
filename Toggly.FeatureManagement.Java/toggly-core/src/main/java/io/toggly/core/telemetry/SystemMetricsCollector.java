@@ -315,7 +315,9 @@ public final class SystemMetricsCollector {
                 if (previous != null) {
                     previous.uncaughtException(thread, ex);
                 } else {
-                    thread.getThreadGroup().uncaughtException(thread, ex);
+                    // Avoid ThreadGroup.uncaughtException — with no prior default handler it
+                    // recurses into this handler and overflows the stack.
+                    ex.printStackTrace(System.err);
                 }
             });
         } catch (RuntimeException ignored) {
