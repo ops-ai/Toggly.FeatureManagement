@@ -8,12 +8,14 @@ type AttachClientSystemMetrics = (
   reporter: TelemetryReporter,
   options: { systemMetrics?: boolean; enableTelemetry?: boolean },
 ) => () => void;
+const telemetryModule = clientTelemetry as unknown as {
+  attachClientSystemMetrics?: AttachClientSystemMetrics
+}
 const attachClientSystemMetrics: AttachClientSystemMetrics =
-  typeof (clientTelemetry as { attachClientSystemMetrics?: AttachClientSystemMetrics })
-    .attachClientSystemMetrics === 'function'
-    ? (clientTelemetry as { attachClientSystemMetrics: AttachClientSystemMetrics })
-        .attachClientSystemMetrics
-    : () => () => {};
+  typeof telemetryModule.attachClientSystemMetrics === 'function'
+    ? telemetryModule.attachClientSystemMetrics
+    : () => () => {}
+
 import { FeatureRequirement, StorageKeys, TogglyConfig, VariantResult, EvaluatedVariantDef } from './models';
 import { decodeVariantValue } from './decode-variant-value';
 import { HookExecutor } from './hooks';

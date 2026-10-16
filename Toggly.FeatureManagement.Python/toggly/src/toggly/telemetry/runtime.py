@@ -442,6 +442,11 @@ class TelemetryRuntime:
                 collector.on_flushed()
         except Exception as exc:
             logger.error("Failed to send metrics: %s", exc)
+            # Batch already drained; clear system-metrics backpressure so
+            # collection resumes after recovery instead of stalling at the cap.
+            collector = self._system_metrics_collector
+            if collector is not None:
+                collector.on_flushed()
         finally:
             with self._lock:
                 self._sending_metrics = False

@@ -321,6 +321,12 @@ public final class TelemetryRuntime implements AutoCloseable, DefinitionCacheRec
             }
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Failed to send metrics", e);
+            // Batch already drained; clear system-metrics backpressure so
+            // collection resumes after recovery instead of stalling at the cap.
+            SystemMetricsCollector collector = systemMetricsCollector;
+            if (collector != null) {
+                collector.onFlushed();
+            }
         } finally {
             sendingMetrics.set(false);
         }
