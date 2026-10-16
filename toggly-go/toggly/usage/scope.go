@@ -7,7 +7,8 @@ import (
 )
 
 // FeatureUsageScope tracks one usage attempt; call Fail to mark failure without returning an error.
-type FeatureUsageScope interface {
+// Named for cross-SDK parity (not the Go single-method -er form).
+type FeatureUsageScope interface { // NOSONAR godre:S8196
 	Fail()
 }
 

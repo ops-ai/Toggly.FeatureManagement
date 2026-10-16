@@ -70,7 +70,7 @@ func TestRunUsageScope_Cancelled(t *testing.T) {
 func TestRunUsageScope_PanicRecordsFailure(t *testing.T) {
 	b := NewBatcher("app", "Production", "", "")
 	defer func() {
-		if r := recover(); r == nil {
+		if recover() == nil {
 			t.Fatal("expected panic")
 		}
 		en := b.buildAndReset().Stats[0].VariantStats["enabled"]

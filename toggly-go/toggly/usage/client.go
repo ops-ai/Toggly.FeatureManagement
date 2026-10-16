@@ -80,7 +80,12 @@ func (c *Client) RecordView(feature, identity string) {
 // RunUsageScope records attempt, duration, and errors for fn without evaluating flags.
 func (c *Client) RunUsageScope(featureKey, identity string, fn func(FeatureUsageScope) error) error {
 	if c == nil || c.batcher == nil {
-		return RunUsageScope(func() {}, func(int64) {}, func(int64) {}, fn)
+		return RunUsageScope(
+			func() { /* no-op: batcher unavailable */ },
+			func(int64) { /* no-op: batcher unavailable */ },
+			func(int64) { /* no-op: batcher unavailable */ },
+			fn,
+		)
 	}
 	return RunUsageScope(
 		func() { c.batcher.RecordUsageAttempt(featureKey, identity) },

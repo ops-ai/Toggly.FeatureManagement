@@ -434,7 +434,12 @@ func (c *Client) Use(ctx context.Context, featureKey string, evalCtx Context, fn
 		return fn(scope)
 	}
 	if c == nil || c.usage == nil {
-		return usage.RunUsageScope(func() {}, func(int64) {}, func(int64) {}, wrapped)
+		return usage.RunUsageScope(
+			func() { /* no-op: usage client unavailable */ },
+			func(int64) { /* no-op: usage client unavailable */ },
+			func(int64) { /* no-op: usage client unavailable */ },
+			wrapped,
+		)
 	}
 	return c.usage.RunUsageScope(featureKey, evalCtx.Identity, wrapped)
 }
