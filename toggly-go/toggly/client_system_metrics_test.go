@@ -84,7 +84,7 @@ func TestNewClientSystemMetricsWithoutOptionOverrides(t *testing.T) {
 	api := &captureSendMetricsAPI{}
 	client, err := NewClient(Config{
 		AppKey: "app", EnableMetrics: true, MetricsClient: metricsClientForSystemMetricsTest(t, api),
-		SystemMetrics: true,
+		SystemMetrics:            true,
 		DisableBackgroundRefresh: true, DisableEntityContextRegistration: true,
 	})
 	if err != nil {
