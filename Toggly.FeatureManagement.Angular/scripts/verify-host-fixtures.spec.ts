@@ -39,26 +39,24 @@ await withHostResources(async defer => {
       if (locked.version !== '2.8.1') throw new Error('Retained consumer baseline drifted');
       console.log('Retained locked Angular SDK baseline 2.8.1 installed before upgrade');
     }
-    // Install all local integration tarballs in one command so npm keeps
-    // them as a single graph (sequential installs can remove the prior
-    // file: package). Retry transient npm 10 graph crashes (edgesOut null
-    // lands on inherited stderr, not Error.message).
-    const install = ['npm', 'install', '--no-save', '--package-lock=false', '--no-audit', '--no-fund', tarball];
+    // Pin local integration artifacts via package.json `file:` deps, then
+    // `npm install`. Passing multiple tarball paths on the CLI hits a
+    // deterministic npm 10 `edgesOut` null crash on Angular 21 hosts;
+    // sequential CLI installs can drop the prior file: package.
+    const hostPackagePath = path.join(cwd, 'package.json');
+    const hostPackage = JSON.parse(fs.readFileSync(hostPackagePath, 'utf8'));
+    hostPackage.dependencies = {
+      ...hostPackage.dependencies,
+      '@ops-ai/ngx-feature-flags-toggly': `file:${tarball}`,
+    };
     if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
-      install.push(path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL));
+      hostPackage.dependencies['@ops-ai/toggly-client-telemetry'] = `file:${path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL)}`;
     }
     if (process.env.TOGGLY_SIGNED_DEFS_TARBALL) {
-      install.push(path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL));
+      hostPackage.dependencies['@ops-ai/toggly-signed-defs'] = `file:${path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL)}`;
     }
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        run(install);
-        break;
-      } catch (error) {
-        if (attempt === 3) throw error;
-        console.warn(`npm install of local tarballs failed (attempt ${attempt}/3); retrying`);
-      }
-    }
+    fs.writeFileSync(hostPackagePath, `${JSON.stringify(hostPackage, null, 2)}\n`);
+    run(['npm', 'install', '--package-lock=false', '--no-audit', '--no-fund']);
     const installed = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/ngx-feature-flags-toggly/package.json')));
     const reporter = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-client-telemetry/package.json')));
     const signer = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-signed-defs/package.json')));
