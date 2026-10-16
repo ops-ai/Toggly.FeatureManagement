@@ -33,7 +33,11 @@ private enum UncaughtExceptionBridge {
         guard installs > 0 else { return }
         installs -= 1
         if installs == 0 {
-            NSSetUncaughtExceptionHandler(previous)
+            // Only restore our saved previous when we still own the slot —
+            // another SDK may have chained after us.
+            if NSGetUncaughtExceptionHandler() == togglySystemMetricsUncaughtHandler {
+                NSSetUncaughtExceptionHandler(previous)
+            }
             previous = nil
         }
     }

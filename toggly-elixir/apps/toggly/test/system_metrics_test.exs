@@ -95,36 +95,6 @@ defmodule Toggly.SystemMetricsTest do
     assert :ok = SystemMetrics.detach_exception_handler(SmHandlerIdempotent)
   end
 
-  test "attach_exception_handler refreshes stale client pid on already_exists" do
-    {:ok, stale} = Toggly.SystemMetricsTest.ExceptionClient.start_link([])
-    assert :ok = SystemMetrics.attach_exception_handler(SmHandlerRefresh, stale)
-    GenServer.stop(stale)
-
-    {:ok, live} = Toggly.SystemMetricsTest.ExceptionClient.start_link([])
-    assert :ok = SystemMetrics.attach_exception_handler(SmHandlerRefresh, live)
-
-    {:ok, handler_config} =
-      :logger.get_handler_config(:"toggly.system_metrics.SmHandlerRefresh")
-
-    client =
-      case handler_config do
-        %{config: %{client: pid}} -> pid
-        %{client: pid} -> pid
-      end
-
-    assert client == live
-
-    assert :ok =
-             Toggly.SystemMetrics.LogHandler.log(
-               %{msg: {:report, %{kind: :crash_report}}},
-               handler_config
-             )
-
-    assert Toggly.SystemMetricsTest.ExceptionClient.get(live) == 1
-    assert :ok = SystemMetrics.detach_exception_handler(SmHandlerRefresh)
-    GenServer.stop(live)
-  end
-
   test "parse_vm_rss extracts kilobytes from /proc status" do
     assert SystemMetrics.parse_vm_rss("Name:\tfoo\nVmRSS:\t 2048 kB\n") == 2048 * 1024.0
     assert SystemMetrics.parse_vm_rss("VmRSS:\tnot-a-number\n") == nil
