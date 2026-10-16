@@ -53,13 +53,20 @@ await withHostResources(async defer => {
       fs.cpSync(extracted, destination, { recursive: true });
     };
     overlayLocalPackage(tarball, '@ops-ai/ngx-feature-flags-toggly');
+    const installed = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/ngx-feature-flags-toggly/package.json')));
+    const installRegistryDependency = (name, versionRange) => {
+      run(['npm', 'install', '--no-save', '--package-lock=false', '--no-audit', '--no-fund', `${name}@${versionRange}`]);
+    };
     if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
       overlayLocalPackage(path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL), '@ops-ai/toggly-client-telemetry');
+    } else {
+      installRegistryDependency('@ops-ai/toggly-client-telemetry', installed.dependencies['@ops-ai/toggly-client-telemetry']);
     }
     if (process.env.TOGGLY_SIGNED_DEFS_TARBALL) {
       overlayLocalPackage(path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL), '@ops-ai/toggly-signed-defs');
+    } else {
+      installRegistryDependency('@ops-ai/toggly-signed-defs', installed.dependencies['@ops-ai/toggly-signed-defs']);
     }
-    const installed = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/ngx-feature-flags-toggly/package.json')));
     const reporter = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-client-telemetry/package.json')));
     const signer = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-signed-defs/package.json')));
     const host = Object.fromEntries(Object.entries({ angular: '@angular/core', cli: '@angular/cli', typescript: 'typescript' })
