@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.3 — 2026-10-16
+
+### Fixed
+- `use()` pins telemetry attribution for the duration of the scope so a
+  mid-await `setContext` cannot split attempt vs duration metrics [OPS-1758].
+
 ## 1.2.2 — 2026-10-16
 
 ### Fixed

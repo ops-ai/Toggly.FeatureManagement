@@ -334,14 +334,16 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
       feature(featureKey, variant, failed ? 5 : 4, durationMs),
     recordUsageScopeOutcome,
     use<T>(featureKey: string, fn: (scope: FeatureUsageScope) => Promise<T>, variant = 'enabled'): Promise<T> {
+      // Pin attribution for the whole scope so mid-flight setContext cannot split metrics.
+      const pinned = context;
       return runFeatureUsageScope(
         {
-          recordAttempt: () => reporter.recordUsage(featureKey, variant),
+          recordAttempt: () => feature(featureKey, variant, 1, 1, pinned),
           recordSuccessDuration: (durationMs) =>
-            reporter.recordUsageDuration(featureKey, durationMs, variant, false),
+            feature(featureKey, variant, 4, durationMs, pinned),
           recordFailure: (durationMs) => {
-            reporter.recordUsageError(featureKey, variant);
-            reporter.recordUsageDuration(featureKey, durationMs, variant, true);
+            feature(featureKey, variant, 3, 1, pinned);
+            feature(featureKey, variant, 5, durationMs, pinned);
           },
         },
         fn,

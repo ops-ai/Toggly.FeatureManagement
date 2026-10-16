@@ -47,10 +47,10 @@ RSpec.describe Toggly::Telemetry::UsageScopeRunner do
   end
 
   it "records error for Exception subclasses that bypass StandardError" do
-    fatal = Class.new(Exception)
     expect do
-      described_class.run(handlers("Fatal")) { |_scope| raise fatal, "fatal" }
-    end.to raise_error(fatal)
+      # SystemStackError inherits Exception, not StandardError.
+      described_class.run(handlers("Fatal")) { |_scope| raise SystemStackError, "fatal" }
+    end.to raise_error(SystemStackError)
     vs = batcher.build_and_reset[:stats].first[:variantStats]["enabled"]
     expect(vs[:errorCount]).to eq(1)
     expect(vs[:usedCount]).to eq(1)
