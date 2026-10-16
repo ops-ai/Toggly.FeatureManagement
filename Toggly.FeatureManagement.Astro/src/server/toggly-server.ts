@@ -40,6 +40,7 @@ import { decodeVariantValue } from '../utils/decode-variant-value.js';
 import {
   UsageTelemetryRuntime,
   resolveTelemetryEnableFlag,
+  type MetricsSender,
   type UsageSender,
 } from '../telemetry/index.js';
 
@@ -115,7 +116,7 @@ export class TogglyServer implements TogglyClient {
       restoreOnSendFailure: true,
       fetchImpl: this.config.telemetryFetch,
       usageClient: this.config.usageClient as UsageSender | null | undefined,
-      metricsClient: this.config.metricsClient,
+      metricsClient: this.config.metricsClient as MetricsSender | null | undefined,
     });
     this.telemetry.start();
   }

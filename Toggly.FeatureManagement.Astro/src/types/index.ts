@@ -4,6 +4,8 @@
 
 import type { Hook, EvaluatedDefinitions } from '@ops-ai/toggly-hooks-types';
 import type { LocalGate } from '@ops-ai/toggly-local-gates';
+import type { FeatureStatPayload } from '../telemetry/usage-batcher.js';
+import type { MetricStatPayload } from '../telemetry/metrics-batcher.js';
 
 /**
  * Configuration options for Toggly integration
@@ -116,7 +118,7 @@ export interface TogglyConfig {
    * server client builds a soft-fail HTTPS client to `api/usage/stats`.
    */
   usageClient?: {
-    sendStats(request: Record<string, unknown>): Promise<unknown>;
+    sendStats(request: FeatureStatPayload): Promise<unknown>;
     close?(): void;
   } | null;
   /**
@@ -124,7 +126,7 @@ export interface TogglyConfig {
    * server client builds a soft-fail HTTPS client to `api/metrics`.
    */
   metricsClient?: {
-    sendMetrics(request: Record<string, unknown>): Promise<unknown>;
+    sendMetrics(request: MetricStatPayload): Promise<unknown>;
     close?(): void;
   } | null;
 }
