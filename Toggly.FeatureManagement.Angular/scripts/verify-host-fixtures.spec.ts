@@ -42,7 +42,22 @@ await withHostResources(async defer => {
     const install = ['npm', 'install', '--no-save', '--package-lock=false', '--no-audit', '--no-fund', tarball];
     if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) install.push(path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL));
     if (process.env.TOGGLY_SIGNED_DEFS_TARBALL) install.push(path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL));
-    run(install);
+    // npm@10 arborist can throw "Cannot read properties of null (reading 'edgesOut')"
+    // when overlaying a packed tarball with --package-lock=false; retry clears it.
+    let installError;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        run(install);
+        installError = undefined;
+        break;
+      } catch (error) {
+        installError = error;
+        const message = error instanceof Error ? error.message : String(error);
+        if (!message.includes("reading 'edgesOut'") || attempt === 2) throw error;
+        console.warn(`npm install edgesOut flake on ${entry.fixture}; retry ${attempt + 1}/2`);
+      }
+    }
+    if (installError) throw installError;
     const installed = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/ngx-feature-flags-toggly/package.json')));
     const reporter = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-client-telemetry/package.json')));
     const signer = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-signed-defs/package.json')));
