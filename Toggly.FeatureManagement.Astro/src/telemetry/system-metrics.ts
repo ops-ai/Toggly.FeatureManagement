@@ -50,7 +50,7 @@ export class SystemMetricsCollector {
   private eventLoopHistogram: ReturnType<typeof monitorEventLoopDelay> | null = null
   private gcObserver: PerformanceObserver | null = null
   private gcDurationMs = 0
-  private pendingByMetric = new Map<string, number>()
+  private readonly pendingByMetric = new Map<string, number>()
 
   constructor(options: SystemMetricsCollectorOptions) {
     this.observe = options.observe
@@ -119,8 +119,10 @@ export class SystemMetricsCollector {
     if (cpu != null) out.push({ metric: 'CpuUsage', value: cpu })
 
     const mem = process.memoryUsage()
-    out.push({ metric: 'MemoryWorkingSet', value: mem.rss })
-    out.push({ metric: 'GCHeapSize', value: mem.heapUsed })
+    out.push(
+      { metric: 'MemoryWorkingSet', value: mem.rss },
+      { metric: 'GCHeapSize', value: mem.heapUsed },
+    )
 
     if (this.exceptionCount > 0) {
       const pending = this.pendingByMetric.get('ExceptionCount') ?? 0

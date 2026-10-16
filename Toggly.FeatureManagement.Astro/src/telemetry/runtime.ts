@@ -11,20 +11,25 @@ import {
   type MetricsFeatureOptions,
   type MetricStatPayload,
 } from './metrics-batcher.js'
-import { UsageBatcher } from './usage-batcher.js'
+import { UsageBatcher, type FeatureStatPayload } from './usage-batcher.js'
 import { SystemMetricsCollector, type SystemMetricsSampler } from './system-metrics.js'
 
 /** Bound wait for request-scoped / signal close so hung flush cannot stall forever. */
 export const REQUEST_SCOPED_CLOSE_TIMEOUT_MS = 2_000
 
 export interface UsageSender {
-  sendStats(request: Record<string, unknown>): Promise<unknown>
+  sendStats(request: FeatureStatPayload): Promise<unknown>
   close?(): void
 }
 
 export interface MetricsSender {
-  sendMetrics(request: Record<string, unknown>): Promise<unknown>
+  sendMetrics(request: MetricStatPayload): Promise<unknown>
   close?(): void
+}
+
+function isSoftFailResult(result: unknown): boolean {
+  if (!result || typeof result !== 'object' || !('ok' in result)) return false
+  return result.ok === false
 }
 
 /**
@@ -161,81 +166,85 @@ export class UsageTelemetryRuntime {
       return
     }
 
-    const needsHttps =
-      (this.config.enableUsageTracking && this.config.usageClient === undefined) ||
-      (this.config.enableMetrics && this.config.metricsClient === undefined)
-
-    if (needsHttps) {
-      this.httpsClient = new HttpsTelemetryClient({
-        metricsBaseUrl: this.config.metricsBaseUrl,
-        fetchImpl: this.config.fetchImpl,
-        fetchTimeoutMs: this.config.fetchTimeoutMs,
-      })
-    }
-
+    this.ensureHttpsClient()
     if (this.config.enableUsageTracking) {
-      if (this.config.usageClient !== undefined) {
-        this.usageClient = this.config.usageClient
-      } else {
-        this.usageClient = {
-          sendStats: async (request) => {
-            const ok = await this.httpsClient!.sendUsageStats(
-              request as unknown as Parameters<HttpsTelemetryClient['sendUsageStats']>[0],
-            )
-            return { ok }
-          },
-        }
-      }
-
-      this.usageBatcher = new UsageBatcher({
-        appKey: this.config.appKey,
-        environment: this.config.environment,
-        instanceName: this.config.instanceName,
-        appVersion: this.config.appVersion,
-        processStartTime: this.processStartTime,
-      })
-
-      if (this.config.usageFlushInterval > 0) {
-        this.usageTimer = setInterval(() => {
-          void this.flush()
-        }, this.config.usageFlushInterval)
-        this.usageTimer.unref?.()
-      }
+      this.startUsageTelemetry()
     }
-
     if (this.config.enableMetrics) {
-      if (this.config.metricsClient !== undefined) {
-        this.metricsClient = this.config.metricsClient
-      } else {
-        this.metricsClient = {
-          sendMetrics: async (request) => {
-            const ok = await this.httpsClient!.sendMetrics(
-              request as unknown as Parameters<HttpsTelemetryClient['sendMetrics']>[0],
-            )
-            return { ok }
-          },
-        }
-      }
-
-      this.metricsBatcher = new MetricsBatcher({
-        appKey: this.config.appKey,
-        environment: this.config.environment,
-        instanceName: this.config.instanceName,
-      })
-
-      if (this.config.metricsFlushInterval > 0) {
-        this.metricsTimer = setInterval(() => {
-          void this.flush()
-        }, this.config.metricsFlushInterval)
-        this.metricsTimer.unref?.()
-      }
-
-      this.startSystemMetrics()
+      this.startMetricsTelemetry()
     }
-
     if (this.attachProcessHandlers) {
       this.attachHandlers()
     }
+  }
+
+  private ensureHttpsClient(): void {
+    const needsHttps =
+      (this.config.enableUsageTracking && this.config.usageClient === undefined) ||
+      (this.config.enableMetrics && this.config.metricsClient === undefined)
+    if (!needsHttps) return
+    this.httpsClient = new HttpsTelemetryClient({
+      metricsBaseUrl: this.config.metricsBaseUrl,
+      fetchImpl: this.config.fetchImpl,
+      fetchTimeoutMs: this.config.fetchTimeoutMs,
+    })
+  }
+
+  private startUsageTelemetry(): void {
+    this.usageClient = this.resolveUsageClient()
+    this.usageBatcher = new UsageBatcher({
+      appKey: this.config.appKey,
+      environment: this.config.environment,
+      instanceName: this.config.instanceName,
+      appVersion: this.config.appVersion,
+      processStartTime: this.processStartTime,
+    })
+    if (this.config.usageFlushInterval > 0) {
+      this.usageTimer = setInterval(() => {
+        void this.flush()
+      }, this.config.usageFlushInterval)
+      this.usageTimer.unref?.()
+    }
+  }
+
+  private resolveUsageClient(): UsageSender | null {
+    if (this.config.usageClient === undefined) {
+      return {
+        sendStats: async (request) => {
+          const ok = await this.httpsClient!.sendUsageStats(request)
+          return { ok }
+        },
+      }
+    }
+    return this.config.usageClient
+  }
+
+  private startMetricsTelemetry(): void {
+    this.metricsClient = this.resolveMetricsClient()
+    this.metricsBatcher = new MetricsBatcher({
+      appKey: this.config.appKey,
+      environment: this.config.environment,
+      instanceName: this.config.instanceName,
+    })
+    if (this.config.metricsFlushInterval > 0) {
+      this.metricsTimer = setInterval(() => {
+        void this.flush()
+      }, this.config.metricsFlushInterval)
+      this.metricsTimer.unref?.()
+    }
+    this.startSystemMetrics()
+  }
+
+  private resolveMetricsClient(): MetricsSender | null {
+    if (this.config.metricsClient === undefined) {
+      return {
+        sendMetrics: async (request) => {
+          const ok = await this.httpsClient!.sendMetrics(request)
+          return { ok }
+        },
+      }
+    }
+    return this.config.metricsClient
   }
 
   static readonly SIGNAL_FLUSH_TIMEOUT_MS = REQUEST_SCOPED_CLOSE_TIMEOUT_MS
@@ -382,14 +391,8 @@ export class UsageTelemetryRuntime {
     if (!bundle) return
 
     try {
-      const result = await client.sendStats(bundle.payload as unknown as Record<string, unknown>)
-      if (
-        this.restoreOnSendFailure &&
-        result &&
-        typeof result === 'object' &&
-        'ok' in result &&
-        (result as { ok: boolean }).ok === false
-      ) {
+      const result = await client.sendStats(bundle.payload)
+      if (this.restoreOnSendFailure && isSoftFailResult(result)) {
         batcher.restoreFromBundle(bundle)
         this.logger.debug('Usage HTTPS soft-fail; batch restored')
       }
@@ -415,22 +418,16 @@ export class UsageTelemetryRuntime {
     if (!payload) return
 
     try {
-      const result = await client.sendMetrics(payload as unknown as Record<string, unknown>)
-      if (
-        this.restoreOnSendFailure &&
-        result &&
-        typeof result === 'object' &&
-        'ok' in result &&
-        (result as { ok: boolean }).ok === false
-      ) {
-        batcher.restoreFromPayload(payload as MetricStatPayload)
+      const result = await client.sendMetrics(payload)
+      if (this.restoreOnSendFailure && isSoftFailResult(result)) {
+        batcher.restoreFromPayload(payload)
         this.logger.debug('Metrics HTTPS soft-fail; batch restored')
       } else {
         this.systemMetrics?.onFlushed()
       }
     } catch (error) {
       if (this.restoreOnSendFailure) {
-        batcher.restoreFromPayload(payload as MetricStatPayload)
+        batcher.restoreFromPayload(payload)
       }
       this.logger.error('Failed to send metrics:', error)
     }

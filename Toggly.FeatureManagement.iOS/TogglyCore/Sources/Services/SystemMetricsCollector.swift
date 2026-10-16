@@ -168,6 +168,10 @@ final class SystemMetricsCollector: @unchecked Sendable {
         guard let current = readCpuSample() else { return nil }
         defer { lastCpu = current }
         guard let previous = lastCpu else { return nil }
+        return Self.computeCpuPercent(previous: previous, current: current)
+    }
+
+    private static func computeCpuPercent(previous: CpuSample, current: CpuSample) -> Double? {
         let wallNs = current.monotonicNs &- previous.monotonicNs
         guard wallNs > 0 else { return nil }
         let cpuMicros = (current.userMicros &- previous.userMicros)
@@ -194,5 +198,51 @@ final class SystemMetricsCollector: @unchecked Sendable {
         guard clock_gettime(CLOCK_MONOTONIC_RAW, &time) == 0 else { return nil }
         let mono = UInt64(time.tv_sec) * 1_000_000_000 + UInt64(time.tv_nsec)
         return CpuSample(userMicros: user, sysMicros: sys, monotonicNs: mono)
+    }
+}
+
+// Internal hooks for TogglyCoreTests only (@testable import).
+extension SystemMetricsCollector {
+    enum Testing {
+        /// Resets bridge counters between tests; does not touch the process handler slot.
+        static func resetUncaughtBridgeState() {
+            UncaughtExceptionBridge.lock.lock()
+            UncaughtExceptionBridge.count = 0
+            UncaughtExceptionBridge.installs = 0
+            UncaughtExceptionBridge.previous = nil
+            UncaughtExceptionBridge.reentrant = false
+            UncaughtExceptionBridge.lock.unlock()
+        }
+
+        static func uncaughtBridgeCount() -> Int {
+            UncaughtExceptionBridge.lock.lock()
+            defer { UncaughtExceptionBridge.lock.unlock() }
+            return UncaughtExceptionBridge.count
+        }
+
+        static func invokeUncaughtHandler(_ exception: NSException) {
+            togglySystemMetricsUncaughtHandler(exception)
+        }
+
+        static func computeCpuPercent(
+            previousUserMicros: UInt64,
+            previousSysMicros: UInt64,
+            previousMonotonicNs: UInt64,
+            currentUserMicros: UInt64,
+            currentSysMicros: UInt64,
+            currentMonotonicNs: UInt64
+        ) -> Double? {
+            let previous = CpuSample(
+                userMicros: previousUserMicros,
+                sysMicros: previousSysMicros,
+                monotonicNs: previousMonotonicNs
+            )
+            let current = CpuSample(
+                userMicros: currentUserMicros,
+                sysMicros: currentSysMicros,
+                monotonicNs: currentMonotonicNs
+            )
+            return SystemMetricsCollector.computeCpuPercent(previous: previous, current: current)
+        }
     }
 }

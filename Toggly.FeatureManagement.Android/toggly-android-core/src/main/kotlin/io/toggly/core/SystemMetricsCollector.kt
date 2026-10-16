@@ -24,6 +24,7 @@ internal class SystemMetricsCollector(
     private val processorCount: () -> Int = {
         max(1, Runtime.getRuntime().availableProcessors())
     },
+    private val procStatReader: () -> Long? = DEFAULT_PROC_STAT_READER,
 ) {
     private val pendingByMetric = ConcurrentHashMap<String, Int>()
     private val exceptionCount = AtomicInteger()
@@ -113,18 +114,7 @@ internal class SystemMetricsCollector(
         return min(100.0, pct)
     }
 
-    private fun readProcCpuJiffies(): Long? {
-        return runCatching {
-            val stat = File("/proc/self/stat").readText()
-            val afterPid = stat.indexOf(") ")
-            if (afterPid < 0) return@runCatching null
-            val fields = stat.substring(afterPid + 2).split(' ')
-            if (fields.size < 15) return@runCatching null
-            val utime = fields[11].toLongOrNull() ?: return@runCatching null
-            val stime = fields[12].toLongOrNull() ?: return@runCatching null
-            utime + stime
-        }.getOrNull()
-    }
+    private fun readProcCpuJiffies(): Long? = procStatReader()
 
     private fun attachUncaughtHandler() {
         runCatching {
@@ -153,5 +143,20 @@ internal class SystemMetricsCollector(
     companion object {
         const val INTERVAL_MS = 10_000L
         const val MAX_PENDING = 30
+
+        private val DEFAULT_PROC_STAT_READER: () -> Long? = { readProcCpuJiffiesFromFile() }
+
+        private fun readProcCpuJiffiesFromFile(): Long? {
+            return runCatching {
+                val stat = File("/proc/self/stat").readText()
+                val afterPid = stat.indexOf(") ")
+                if (afterPid < 0) return@runCatching null
+                val fields = stat.substring(afterPid + 2).split(' ')
+                if (fields.size < 15) return@runCatching null
+                val utime = fields[11].toLongOrNull() ?: return@runCatching null
+                val stime = fields[12].toLongOrNull() ?: return@runCatching null
+                utime + stime
+            }.getOrNull()
+        }
     }
 }

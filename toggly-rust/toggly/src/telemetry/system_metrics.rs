@@ -83,12 +83,16 @@ impl SystemMetricsCollector {
             };
             for (metric, value) in samples {
                 if value.is_finite() && value >= 0.0 {
-                    self.emit(&metric, value);
+                    let _ = self.emit(&metric, value);
                 }
             }
-            let exceptions = PANIC_EXCEPTIONS.swap(0, Ordering::Relaxed);
-            if exceptions > 0 {
-                self.emit("ExceptionCount", exceptions as f64);
+            // Drain only after a successful emit so a full pending queue does not
+            // permanently drop panic counts collected while flush is stalled.
+            let exceptions = PANIC_EXCEPTIONS.load(Ordering::Relaxed);
+            if exceptions > 0 && self.emit("ExceptionCount", exceptions as f64) {
+                let _ = PANIC_EXCEPTIONS.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |cur| {
+                    Some(cur.saturating_sub(exceptions))
+                });
             }
         }));
     }
@@ -98,15 +102,17 @@ impl SystemMetricsCollector {
         self.pending_by_metric.lock().clear();
     }
 
-    fn emit(&self, metric: &str, value: f64) {
+    /// Returns `false` when the per-metric pending cap is full (observation dropped).
+    fn emit(&self, metric: &str, value: f64) -> bool {
         let mut pending = self.pending_by_metric.lock();
         let count = pending.entry(metric.to_string()).or_insert(0);
         if *count >= SYSTEM_METRICS_MAX_PENDING {
-            return;
+            return false;
         }
         *count += 1;
         drop(pending);
         (self.observe)(metric, value, None);
+        true
     }
 
     /// Cancel the background sampler task.
@@ -383,6 +389,35 @@ mod tests {
         collector.on_flushed();
         collector.tick();
         assert_eq!(seen.lock().unwrap().len(), SYSTEM_METRICS_MAX_PENDING + 1);
+    }
+
+    #[test]
+    fn exception_count_preserved_when_pending_cap_full() {
+        let _guard = TEST_LOCK.lock();
+        PANIC_EXCEPTIONS.store(0, Ordering::Relaxed);
+        let (observe, seen) = test_observe();
+        let sampler: SamplerFn = Arc::new(|| vec![("ExceptionCount".into(), 1.0)]);
+        let collector = manual_collector(observe, Some(sampler));
+        for _ in 0..SYSTEM_METRICS_MAX_PENDING {
+            collector.tick();
+        }
+        assert_eq!(seen.lock().unwrap().len(), SYSTEM_METRICS_MAX_PENDING);
+        PANIC_EXCEPTIONS.store(4, Ordering::Relaxed);
+        collector.tick();
+        assert_eq!(PANIC_EXCEPTIONS.load(Ordering::Relaxed), 4);
+        assert!(!seen
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(m, v)| m == "ExceptionCount" && *v == 4.0));
+        collector.on_flushed();
+        collector.tick();
+        assert_eq!(PANIC_EXCEPTIONS.load(Ordering::Relaxed), 0);
+        assert!(seen
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|(m, v)| m == "ExceptionCount" && *v == 4.0));
     }
 
     #[test]

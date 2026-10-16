@@ -49,7 +49,7 @@ export class ClientSystemMetricsCollector {
   private longTaskCount = 0;
   private longTaskObserver: LongTaskObserver | null = null;
   private detachExceptionSources: (() => void) | undefined;
-  private pendingByMetric = new Map<string, number>();
+  private readonly pendingByMetric = new Map<string, number>();
 
   constructor(options: ClientSystemMetricsCollectorOptions) {
     this.setGauge = options.setGauge;
@@ -154,18 +154,19 @@ export class ClientSystemMetricsCollector {
 }
 
 export function attachBrowserExceptionSources(onException: () => void): () => void {
-  if (typeof window === 'undefined') return () => {};
+  if (typeof globalThis.window === 'undefined') return () => {};
+  const win = globalThis.window;
   const errorHandler = () => {
     onException();
   };
   const rejectionHandler = () => {
     onException();
   };
-  window.addEventListener('error', errorHandler);
-  window.addEventListener('unhandledrejection', rejectionHandler);
+  win.addEventListener('error', errorHandler);
+  win.addEventListener('unhandledrejection', rejectionHandler);
   return () => {
-    window.removeEventListener('error', errorHandler);
-    window.removeEventListener('unhandledrejection', rejectionHandler);
+    win.removeEventListener('error', errorHandler);
+    win.removeEventListener('unhandledrejection', rejectionHandler);
   };
 }
 

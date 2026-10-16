@@ -20,8 +20,6 @@ export interface MetricsBatcherOptions {
   maxObservations?: number
 }
 
-type MetricKey = string // `${metric}\0${feature ?? ''}`
-
 export interface MetricStatPayload {
   appKey: string
   environment: string
@@ -54,8 +52,8 @@ export class MetricsBatcher {
   private readonly instanceName?: string
   private readonly maxMetricKeys: number
   private readonly maxObservations: number
-  private measures = new Map<MetricKey, Map<string, number>>()
-  private counters = new Map<MetricKey, Map<string, number>>()
+  private readonly measures = new Map<string, Map<string, number>>()
+  private readonly counters = new Map<string, Map<string, number>>()
   private observations: Array<{
     time: Date
     metric: string
@@ -73,11 +71,11 @@ export class MetricsBatcher {
     this.maxObservations = options.maxObservations ?? MAX_OBSERVATIONS_PER_BATCH
   }
 
-  private key(metric: string, feature?: string): MetricKey {
+  private key(metric: string, feature?: string): string {
     return `${metric}\0${feature ?? ''}`
   }
 
-  private parseKey(key: MetricKey): { metric: string; feature?: string } {
+  private parseKey(key: string): { metric: string; feature?: string } {
     const sep = key.indexOf('\0')
     if (sep < 0) {
       return { metric: key }
@@ -88,7 +86,7 @@ export class MetricsBatcher {
   }
 
   private addToMap(
-    store: Map<MetricKey, Map<string, number>>,
+    store: Map<string, Map<string, number>>,
     metric: string,
     value: number,
     options?: MetricsFeatureOptions,
@@ -147,7 +145,7 @@ export class MetricsBatcher {
   }
 
   private drainMap(
-    store: Map<MetricKey, Map<string, number>>,
+    store: Map<string, Map<string, number>>,
   ): Array<{ metric: string; feature?: string; variantValues: Record<string, number> }> {
     const out: Array<{ metric: string; feature?: string; variantValues: Record<string, number> }> =
       []
