@@ -253,7 +253,9 @@ jobs:
             | Module | Description |
             |--------|-------------|
             | `toggly-core` | Core feature flag SDK |
-            | `toggly-spring-boot-starter` | Spring Boot auto-configuration |
+            | `toggly-spring-boot-autoconfigure` | Shared Spring Boot auto-configuration |
+            | `toggly-spring-boot-starter` | Spring Boot 3 Actuator health adapter |
+            | `toggly-spring-boot4-starter` | Spring Boot 4 Actuator health adapter |
             | `toggly-spring-mvc` | Spring MVC integration |
             | `toggly-spring-webflux` | Spring WebFlux integration |
             | `toggly-servlet` | Servlet filter integration |
@@ -292,7 +294,9 @@ jobs:
           echo "### Maven Central Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "- io.toggly:toggly-parent:${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- io.toggly:toggly-core:${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- io.toggly:toggly-spring-boot-autoconfigure:${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- io.toggly:toggly-spring-boot-starter:${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- io.toggly:toggly-spring-boot4-starter:${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- io.toggly:toggly-spring-mvc:${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- io.toggly:toggly-spring-webflux:${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- io.toggly:toggly-servlet:${{ needs.validate.outputs.version }}" >> $GITHUB_STEP_SUMMARY

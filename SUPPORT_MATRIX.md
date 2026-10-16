@@ -22,7 +22,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | SvelteKit | kit `^2` | 2.x | 2.x | Kit 3 when shipped |
 | .NET core family | netstandard2.1…net9 + **net10** | multi-TFM build | net10 | Wave 2 |
 | .NET Mongo/Dapper/EF | includes net10 | net8/net10 consumers | net10 | Maintain |
-| Java Spring | Boot 3.5 / Java 17 | Boot 3 hosts | Boot 3.5 | Boot 4 when stable |
+| Java Spring | Boot 3.5 + Boot 4.1 / Java 17 | Boot 3 + `toggly-spring-boot4-starter` tests | Boot 4.1 | Dual starter artifacts |
 | Java Redis | Jedis 5 + Jedis 8 | dual artifacts | Jedis 8 | No Lettuce 7 |
 | Android | AGP 8.7 / Kotlin 2.0 | Java 17+21 | AGP 9 / Kotlin 2.2+ | Wave 3 dual line |
 | Flutter | Dart `>=2.18.2 <4` | Flutter stable (Dart 3) | Dart 3 | Keep floor; equatable 3 deferred |
