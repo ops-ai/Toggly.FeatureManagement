@@ -194,9 +194,12 @@ public final class SystemMetricsCollector {
             out.add(new Observation("TimeInGC", timeInGc));
         }
 
-        int exceptions = exceptionCount.getAndSet(0);
-        if (exceptions > 0) {
-            out.add(new Observation("ExceptionCount", exceptions));
+        int pendingExceptions = pendingByMetric.getOrDefault("ExceptionCount", 0);
+        if (pendingExceptions < SYSTEM_METRICS_MAX_PENDING) {
+            int exceptions = exceptionCount.getAndSet(0);
+            if (exceptions > 0) {
+                out.add(new Observation("ExceptionCount", exceptions));
+            }
         }
 
         return out;
@@ -265,16 +268,18 @@ public final class SystemMetricsCollector {
             if (!hotspot.isThreadAllocatedMemoryEnabled()) {
                 hotspot.setThreadAllocatedMemoryEnabled(true);
             }
-            // Prefer JVM total API when present (not on every JDK compile target).
+            // Prefer JVM total API when present (JDK 21+). Reflect on the
+            // public HotSpot interface so module encapsulation does not block
+            // Method.invoke on the concrete MXBean class.
             try {
-                // JDK 21+: com.sun.management.ThreadMXBean.getTotalThreadAllocatedBytes()
-                var method = hotspot.getClass().getMethod("getTotalThreadAllocatedBytes");
+                var method = com.sun.management.ThreadMXBean.class
+                        .getMethod("getTotalThreadAllocatedBytes");
                 Object value = method.invoke(hotspot);
                 if (value instanceof Long total && total >= 0L) {
                     return total;
                 }
-            } catch (ReflectiveOperationException ignored) {
-                // Fall through to per-thread sum.
+            } catch (ReflectiveOperationException | NoSuchMethodError ignored) {
+                // Fall through to per-thread sum (JDK 17 / older HotSpot).
             }
             long[] ids = hotspot.getAllThreadIds();
             long[] bytes = hotspot.getThreadAllocatedBytes(ids);
