@@ -51,10 +51,11 @@ defmodule Toggly.SystemMetrics do
   defp maybe_add_exception(samples, count) when count > 0, do: [{"ExceptionCount", count * 1.0} | samples]
 
   defp sample_cpu do
-    {run_time, wall_time} = :erlang.statistics(:runtime)
+    {_total_rt, run_delta} = :erlang.statistics(:runtime)
+    {_total_wc, wall_delta} = :erlang.statistics(:wall_clock)
     schedulers = max(:erlang.system_info(:schedulers_online), 1)
-    wall = max(wall_time, 1)
-    pct = run_time / wall / schedulers * 100.0
+    wall = max(wall_delta, 1)
+    pct = run_delta / wall / schedulers * 100.0
 
     if pct >= 0 and pct <= 100, do: pct, else: nil
   rescue
@@ -109,7 +110,9 @@ defmodule Toggly.SystemMetrics.LogHandler do
   @behaviour :logger_handler
 
   @impl :logger_handler
-  def log(%{msg: {:report, report}} = _event, %{client: client} = _config) when is_map(report) do
+  def log(%{msg: {:report, report}}, config) when is_map(report) do
+    client = handler_client(config)
+
     if crash_report?(report) and is_pid(client) and Process.alive?(client) do
       GenServer.cast(client, :system_metrics_exception)
     end
@@ -118,6 +121,10 @@ defmodule Toggly.SystemMetrics.LogHandler do
   end
 
   def log(_event, _config), do: :ok
+
+  defp handler_client(%{config: %{client: client}}), do: client
+  defp handler_client(%{client: client}), do: client
+  defp handler_client(_), do: nil
 
   defp crash_report?(report) do
     kind =

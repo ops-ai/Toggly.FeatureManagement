@@ -61,12 +61,103 @@ describe('ClientSystemMetricsCollector', () => {
   });
 });
 
+describe('ClientSystemMetricsCollector long tasks', () => {
+  it('emits LongTaskCount from the default sampler and clears on stop', () => {
+    const gauges: Array<[string, number]> = [];
+    const collector = new ClientSystemMetricsCollector({
+      setGauge: (metric, value) => gauges.push([metric, value]),
+      attachExceptionSources: () => () => {},
+    });
+    collector.start();
+    (collector as unknown as { longTaskCount: number }).longTaskCount = 3;
+    collector.tick();
+    expect(gauges).toEqual([['LongTaskCount', 3]]);
+    collector.stop();
+    expect((collector as unknown as { longTaskCount: number }).longTaskCount).toBe(0);
+  });
+
+  it('ignores PerformanceObserver failures when attaching long tasks', () => {
+    const Original = globalThis.PerformanceObserver;
+    (globalThis as { PerformanceObserver?: unknown }).PerformanceObserver = class {
+      observe() {
+        throw new Error('unsupported');
+      }
+      disconnect() {}
+    };
+    const collector = new ClientSystemMetricsCollector({
+      setGauge: () => {},
+      attachExceptionSources: () => () => {},
+    });
+    expect(() => collector.start()).not.toThrow();
+    collector.stop();
+    (globalThis as { PerformanceObserver?: unknown }).PerformanceObserver = Original;
+  });
+
+  it('counts longtask entries from PerformanceObserver', () => {
+    const Original = globalThis.PerformanceObserver;
+    let callback: ((list: { getEntries: () => unknown[] }) => void) | undefined;
+    (globalThis as { PerformanceObserver?: unknown }).PerformanceObserver = class {
+      constructor(cb: (list: { getEntries: () => unknown[] }) => void) {
+        callback = cb;
+      }
+      observe() {}
+      disconnect() {}
+    };
+    const gauges: Array<[string, number]> = [];
+    const timers: Array<() => void> = [];
+    const collector = new ClientSystemMetricsCollector({
+      setGauge: (metric, value) => gauges.push([metric, value]),
+      attachExceptionSources: () => () => {},
+      setIntervalFn: ((fn: () => void) => {
+        timers.push(fn);
+        return { unref: () => {} } as unknown as ReturnType<typeof setInterval>;
+      }) as typeof setInterval,
+      clearIntervalFn: (() => {}) as typeof clearInterval,
+    });
+    collector.start();
+    callback?.({ getEntries: () => [{}, {}] });
+    timers[0]?.();
+    expect(gauges).toEqual([['LongTaskCount', 2]]);
+    collector.stop();
+    (globalThis as { PerformanceObserver?: unknown }).PerformanceObserver = Original;
+  });
+});
+
 describe('attachClientSystemMetrics', () => {
   it('does not start when systemMetrics is false', () => {
     const fetch = jest.fn();
     const reporter = createTelemetryReporter({ appKey: 'key', fetch, enableTelemetry: true });
     const detach = attachClientSystemMetrics(reporter, { systemMetrics: false, enableTelemetry: true });
     detach();
+    reporter.dispose({ flush: false });
+  });
+
+  it('does not start when enableTelemetry is false', () => {
+    const fetch = jest.fn();
+    const reporter = createTelemetryReporter({ appKey: 'key', fetch, enableTelemetry: true });
+    const detach = attachClientSystemMetrics(reporter, { systemMetrics: true, enableTelemetry: false });
+    detach();
+    reporter.dispose({ flush: false });
+  });
+
+  it('uses React Native exception sources when requested', () => {
+    const previous = jest.fn();
+    (globalThis as { ErrorUtils?: unknown }).ErrorUtils = {
+      getGlobalHandler: () => previous,
+      setGlobalHandler: (handler: (error: unknown, isFatal?: boolean) => void) => {
+        handler(new Error('boom'), true);
+      },
+    };
+    const fetch = jest.fn().mockResolvedValue({ status: 202 });
+    const reporter = createTelemetryReporter({ appKey: 'key', fetch, enableTelemetry: true });
+    const detach = attachClientSystemMetrics(reporter, {
+      systemMetrics: true,
+      enableTelemetry: true,
+      reactNativeExceptions: true,
+      sampler: () => [],
+    });
+    detach();
+    delete (globalThis as { ErrorUtils?: unknown }).ErrorUtils;
     reporter.dispose({ flush: false });
   });
 
@@ -86,18 +177,58 @@ describe('attachClientSystemMetrics', () => {
     detach();
     reporter.dispose({ flush: false });
   });
+
+  it('posts sampler gauges through the reporter on each interval tick', async () => {
+    const fetch = jest.fn().mockResolvedValue({ status: 202 });
+    const reporter = createTelemetryReporter({ appKey: 'key', fetch, enableTelemetry: true });
+    let intervalFn: (() => void) | undefined;
+    const detach = attachClientSystemMetrics(reporter, {
+      systemMetrics: true,
+      enableTelemetry: true,
+      sampler: () => [{ metric: 'ExceptionCount', value: 4 }],
+      setIntervalFn: ((fn: () => void) => {
+        intervalFn = fn;
+        return { unref: () => {} } as unknown as ReturnType<typeof setInterval>;
+      }) as typeof setInterval,
+      clearIntervalFn: (() => {}) as typeof clearInterval,
+    });
+    intervalFn?.();
+    await reporter.flush();
+    expect(fetch).toHaveBeenCalled();
+    detach();
+    detach();
+    reporter.dispose({ flush: false });
+  });
 });
 
 describe('attachBrowserExceptionSources', () => {
   it('listens for error and unhandledrejection', () => {
-    if (typeof window === 'undefined') return;
+    const listeners = new Map<string, EventListener>();
+    const fakeWindow = {
+      addEventListener: (type: string, handler: EventListener) => {
+        listeners.set(type, handler);
+      },
+      removeEventListener: (type: string) => {
+        listeners.delete(type);
+      },
+    };
+    (globalThis as { window?: unknown }).window = fakeWindow;
+
     let count = 0;
     const detach = attachBrowserExceptionSources(() => {
       count += 1;
     });
-    window.dispatchEvent(new Event('error'));
-    window.dispatchEvent(new Event('unhandledrejection'));
+    listeners.get('error')?.(new Event('error'));
+    listeners.get('unhandledrejection')?.(new Event('unhandledrejection'));
     expect(count).toBe(2);
+    detach();
+    expect(listeners.size).toBe(0);
+    delete (globalThis as { window?: unknown }).window;
+  });
+
+  it('is a no-op when window is undefined', () => {
+    delete (globalThis as { window?: unknown }).window;
+    const detach = attachBrowserExceptionSources(() => {});
     detach();
   });
 });

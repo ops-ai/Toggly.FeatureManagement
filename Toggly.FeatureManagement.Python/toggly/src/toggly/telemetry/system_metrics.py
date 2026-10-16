@@ -10,6 +10,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from types import TracebackType
 from typing import Protocol
 
 SYSTEM_METRICS_INTERVAL_SECONDS = 10.0
@@ -172,7 +173,9 @@ class SystemMetricsCollector:
         previous_sys = sys.excepthook
 
         def sys_hook(
-            exc_type: type[BaseException], exc: BaseException, tb: object
+            exc_type: type[BaseException],
+            exc: BaseException,
+            tb: TracebackType | None,
         ) -> None:
             self._exception_count += 1
             previous_sys(exc_type, exc, tb)
@@ -189,7 +192,8 @@ class SystemMetricsCollector:
             previous_thread(args)
 
         self._previous_thread_excepthook = previous_thread
-        threading.excepthook = thread_hook
+        # threading.excepthook is typed loosely across Python versions.
+        threading.excepthook = thread_hook  # type: ignore[assignment]
 
     def _detach_exception_hooks(self) -> None:
         if self._previous_sys_excepthook is not None:

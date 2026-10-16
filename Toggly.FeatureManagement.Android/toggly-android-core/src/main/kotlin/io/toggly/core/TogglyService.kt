@@ -109,9 +109,9 @@ class TogglyService(
         instanceId = config.instanceId, identity = config.identity
     ) else null
     private val systemMetricsCollector = if (config.systemMetrics && telemetry != null) {
-        SystemMetricsCollector { metric, value ->
+        SystemMetricsCollector(observe = { metric, value ->
             telemetry.setGauge(metric, value)
-        }.also { collector ->
+        }).also { collector ->
             telemetry.onBatchAccepted = { collector.onFlushed() }
             collector.start()
         }

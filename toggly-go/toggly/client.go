@@ -46,8 +46,8 @@ type Client struct {
 	identityMu sync.RWMutex
 	identity   string
 
-	usage        *usage.Client
-	metrics      *metrics.Client
+	usage         *usage.Client
+	metrics       *metrics.Client
 	systemMetrics *systemmetrics.Collector
 }
 

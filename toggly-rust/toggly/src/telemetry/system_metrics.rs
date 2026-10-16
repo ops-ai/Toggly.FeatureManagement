@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
+/// Default sampling interval for opt-in system metrics.
 pub const SYSTEM_METRICS_INTERVAL: Duration = Duration::from_secs(10);
 
 type ObserveFn = Arc<dyn Fn(&str, f64, Option<&MetricsFeatureOptions>) + Send + Sync>;
@@ -21,6 +22,7 @@ struct CpuSnapshot {
 
 static PANIC_EXCEPTIONS: AtomicU64 = AtomicU64::new(0);
 
+/// Periodic process sampler that posts gauges through an observe callback.
 pub struct SystemMetricsCollector {
     observe: ObserveFn,
     custom_sampler: Option<SamplerFn>,
@@ -30,6 +32,7 @@ pub struct SystemMetricsCollector {
 }
 
 impl SystemMetricsCollector {
+    /// Start the background sampler. Pass `sampler` to inject values in tests.
     pub fn start(observe: ObserveFn, sampler: Option<SamplerFn>) -> Arc<Self> {
         install_panic_hook();
 
@@ -63,6 +66,7 @@ impl SystemMetricsCollector {
         collector
     }
 
+    /// Sample once and emit gauges (also invoked by the background timer).
     pub fn tick(&self) {
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let samples = if let Some(sampler) = &self.custom_sampler {
@@ -82,6 +86,7 @@ impl SystemMetricsCollector {
         }));
     }
 
+    /// Cancel the background sampler task.
     pub fn stop(&self) {
         let _ = self.cancel_tx.send(true);
         if let Some(handle) = self.task.lock().take() {
@@ -111,7 +116,8 @@ impl SystemMetricsCollector {
         let prev = prev?;
         let wall = cur.at.duration_since(prev.at);
         let wall_us = wall.as_micros().max(1) as f64;
-        let cpu_us = (cur.user_micros - prev.user_micros) + (cur.system_micros - prev.system_micros);
+        let cpu_us =
+            (cur.user_micros - prev.user_micros) + (cur.system_micros - prev.system_micros);
         if cpu_us < 0 {
             return None;
         }
@@ -164,23 +170,30 @@ fn linux_clock_ticks_per_sec() -> i64 {
         .unwrap_or(100)
 }
 
-fn read_rusage_cpu() -> Option<ProcessCpu> {
-    #[cfg(unix)]
-    {
-        #[repr(C)]
-        struct TimeVal {
-            tv_sec: i64,
-            tv_usec: i64,
-        }
-        #[repr(C)]
-        struct Rusage {
-            ru_utime: TimeVal,
-            ru_stime: TimeVal,
-        }
-        extern "C" {
-            fn getrusage(who: i32, usage: *mut Rusage) -> i32;
-        }
-        const RUSAGE_SELF: i32 = 0;
+#[cfg(unix)]
+mod rusage_ffi {
+    use super::{Instant, ProcessCpu};
+
+    #[repr(C)]
+    struct TimeVal {
+        tv_sec: i64,
+        tv_usec: i64,
+    }
+
+    #[repr(C)]
+    pub(super) struct Rusage {
+        ru_utime: TimeVal,
+        ru_stime: TimeVal,
+        ru_maxrss: i64,
+    }
+
+    extern "C" {
+        fn getrusage(who: i32, usage: *mut Rusage) -> i32;
+    }
+
+    const RUSAGE_SELF: i32 = 0;
+
+    fn read_rusage() -> Option<Rusage> {
         let mut ru = Rusage {
             ru_utime: TimeVal {
                 tv_sec: 0,
@@ -190,10 +203,16 @@ fn read_rusage_cpu() -> Option<ProcessCpu> {
                 tv_sec: 0,
                 tv_usec: 0,
             },
+            ru_maxrss: 0,
         };
-        if unsafe { getrusage(RUSAGE_SELF, &mut ru as *mut Rusage as *mut _) } != 0 {
+        if unsafe { getrusage(RUSAGE_SELF, &mut ru) } != 0 {
             return None;
         }
+        Some(ru)
+    }
+
+    pub(super) fn read_cpu() -> Option<ProcessCpu> {
+        let ru = read_rusage()?;
         let user = ru.ru_utime.tv_sec * 1_000_000 + ru.ru_utime.tv_usec;
         let system = ru.ru_stime.tv_sec * 1_000_000 + ru.ru_stime.tv_usec;
         Some(ProcessCpu {
@@ -201,6 +220,25 @@ fn read_rusage_cpu() -> Option<ProcessCpu> {
             system_micros: system,
             at: Instant::now(),
         })
+    }
+
+    pub(super) fn read_maxrss_bytes() -> Option<f64> {
+        let ru = read_rusage()?;
+        if ru.ru_maxrss <= 0 {
+            return None;
+        }
+        let mut rss = ru.ru_maxrss;
+        if cfg!(target_os = "linux") {
+            rss *= 1024;
+        }
+        Some(rss as f64)
+    }
+}
+
+fn read_rusage_cpu() -> Option<ProcessCpu> {
+    #[cfg(unix)]
+    {
+        rusage_ffi::read_cpu()
     }
     #[cfg(not(unix))]
     {
@@ -235,42 +273,7 @@ fn page_size_bytes() -> u64 {
 fn read_rusage_maxrss() -> Option<f64> {
     #[cfg(unix)]
     {
-        #[repr(C)]
-        struct TimeVal {
-            tv_sec: i64,
-            tv_usec: i64,
-        }
-        #[repr(C)]
-        struct Rusage {
-            ru_utime: TimeVal,
-            ru_stime: TimeVal,
-            ru_maxrss: i64,
-        }
-        extern "C" {
-            fn getrusage(who: i32, usage: *mut Rusage) -> i32;
-        }
-        const RUSAGE_SELF: i32 = 0;
-        let mut ru = Rusage {
-            ru_utime: TimeVal {
-                tv_sec: 0,
-                tv_usec: 0,
-            },
-            ru_stime: TimeVal {
-                tv_sec: 0,
-                tv_usec: 0,
-            },
-            ru_maxrss: 0,
-        };
-        if unsafe { getrusage(RUSAGE_SELF, &mut ru as *mut Rusage as *mut _) } != 0
-            || ru.ru_maxrss <= 0
-        {
-            return None;
-        }
-        let mut rss = ru.ru_maxrss;
-        if cfg!(target_os = "linux") {
-            rss *= 1024;
-        }
-        Some(rss as f64)
+        rusage_ffi::read_maxrss_bytes()
     }
     #[cfg(not(unix))]
     {
@@ -318,7 +321,9 @@ mod tests {
         collector.tick();
         let rows = seen.lock().unwrap();
         assert!(rows.iter().any(|(m, v)| m == "CpuUsage" && *v == 3.0));
-        assert!(rows.iter().any(|(m, v)| m == "MemoryWorkingSet" && *v == 1024.0));
+        assert!(rows
+            .iter()
+            .any(|(m, v)| m == "MemoryWorkingSet" && *v == 1024.0));
         assert!(rows.iter().any(|(m, v)| m == "ExceptionCount" && *v == 2.0));
     }
 }

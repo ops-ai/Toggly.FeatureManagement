@@ -3,6 +3,7 @@ package io.toggly.core.telemetry;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryUsage;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -299,7 +300,7 @@ public final class SystemMetricsCollector {
                 }
                 return kb * 1024L;
             }
-        } catch (Exception ignored) {
+        } catch (IOException | NumberFormatException ignored) {
             return null;
         }
         return null;

@@ -41,11 +41,11 @@ type Collector struct {
 	sampler  Sampler
 	flush    *autoflush.Controller
 
-	mu            sync.Mutex
-	lastCPU       *cpuSample
+	mu             sync.Mutex
+	lastCPU        *cpuSample
 	lastHeapAllocs uint64
-	lastSampleAt  time.Time
-	started       bool
+	lastSampleAt   time.Time
+	started        bool
 }
 
 type cpuSample struct {

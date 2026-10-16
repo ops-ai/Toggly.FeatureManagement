@@ -11,8 +11,6 @@ import type { LocalGate } from '@ops-ai/toggly-local-gates';
 export interface TogglyConfig {
   /** Enable compact browser telemetry (default: true with an app key). */
   enableTelemetry?: boolean;
-  /** Enable browser app-level business metrics (default: true). */
-  enableMetrics?: boolean;
   /** Browser telemetry interval, 30000–60000 ms (default: 45000). */
   telemetryFlushIntervalMs?: number;
   /** Base URI for the Toggly definitions API (default: 'https://definitions.toggly.io') */
@@ -80,7 +78,8 @@ export interface TogglyConfig {
    */
   enableUsageTracking?: boolean;
   /**
-   * When true, report business metrics via HTTPS `POST api/metrics`.
+   * When true, report business metrics (browser compact telemetry and/or
+   * HTTPS `POST api/metrics` on the server client).
    * Defaults to true when `appKey` is set (same as usage).
    * `TOGGLY_DISABLE_TELEMETRY=1` always wins over an explicit `true`.
    */

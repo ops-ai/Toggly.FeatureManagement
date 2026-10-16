@@ -9,26 +9,30 @@ module Toggly
     module SystemMetrics
       INTERVAL_SECONDS = 10.0
 
+      # FFI helpers for getrusage-based CPU and RSS samples.
       module RusageFFI
         module_function
 
         def read_rusage
           return nil unless defined?(@getrusage) && @getrusage
 
-          buf = "\0" * (Fiddle::SIZEOF_LONG * 18)
-          return nil if @getrusage.call(RUSAGE_SELF, buf) != 0
+          ptr = Fiddle::Pointer.malloc(Fiddle::SIZEOF_LONG * 18)
+          begin
+            return nil if @getrusage.call(RUSAGE_SELF, ptr) != 0
 
-          ptr = Fiddle::Pointer.new(buf)
-          utime_sec = ptr[0, Fiddle::SIZEOF_LONG].unpack1("l!")
-          utime_usec = ptr[Fiddle::SIZEOF_LONG, Fiddle::SIZEOF_LONG].unpack1("l!")
-          stime_sec = ptr[2 * Fiddle::SIZEOF_LONG, Fiddle::SIZEOF_LONG].unpack1("l!")
-          stime_usec = ptr[3 * Fiddle::SIZEOF_LONG, Fiddle::SIZEOF_LONG].unpack1("l!")
-          maxrss = ptr[4 * Fiddle::SIZEOF_LONG, Fiddle::SIZEOF_LONG].unpack1("l!")
-          {
-            user_us: (utime_sec * 1_000_000) + utime_usec,
-            sys_us: (stime_sec * 1_000_000) + stime_usec,
-            maxrss: maxrss
-          }
+            utime_sec = ptr[0, Fiddle::SIZEOF_LONG].unpack1("l!")
+            utime_usec = ptr[Fiddle::SIZEOF_LONG, Fiddle::SIZEOF_LONG].unpack1("l!")
+            stime_sec = ptr[2 * Fiddle::SIZEOF_LONG, Fiddle::SIZEOF_LONG].unpack1("l!")
+            stime_usec = ptr[3 * Fiddle::SIZEOF_LONG, Fiddle::SIZEOF_LONG].unpack1("l!")
+            maxrss = ptr[4 * Fiddle::SIZEOF_LONG, Fiddle::SIZEOF_LONG].unpack1("l!")
+            {
+              user_us: (utime_sec * 1_000_000) + utime_usec,
+              sys_us: (stime_sec * 1_000_000) + stime_usec,
+              maxrss: maxrss
+            }
+          ensure
+            ptr.free if ptr.respond_to?(:free)
+          end
         rescue StandardError
           nil
         end
@@ -46,6 +50,7 @@ module Toggly
         end
       end
 
+      # Periodic sampler that posts gauges through the provided observe callback.
       class Collector
         def initialize(observe:, sampler: nil, interval: INTERVAL_SECONDS)
           @observe = observe
@@ -132,6 +137,7 @@ module Toggly
           cpu_us = (user_us - prev[:user_us]) + (sys_us - prev[:sys_us])
           return nil if cpu_us.negative?
 
+
           n_cpu = [Etc.nprocessors, 1].max
           pct = (cpu_us.to_f / wall_us / n_cpu) * 100.0
           return nil unless pct.finite? && pct >= 0
@@ -143,6 +149,7 @@ module Toggly
           if (rss = read_linux_statm_rss)
             return rss.to_f
           end
+
           ru = RusageFFI.read_rusage
           return nil unless ru && ru[:maxrss].to_i.positive?
 

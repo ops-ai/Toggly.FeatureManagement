@@ -5,7 +5,8 @@ void main() {
   test('emits injected exception count', () {
     final observed = <SystemMetricSample>[];
     final collector = SystemMetricsCollector(
-      observe: (metric, value) => observed.add(SystemMetricSample(metric, value)),
+      observe: (metric, value) =>
+          observed.add(SystemMetricSample(metric, value)),
       sampler: () => [const SystemMetricSample('ExceptionCount', 2)],
     );
     collector.start();
