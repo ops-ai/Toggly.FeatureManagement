@@ -20,35 +20,13 @@
     </properties>
 
     <dependencies>
-        <!-- Core dependency -->
         <dependency>
             <groupId>io.toggly</groupId>
-            <artifactId>toggly-core</artifactId>
+            <artifactId>toggly-spring-boot-autoconfigure</artifactId>
             <version>${project.version}</version>
         </dependency>
 
-        <!-- Spring Boot -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-autoconfigure</artifactId>
-            <version>${spring-boot.version}</version>
-        </dependency>
-
-        <!-- AspectJ for AOP support -->
-        <dependency>
-            <groupId>org.aspectj</groupId>
-            <artifactId>aspectjweaver</artifactId>
-            <version>1.9.25.1</version>
-            <scope>provided</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-configuration-processor</artifactId>
-            <version>${spring-boot.version}</version>
-            <optional>true</optional>
-        </dependency>
-
-        <!-- Optional: Actuator support (health APIs live in spring-boot-health on Boot 4) -->
+        <!-- Optional: Actuator + health (Boot 4 APIs) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
@@ -62,7 +40,6 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- Testing -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

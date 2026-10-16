@@ -6,10 +6,10 @@
 
 ### Added
 
-- `toggly-spring-boot4-starter`, a Spring Boot **4.1** auto-configuration artifact
-  parallel to `toggly-spring-boot-starter` (Boot 3.5). Boot 4 moved health APIs to
-  `spring-boot-health`; the Boot 3 starter is unchanged so existing applications keep
-  working on Spring Boot 3.x.
+- `toggly-spring-boot4-starter`, a Spring Boot **4.1** starter parallel to
+  `toggly-spring-boot-starter` (Boot 3.5). Shared configuration lives in
+  `toggly-spring-boot-autoconfigure`; each starter only adds Boot-major-specific
+  Actuator health wiring (Boot 4 health APIs moved to `spring-boot-health`).
 
 ### Changed
 
