@@ -162,7 +162,7 @@ RSpec.describe Toggly::Telemetry::SystemMetrics::Collector do
     ticks = 0
     collector = described_class.new(
       observe: ->(_m, _v) {},
-      sampler: -> {
+      sampler: lambda {
         ticks += 1
         []
       },
