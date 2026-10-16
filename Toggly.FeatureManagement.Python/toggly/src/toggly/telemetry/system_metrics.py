@@ -8,16 +8,16 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
-from types import TracebackType
-from types import ModuleType
+from types import ModuleType, TracebackType
 from typing import Callable, Optional, Protocol, cast
 
+_resource: Optional[ModuleType]
 try:
     import resource as _resource_mod
-except ImportError:  # Windows / non-POSIX
-    _resource_mod = None
 
-_resource: Optional[ModuleType] = _resource_mod
+    _resource = _resource_mod
+except ImportError:  # Windows / non-POSIX
+    _resource = None
 
 SYSTEM_METRICS_INTERVAL_SECONDS = 10.0
 SYSTEM_METRICS_MAX_PENDING = 30

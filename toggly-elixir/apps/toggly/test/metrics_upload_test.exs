@@ -101,6 +101,7 @@ defmodule Toggly.MetricsUploadTest do
     assert {:error, :usage_upload} = Toggly.flush(name)
 
     posts = drain_posts()
+
     assert Enum.any?(posts, fn {url, body} ->
              String.contains?(url, "api/metrics") and Jason.decode!(body)["counters"] != []
            end)
@@ -129,7 +130,9 @@ defmodule Toggly.MetricsUploadTest do
 
       status =
         cond do
-          req.method != :post -> 200
+          req.method != :post ->
+            200
+
           String.contains?(req.url, "api/metrics") ->
             Agent.get(statuses, &Map.get(&1, "api/metrics", 200))
 

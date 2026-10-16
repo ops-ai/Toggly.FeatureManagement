@@ -48,7 +48,9 @@ defmodule Toggly.SystemMetrics do
   defp maybe_add(samples, metric, value) when is_number(value), do: [{metric, value} | samples]
 
   defp maybe_add_exception(samples, 0), do: samples
-  defp maybe_add_exception(samples, count) when count > 0, do: [{"ExceptionCount", count * 1.0} | samples]
+
+  defp maybe_add_exception(samples, count) when count > 0,
+    do: [{"ExceptionCount", count * 1.0} | samples]
 
   defp sample_cpu do
     {_total_rt, run_delta} = :erlang.statistics(:runtime)
@@ -63,13 +65,13 @@ defmodule Toggly.SystemMetrics do
   end
 
   defp sample_gc_heap do
-    (:erlang.memory(:total) * 1.0)
+    :erlang.memory(:total) * 1.0
   rescue
     _ -> nil
   end
 
   defp sample_process_count do
-    (:erlang.system_info(:process_count) * 1.0)
+    :erlang.system_info(:process_count) * 1.0
   rescue
     _ -> nil
   end
