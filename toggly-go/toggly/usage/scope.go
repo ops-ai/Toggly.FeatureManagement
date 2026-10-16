@@ -20,7 +20,7 @@ func (s *scopeImpl) Fail() {
 }
 
 func isUsageCancellation(err error) bool {
-	return errors.Is(err, context.Canceled)
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 // RunUsageScope records attempt, duration, and errors for fn. Does not evaluate feature flags.
