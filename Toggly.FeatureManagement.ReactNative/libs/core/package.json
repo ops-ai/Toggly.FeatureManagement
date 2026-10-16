@@ -52,7 +52,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@ops-ai/toggly-client-telemetry": "file:../../../../toggly-client-telemetry",
+    "@ops-ai/toggly-client-telemetry": "^1.2.0",
     "@ops-ai/toggly-hooks-types": "^1.4.3",
     "@ops-ai/toggly-local-gates": "^1.0.1",
     "@ops-ai/toggly-signed-defs": "^1.2.3"

@@ -9,12 +9,15 @@ import threading
 import time
 from dataclasses import dataclass
 from types import TracebackType
-from typing import Callable, Optional, Protocol
+from types import ModuleType
+from typing import Callable, Optional, Protocol, cast
 
 try:
-    import resource as _resource
+    import resource as _resource_mod
 except ImportError:  # Windows / non-POSIX
-    _resource = None
+    _resource_mod = None
+
+_resource: Optional[ModuleType] = _resource_mod
 
 SYSTEM_METRICS_INTERVAL_SECONDS = 10.0
 SYSTEM_METRICS_MAX_PENDING = 30
@@ -207,13 +210,13 @@ class SystemMetricsCollector:
             self._exception_count += 1
             previous_thread(args)
 
-        self._previous_thread_excepthook = previous_thread
-        setattr(threading, "excepthook", thread_hook)
+        self._previous_thread_excepthook = cast(Optional[Callable[..., None]], previous_thread)
+        threading.excepthook = thread_hook  # type: ignore[attr-defined, assignment]
 
     def _detach_exception_hooks(self) -> None:
         if self._previous_sys_excepthook is not None:
             sys.excepthook = self._previous_sys_excepthook
             self._previous_sys_excepthook = None
         if self._previous_thread_excepthook is not None:
-            setattr(threading, "excepthook", self._previous_thread_excepthook)
+            threading.excepthook = self._previous_thread_excepthook  # type: ignore[attr-defined, assignment]
             self._previous_thread_excepthook = None

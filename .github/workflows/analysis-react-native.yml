@@ -62,6 +62,14 @@ jobs:
         working-directory: Toggly.FeatureManagement.ReactNative/libs/core
         run: npm ci || npm install
 
+      - name: Overlay local toggly-client-telemetry
+        working-directory: Toggly.FeatureManagement.ReactNative/libs/core
+        run: |
+          set -euo pipefail
+          (cd ../../../toggly-client-telemetry && npm pack --pack-destination "$RUNNER_TEMP")
+          TGZ=$(ls "$RUNNER_TEMP"/ops-ai-toggly-client-telemetry-*.tgz | head -1)
+          npm install --no-save "$TGZ"
+
       - name: Build core package (for other packages)
         if: matrix.sdk != 'Core'
         working-directory: Toggly.FeatureManagement.ReactNative/libs/core
@@ -70,6 +78,15 @@ jobs:
       - name: Install dependencies
         working-directory: ${{ matrix.path }}
         run: npm ci || npm install
+
+      - name: Overlay local toggly-client-telemetry (Core)
+        if: matrix.sdk == 'Core'
+        working-directory: Toggly.FeatureManagement.ReactNative/libs/core
+        run: |
+          set -euo pipefail
+          (cd ../../../toggly-client-telemetry && npm pack --pack-destination "$RUNNER_TEMP")
+          TGZ=$(ls "$RUNNER_TEMP"/ops-ai-toggly-client-telemetry-*.tgz | head -1)
+          npm install --no-save "$TGZ"
 
       - name: Build package
         working-directory: ${{ matrix.path }}
@@ -126,6 +143,9 @@ jobs:
       - name: Install dependencies for TypeScript analysis
         run: |
           npm ci --prefix Toggly.FeatureManagement.ReactNative/libs/core || npm install --prefix Toggly.FeatureManagement.ReactNative/libs/core
+          (cd toggly-client-telemetry && npm pack --pack-destination "$RUNNER_TEMP")
+          TGZ=$(ls "$RUNNER_TEMP"/ops-ai-toggly-client-telemetry-*.tgz | head -1)
+          npm install --prefix Toggly.FeatureManagement.ReactNative/libs/core --no-save "$TGZ"
           npm run build --prefix Toggly.FeatureManagement.ReactNative/libs/core
           npm ci --prefix Toggly.FeatureManagement.ReactNative/libs/react-native || npm install --prefix Toggly.FeatureManagement.ReactNative/libs/react-native
           npm ci --prefix Toggly.FeatureManagement.ReactNative/libs/storage-async || npm install --prefix Toggly.FeatureManagement.ReactNative/libs/storage-async
@@ -281,6 +301,14 @@ jobs:
       - name: Install core dependencies
         working-directory: Toggly.FeatureManagement.ReactNative/libs/core
         run: npm ci || npm install
+
+      - name: Overlay local toggly-client-telemetry
+        working-directory: Toggly.FeatureManagement.ReactNative/libs/core
+        run: |
+          set -euo pipefail
+          (cd ../../../toggly-client-telemetry && npm pack --pack-destination "$RUNNER_TEMP")
+          TGZ=$(ls "$RUNNER_TEMP"/ops-ai-toggly-client-telemetry-*.tgz | head -1)
+          npm install --no-save "$TGZ"
 
       - name: Run core smoke test
         timeout-minutes: 2

@@ -49,3 +49,15 @@ class TestSystemMetricsCollector:
         collector.tick()
         assert len(observed) == SYSTEM_METRICS_MAX_PENDING + 1
         collector.stop()
+
+
+def test_start_without_resource_module(monkeypatch):
+    """Collector starts on hosts without POSIX resource (coverage / Windows)."""
+    import toggly.telemetry.system_metrics as sm
+
+    monkeypatch.setattr(sm, "_resource", None)
+    c = sm.SystemMetricsCollector(lambda m, v: None, interval_seconds=60.0)
+    c.start()
+    c.tick()
+    c.stop()
+    assert c._started is False
