@@ -58,11 +58,17 @@ await withHostResources(async defer => {
     };
     const telemetryRange = metadata.dependencies['@ops-ai/toggly-client-telemetry'];
     const signedRange = metadata.dependencies['@ops-ai/toggly-signed-defs'];
-    if (!process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
-      installRegistryDependency('@ops-ai/toggly-client-telemetry', telemetryRange);
-    }
-    if (!process.env.TOGGLY_SIGNED_DEFS_TARBALL) {
-      installRegistryDependency('@ops-ai/toggly-signed-defs', signedRange);
+    const registryPackages = {
+      ...metadata.dependencies,
+      ...Object.fromEntries(
+        Object.entries(metadata.peerDependencies || {}).filter(([name]) => !name.startsWith('@angular/')),
+      ),
+    };
+    for (const [name, versionRange] of Object.entries(registryPackages)) {
+      if (name === 'tslib') continue;
+      if (name === '@ops-ai/toggly-client-telemetry' && process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) continue;
+      if (name === '@ops-ai/toggly-signed-defs' && process.env.TOGGLY_SIGNED_DEFS_TARBALL) continue;
+      installRegistryDependency(name, versionRange);
     }
     overlayLocalPackage(tarball, '@ops-ai/ngx-feature-flags-toggly');
     if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
