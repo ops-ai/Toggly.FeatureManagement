@@ -45,4 +45,13 @@ RSpec.describe Toggly::Telemetry::UsageScopeRunner do
     vs = batcher.build_and_reset[:stats].first[:variantStats]["enabled"]
     expect(vs[:errorCount]).to eq(1)
   end
+
+  it "records error for Exception subclasses that bypass StandardError" do
+    expect do
+      described_class.run(handlers("Fatal")) { |_scope| raise Exception, "fatal" }
+    end.to raise_error(Exception)
+    vs = batcher.build_and_reset[:stats].first[:variantStats]["enabled"]
+    expect(vs[:errorCount]).to eq(1)
+    expect(vs[:usedCount]).to eq(1)
+  end
 end

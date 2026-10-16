@@ -2,6 +2,14 @@ import Darwin
 import Foundation
 import zlib
 
+/// Seconds since an arbitrary boot epoch; continues while the device sleeps.
+/// File-level so it can be used as an init default without covariant `Self`.
+private let togglyMonotonicSeconds: @Sendable () -> TimeInterval = {
+    var ts = timespec()
+    clock_gettime(CLOCK_MONOTONIC_RAW, &ts)
+    return TimeInterval(ts.tv_sec) + TimeInterval(ts.tv_nsec) / 1_000_000_000
+}
+
 /// Batches feature and app metric deltas with immutable attribution per admitted batch.
 /// A reporter belongs to one service and never stores groups, claims, or entity context.
 public actor TelemetryReporter {
@@ -127,7 +135,7 @@ public actor TelemetryReporter {
         self.compressor = { Self.gzip($0) }
         // CLOCK_MONOTONIC_RAW advances during sleep (Android elapsedRealtime parity)
         // and is immune to wall-clock NTP jumps that skew duration / batch age.
-        self.clock = Self.monotonicSeconds
+        self.clock = togglyMonotonicSeconds
     }
 
     // The transport/sleeper seams allow deterministic tests without making test hooks public.
@@ -142,7 +150,7 @@ public actor TelemetryReporter {
         onDiagnostic: Diagnostic? = nil,
         sleep: @escaping Sleeper = { seconds in try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)) },
         compressor: @escaping Compressor = { _ in nil },
-        clock: @escaping @Sendable () -> TimeInterval = Self.monotonicSeconds,
+        clock: @escaping @Sendable () -> TimeInterval = togglyMonotonicSeconds,
         transport: @escaping Transport
     ) {
         self.appKey = appKey.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -160,13 +168,6 @@ public actor TelemetryReporter {
         self.compressor = compressor
         self.clock = clock
         self.transport = transport
-    }
-
-    /// Seconds since an arbitrary boot epoch; continues while the device sleeps.
-    private static let monotonicSeconds: @Sendable () -> TimeInterval = {
-        var ts = timespec()
-        clock_gettime(CLOCK_MONOTONIC_RAW, &ts)
-        return TimeInterval(ts.tv_sec) + TimeInterval(ts.tv_nsec) / 1_000_000_000
     }
 
     static func gzip(_ data: Data) -> Data? {

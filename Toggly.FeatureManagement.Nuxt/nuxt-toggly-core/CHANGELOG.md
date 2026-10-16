@@ -1,3 +1,9 @@
+## 1.16.1 — 2026-10-16
+
+### Fixed
+- Usage-scope durations use monotonic `performance.now()` instead of
+  `Date.now()` [OPS-1758].
+
 ## 1.16.0 — 2026-10-11
 
 ### Added

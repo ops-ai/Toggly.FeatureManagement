@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.2 — 2026-10-16
+
+### Fixed
+- Usage-scope duration measurement uses monotonic `performance.now()` instead
+  of `Date.now()` [OPS-1758].
+
 ## 1.2.1 — 2026-10-15
 
 ### Fixed

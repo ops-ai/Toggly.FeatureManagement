@@ -11,7 +11,7 @@ export function isUsageCancellation(error: unknown): boolean {
 }
 
 function elapsedMs(start: number): number {
-  return Math.max(0, Math.round(Date.now() - start))
+  return Math.max(0, Math.round(performance.now() - start))
 }
 
 export async function runFeatureUsageScope<T>(
@@ -23,7 +23,8 @@ export async function runFeatureUsageScope<T>(
   fn: (scope: FeatureUsageScope) => Promise<T>,
 ): Promise<T> {
   handlers.recordAttempt()
-  const start = Date.now()
+  // Monotonic clock — wall Date.now() skews under NTP / manual time changes.
+  const start = performance.now()
   let failed = false
   const scope: FeatureUsageScope = {
     fail() {

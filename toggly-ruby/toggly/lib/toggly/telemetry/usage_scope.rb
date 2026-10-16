@@ -42,10 +42,11 @@ module Toggly
           outcome_recorded = true
           raise e
         ensure
-          # Non-local exits (return/break/throw) still need an outcome; honor fail().
+          # Non-local exits (return/break/throw) and Exception subclasses that
+          # bypass rescue StandardError still need an outcome; honor fail() and $!.
           unless outcome_recorded
             duration_ms = elapsed_ms(start)
-            if scope.failed?
+            if scope.failed? || $!
               record_failure.call(duration_ms)
             else
               record_success.call(duration_ms)
