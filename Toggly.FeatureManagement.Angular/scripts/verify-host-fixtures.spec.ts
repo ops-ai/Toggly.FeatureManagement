@@ -57,15 +57,19 @@ await withHostResources(async defer => {
     const installRegistryDependency = (name, versionRange) => {
       run(['npm', 'install', '--no-save', '--package-lock=false', '--no-audit', '--no-fund', `${name}@${versionRange}`]);
     };
+    // Registry installs first (one at a time). Local tarball overlays last so
+    // npm cannot remove a prior file: overlay when resolving the other dep.
+    if (!process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
+      installRegistryDependency('@ops-ai/toggly-client-telemetry', installed.dependencies['@ops-ai/toggly-client-telemetry']);
+    }
+    if (!process.env.TOGGLY_SIGNED_DEFS_TARBALL) {
+      installRegistryDependency('@ops-ai/toggly-signed-defs', installed.dependencies['@ops-ai/toggly-signed-defs']);
+    }
     if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
       overlayLocalPackage(path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL), '@ops-ai/toggly-client-telemetry');
-    } else {
-      installRegistryDependency('@ops-ai/toggly-client-telemetry', installed.dependencies['@ops-ai/toggly-client-telemetry']);
     }
     if (process.env.TOGGLY_SIGNED_DEFS_TARBALL) {
       overlayLocalPackage(path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL), '@ops-ai/toggly-signed-defs');
-    } else {
-      installRegistryDependency('@ops-ai/toggly-signed-defs', installed.dependencies['@ops-ai/toggly-signed-defs']);
     }
     const reporter = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-client-telemetry/package.json')));
     const signer = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-signed-defs/package.json')));
