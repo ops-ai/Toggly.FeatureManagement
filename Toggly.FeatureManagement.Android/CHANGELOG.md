@@ -14,6 +14,9 @@
 - Usage-scope durations use monotonic `elapsedRealtime` instead of wall-clock
   `currentTimeMillis`, so NTP / manual clock changes do not skew
   `durationSumMs` / `errorDurationSumMs` [OPS-1758].
+- `TelemetryReporter.use` records completion counters on the identity that
+  started the scope when attribution changes while the action is suspended
+  [OPS-1758].
 
 ## 1.9.0
 

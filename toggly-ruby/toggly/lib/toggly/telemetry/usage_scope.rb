@@ -29,6 +29,9 @@ module Toggly
         start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         scope = FeatureUsageScope.new
         outcome_recorded = false
+        # $! is the nearest enclosing rescue, not this scope. A clean return
+        # inside an outer rescue must not inherit that exception as a failure.
+        enclosing_error = $ERROR_INFO
         begin
           result = block.call(scope)
           duration_ms = elapsed_ms(start)
@@ -45,10 +48,12 @@ module Toggly
           raise e
         ensure
           # Non-local exits (return/break/throw) and Exception subclasses that
-          # bypass rescue StandardError still need an outcome; honor fail() and $ERROR_INFO.
+          # bypass rescue StandardError still need an outcome. Only a $! raised
+          # by this scope (different from the enclosing rescue) is a failure.
           unless outcome_recorded
             duration_ms = elapsed_ms(start)
-            if scope.failed? || $ERROR_INFO
+            raised_here = !$ERROR_INFO.equal?(enclosing_error)
+            if scope.failed? || raised_here
               record_failure.call(duration_ms)
             else
               record_success.call(duration_ms)

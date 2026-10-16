@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Usage scopes that raise `Exception` (not only `StandardError`) record an
   error outcome instead of treating the attempt as success [OPS-1758].
+- A clean usage scope nested in an outer `rescue` no longer inherits that
+  exception from `$!` and records a failure [OPS-1758].
 
 ## [1.4.1] - 2026-10-15
 

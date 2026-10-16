@@ -30,7 +30,10 @@ await withHostResources(async defer => {
     const cwd = path.join(temporaryRoot, entry.fixture);
     fs.cpSync(path.join(fixtures, entry.fixture), cwd, { recursive: true });
     fs.copyFileSync(path.join(fixtures, 'host.spec.ts'), path.join(cwd, 'src/host.spec.ts'));
-    const run = args => execFileSync(process.execPath, [npmCli, 'exec', '--yes', `--package=node@${entry.node}`, '--package=npm@10.8.2', '--', ...args], { cwd, stdio: 'inherit', env: commandEnvironment });
+    // Angular 21's arborist build hits npm 10 `edgesOut` null on any install
+    // after `npm ci`. npm 11 completes the same classic tarball install.
+    const npmVersion = String(entry.angular || '').startsWith('21.') ? '11.6.2' : '10.8.2';
+    const run = args => execFileSync(process.execPath, [npmCli, 'exec', '--yes', `--package=node@${entry.node}`, `--package=npm@${npmVersion}`, '--', ...args], { cwd, stdio: 'inherit', env: commandEnvironment });
     console.log(`HOST ${JSON.stringify(entry)}`);
     run(['node', '--version']);
     run(['npm', 'ci', '--no-audit', '--no-fund']);
@@ -39,38 +42,14 @@ await withHostResources(async defer => {
       if (locked.version !== '2.8.1') throw new Error('Retained consumer baseline drifted');
       console.log('Retained locked Angular SDK baseline 2.8.1 installed before upgrade');
     }
-    const overlayLocalPackage = (tarballPath, packageName) => {
-      const extractRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'toggly-overlay-'));
-      defer(() => fs.rmSync(extractRoot, { recursive: true, force: true }));
-      execFileSync('tar', ['-xzf', tarballPath, '-C', extractRoot], { stdio: 'inherit' });
-      const extracted = path.join(extractRoot, 'package');
-      const destination = path.join(cwd, 'node_modules', ...packageName.split('/'));
-      fs.rmSync(destination, { recursive: true, force: true });
-      fs.mkdirSync(path.dirname(destination), { recursive: true });
-      fs.cpSync(extracted, destination, { recursive: true });
-    };
-    // Angular ≤20: classic multi-tarball `npm install` (pulls peers/deps).
-    // Angular 21 + npm 10: any extra `npm install` after `npm ci` hits
-    // `edgesOut` null. Tar-overlay the packed SDK and local artifacts only.
-    const useTarOverlay = String(entry.angular || '').startsWith('21.');
-    if (useTarOverlay) {
-      overlayLocalPackage(tarball, '@ops-ai/ngx-feature-flags-toggly');
-      if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
-        overlayLocalPackage(path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL), '@ops-ai/toggly-client-telemetry');
-      }
-      if (process.env.TOGGLY_SIGNED_DEFS_TARBALL) {
-        overlayLocalPackage(path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL), '@ops-ai/toggly-signed-defs');
-      }
-    } else {
-      const install = ['npm', 'install', '--no-save', '--package-lock=false', '--no-audit', '--no-fund', tarball];
-      if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
-        install.push(path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL));
-      }
-      if (process.env.TOGGLY_SIGNED_DEFS_TARBALL) {
-        install.push(path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL));
-      }
-      run(install);
+    const install = ['npm', 'install', '--no-save', '--package-lock=false', '--no-audit', '--no-fund', tarball];
+    if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
+      install.push(path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL));
     }
+    if (process.env.TOGGLY_SIGNED_DEFS_TARBALL) {
+      install.push(path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL));
+    }
+    run(install);
     const installed = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/ngx-feature-flags-toggly/package.json')));
     const reporter = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-client-telemetry/package.json')));
     const signer = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-signed-defs/package.json')));

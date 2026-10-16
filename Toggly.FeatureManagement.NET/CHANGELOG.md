@@ -6,6 +6,8 @@
 - `CaptureBatch` drains usage counters and duration maps with `TryRemove` so
   concurrent scope completions cannot lose values between snapshot and clear
   [OPS-1758].
+- `[FeatureUsage]` treats an MVC or Razor exception as a scope failure only
+  when `ExceptionHandled` is false [OPS-1758].
 
 ## All .NET SDK packages 3.14.0 - 2026-10-12
 

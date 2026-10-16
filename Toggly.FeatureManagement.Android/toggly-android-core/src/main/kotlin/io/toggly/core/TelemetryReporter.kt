@@ -140,19 +140,27 @@ internal class TelemetryReporter(
         variant: String = "enabled",
         action: suspend (fail: () -> Unit) -> T,
     ): T {
+        val pinnedInstance: String?
+        val pinnedIdentity: String?
+        synchronized(lock) {
+            pinnedInstance = currentInstanceId
+            pinnedIdentity = currentIdentity
+        }
         recordUsage(key, variant)
         // Monotonic elapsedRealtime — wall clock is only for HTTP Retry-After parsing.
         val started = now()
         var failed = false
         val fail = { failed = true }
+        fun recordCompletion(index: Int, amount: Long = 1) =
+            recordUnderPinned(pinnedInstance, pinnedIdentity, key, variant, index, amount)
         return try {
             val result = action(fail)
             val durationMs = max(0, now() - started)
             if (failed) {
-                recordFeature(key, variant, 3)
-                if (durationMs > 0) recordFeature(key, variant, 5, durationMs)
+                recordCompletion(3)
+                if (durationMs > 0) recordCompletion(5, durationMs)
             } else if (durationMs > 0) {
-                recordFeature(key, variant, 4, durationMs)
+                recordCompletion(4, durationMs)
             }
             result
         } catch (error: CancellationException) {
@@ -160,9 +168,29 @@ internal class TelemetryReporter(
             throw error
         } catch (error: Throwable) {
             val durationMs = max(0, now() - started)
-            recordFeature(key, variant, 3)
-            if (durationMs > 0) recordFeature(key, variant, 5, durationMs)
+            recordCompletion(3)
+            if (durationMs > 0) recordCompletion(5, durationMs)
             throw error
+        }
+    }
+
+    /** Completion counters stay on the identity that admitted the attempt. */
+    private fun recordUnderPinned(
+        instanceId: String?,
+        identity: String?,
+        key: String,
+        variant: String,
+        index: Int,
+        amount: Long,
+    ) = synchronized(lock) {
+        val liveInstance = currentInstanceId
+        val liveIdentity = currentIdentity
+        val drifted = liveInstance != instanceId || liveIdentity != identity
+        if (drifted) updateAttribution(instanceId, identity)
+        try {
+            recordFeature(key, variant, index, amount)
+        } finally {
+            if (drifted) updateAttribution(liveInstance, liveIdentity)
         }
     }
 

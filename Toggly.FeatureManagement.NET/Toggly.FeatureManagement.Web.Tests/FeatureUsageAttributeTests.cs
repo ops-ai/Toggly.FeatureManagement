@@ -527,6 +527,40 @@ public class FeatureUsageAttributeTests
     }
 
     [Fact]
+    public async Task OnActionExecutionAsync_WhenExecutedExceptionIsHandled_DoesNotFailScope()
+    {
+        var attribute = new FeatureUsageAttribute("enabled-feature");
+        var featureManagerMock = new Mock<IFeatureManagerSnapshot>();
+        featureManagerMock.Setup(m => m.IsEnabledAsync("enabled-feature")).ReturnsAsync(true);
+
+        var scope = new Mock<IFeatureUsageScope>();
+        scope.Setup(s => s.DisposeAsync()).Returns(ValueTask.CompletedTask);
+        var statsProviderMock = new Mock<IFeatureUsageStatsProvider>();
+        statsProviderMock.Setup(m => m.BeginUsageAsync(It.IsAny<string[]>())).ReturnsAsync(scope.Object);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(featureManagerMock.Object);
+        services.AddSingleton(statsProviderMock.Object);
+        var serviceProvider = services.BuildServiceProvider();
+        var httpContext = new DefaultHttpContext { RequestServices = serviceProvider };
+        var actionContext = CreateActionExecutingContext(httpContext);
+
+        await attribute.OnActionExecutionAsync(actionContext, () =>
+        {
+            var executed = new ActionExecutedContext(
+                actionContext, new List<IFilterMetadata>(), new object())
+            {
+                Exception = new InvalidOperationException("handled"),
+                ExceptionHandled = true,
+            };
+            return Task.FromResult(executed);
+        });
+
+        scope.Verify(s => s.Fail(), Times.Never);
+        scope.Verify(s => s.MarkCancelled(), Times.Never);
+    }
+
+    [Fact]
     public async Task OnActionExecutionAsync_WhenExecutedContextHasCancellation_MarksCancelled()
     {
         var attribute = new FeatureUsageAttribute("enabled-feature");
@@ -705,6 +739,43 @@ public class FeatureUsageAttributeTests
         });
 
         scope.Verify(s => s.Fail(), Times.Once);
+        scope.Verify(s => s.MarkCancelled(), Times.Never);
+    }
+
+    [Fact]
+    public async Task OnPageHandlerExecutionAsync_WhenExecutedExceptionIsHandled_DoesNotFailScope()
+    {
+        var attribute = new FeatureUsageAttribute("enabled-feature");
+        var featureManagerMock = new Mock<IFeatureManagerSnapshot>();
+        featureManagerMock.Setup(m => m.IsEnabledAsync("enabled-feature")).ReturnsAsync(true);
+
+        var scope = new Mock<IFeatureUsageScope>();
+        scope.Setup(s => s.DisposeAsync()).Returns(ValueTask.CompletedTask);
+        var statsProviderMock = new Mock<IFeatureUsageStatsProvider>();
+        statsProviderMock.Setup(m => m.BeginUsageAsync(It.IsAny<string[]>())).ReturnsAsync(scope.Object);
+
+        var services = new ServiceCollection();
+        services.AddSingleton(featureManagerMock.Object);
+        services.AddSingleton(statsProviderMock.Object);
+        var serviceProvider = services.BuildServiceProvider();
+
+        var httpContext = new DefaultHttpContext { RequestServices = serviceProvider };
+        var pageContext = new PageContext(new ActionContext(httpContext, new RouteData(), new ActionDescriptor()));
+        var executingContext = new PageHandlerExecutingContext(
+            pageContext, new List<IFilterMetadata>(), null, new Dictionary<string, object?>(), new object());
+
+        await attribute.OnPageHandlerExecutionAsync(executingContext, () =>
+        {
+            var executed = new PageHandlerExecutedContext(
+                pageContext, new List<IFilterMetadata>(), null, new object())
+            {
+                Exception = new InvalidOperationException("handled"),
+                ExceptionHandled = true,
+            };
+            return Task.FromResult(executed);
+        });
+
+        scope.Verify(s => s.Fail(), Times.Never);
         scope.Verify(s => s.MarkCancelled(), Times.Never);
     }
 

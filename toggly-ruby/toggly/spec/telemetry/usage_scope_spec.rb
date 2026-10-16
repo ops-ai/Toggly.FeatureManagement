@@ -46,6 +46,17 @@ RSpec.describe Toggly::Telemetry::UsageScopeRunner do
     expect(vs[:errorCount]).to eq(1)
   end
 
+  it "does not inherit an enclosing rescue exception on a clean return" do
+    begin
+      raise "outer"
+    rescue StandardError
+      described_class.run(handlers("Nested")) { |_scope| :ok }
+    end
+    vs = batcher.build_and_reset[:stats].first[:variantStats]["enabled"]
+    expect(vs[:usedCount]).to eq(1)
+    expect(vs[:errorCount]).to eq(0)
+  end
+
   it "records error for Exception subclasses that bypass StandardError" do
     expect do
       # SystemStackError inherits Exception, not StandardError.

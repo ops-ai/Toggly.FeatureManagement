@@ -462,4 +462,31 @@ class TelemetryReporterTest {
         reporter.dispose()
     }
 
+    @Test fun useKeepsCompletionOnTheIdentityThatStartedTheScope() = runTest {
+        val requests = mutableListOf<Request>()
+        val reporter = TelemetryReporter(
+            "test-app",
+            identity = "alice",
+            scope = backgroundScope,
+            now = { testScheduler.currentTime },
+            transport = { requests += it; TelemetryResponse(202) },
+        )
+        assertEquals("ok", reporter.use("Scoped") {
+            reporter.updateAttribution(null, "bob")
+            advanceTimeBy(12)
+            "ok"
+        })
+        reporter.flushTelemetry()
+        val packets = requests.map { body(it).jsonObject }
+        val slots = LongArray(6)
+        packets.filter { it["u"]?.jsonPrimitive?.content == "alice" }.forEach { packet ->
+            packet.getValue("f").jsonObject.getValue("Scoped").jsonObject.getValue("enabled").jsonArray
+                .forEachIndexed { index, value -> slots[index] += value.jsonPrimitive.long }
+        }
+        assertEquals(1L, slots[1])
+        assertEquals(12L, slots[4])
+        assertTrue(packets.none { it["u"]?.jsonPrimitive?.content == "bob" && it.containsKey("f") })
+        reporter.dispose()
+    }
+
 }

@@ -110,7 +110,7 @@ namespace Toggly.FeatureManagement
                 // ASP.NET Core stores action exceptions on the executed context and rethrows
                 // only after this filter returns — inspect Exception, do not rely on throw alone.
                 var executed = await next().ConfigureAwait(false);
-                ApplyScopeOutcome(scope, executed.Exception);
+                ApplyScopeOutcome(scope, executed.Exception, executed.ExceptionHandled);
             }
             catch (OperationCanceledException)
             {
@@ -152,7 +152,7 @@ namespace Toggly.FeatureManagement
             {
                 // PageActionInvoker stores handler exceptions on the executed context the same way.
                 var executed = await next.Invoke().ConfigureAwait(false);
-                ApplyScopeOutcome(scope, executed.Exception);
+                ApplyScopeOutcome(scope, executed.Exception, executed.ExceptionHandled);
             }
             catch (OperationCanceledException)
             {
@@ -175,10 +175,11 @@ namespace Toggly.FeatureManagement
 
         /// <summary>
         /// Maps an exception stored on the MVC/Razor executed context to scope outcome.
+        /// A handled exception stays on the context but the request completed successfully.
         /// </summary>
-        private static void ApplyScopeOutcome(IFeatureUsageScope scope, Exception exception)
+        private static void ApplyScopeOutcome(IFeatureUsageScope scope, Exception exception, bool exceptionHandled)
         {
-            if (exception == null)
+            if (exception == null || exceptionHandled)
                 return;
             if (exception is OperationCanceledException)
                 scope.MarkCancelled();
