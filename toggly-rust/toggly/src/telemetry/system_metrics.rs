@@ -16,6 +16,9 @@ pub const SYSTEM_METRICS_MAX_PENDING: usize = 30;
 type ObserveFn = Arc<dyn Fn(&str, f64, Option<&MetricsFeatureOptions>) + Send + Sync>;
 type SamplerFn = Arc<dyn Fn() -> Vec<(String, f64)> + Send + Sync>;
 
+/// Injectable process-metric sampler (tests / custom hosts).
+pub type SystemMetricsSampler = SamplerFn;
+
 struct CpuSnapshot {
     user_micros: i64,
     system_micros: i64,
@@ -295,15 +298,37 @@ fn install_panic_hook() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use parking_lot::Mutex as TestMutex;
+    use std::sync::atomic::AtomicUsize;
     use std::sync::Mutex as StdMutex;
 
-    #[test]
-    fn tick_emits_injected_samples_and_exception_count() {
+    static TEST_LOCK: TestMutex<()> = TestMutex::new(());
+
+    fn test_observe() -> (ObserveFn, Arc<StdMutex<Vec<(String, f64)>>>) {
         let seen: Arc<StdMutex<Vec<(String, f64)>>> = Arc::new(StdMutex::new(Vec::new()));
         let seen2 = seen.clone();
         let observe: ObserveFn = Arc::new(move |metric, value, _| {
             seen2.lock().unwrap().push((metric.to_string(), value));
         });
+        (observe, seen)
+    }
+
+    fn manual_collector(observe: ObserveFn, sampler: Option<SamplerFn>) -> SystemMetricsCollector {
+        SystemMetricsCollector {
+            observe,
+            custom_sampler: sampler,
+            cpu_state: Mutex::new(None),
+            pending_by_metric: Mutex::new(std::collections::HashMap::new()),
+            cancel_tx: watch::channel(false).0,
+            task: Mutex::new(None),
+        }
+    }
+
+    #[test]
+    fn tick_emits_injected_samples_and_exception_count() {
+        let _guard = TEST_LOCK.lock();
+        PANIC_EXCEPTIONS.store(0, Ordering::Relaxed);
+        let (observe, seen) = test_observe();
         let sampler: SamplerFn = Arc::new(|| {
             vec![
                 ("CpuUsage".into(), 3.0),
@@ -311,14 +336,7 @@ mod tests {
             ]
         });
         PANIC_EXCEPTIONS.store(2, Ordering::Relaxed);
-        let collector = SystemMetricsCollector {
-            observe,
-            custom_sampler: Some(sampler),
-            cpu_state: Mutex::new(None),
-            pending_by_metric: Mutex::new(std::collections::HashMap::new()),
-            cancel_tx: watch::channel(false).0,
-            task: Mutex::new(None),
-        };
+        let collector = manual_collector(observe, Some(sampler));
         collector.tick();
         let rows = seen.lock().unwrap();
         assert!(rows.iter().any(|(m, v)| m == "CpuUsage" && *v == 3.0));
@@ -326,5 +344,120 @@ mod tests {
             .iter()
             .any(|(m, v)| m == "MemoryWorkingSet" && *v == 1024.0));
         assert!(rows.iter().any(|(m, v)| m == "ExceptionCount" && *v == 2.0));
+        assert_eq!(PANIC_EXCEPTIONS.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn tick_skips_non_finite_and_negative_values() {
+        let _guard = TEST_LOCK.lock();
+        let (observe, seen) = test_observe();
+        let sampler: SamplerFn = Arc::new(|| {
+            vec![
+                ("CpuUsage".into(), f64::NAN),
+                ("CpuUsage".into(), f64::INFINITY),
+                ("CpuUsage".into(), -1.0),
+                ("CpuUsage".into(), 4.0),
+            ]
+        });
+        let collector = manual_collector(observe, Some(sampler));
+        collector.tick();
+        let rows = seen.lock().unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0, "CpuUsage");
+        assert_eq!(rows[0].1, 4.0);
+    }
+
+    #[test]
+    fn pending_cap_drops_observations_beyond_max() {
+        let _guard = TEST_LOCK.lock();
+        PANIC_EXCEPTIONS.store(0, Ordering::Relaxed);
+        let (observe, seen) = test_observe();
+        let sampler: SamplerFn = Arc::new(|| vec![("CpuUsage".into(), 1.0)]);
+        let collector = manual_collector(observe, Some(sampler));
+        for _ in 0..(SYSTEM_METRICS_MAX_PENDING + 5) {
+            collector.tick();
+        }
+        assert_eq!(seen.lock().unwrap().len(), SYSTEM_METRICS_MAX_PENDING);
+        collector.on_flushed();
+        collector.tick();
+        assert_eq!(
+            seen.lock().unwrap().len(),
+            SYSTEM_METRICS_MAX_PENDING + 1
+        );
+    }
+
+    #[test]
+    fn tick_survives_sampler_panic() {
+        let _guard = TEST_LOCK.lock();
+        PANIC_EXCEPTIONS.store(0, Ordering::Relaxed);
+        let (observe, seen) = test_observe();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let calls2 = calls.clone();
+        let sampler: SamplerFn = Arc::new(move || {
+            let n = calls2.fetch_add(1, Ordering::Relaxed);
+            if n == 0 {
+                panic!("boom");
+            }
+            vec![("CpuUsage".into(), 7.0)]
+        });
+        let collector = manual_collector(observe, Some(sampler));
+        collector.tick();
+        collector.tick();
+        let rows = seen.lock().unwrap();
+        assert_eq!(
+            rows.iter().filter(|(m, _)| m == "CpuUsage").count(),
+            1
+        );
+        assert!(rows.iter().any(|(m, v)| m == "CpuUsage" && *v == 7.0));
+    }
+
+    #[tokio::test]
+    async fn start_allows_manual_tick_and_double_stop_is_idempotent() {
+        let _guard = TEST_LOCK.lock();
+        PANIC_EXCEPTIONS.store(0, Ordering::Relaxed);
+        let (observe, seen) = test_observe();
+        let sampler: SamplerFn = Arc::new(|| vec![("CpuUsage".into(), 11.0)]);
+        let collector = SystemMetricsCollector::start(observe, Some(sampler));
+        collector.tick();
+        assert_eq!(seen.lock().unwrap().len(), 1);
+        collector.stop();
+        collector.stop();
+    }
+
+    #[test]
+    fn default_sample_cpu_after_second_tick_on_unix() {
+        let _guard = TEST_LOCK.lock();
+        let (observe, seen) = test_observe();
+        let collector = manual_collector(observe, None);
+        collector.tick();
+        std::thread::sleep(Duration::from_millis(15));
+        collector.tick();
+        #[cfg(unix)]
+        {
+            assert!(
+                seen.lock().unwrap().iter().any(|(m, v)| m == "CpuUsage" && *v >= 0.0),
+                "expected CpuUsage from rusage delta"
+            );
+        }
+    }
+
+    #[test]
+    fn stop_clears_pending_backpressure() {
+        let _guard = TEST_LOCK.lock();
+        PANIC_EXCEPTIONS.store(0, Ordering::Relaxed);
+        let (observe, seen) = test_observe();
+        let sampler: SamplerFn = Arc::new(|| vec![("CpuUsage".into(), 1.0)]);
+        let collector = manual_collector(observe, Some(sampler));
+        for _ in 0..SYSTEM_METRICS_MAX_PENDING {
+            collector.tick();
+        }
+        collector.tick();
+        assert_eq!(seen.lock().unwrap().len(), SYSTEM_METRICS_MAX_PENDING);
+        collector.stop();
+        collector.tick();
+        assert_eq!(
+            seen.lock().unwrap().len(),
+            SYSTEM_METRICS_MAX_PENDING + 1
+        );
     }
 }

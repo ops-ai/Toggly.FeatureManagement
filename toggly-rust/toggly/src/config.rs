@@ -461,4 +461,20 @@ mod tests {
             "https://definitions.toggly.io/.well-known/jwks"
         );
     }
+
+    #[test]
+    fn test_system_metrics_defaults_off_and_builder() {
+        let default_cfg = TogglyConfig::default();
+        assert!(!default_cfg.system_metrics);
+
+        let config = TogglyConfig::builder()
+            .app_key("app")
+            .enable_metrics(true)
+            .system_metrics(true)
+            .build();
+        assert!(config.system_metrics);
+
+        let rendered = format!("{config:?}");
+        assert!(rendered.contains("system_metrics"));
+    }
 }

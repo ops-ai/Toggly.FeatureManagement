@@ -424,7 +424,7 @@ jobs:
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Go"
             -Dsonar.sources=.
-            -Dsonar.exclusions=**/*_test.go,**/vendor/**,**/examples/**,**/*.pb.go
+            -Dsonar.exclusions=**/*_test.go,**/vendor/**,**/examples/**,**/*.pb.go,**/rusage_windows.go
             -Dsonar.tests=.
             -Dsonar.test.inclusions=**/*_test.go
             -Dsonar.go.coverage.reportPaths=coverage.out
@@ -449,7 +449,7 @@ jobs:
             -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.projectName="Toggly SDKs - Go"
             -Dsonar.sources=.
-            -Dsonar.exclusions=**/*_test.go,**/vendor/**,**/examples/**,**/*.pb.go
+            -Dsonar.exclusions=**/*_test.go,**/vendor/**,**/examples/**,**/*.pb.go,**/rusage_windows.go
             -Dsonar.tests=.
             -Dsonar.test.inclusions=**/*_test.go
             -Dsonar.go.coverage.reportPaths=coverage.out

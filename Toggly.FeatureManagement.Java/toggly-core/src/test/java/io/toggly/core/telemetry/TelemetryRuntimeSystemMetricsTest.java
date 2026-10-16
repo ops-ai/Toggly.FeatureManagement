@@ -102,4 +102,55 @@ class TelemetryRuntimeSystemMetricsTest {
         assertThat(sampled.await(200, TimeUnit.MILLISECONDS)).isFalse();
         runtime.close();
     }
+
+    @Test
+    void clearsSystemMetricsPendingAfterFailedMetricsFlush() throws Exception {
+        AtomicInteger sampleCount = new AtomicInteger();
+        AtomicInteger sendAttempts = new AtomicInteger();
+        MetricsGrpcClient client = new MetricsGrpcClient() {
+            @Override
+            public void sendMetrics(MetricStatPayload payload) {
+                sendAttempts.incrementAndGet();
+                throw new RuntimeException("send failed");
+            }
+
+            @Override
+            public void close() {}
+        };
+
+        TelemetryRuntime runtime = TelemetryRuntime.builder()
+                .appKey("app")
+                .environment("Production")
+                .enableUsageTracking(false)
+                .enableMetrics(true)
+                .metricsFlushInterval(Duration.ofSeconds(60))
+                .systemMetrics(true)
+                .systemMetricsIntervalMs(20)
+                .systemMetricsSampler(() -> {
+                    sampleCount.incrementAndGet();
+                    return List.of(new SystemMetricsCollector.Observation("CpuUsage", 1.0));
+                })
+                .metricsClient(client)
+                .build();
+        runtime.start();
+
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (sampleCount.get() < SystemMetricsCollector.SYSTEM_METRICS_MAX_PENDING + 2
+                && System.nanoTime() < deadline) {
+            TimeUnit.MILLISECONDS.sleep(25);
+        }
+        assertThat(sampleCount.get())
+                .isGreaterThanOrEqualTo(SystemMetricsCollector.SYSTEM_METRICS_MAX_PENDING + 2);
+
+        int samplesBeforeFlush = sampleCount.get();
+        runtime.flushMetrics();
+        assertThat(sendAttempts.get()).isEqualTo(1);
+
+        deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (sampleCount.get() <= samplesBeforeFlush && System.nanoTime() < deadline) {
+            TimeUnit.MILLISECONDS.sleep(25);
+        }
+        assertThat(sampleCount.get()).isGreaterThan(samplesBeforeFlush);
+        runtime.close();
+    }
 }

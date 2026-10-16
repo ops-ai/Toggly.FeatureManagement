@@ -2,9 +2,99 @@ package systemmetrics
 
 import (
 	"math"
+	"runtime"
 	"sync"
 	"testing"
+	"time"
 )
+
+func TestWithIntervalOverridesDefault(t *testing.T) {
+	c := New(func(string, float64) {}, WithInterval(3*time.Second))
+	if c.interval != 3*time.Second {
+		t.Fatalf("interval = %v, want 3s", c.interval)
+	}
+	ignored := New(func(string, float64) {}, WithInterval(0))
+	if ignored.interval != DefaultInterval {
+		t.Fatalf("interval = %v, want default %v", ignored.interval, DefaultInterval)
+	}
+}
+
+func TestCollectorStartIsIdempotent(t *testing.T) {
+	c := New(func(string, float64) {}, WithSampler(func() []Observation {
+		return nil
+	}), WithInterval(time.Hour))
+	c.Start()
+	c.Start()
+	c.Stop()
+}
+
+func TestCollectorStopNoOpWhenNotStarted(t *testing.T) {
+	c := New(func(string, float64) {})
+	c.Stop()
+}
+
+func TestCollectorSkipsNonFiniteObservations(t *testing.T) {
+	var count int
+	c := New(func(string, float64) { count++ }, WithSampler(func() []Observation {
+		return []Observation{
+			{Metric: "CpuUsage", Value: math.NaN()},
+			{Metric: "CpuUsage", Value: 1.5},
+		}
+	}))
+	c.mu.Lock()
+	c.started = true
+	c.mu.Unlock()
+	c.Tick()
+	if count != 1 {
+		t.Fatalf("count = %d, want 1", count)
+	}
+}
+
+func TestCollectorBuildSampleWithoutSampler(t *testing.T) {
+	var metrics []string
+	c := New(func(metric string, _ float64) {
+		metrics = append(metrics, metric)
+	})
+	c.mu.Lock()
+	c.started = true
+	c.seedCPU()
+	c.mu.Unlock()
+	c.Tick()
+	if len(metrics) == 0 {
+		t.Fatal("expected default buildSample to emit at least one metric")
+	}
+}
+
+func TestSampleCPUSkipsZeroWallDuration(t *testing.T) {
+	now := time.Now()
+	c := New(func(string, float64) {})
+	c.lastCPU = &cpuSample{userMicros: 100, systemMicros: 0, at: now}
+	if obs := c.sampleCPU(now); obs != nil {
+		t.Fatalf("expected nil observation for zero wall duration, got %+v", obs)
+	}
+}
+
+func TestSampleCPURejectsRegressiveUsage(t *testing.T) {
+	c := New(func(string, float64) {})
+	c.mu.Lock()
+	c.started = true
+	c.lastCPU = &cpuSample{
+		userMicros:   1_000_000_000_000,
+		systemMicros: 0,
+		at:           time.Now().Add(-time.Second),
+	}
+	c.mu.Unlock()
+	c.Tick()
+}
+
+func TestReadLinuxStatmRSSSkipsNonLinux(t *testing.T) {
+	if runtime.GOOS == "linux" || runtime.GOOS == "android" {
+		t.Skip("linux/android use live /proc/self/statm")
+	}
+	if _, ok := readLinuxStatmRSS(); ok {
+		t.Fatal("expected non-linux platforms to skip statm RSS")
+	}
+}
 
 func TestCollectorUsesInjectedSampler(t *testing.T) {
 	var mu sync.Mutex
