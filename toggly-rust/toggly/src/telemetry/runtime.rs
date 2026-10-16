@@ -525,6 +525,8 @@ impl Inner {
             if let Some(batcher) = self.metrics_batcher.lock().as_ref() {
                 batcher.restore_snapshot(snapshot);
             }
+        } else if let Some(collector) = self.system_metrics.lock().as_ref() {
+            collector.on_flushed();
         }
     }
 }

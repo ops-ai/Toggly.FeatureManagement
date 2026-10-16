@@ -193,7 +193,15 @@ export function attachClientSystemMetrics(
     return () => {};
   }
   const collector = new ClientSystemMetricsCollector({
-    setGauge: (metric, value) => reporter.setGauge(metric, value),
+    // ExceptionCount / LongTaskCount are per-window deltas — counters sum
+    // across ticks in one flush; gauges would overwrite earlier samples.
+    setGauge: (metric, value) => {
+      if (metric === 'ExceptionCount' || metric === 'LongTaskCount') {
+        reporter.incrementCounter(metric, value);
+      } else {
+        reporter.setGauge(metric, value);
+      }
+    },
     intervalMs: options.intervalMs,
     sampler: options.sampler,
     now: options.now,

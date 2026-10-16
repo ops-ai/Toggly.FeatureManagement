@@ -77,6 +77,9 @@ struct PendingObservation {
     value: f64,
 }
 
+/// Max observation rows retained before flush (drop oldest when exceeded).
+pub const MAX_OBSERVATIONS_PER_BATCH: usize = 1_000;
+
 /// Accumulate business metrics and build MetricStat payloads.
 pub struct MetricsBatcher {
     app_key: String,
@@ -129,6 +132,10 @@ impl MetricsBatcher {
     pub fn observe(&self, metric: &str, value: f64, options: Option<&MetricsFeatureOptions>) {
         let (feature, variant) = normalize_options(options);
         let mut guard = self.inner.lock();
+        if guard.observations.len() >= MAX_OBSERVATIONS_PER_BATCH {
+            // Drop oldest so sustained upload failures cannot grow without bound.
+            guard.observations.remove(0);
+        }
         guard.observations.push(PendingObservation {
             time: Utc::now(),
             metric: metric.to_string(),

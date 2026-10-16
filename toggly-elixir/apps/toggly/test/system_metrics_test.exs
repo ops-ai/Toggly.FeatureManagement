@@ -96,9 +96,12 @@ defmodule Toggly.SystemMetricsTest do
   end
 
   test "attach_exception_handler refreshes stale client pid on already_exists" do
-    stale = spawn(fn -> :ok end)
+    {:ok, stale} = Toggly.SystemMetricsTest.ExceptionClient.start_link([])
     assert :ok = SystemMetrics.attach_exception_handler(SmHandlerRefresh, stale)
-    assert :ok = SystemMetrics.attach_exception_handler(SmHandlerRefresh, self())
+    GenServer.stop(stale)
+
+    {:ok, live} = Toggly.SystemMetricsTest.ExceptionClient.start_link([])
+    assert :ok = SystemMetrics.attach_exception_handler(SmHandlerRefresh, live)
 
     {:ok, handler_config} =
       :logger.get_handler_config(:"toggly.system_metrics.SmHandlerRefresh")
@@ -109,8 +112,17 @@ defmodule Toggly.SystemMetricsTest do
         %{client: pid} -> pid
       end
 
-    assert client == self()
+    assert client == live
+
+    assert :ok =
+             Toggly.SystemMetrics.LogHandler.log(
+               %{msg: {:report, %{kind: :crash_report}}},
+               handler_config
+             )
+
+    assert Toggly.SystemMetricsTest.ExceptionClient.get(live) == 1
     assert :ok = SystemMetrics.detach_exception_handler(SmHandlerRefresh)
+    GenServer.stop(live)
   end
 
   test "parse_vm_rss extracts kilobytes from /proc status" do

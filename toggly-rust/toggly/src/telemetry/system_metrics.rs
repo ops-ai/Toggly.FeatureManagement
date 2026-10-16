@@ -10,6 +10,8 @@ use tokio::task::JoinHandle;
 
 /// Default sampling interval for opt-in system metrics.
 pub const SYSTEM_METRICS_INTERVAL: Duration = Duration::from_secs(10);
+/// Max unflushed samples retained per metric name when flush stalls.
+pub const SYSTEM_METRICS_MAX_PENDING: usize = 30;
 
 type ObserveFn = Arc<dyn Fn(&str, f64, Option<&MetricsFeatureOptions>) + Send + Sync>;
 type SamplerFn = Arc<dyn Fn() -> Vec<(String, f64)> + Send + Sync>;
@@ -27,6 +29,7 @@ pub struct SystemMetricsCollector {
     observe: ObserveFn,
     custom_sampler: Option<SamplerFn>,
     cpu_state: Mutex<Option<CpuSnapshot>>,
+    pending_by_metric: Mutex<std::collections::HashMap<String, usize>>,
     cancel_tx: watch::Sender<bool>,
     task: Mutex<Option<JoinHandle<()>>>,
 }
@@ -41,6 +44,7 @@ impl SystemMetricsCollector {
             observe,
             custom_sampler: sampler,
             cpu_state: Mutex::new(None),
+            pending_by_metric: Mutex::new(std::collections::HashMap::new()),
             cancel_tx,
             task: Mutex::new(None),
         });
@@ -76,14 +80,30 @@ impl SystemMetricsCollector {
             };
             for (metric, value) in samples {
                 if value.is_finite() && value >= 0.0 {
-                    (self.observe)(&metric, value, None);
+                    self.emit(&metric, value);
                 }
             }
             let exceptions = PANIC_EXCEPTIONS.swap(0, Ordering::Relaxed);
             if exceptions > 0 {
-                (self.observe)("ExceptionCount", exceptions as f64, None);
+                self.emit("ExceptionCount", exceptions as f64);
             }
         }));
+    }
+
+    /// Clear pending-sample backpressure after a successful metrics flush.
+    pub fn on_flushed(&self) {
+        self.pending_by_metric.lock().clear();
+    }
+
+    fn emit(&self, metric: &str, value: f64) {
+        let mut pending = self.pending_by_metric.lock();
+        let count = pending.entry(metric.to_string()).or_insert(0);
+        if *count >= SYSTEM_METRICS_MAX_PENDING {
+            return;
+        }
+        *count += 1;
+        drop(pending);
+        (self.observe)(metric, value, None);
     }
 
     /// Cancel the background sampler task.
@@ -92,6 +112,7 @@ impl SystemMetricsCollector {
         if let Some(handle) = self.task.lock().take() {
             handle.abort();
         }
+        self.pending_by_metric.lock().clear();
     }
 
     fn build_sample(&self) -> Vec<(String, f64)> {
