@@ -107,6 +107,25 @@ func TestClient_Close_WaitsForInFlightAutoFlush(t *testing.T) {
 	}
 }
 
+func TestClient_RunUsageScope_WithBatcherAndNil(t *testing.T) {
+	b := NewBatcher("app", "Production", "", "")
+	c := NewClientWithBatcher(b)
+	if err := c.RunUsageScope("Feat", "u1", func(FeatureUsageScope) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	en := b.buildAndReset().Stats[0].VariantStats["enabled"]
+	if en.UsedCount != 1 || en.ErrorCount != 0 {
+		t.Fatalf("with batcher: %+v", en)
+	}
+
+	if err := (*Client)(nil).RunUsageScope("Feat", "u1", func(FeatureUsageScope) error { return nil }); err != nil {
+		t.Fatalf("nil client: %v", err)
+	}
+	if err := (&Client{}).RunUsageScope("Feat", "u1", func(FeatureUsageScope) error { return nil }); err != nil {
+		t.Fatalf("nil batcher: %v", err)
+	}
+}
+
 func TestDialNormalizesTargetAndRecordsUsage(t *testing.T) {
 	for _, tc := range []struct{ input, want string }{
 		{"https://metrics.example.com/", "metrics.example.com:443"},
