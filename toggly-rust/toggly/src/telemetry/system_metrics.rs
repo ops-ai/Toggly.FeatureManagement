@@ -90,10 +90,8 @@ impl SystemMetricsCollector {
             // permanently drop panic counts collected while flush is stalled.
             let exceptions = PANIC_EXCEPTIONS.load(Ordering::Relaxed);
             if exceptions > 0 && self.emit("ExceptionCount", exceptions as f64) {
-                let _ =
-                    PANIC_EXCEPTIONS.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |cur| {
-                        Some(cur.saturating_sub(exceptions))
-                    });
+                // Panic hook only increments; subtract the amount we just emitted.
+                PANIC_EXCEPTIONS.fetch_sub(exceptions, Ordering::Relaxed);
             }
         }));
     }
