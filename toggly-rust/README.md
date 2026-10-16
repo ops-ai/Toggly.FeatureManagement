@@ -397,7 +397,7 @@ async fn safe_feature_check(client: &TogglyClient) -> bool {
 
 ## Requirements
 
-- Rust 1.88+ (MSRV; matches `rust-version` in `Cargo.toml`)
+- Rust 1.89+ (MSRV; matches `rust-version` in `Cargo.toml`)
 - Tokio runtime
 
 ## Documentation

@@ -35,6 +35,11 @@
 
 ## Unreleased
 
+### Changed
+
+- MSRV raised to **Rust 1.89** so the workspace resolves current
+  `actix-server` releases (`2.10+` requires rustc 1.89).
+
 ### Added
 - `toggly-axum08` 0.2.0, a separate Axum 0.8 adapter. `toggly-axum` remains
   the Axum 0.7 adapter, so existing applications keep their dependency types

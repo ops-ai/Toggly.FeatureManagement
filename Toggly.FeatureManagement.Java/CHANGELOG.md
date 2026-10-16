@@ -11,6 +11,25 @@
   uncaught ExceptionCount every 10s when metrics telemetry is enabled
   [OPS-1765].
 
+### Changed
+
+- User-Agent and live-update `sdkVersion` report `toggly-java/2.3.0`.
+
+## 2.2.2
+
+2026-10-16
+
+### Added
+
+- `toggly-spring-boot4-starter`, a Spring Boot **4.1** starter parallel to
+  `toggly-spring-boot-starter` (Boot 3.5). Shared configuration lives in
+  `toggly-spring-boot-autoconfigure`; each starter only adds Boot-major-specific
+  Actuator health wiring (Boot 4 health APIs moved to `spring-boot-health`).
+
+### Changed
+
+- User-Agent and live-update `sdkVersion` report `toggly-java/2.2.2`.
+
 ## 2.2.1
 
 2026-10-06
