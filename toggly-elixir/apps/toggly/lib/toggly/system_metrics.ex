@@ -9,15 +9,34 @@ defmodule Toggly.SystemMetrics do
   def max_pending, do: @max_pending
 
   @type sample :: {String.t(), number()}
+  @type cpu_snapshot :: {non_neg_integer(), non_neg_integer()}
+
+  @doc """
+  Cumulative `{runtime_ms, wall_clock_ms}` from `:erlang.statistics/1`.
+
+  Prefer these totals over the since-last-call deltas — those counters are
+  global and reset on every reader, so concurrent clients skew each other.
+  """
+  @spec cpu_snapshot() :: cpu_snapshot()
+  def cpu_snapshot do
+    {runtime_ms, _delta} = :erlang.statistics(:runtime)
+    {wall_ms, _delta} = :erlang.statistics(:wall_clock)
+    {runtime_ms, wall_ms}
+  end
 
   @doc """
   Default process samples. `exception_count` is consumed (zeroed in the returned count).
+  Pass the previous `cpu_snapshot/0` (or `nil` on first sample) so CpuUsage uses
+  cumulative totals instead of the global since-last-call deltas.
   """
-  @spec default_sample(non_neg_integer()) :: {non_neg_integer(), [sample()]}
-  def default_sample(exception_count) do
+  @spec default_sample(non_neg_integer(), cpu_snapshot() | nil) ::
+          {non_neg_integer(), [sample()], cpu_snapshot()}
+  def default_sample(exception_count, prev_cpu \\ nil) do
+    {cpu_pct, next_cpu} = sample_cpu(prev_cpu)
+
     samples =
       []
-      |> maybe_add("CpuUsage", sample_cpu())
+      |> maybe_add("CpuUsage", cpu_pct)
       |> maybe_add("GCHeapSize", sample_gc_heap())
       |> maybe_add("ProcessCount", sample_process_count())
       |> maybe_add("MemoryWorkingSet", sample_memory_working_set())
@@ -25,7 +44,7 @@ defmodule Toggly.SystemMetrics do
 
     # Keep the exception count until the client confirms ExceptionCount was
     # accepted under the pending cap (see Client.sample_system_metrics/1).
-    {exception_count, samples}
+    {exception_count, samples, next_cpu}
   end
 
   def attach_exception_handler(client_name, client_pid) do
@@ -69,20 +88,31 @@ defmodule Toggly.SystemMetrics do
   defp maybe_add_exception(samples, count) when count > 0,
     do: [{"ExceptionCount", count * 1.0} | samples]
 
-  defp sample_cpu do
-    {_total_rt, run_delta} = :erlang.statistics(:runtime)
-    {_total_wc, wall_delta} = :erlang.statistics(:wall_clock)
-    schedulers = max(:erlang.system_info(:schedulers_online), 1)
-    wall = max(wall_delta, 1)
-    pct = run_delta / wall / schedulers * 100.0
+  defp sample_cpu(prev) do
+    next = cpu_snapshot()
 
-    cond do
-      pct < 0 -> nil
-      pct > 100.0 -> 100.0
-      true -> pct
-    end
+    pct =
+      case prev do
+        {prev_rt, prev_wc} when is_integer(prev_rt) and is_integer(prev_wc) ->
+          {rt, wc} = next
+          run_delta = rt - prev_rt
+          wall_delta = max(wc - prev_wc, 1)
+          schedulers = max(:erlang.system_info(:schedulers_online), 1)
+          value = run_delta / wall_delta / schedulers * 100.0
+
+          cond do
+            value < 0 -> nil
+            value > 100.0 -> 100.0
+            true -> value
+          end
+
+        _ ->
+          nil
+      end
+
+    {pct, next}
   rescue
-    _ -> nil
+    _ -> {nil, prev || {0, 0}}
   end
 
   defp sample_gc_heap do

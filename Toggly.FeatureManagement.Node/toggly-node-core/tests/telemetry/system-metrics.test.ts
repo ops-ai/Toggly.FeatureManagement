@@ -108,16 +108,13 @@ describe('SystemMetricsCollector', () => {
   it('default sampler emits memory and cpu after a second tick', () => {
     const observed: Array<{ metric: string; value: number }> = []
     const { setIntervalFn, clearIntervalFn } = manualTimers()
-    let t = 1_000
     const collector = new SystemMetricsCollector({
       observe: (metric, value) => observed.push({ metric, value }),
-      now: () => t,
       setIntervalFn,
       clearIntervalFn,
     })
     collector.start()
     observed.length = 0
-    t = 1_100
     collector.tick()
     const names = new Set(observed.map((o) => o.metric))
     expect(names.has('MemoryWorkingSet')).toBe(true)

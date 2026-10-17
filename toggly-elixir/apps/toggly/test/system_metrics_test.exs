@@ -20,13 +20,13 @@ defmodule Toggly.SystemMetricsTest do
   end
 
   test "default_sample returns BEAM metrics with finite values" do
-    _ = :erlang.statistics(:runtime)
-    _ = :erlang.statistics(:wall_clock)
+    prev = SystemMetrics.cpu_snapshot()
     Process.sleep(2)
 
-    {0, samples} = SystemMetrics.default_sample(0)
+    {0, samples, next} = SystemMetrics.default_sample(0, prev)
     metrics = Map.new(samples)
 
+    assert is_tuple(next)
     assert Map.has_key?(metrics, "GCHeapSize")
     assert Map.has_key?(metrics, "ProcessCount")
     assert metrics["GCHeapSize"] > 0
@@ -39,9 +39,9 @@ defmodule Toggly.SystemMetricsTest do
   end
 
   test "default_sample emits ExceptionCount without draining the counter" do
-    {2, samples} = SystemMetrics.default_sample(2)
+    {2, samples, _cpu} = SystemMetrics.default_sample(2)
     assert {"ExceptionCount", 2.0} in samples
-    {0, again} = SystemMetrics.default_sample(0)
+    {0, again, _} = SystemMetrics.default_sample(0)
     refute Enum.any?(again, fn {m, _} -> m == "ExceptionCount" end)
   end
 

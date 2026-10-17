@@ -31,7 +31,8 @@ defmodule Toggly.Client do
       jwks: Keyword.get(opts, :jwks),
       identity: normalize_identity(Keyword.get(opts, :identity)),
       system_metrics_exceptions: 0,
-      system_metrics_pending: %{}
+      system_metrics_pending: %{},
+      system_metrics_cpu: nil
     }
 
     # Restore and reverify before any refresh can reach the network. Groups and
@@ -470,9 +471,9 @@ defmodule Toggly.Client do
   defp start_system_metrics(state) do
     if system_metrics_enabled?(state) do
       SystemMetrics.attach_exception_handler(state.name, self())
-      # Prime both counters so the first CpuUsage sample has a real delta window.
-      _ = :erlang.statistics(:runtime)
-      _ = :erlang.statistics(:wall_clock)
+      # Snapshot cumulative totals so the first CpuUsage sample has a real window
+      # without consuming the global since-last-call statistics counters.
+      state = %{state | system_metrics_cpu: SystemMetrics.cpu_snapshot()}
       schedule(:system_metrics_sample, SystemMetrics.interval_ms(state.opts))
       state
     else
@@ -487,11 +488,17 @@ defmodule Toggly.Client do
   defp sample_system_metrics(state) do
     sampler = Keyword.get(state.opts, :system_metrics_sampler)
 
-    {_exception_count, samples} =
+    {samples, state} =
       if sampler do
-        {state.system_metrics_exceptions, sampler.()}
+        {sampler.(), state}
       else
-        SystemMetrics.default_sample(state.system_metrics_exceptions)
+        {_exception_count, samples, next_cpu} =
+          SystemMetrics.default_sample(
+            state.system_metrics_exceptions,
+            state.system_metrics_cpu
+          )
+
+        {samples, %{state | system_metrics_cpu: next_cpu}}
       end
 
     Enum.reduce(samples, state, fn {metric, value}, acc ->

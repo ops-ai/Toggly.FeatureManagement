@@ -26,13 +26,11 @@ export interface SystemMetricsCollectorOptions {
   observe: SystemMetricsObserve
   intervalMs?: number
   sampler?: SystemMetricsSampler
-  /** Injected clock for tests (returns Date.now()-style ms). */
-  now?: () => number
   setIntervalFn?: typeof setInterval
   clearIntervalFn?: typeof clearInterval
 }
 
-type CpuSnapshot = { user: number; system: number; at: number }
+type CpuSnapshot = { user: number; system: number; atNs: bigint }
 
 /**
  * Opt-in Node process metrics: CpuUsage, MemoryWorkingSet, GCHeapSize,
@@ -42,7 +40,6 @@ export class SystemMetricsCollector {
   private readonly observe: SystemMetricsObserve
   private readonly intervalMs: number
   private readonly sampler: SystemMetricsSampler
-  private readonly now: () => number
   private readonly setIntervalFn: typeof setInterval
   private readonly clearIntervalFn: typeof clearInterval
   private timer: ReturnType<typeof setInterval> | null = null
@@ -58,7 +55,6 @@ export class SystemMetricsCollector {
   constructor(options: SystemMetricsCollectorOptions) {
     this.observe = options.observe
     this.intervalMs = options.intervalMs ?? SYSTEM_METRICS_INTERVAL_MS
-    this.now = options.now ?? Date.now
     this.setIntervalFn = options.setIntervalFn ?? setInterval
     this.clearIntervalFn = options.clearIntervalFn ?? clearInterval
     this.onException = () => {
@@ -71,7 +67,11 @@ export class SystemMetricsCollector {
     if (this.started) return
     this.started = true
     const usage = process.cpuUsage()
-    this.lastCpu = { user: usage.user, system: usage.system, at: this.now() }
+    this.lastCpu = {
+      user: usage.user,
+      system: usage.system,
+      atNs: process.hrtime.bigint(),
+    }
     this.attachExceptionMonitor()
     this.attachGcObserver()
     this.attachEventLoopMonitor()
@@ -147,11 +147,13 @@ export class SystemMetricsCollector {
 
   private sampleCpu(): number | null {
     const usage = process.cpuUsage()
-    const at = this.now()
+    // Monotonic wall time — Date.now() can jump backward/forward and clamp the
+    // delta to 1µs, which falsely reports ~100% CPU.
+    const atNs = process.hrtime.bigint()
     const prev = this.lastCpu
-    this.lastCpu = { user: usage.user, system: usage.system, at }
+    this.lastCpu = { user: usage.user, system: usage.system, atNs }
     if (!prev) return null
-    const wallUs = Math.max(1, (at - prev.at) * 1000)
+    const wallUs = Math.max(1, Number(atNs - prev.atNs) / 1_000)
     const cpuUs = usage.user - prev.user + (usage.system - prev.system)
     const cpuCount = Math.max(1, cpus()?.length ?? 1)
     const pct = (cpuUs / wallUs / cpuCount) * 100
