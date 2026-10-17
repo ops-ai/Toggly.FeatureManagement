@@ -222,13 +222,11 @@ module Toggly
             list
           end
           ended.each do |thread|
-            begin
-              thread.value
-            rescue StandardError, ScriptError
-              @mutex.synchronize { @exception_count += 1 }
-            rescue Exception # rubocop:disable Lint/RescueException
-              nil
-            end
+            thread.value
+          rescue StandardError, ScriptError
+            @mutex.synchronize { @exception_count += 1 }
+          rescue Exception # rubocop:disable Lint/RescueException
+            nil
           end
         end
 
