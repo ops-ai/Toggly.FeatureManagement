@@ -50,16 +50,23 @@ module Toggly
           # Non-local exits (return/break/throw) and Exception subclasses that
           # bypass rescue StandardError still need an outcome. Only a $! raised
           # by this scope (different from the enclosing rescue) is a failure.
+          # Interrupt / SystemExit / SignalException match Python: attempt only.
           unless outcome_recorded
             duration_ms = elapsed_ms(start)
             raised_here = !$ERROR_INFO.equal?(enclosing_error)
-            if scope.failed? || raised_here
+            if attempt_only_exception?($ERROR_INFO) && raised_here && !scope.failed?
+              # Attempt already recorded; process control exits are not failures.
+            elsif scope.failed? || raised_here
               record_failure.call(duration_ms)
             else
               record_success.call(duration_ms)
             end
           end
         end
+      end
+
+      def attempt_only_exception?(error)
+        error.is_a?(SystemExit) || error.is_a?(Interrupt) || error.is_a?(SignalException)
       end
 
       def elapsed_ms(start)

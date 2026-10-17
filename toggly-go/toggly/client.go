@@ -421,11 +421,18 @@ func (c *Client) RecordUsage(featureKey string, enabled bool, evalCtx Context) {
 }
 
 // Use runs fn inside a usage scope (attempt + duration + errors). Does not evaluate the flag.
-// Cancellation (ctx.Err() or context.Canceled from fn) records attempt only.
+// An already-cancelled or expired ctx returns without recording an attempt.
+// Cancellation from fn (context.Canceled / DeadlineExceeded) records attempt only.
 func (c *Client) Use(ctx context.Context, featureKey string, evalCtx Context, fn func(usage.FeatureUsageScope) error) error {
+	// Skip the attempt when the caller already cancelled before Use starts.
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
 	wrapped := func(scope usage.FeatureUsageScope) error {
 		// Pre-check only: a deadline that expires after a successful fn must not
-		// rewrite success into DeadlineExceeded (which is recorded as failure).
+		// rewrite success into DeadlineExceeded (which is recorded as cancellation).
 		if ctx != nil {
 			if err := ctx.Err(); err != nil {
 				return err

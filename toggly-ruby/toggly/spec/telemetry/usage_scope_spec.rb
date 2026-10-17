@@ -57,6 +57,16 @@ RSpec.describe Toggly::Telemetry::UsageScopeRunner do
     expect(vs[:errorCount]).to eq(0)
   end
 
+  it "treats Interrupt as attempt-only" do
+    expect do
+      described_class.run(handlers("Stop")) { |_scope| raise Interrupt }
+    end.to raise_error(Interrupt)
+    vs = batcher.build_and_reset[:stats].first[:variantStats]["enabled"]
+    expect(vs[:usedCount]).to eq(1)
+    expect(vs[:errorCount]).to eq(0)
+    expect(vs[:durationSumMs]).to eq(0)
+  end
+
   it "records error for Exception subclasses that bypass StandardError" do
     expect do
       # SystemStackError inherits Exception, not StandardError.

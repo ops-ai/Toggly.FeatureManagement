@@ -6,10 +6,10 @@
 
 ### Fixed
 - `RunUsageScope` recovers panics and records failure duration before
-  re-panicking; `Client.Use` honors pre-flight `ctx` cancellation as
-  attempt-only without overwriting a successful `fn` when the deadline
-  expires afterward; `DeadlineExceeded` is treated as cancellation
-  [OPS-1758].
+  re-panicking; `Client.Use` returns without recording an attempt when
+  `ctx` is already cancelled or expired, and does not overwrite a
+  successful `fn` when the deadline expires afterward; `DeadlineExceeded`
+  from `fn` is treated as cancellation [OPS-1758].
 
 ## 0.13.0
 

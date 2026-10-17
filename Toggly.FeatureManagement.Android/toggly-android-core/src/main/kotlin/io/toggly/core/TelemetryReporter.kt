@@ -146,7 +146,8 @@ internal class TelemetryReporter(
             pinnedInstance = currentInstanceId
             pinnedIdentity = currentIdentity
         }
-        recordUsage(key, variant)
+        // Attempt and completion share the same pinned attribution.
+        recordUnderPinned(pinnedInstance, pinnedIdentity, key, variant, 1, 1)
         // Monotonic elapsedRealtime — wall clock is only for HTTP Retry-After parsing.
         val started = now()
         var failed = false

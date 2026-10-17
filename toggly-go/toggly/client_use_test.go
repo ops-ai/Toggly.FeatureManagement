@@ -49,4 +49,8 @@ func TestClient_Use_WithBatcherRecordsAttempt(t *testing.T) {
 	}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("got %v", err)
 	}
+	en := b.TestingBuildAndReset().Stats[0].VariantStats["enabled"]
+	if en.UsedCount != 1 || en.ErrorCount != 0 {
+		t.Fatalf("pre-cancelled Use must not record an attempt: got %+v", en)
+	}
 }

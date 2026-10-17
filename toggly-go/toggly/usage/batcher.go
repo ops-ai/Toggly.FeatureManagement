@@ -218,6 +218,11 @@ func (b *Batcher) exportAndReset() *DrainedBatch {
 }
 
 // buildAndReset is retained for tests; prefer exportAndReset for flush+restore.
+// TestingBuildAndReset snapshots and clears pending stats for unit tests.
+func (b *Batcher) TestingBuildAndReset() *usagepb.FeatureStat {
+	return b.buildAndReset()
+}
+
 func (b *Batcher) buildAndReset() *usagepb.FeatureStat {
 	drained := b.exportAndReset()
 	if drained == nil {
