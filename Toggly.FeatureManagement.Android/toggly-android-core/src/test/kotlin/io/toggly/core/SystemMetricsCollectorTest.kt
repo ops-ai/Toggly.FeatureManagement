@@ -1,9 +1,13 @@
 package io.toggly.core
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+
+@OptIn(ExperimentalCoroutinesApi::class)
 
 class SystemMetricsCollectorTest {
     @Test
@@ -195,5 +199,67 @@ class SystemMetricsCollectorTest {
         collector.tick()
         collector.stop()
         assertFalse(observed.any { it.first == "CpuUsage" })
+    }
+
+    @Test
+    fun wrappedUncaughtHandlerKeepsPreviousForForwarding() {
+        var previousCalled = false
+        val previous = Thread.UncaughtExceptionHandler { _, _ -> previousCalled = true }
+        Thread.setDefaultUncaughtExceptionHandler(previous)
+        val collector = SystemMetricsCollector(observe = { _, _ -> })
+        collector.start()
+        val ours = Thread.getDefaultUncaughtExceptionHandler()!!
+        val wrapper = Thread.UncaughtExceptionHandler { thread, throwable ->
+            ours.uncaughtException(thread, throwable)
+        }
+        Thread.setDefaultUncaughtExceptionHandler(wrapper)
+        collector.stop()
+        assertEquals(wrapper, Thread.getDefaultUncaughtExceptionHandler())
+        previousCalled = false
+        wrapper.uncaughtException(Thread.currentThread(), RuntimeException("wrapped"))
+        assertTrue(previousCalled)
+        Thread.setDefaultUncaughtExceptionHandler(previous)
+    }
+
+    @Test
+    fun shortIntervalInvokesTickSafeViaScheduler() {
+        val observed = mutableListOf<Pair<String, Double>>()
+        val collector = SystemMetricsCollector(
+            observe = { metric, value -> observed += metric to value },
+            intervalMs = 40L,
+            sampler = { listOf("CpuUsage" to 1.0) },
+        )
+        collector.start()
+        Thread.sleep(150)
+        collector.stop()
+        assertTrue(observed.isNotEmpty())
+    }
+
+    @Test
+    fun defaultClockAndProcessorDefaultsDoNotThrow() {
+        val observed = mutableListOf<Pair<String, Double>>()
+        val collector = SystemMetricsCollector(
+            observe = { metric, value -> observed += metric to value },
+        )
+        collector.start()
+        collector.tick()
+        collector.stop()
+        assertTrue(observed.none { !it.second.isFinite() })
+    }
+
+    @Test
+    fun observeSystemMetricRoutesExceptionCountToCounter() = runTest {
+        val requests = mutableListOf<okhttp3.Request>()
+        val reporter = TelemetryReporter(
+            "metrics-key",
+            scope = backgroundScope,
+            now = { testScheduler.currentTime },
+            transport = { requests += it; TelemetryResponse(202) },
+        )
+        observeSystemMetric(reporter, "ExceptionCount", 2.0)
+        observeSystemMetric(reporter, "CpuUsage", 12.5)
+        reporter.flushTelemetry()
+        assertTrue(requests.isNotEmpty())
+        reporter.dispose()
     }
 }

@@ -11,6 +11,15 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.max
 import kotlin.math.min
 
+/** Route ExceptionCount through counters; other system metrics use gauges. */
+internal fun observeSystemMetric(telemetry: TelemetryReporter, metric: String, value: Double) {
+    if (metric == "ExceptionCount") {
+        telemetry.incrementCounter(metric, value)
+    } else {
+        telemetry.setGauge(metric, value)
+    }
+}
+
 /**
  * Opt-in client metrics: [CpuUsage] and [ExceptionCount] every 10s via gauges.
  */
@@ -130,12 +139,15 @@ internal class SystemMetricsCollector(
 
     private fun detachUncaughtHandler() {
         runCatching {
+            // Only unwind when we still own the default slot. If another handler
+            // wrapped ours, leave previousHandler so our installed handler can
+            // keep forwarding until the outer handler is removed.
             if (Thread.getDefaultUncaughtExceptionHandler() === ourHandler) {
                 Thread.setDefaultUncaughtExceptionHandler(previousHandler)
+                ourHandler = null
+                previousHandler = null
             }
         }
-        ourHandler = null
-        previousHandler = null
     }
 
     private data class CpuSnapshot(val jiffies: Long, val nanoTime: Long)
