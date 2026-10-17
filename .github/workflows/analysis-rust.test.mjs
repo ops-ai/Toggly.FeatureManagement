@@ -83,7 +83,8 @@ test('rust Sonar ignores protocol SHA-1 kid on jwks (rust:S4790)', () => {
   const cloud = stepBlock(rustWorkflow, 'SonarCloud Scan');
   const server = stepBlock(rustWorkflow, 'SonarQube Server Scan');
   for (const scan of [cloud, server]) {
-    assert.match(scan, /-Dsonar\.issue\.ignore\.multicriteria=kidSha1/);
+    assert.match(scan, /-Dsonar\.issue\.ignore\.multicriteria=kidSha1\n/);
+    assert.doesNotMatch(scan, /multicriteria=kidSha1 \\|multicriteria=kidSha1 \\$/);
     assert.match(scan, /-Dsonar\.issue\.ignore\.multicriteria\.kidSha1\.ruleKey=rust:S4790/);
     assert.match(scan, /-Dsonar\.issue\.ignore\.multicriteria\.kidSha1\.resourceKey=\*\*\/jwks\.rs/);
   }

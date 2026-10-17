@@ -299,9 +299,9 @@ jobs:
             -Dsonar.tests=.
             -Dsonar.test.inclusions=**/*_test.rs,**/tests/**
             -Dsonar.coverageReportPaths=coverage-sonar.xml
-            -Dsonar.issue.ignore.multicriteria=kidSha1 \
-            -Dsonar.issue.ignore.multicriteria.kidSha1.ruleKey=rust:S4790 \
-            -Dsonar.issue.ignore.multicriteria.kidSha1.resourceKey=**/jwks.rs \
+            -Dsonar.issue.ignore.multicriteria=kidSha1
+            -Dsonar.issue.ignore.multicriteria.kidSha1.ruleKey=rust:S4790
+            -Dsonar.issue.ignore.multicriteria.kidSha1.resourceKey=**/jwks.rs
             -Dsonar.qualitygate.wait=true
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -338,9 +338,9 @@ jobs:
             -Dsonar.test.inclusions=**/*_test.rs,**/tests/**
             -Dsonar.coverageReportPaths=coverage-sonar.xml
             -Dsonar.dependencyCheck.reportPath=../dependency-check-reports/dependency-check-report.xml
-            -Dsonar.issue.ignore.multicriteria=kidSha1 \
-            -Dsonar.issue.ignore.multicriteria.kidSha1.ruleKey=rust:S4790 \
-            -Dsonar.issue.ignore.multicriteria.kidSha1.resourceKey=**/jwks.rs \
+            -Dsonar.issue.ignore.multicriteria=kidSha1
+            -Dsonar.issue.ignore.multicriteria.kidSha1.ruleKey=rust:S4790
+            -Dsonar.issue.ignore.multicriteria.kidSha1.resourceKey=**/jwks.rs
             -Dsonar.qualitygate.wait=true
 
   dependency-check:
