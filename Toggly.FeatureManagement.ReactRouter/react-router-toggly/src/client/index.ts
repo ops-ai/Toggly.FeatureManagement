@@ -89,3 +89,4 @@ export {
 export type { RouterTogglyProviderProps, LoaderDataWithToggly } from './router';
 
 export type { FrontendTelemetry } from './telemetry';
+export type { FeatureUsageScope } from '@ops-ai/toggly-client-telemetry';

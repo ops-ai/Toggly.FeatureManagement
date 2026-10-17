@@ -13,7 +13,7 @@ plugins {
 
 allprojects {
     group = "io.toggly"
-    version = "1.9.0"
+    version = "1.10.0"
 }
 
 dependencies {

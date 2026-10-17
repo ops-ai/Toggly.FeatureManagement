@@ -20,7 +20,11 @@ assert.match(readFileSync(join(sdkDirectory, 'src/utils/sdk-identity.ts'), 'utf8
 assert.equal(packageManifest.peerDependencies?.react, '^18.2.0 || ^19.0.0')
 assert.equal(packageManifest.peerDependencies?.['react-dom'], '^18.2.0 || ^19.0.0')
 assert.equal(packageManifest.dependencies?.react, undefined)
-assert.equal(packageManifest.dependencies?.['@ops-ai/toggly-client-telemetry'], '^1.1.0')
+const telemetryRange = packageManifest.dependencies?.['@ops-ai/toggly-client-telemetry']
+assert.ok(
+  telemetryRange === '^1.1.0' || telemetryRange === '^1.2.0',
+  `expected @ops-ai/toggly-client-telemetry ^1.1.0 or ^1.2.0, got ${telemetryRange}`,
+)
 assert.equal(packageManifest.dependencies?.['@ops-ai/toggly-signed-defs'], '^1.2.7')
 assert.equal(packageManifest.exports?.['.']?.import, './dist/esm/index.js')
 assert.equal(packageManifest.exports?.['.']?.require, './dist/cjs/index.cjs')

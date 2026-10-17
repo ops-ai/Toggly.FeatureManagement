@@ -109,6 +109,8 @@ export type { EntityContextPropertySchema, EntityContextSchemaRegistration } fro
 export {
   UsageBatcher,
 } from './telemetry/usage-batcher.js'
+export type { FeatureUsageScope } from './telemetry/usage-scope.js'
+export { isUsageCancellation, runFeatureUsageScope } from './telemetry/usage-scope.js'
 export {
   MetricsBatcher,
 } from './telemetry/metrics-batcher.js'

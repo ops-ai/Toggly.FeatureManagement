@@ -56,6 +56,11 @@ test('Client-Telemetry runs coverage and packed consumers without shared depende
   assert.equal(result.needSharedDeps, false);
   assert.deepEqual(result.testMatrix, [{ sdk: 'Client-Telemetry', path: 'toggly-client-telemetry', 'test-cmd': 'npm run test:coverage && npm run test:packed', 'has-lint': false }]);
   assert.ok(result.requiredJobs.split(',').includes('test'));
+  assert.equal(result.runSolidstartHost, false);
+  assert.equal(result.runTestCurrentBrowserHosts, false);
+  assert.equal(result.runTestAstroHosts, false);
+  assert.ok(!result.requiredJobs.split(',').includes('solidstart-host'));
+  assert.ok(!result.requiredJobs.split(',').includes('test-current-browser-hosts'));
 });
 
 test('Client-Core runs coverage and its packed browser host from the standalone package', () => {

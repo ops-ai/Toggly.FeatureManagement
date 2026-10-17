@@ -10,7 +10,10 @@ on:
       - 'toggly-eval/**'
       - 'toggly-segments/**'
       - 'toggly-signed-defs/**'
+      - 'toggly-client-telemetry/**'
       - '.github/workflows/analysis-nuxt.yml'
+      - '.github/actions/install-local-client-telemetry/**'
+      - '.github/actions/install-local-client-telemetry-pnpm/**'
       - '.github/workflows/sdk-nuxt-release.yml'
       - '.github/actions/build-shared-js-deps/**'
       - '.github/actions/upload-shared-js-deps/**'
@@ -90,8 +93,10 @@ jobs:
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Install dependencies with local client-telemetry
+        uses: ./.github/actions/install-local-client-telemetry-pnpm
+        with:
+          workspace-dir: Toggly.FeatureManagement.Nuxt
 
       - name: Build package dependencies
         run: |
@@ -156,8 +161,10 @@ jobs:
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Install dependencies with local client-telemetry
+        uses: ./.github/actions/install-local-client-telemetry-pnpm
+        with:
+          workspace-dir: Toggly.FeatureManagement.Nuxt
 
       - name: Build packed SDK candidates
         run: pnpm build
@@ -193,8 +200,10 @@ jobs:
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Install dependencies with local client-telemetry
+        uses: ./.github/actions/install-local-client-telemetry-pnpm
+        with:
+          workspace-dir: Toggly.FeatureManagement.Nuxt
 
       - name: Build core
         run: pnpm build:core

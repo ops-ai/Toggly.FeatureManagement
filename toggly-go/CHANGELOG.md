@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.13.1
+
+2026-10-15
+
+### Fixed
+- `RunUsageScope` recovers panics and records failure duration before
+  re-panicking; `Client.Use` returns without recording an attempt when
+  `ctx` is already cancelled or expired, and does not overwrite a
+  successful `fn` when the deadline expires afterward; `DeadlineExceeded`
+  from `fn` is treated as cancellation [OPS-1758].
+
+## 0.13.0
+
+2026-10-11
+
+### Added
+- `Client.Use` and usage-scope batching: `errorCount`, `durationSumMs`, and
+  `errorDurationSumMs` on `VariantStats`. Cancellation via `context.Canceled`
+  records attempt only [OPS-1758].
+
 ## 0.12.0
 
 2026-10-04

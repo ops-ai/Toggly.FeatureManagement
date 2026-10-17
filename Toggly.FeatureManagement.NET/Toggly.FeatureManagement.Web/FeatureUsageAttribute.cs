@@ -102,14 +102,26 @@ namespace Toggly.FeatureManagement
                 return;
             }
 
-            // Feature is enabled - record the usage
+            // Feature is enabled - wrap the action in a usage scope (attempt + duration + errors)
             var statsProvider = context.HttpContext.RequestServices.GetRequiredService<IFeatureUsageStatsProvider>();
-            foreach (var feature in Features)
+            await using var scope = await statsProvider.BeginUsageAsync(Features.ToArray()).ConfigureAwait(false);
+            try
             {
-                await statsProvider.RecordUsageAsync(feature).ConfigureAwait(false);
+                // ASP.NET Core stores action exceptions on the executed context and rethrows
+                // only after this filter returns — inspect Exception, do not rely on throw alone.
+                var executed = await next().ConfigureAwait(false);
+                ApplyScopeOutcome(scope, executed.Exception, executed.ExceptionHandled);
             }
-
-            await next().ConfigureAwait(false);
+            catch (OperationCanceledException)
+            {
+                scope.MarkCancelled();
+                throw;
+            }
+            catch
+            {
+                scope.Fail();
+                throw;
+            }
         }
 
         /// <summary>
@@ -133,14 +145,25 @@ namespace Toggly.FeatureManagement
                 return;
             }
 
-            // Feature is enabled - record the usage
+            // Feature is enabled - wrap the handler in a usage scope (attempt + duration + errors)
             var statsProvider = context.HttpContext.RequestServices.GetRequiredService<IFeatureUsageStatsProvider>();
-            foreach (var feature in Features)
+            await using var scope = await statsProvider.BeginUsageAsync(Features.ToArray()).ConfigureAwait(false);
+            try
             {
-                await statsProvider.RecordUsageAsync(feature).ConfigureAwait(false);
+                // PageActionInvoker stores handler exceptions on the executed context the same way.
+                var executed = await next.Invoke().ConfigureAwait(false);
+                ApplyScopeOutcome(scope, executed.Exception, executed.ExceptionHandled);
             }
-
-            await next.Invoke().ConfigureAwait(false);
+            catch (OperationCanceledException)
+            {
+                scope.MarkCancelled();
+                throw;
+            }
+            catch
+            {
+                scope.Fail();
+                throw;
+            }
         }
 
         /// <summary>
@@ -149,6 +172,20 @@ namespace Toggly.FeatureManagement
         /// <param name="context">The <see cref="PageHandlerSelectedContext"/>.</param>
         /// <returns>A <see cref="Task"/> that on completion indicates the filter has executed.</returns>
         public Task OnPageHandlerSelectionAsync(PageHandlerSelectedContext context) => Task.CompletedTask;
+
+        /// <summary>
+        /// Maps an exception stored on the MVC/Razor executed context to scope outcome.
+        /// A handled exception stays on the context but the request completed successfully.
+        /// </summary>
+        private static void ApplyScopeOutcome(IFeatureUsageScope scope, Exception exception, bool exceptionHandled)
+        {
+            if (exception == null || exceptionHandled)
+                return;
+            if (exception is OperationCanceledException)
+                scope.MarkCancelled();
+            else
+                scope.Fail();
+        }
 
         /// <summary>
         /// Checks if the required features are enabled based on the RequirementType.

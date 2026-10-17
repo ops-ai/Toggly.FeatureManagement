@@ -132,7 +132,7 @@ struct Inner {
     enable_metrics: bool,
     metrics_base_url: String,
     senders_provided: bool,
-    usage_batcher: Mutex<Option<UsageBatcher>>,
+    usage_batcher: Mutex<Option<Arc<UsageBatcher>>>,
     metrics_batcher: Mutex<Option<MetricsBatcher>>,
     senders: Mutex<TelemetrySenders>,
     sending_usage: AtomicBool,
@@ -193,13 +193,13 @@ impl TelemetryRuntime {
         }
 
         if enable_usage {
-            *inner.usage_batcher.lock() = Some(UsageBatcher::new(
+            *inner.usage_batcher.lock() = Some(Arc::new(UsageBatcher::new(
                 config.app_key.clone(),
                 config.environment.clone(),
                 config.instance_name.clone(),
                 config.app_version.clone(),
                 None,
-            ));
+            )));
             if !config.usage_flush_interval.is_zero() {
                 runtime.spawn_flush_loop(cancel_rx.clone(), config.usage_flush_interval, true);
             }
@@ -300,6 +300,42 @@ impl TelemetryRuntime {
     pub fn record_view(&self, feature: &str, identity: Option<&str>, variant: &str) {
         if let Some(batcher) = self.inner.usage_batcher.lock().as_ref() {
             batcher.record_view(feature, identity, variant);
+        }
+    }
+
+    /// Run an action inside a feature usage scope (used count, duration, errors).
+    pub fn use_feature<F, T, E>(
+        &self,
+        feature: &str,
+        identity: Option<&str>,
+        variant: &str,
+        f: F,
+    ) -> Result<T, E>
+    where
+        F: FnOnce(&super::FeatureUsageScope) -> Result<T, E>,
+    {
+        if !self.usage_enabled() {
+            return f(&super::FeatureUsageScope::noop());
+        }
+        // Clone Arc under a short lock so nested telemetry (and other threads) can
+        // re-enter the batcher without deadlocking on this mutex.
+        let batcher = {
+            let guard = self.inner.usage_batcher.lock();
+            match guard.as_ref() {
+                Some(batcher) => Arc::clone(batcher),
+                None => return f(&super::FeatureUsageScope::noop()),
+            }
+        };
+        let scope = super::FeatureUsageScope::begin(batcher, feature, identity, variant);
+        match f(&scope) {
+            Ok(value) => {
+                scope.complete_from_outcome();
+                Ok(value)
+            }
+            Err(error) => {
+                scope.complete_failure();
+                Err(error)
+            }
         }
     }
 
@@ -748,5 +784,29 @@ mod tests {
             assert!(runtime.usage_enabled());
             runtime.close().await;
         }
+    }
+    #[tokio::test]
+    async fn use_feature_records_success_and_failure() {
+        let config = test_runtime_config(
+            Some(true),
+            Some(false),
+            Some(Duration::from_secs(0)),
+            Some(Duration::from_secs(0)),
+        );
+        let runtime = TelemetryRuntime::start(config);
+        let ok = runtime
+            .use_feature("Checkout", Some("u1"), "enabled", |_scope| Ok::<_, ()>(11))
+            .expect("ok");
+        assert_eq!(ok, 11);
+        let err = runtime.use_feature("Checkout", None, "enabled", |scope| {
+            scope.fail();
+            Err::<i32, &str>("soft")
+        });
+        assert!(err.is_err());
+        let hard = runtime.use_feature("Checkout", None, "enabled", |_scope| {
+            Err::<i32, &str>("hard")
+        });
+        assert!(hard.is_err());
+        runtime.close().await;
     }
 }

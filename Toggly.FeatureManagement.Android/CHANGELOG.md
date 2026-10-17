@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.10.0
+
+2026-10-11
+
+### Added
+- Feature usage scopes via `TogglyService.use` and telemetry compact-array slots
+  for `errorCount`, `durationSumMs`, and `errorDurationSumMs` [OPS-1758].
+
+### Fixed
+- `TogglyService.use` no longer re-invokes `action` when a nullable success
+  returns `null` (elvis fallback) [OPS-1758].
+- Usage-scope durations use monotonic `elapsedRealtime` instead of wall-clock
+  `currentTimeMillis`, so NTP / manual clock changes do not skew
+  `durationSumMs` / `errorDurationSumMs` [OPS-1758].
+- `TelemetryReporter.use` records the attempt and completion counters on the
+  identity that started the scope when attribution changes while the action
+  is suspended [OPS-1758].
+
 ## 1.9.0
 
 2026-09-25

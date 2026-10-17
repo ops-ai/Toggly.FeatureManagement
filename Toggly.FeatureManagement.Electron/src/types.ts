@@ -69,6 +69,13 @@ export type EntityContextInput =
 
 export interface TogglyTelemetry {
   recordUsage(featureKey: string, variant?: string): void
+  /** @internal Scope completion from renderer after {@link use}. */
+  recordUsageScopeCompletion?(
+    featureKey: string,
+    variant: string,
+    failed: boolean,
+    durationMs: number,
+  ): void
   recordView(featureKey: string, variant?: string): void
   incrementCounter(metricKey: string, value?: number): void
   setGauge(metricKey: string, value: number): void

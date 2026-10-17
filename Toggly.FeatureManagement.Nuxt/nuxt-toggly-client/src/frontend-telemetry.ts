@@ -1,5 +1,6 @@
 import {
   createTelemetryReporter,
+  runFeatureUsageScope,
   type TelemetryReporter,
 } from '@ops-ai/toggly-client-telemetry'
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser'
@@ -54,6 +55,15 @@ export const createBrowserTelemetry: FrontendTelemetryFactory = (
     },
     recordUsage(featureKey, variant) {
       if (usageEnabled) reporter.recordUsage(featureKey, variant)
+    },
+    use(featureKey, fn, variant = 'enabled') {
+      if (!usageEnabled) {
+        return runFeatureUsageScope(
+          { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
+          fn,
+        )
+      }
+      return reporter.use(featureKey, fn, variant)
     },
     recordView(featureKey, variant) {
       if (usageEnabled) reporter.recordView(featureKey, variant)

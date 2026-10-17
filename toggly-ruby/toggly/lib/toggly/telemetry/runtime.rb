@@ -120,6 +120,19 @@ module Toggly
         batcher&.record_view(feature, identity, variant: variant)
       end
 
+      def record_usage_scope_success(feature, duration_ms, variant: "enabled")
+        batcher = @mutex.synchronize { @usage_batcher }
+        batcher&.record_usage_duration(feature, duration_ms, variant: variant, failed: false)
+      end
+
+      def record_usage_scope_failure(feature, duration_ms, variant: "enabled")
+        batcher = @mutex.synchronize { @usage_batcher }
+        return unless batcher
+
+        batcher.record_usage_error(feature, variant: variant)
+        batcher.record_usage_duration(feature, duration_ms, variant: variant, failed: true)
+      end
+
       def record_definition_cache_hit
         batcher = @mutex.synchronize { @usage_batcher }
         batcher&.record_definition_cache_hit

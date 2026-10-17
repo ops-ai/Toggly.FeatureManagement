@@ -420,6 +420,37 @@ func (c *Client) RecordUsage(featureKey string, enabled bool, evalCtx Context) {
 	c.usage.RecordUsed(featureKey, enabled, evalCtx.Identity)
 }
 
+// Use runs fn inside a usage scope (attempt + duration + errors). Does not evaluate the flag.
+// An already-cancelled or expired ctx returns without recording an attempt.
+// Cancellation from fn (context.Canceled / DeadlineExceeded) records attempt only.
+func (c *Client) Use(ctx context.Context, featureKey string, evalCtx Context, fn func(usage.FeatureUsageScope) error) error {
+	// Skip the attempt when the caller already cancelled before Use starts.
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
+	wrapped := func(scope usage.FeatureUsageScope) error {
+		// Pre-check only: a deadline that expires after a successful fn must not
+		// rewrite success into DeadlineExceeded (which is recorded as cancellation).
+		if ctx != nil {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+		}
+		return fn(scope)
+	}
+	if c == nil || c.usage == nil {
+		return usage.RunUsageScope(
+			func() { /* no-op: usage client unavailable */ },
+			func(int64) { /* no-op: usage client unavailable */ },
+			func(int64) { /* no-op: usage client unavailable */ },
+			wrapped,
+		)
+	}
+	return c.usage.RunUsageScope(featureKey, evalCtx.Identity, wrapped)
+}
+
 // RecordView increments the "viewed" counter for a feature (rendered/displayed).
 // This is separate from IsEnabled checks and RecordUsage.
 func (c *Client) RecordView(featureKey string, evalCtx Context) {

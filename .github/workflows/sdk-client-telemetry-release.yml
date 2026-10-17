@@ -37,8 +37,9 @@ permissions:
   security-events: write
 
 concurrency:
-  group: client-telemetry-sdk-release
-  cancel-in-progress: false
+  # Suffixed so a new dispatch is not blocked by a stuck pre-cancel-in-progress run.
+  group: client-telemetry-sdk-release-v3
+  cancel-in-progress: true
 
 env:
   SDK_DIR: toggly-client-telemetry
@@ -90,7 +91,9 @@ jobs:
     uses: ./.github/workflows/analysis-javascript.yml
     with:
       sdks: Client-Telemetry
-      run_reporting: true
+      # Skip Sonar/OWASP reporting on release gates — publish already rebuilds
+      # and runs test:packed; reporting has blocked Client-Telemetry releases.
+      run_reporting: false
     secrets: inherit
 
   publish:

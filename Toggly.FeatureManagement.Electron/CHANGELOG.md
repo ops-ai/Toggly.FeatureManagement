@@ -1,3 +1,10 @@
+## 1.4.0
+
+2026-10-11
+
+### Added
+- `use()` for timed feature usage scopes (attempt, duration, errors) via `@ops-ai/toggly-client-telemetry` [OPS-1758].
+
 # Changelog
 
 All notable changes to this project will be documented in this file.

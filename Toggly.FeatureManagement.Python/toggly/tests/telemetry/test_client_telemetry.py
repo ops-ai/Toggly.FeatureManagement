@@ -82,6 +82,47 @@ class TestClientTelemetry:
         assert metrics.calls[0]["observations"][0]["metric"] == "latency"
         client.close()
 
+    def test_use_scope_records_duration_and_errors(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("TOGGLY_DISABLE_TELEMETRY", raising=False)
+        usage = FakeUsageClient()
+        config = TogglyConfig(
+            app_key="app",
+            environment="Production",
+            feature_defaults={"FeatureA": True},
+            enable_usage_tracking=True,
+            enable_metrics=False,
+            usage_flush_interval=0,
+            usage_client=usage,
+            metrics_client=FakeMetricsClient(),
+            disable_background_refresh=True,
+            enable_live_updates=False,
+            register_contexts_on_startup=False,
+        )
+        client = TogglyClient(config)
+        with client.use("FeatureA") as scope:
+            pass
+        client.run_use("FeatureB", lambda _scope: None)
+        with pytest.raises(ValueError):
+            with client.use("FeatureC"):
+                raise ValueError("boom")
+        client.run_use("FeatureD", lambda scope: scope.fail())
+        client.flush_telemetry()
+
+        assert len(usage.calls) == 1
+        stats = {
+            s["feature"]: s["variantStats"]["enabled"]
+            for s in usage.calls[0]["stats"]
+        }
+        assert stats["FeatureA"]["usedCount"] == 1
+        assert stats["FeatureA"].get("errorCount", 0) == 0
+        assert stats["FeatureA"].get("durationSumMs", 0) >= 0
+        assert stats["FeatureB"]["usedCount"] == 1
+        assert stats["FeatureC"]["errorCount"] == 1
+        assert stats["FeatureD"]["errorCount"] == 1
+        client.close()
+
     def test_usage_disabled_skips_recording(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -102,6 +143,45 @@ class TestClientTelemetry:
         assert client.is_enabled("FeatureA") is True
         client.flush_telemetry()
         assert usage.calls == []
+        client.close()
+
+    def test_use_context_manager_base_exception_is_attempt_only(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("TOGGLY_DISABLE_TELEMETRY", raising=False)
+        usage = FakeUsageClient()
+        config = TogglyConfig(
+            app_key="app",
+            environment="Production",
+            feature_defaults={"FeatureA": True, "FeatureB": True},
+            enable_usage_tracking=True,
+            enable_metrics=False,
+            usage_flush_interval=0,
+            usage_client=usage,
+            metrics_client=FakeMetricsClient(),
+            disable_background_refresh=True,
+            enable_live_updates=False,
+            register_contexts_on_startup=False,
+        )
+        client = TogglyClient(config)
+
+        with pytest.raises(KeyboardInterrupt):
+            with client.use("FeatureA"):
+                raise KeyboardInterrupt()
+
+        with pytest.raises(SystemExit):
+            with client.use("FeatureB"):
+                raise SystemExit(1)
+
+        client.flush_telemetry()
+        stats = {
+            s["feature"]: s["variantStats"]["enabled"]
+            for s in usage.calls[0]["stats"]
+        }
+        assert stats["FeatureA"]["usedCount"] == 1
+        assert stats["FeatureA"].get("errorCount", 0) == 0
+        assert stats["FeatureB"]["usedCount"] == 1
+        assert stats["FeatureB"].get("errorCount", 0) == 0
         client.close()
 
 
@@ -143,4 +223,47 @@ class TestAsyncClientTelemetry:
         assert len(metrics.calls) == 1
         assert metrics.calls[0]["counters"][0]["metric"] == "clicks"
         assert metrics.calls[0]["observations"][0]["metric"] == "gauge"
+        await client.close()
+
+    @pytest.mark.asyncio
+    async def test_use_async_scope_records_duration(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("TOGGLY_DISABLE_TELEMETRY", raising=False)
+        usage = FakeUsageClient()
+        config = TogglyConfig(
+            app_key="app",
+            environment="Production",
+            feature_defaults={"FeatureA": True},
+            enable_usage_tracking=True,
+            enable_metrics=False,
+            usage_flush_interval=0,
+            usage_client=usage,
+            metrics_client=FakeMetricsClient(),
+            disable_background_refresh=True,
+            enable_live_updates=False,
+            register_contexts_on_startup=False,
+        )
+        client = AsyncTogglyClient(config)
+
+        async with client.use_async("FeatureA"):
+            pass
+
+        async def _ok(_scope):
+            return "ok"
+
+        assert await client.run_use_async("FeatureB", _ok) == "ok"
+
+        with pytest.raises(RuntimeError):
+            async with client.use_async("FeatureC"):
+                raise RuntimeError("boom")
+
+        client.flush_telemetry()
+        stats = {
+            s["feature"]: s["variantStats"]["enabled"]
+            for s in usage.calls[0]["stats"]
+        }
+        assert stats["FeatureA"]["usedCount"] == 1
+        assert stats["FeatureB"]["usedCount"] == 1
+        assert stats["FeatureC"]["errorCount"] == 1
         await client.close()

@@ -24,6 +24,11 @@ type Client struct {
 	flush     *autoflush.Controller
 }
 
+// NewClientWithBatcher constructs a usage client without gRPC (unit tests / local batching).
+func NewClientWithBatcher(b *Batcher) *Client {
+	return &Client{batcher: b}
+}
+
 // Dial creates a gRPC usage client.
 // userAgent is sent as gRPC metadata key "UA" on SendStats (matching .NET).
 func Dial(baseURL, appKey, env, instance, appVersion, userAgent string) (*Client, error) {
@@ -70,6 +75,27 @@ func (c *Client) RecordUsed(feature string, enabled bool, identity string) {
 // RecordView records a feature view (rendered/displayed).
 func (c *Client) RecordView(feature, identity string) {
 	c.batcher.RecordView(feature, identity)
+}
+
+// RunUsageScope records attempt, duration, and errors for fn without evaluating flags.
+func (c *Client) RunUsageScope(featureKey, identity string, fn func(FeatureUsageScope) error) error {
+	if c == nil || c.batcher == nil {
+		return RunUsageScope(
+			func() { /* no-op: batcher unavailable */ },
+			func(int64) { /* no-op: batcher unavailable */ },
+			func(int64) { /* no-op: batcher unavailable */ },
+			fn,
+		)
+	}
+	return RunUsageScope(
+		func() { c.batcher.RecordUsageAttempt(featureKey, identity) },
+		func(ms int64) { c.batcher.RecordUsageDuration(featureKey, ms, false) },
+		func(ms int64) {
+			c.batcher.RecordUsageError(featureKey, 1)
+			c.batcher.RecordUsageDuration(featureKey, ms, true)
+		},
+		fn,
+	)
 }
 
 // RecordDefinitionCacheHit counts a definition-refresh served from local cache.

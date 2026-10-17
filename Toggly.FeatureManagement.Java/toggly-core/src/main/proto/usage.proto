@@ -47,6 +47,9 @@ message VariantStats {
   int32 requestCount = 2;
   int32 usedCount = 3;
   int32 viewedCount = 4;
+  int32 errorCount = 5;
+  int64 durationSumMs = 6;
+  int64 errorDurationSumMs = 7;
 }
 
 message StatResult {

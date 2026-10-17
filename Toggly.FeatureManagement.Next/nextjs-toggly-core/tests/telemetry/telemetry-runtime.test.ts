@@ -57,6 +57,53 @@ describe('TelemetryRuntime', () => {
     expect(metricsClient.close).toHaveBeenCalled()
   })
 
+  it('use() records attempt, success duration, and soft-fail errors', async () => {
+    const sendStats = vi.fn().mockResolvedValue({ featureCount: 1 })
+    const usageClient: UsageSender = { sendStats, close: vi.fn() }
+    const runtime = new TelemetryRuntime({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: true,
+      enableMetrics: false,
+      usageFlushInterval: 0,
+      usageClient,
+      attachProcessHandlers: false,
+    })
+    runtime.start()
+
+    await runtime.use('Scoped', async () => {
+      vi.advanceTimersByTime(12)
+    }, 'user-1')
+    await runtime.use(
+      'Scoped',
+      async (scope) => {
+        vi.advanceTimersByTime(8)
+        scope.fail()
+      },
+      'user-1',
+    )
+    runtime.recordUsageError('Scoped', 'user-1')
+    runtime.recordUsageDuration('Scoped', 40, 'user-1')
+    runtime.recordUsageDuration('Scoped', 15, 'user-1', 'enabled', true)
+    await runtime.flushAll()
+
+    const usagePayload = sendStats.mock.calls[0][0] as {
+      stats: Array<{
+        feature: string
+        variantStats: Record<
+          string,
+          { usedCount: number; errorCount: number; durationSumMs: number; errorDurationSumMs: number }
+        >
+      }>
+    }
+    const enabled = usagePayload.stats[0].variantStats.enabled
+    expect(enabled.usedCount).toBe(2)
+    expect(enabled.errorCount).toBeGreaterThanOrEqual(2)
+    expect(enabled.durationSumMs).toBeGreaterThan(0)
+    expect(enabled.errorDurationSumMs).toBeGreaterThan(0)
+    runtime.close()
+  })
+
   it('auto-flushes on interval', async () => {
     const sendStats = vi.fn().mockResolvedValue({ featureCount: 1 })
     const runtime = new TelemetryRuntime({

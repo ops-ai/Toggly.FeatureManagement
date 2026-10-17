@@ -1,3 +1,10 @@
+## 1.12.0
+
+2026-10-11
+
+### Added
+- `use()` on the Toggly service for timed feature usage scopes [OPS-1758].
+
 ## 1.11.2
 
 2026-09-27

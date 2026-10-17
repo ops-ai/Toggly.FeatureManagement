@@ -1,6 +1,11 @@
 import { Injectable, Inject, NgZone, OnDestroy, PLATFORM_ID } from '@angular/core'
 import { isPlatformBrowser } from '@angular/common'
-import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry'
+import {
+  createTelemetryReporter,
+  runFeatureUsageScope,
+  type FeatureUsageScope,
+  type TelemetryReporter,
+} from '@ops-ai/toggly-client-telemetry'
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser'
 import {
   EvaluatedVariantDef,
@@ -857,6 +862,21 @@ export class TogglyService implements ITogglyService, OnDestroy {
   /** Record explicit usage without evaluating the feature. */
   recordUsage(featureKey: string, variant = 'enabled'): void {
     this._ngZone.runOutsideAngular(() => this._telemetry?.recordUsage(featureKey, variant))
+  }
+
+  use<T>(
+    featureKey: string,
+    fn: (scope: FeatureUsageScope) => Promise<T>,
+    variant = 'enabled',
+  ): Promise<T> {
+    // Keep telemetry bookkeeping outside Angular CD, but run the caller's work
+    // inside the zone so async UI updates still trigger change detection.
+    const runInZone = (scope: FeatureUsageScope) => this._ngZone.run(() => fn(scope))
+    if (this._telemetry) return this._telemetry.use(featureKey, runInZone, variant)
+    return runFeatureUsageScope(
+      { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
+      runInZone,
+    )
   }
 
   /** Record an explicit feature view without evaluating it. */

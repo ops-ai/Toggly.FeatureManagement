@@ -32,6 +32,9 @@ type featureAgg struct {
 	disabledCount int32
 	usedCount     int32
 	viewedCount   int32
+	errorCount    int32
+	durationSumMs int64
+	errorDurSumMs int64
 
 	uniqueUsersEnabled  map[int32]struct{}
 	uniqueUsersDisabled map[int32]struct{}
@@ -134,6 +137,43 @@ func (b *Batcher) RecordView(feature, identity string) {
 	}
 }
 
+// RecordUsageAttempt increments usedCount for a usage scope (enabled variant).
+func (b *Batcher) RecordUsageAttempt(feature, identity string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	agg := b.get(feature)
+	agg.usedCount++
+	if identity != "" {
+		h := hashIdentity(identity)
+		b.appUnique[h] = struct{}{}
+		agg.uniqueUsersUsed[h] = struct{}{}
+		agg.uniqueUsedHashes[h] = struct{}{}
+	}
+}
+
+func (b *Batcher) RecordUsageError(feature string, count int32) {
+	if count <= 0 {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.get(feature).errorCount += count
+}
+
+func (b *Batcher) RecordUsageDuration(feature string, durationMs int64, failed bool) {
+	if durationMs <= 0 {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	agg := b.get(feature)
+	if failed {
+		agg.errorDurSumMs += durationMs
+	} else {
+		agg.durationSumMs += durationMs
+	}
+}
+
 func (b *Batcher) isEmptyUnlocked() bool {
 	return len(b.perFeature) == 0 &&
 		len(b.appUnique) == 0 &&
@@ -178,6 +218,11 @@ func (b *Batcher) exportAndReset() *DrainedBatch {
 }
 
 // buildAndReset is retained for tests; prefer exportAndReset for flush+restore.
+// TestingBuildAndReset snapshots and clears pending stats for unit tests.
+func (b *Batcher) TestingBuildAndReset() *usagepb.FeatureStat {
+	return b.buildAndReset()
+}
+
 func (b *Batcher) buildAndReset() *usagepb.FeatureStat {
 	drained := b.exportAndReset()
 	if drained == nil {
@@ -232,11 +277,15 @@ func (b *Batcher) buildPayloadUnlocked() *usagepb.FeatureStat {
 			VariantStats:                         map[string]*usagepb.VariantStats{},
 		}
 
-		if agg.enabledCount > 0 || agg.usedCount > 0 || agg.viewedCount > 0 {
+		if agg.enabledCount > 0 || agg.usedCount > 0 || agg.viewedCount > 0 ||
+			agg.errorCount > 0 || agg.durationSumMs > 0 || agg.errorDurSumMs > 0 {
 			msg.VariantStats["enabled"] = &usagepb.VariantStats{
-				CheckCount:  agg.enabledCount,
-				UsedCount:   agg.usedCount,
-				ViewedCount: agg.viewedCount,
+				CheckCount:         agg.enabledCount,
+				UsedCount:          agg.usedCount,
+				ViewedCount:        agg.viewedCount,
+				ErrorCount:         agg.errorCount,
+				DurationSumMs:      agg.durationSumMs,
+				ErrorDurationSumMs: agg.errorDurSumMs,
 			}
 		}
 		if agg.disabledCount > 0 {
@@ -273,6 +322,9 @@ func (b *Batcher) restore(snapshot *BatchSnapshot) {
 		agg.disabledCount += snapAgg.disabledCount
 		agg.usedCount += snapAgg.usedCount
 		agg.viewedCount += snapAgg.viewedCount
+		agg.errorCount += snapAgg.errorCount
+		agg.durationSumMs += snapAgg.durationSumMs
+		agg.errorDurSumMs += snapAgg.errorDurSumMs
 		for h := range snapAgg.uniqueUsersEnabled {
 			agg.uniqueUsersEnabled[h] = struct{}{}
 		}
@@ -314,6 +366,9 @@ func cloneFeatureAgg(agg *featureAgg) *featureAgg {
 		disabledCount:       agg.disabledCount,
 		usedCount:           agg.usedCount,
 		viewedCount:         agg.viewedCount,
+		errorCount:          agg.errorCount,
+		durationSumMs:       agg.durationSumMs,
+		errorDurSumMs:       agg.errorDurSumMs,
 		uniqueUsersEnabled:  cloneIntSet(agg.uniqueUsersEnabled),
 		uniqueUsersDisabled: cloneIntSet(agg.uniqueUsersDisabled),
 		uniqueUsersUsed:     cloneIntSet(agg.uniqueUsersUsed),

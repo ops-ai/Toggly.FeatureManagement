@@ -50,6 +50,11 @@ export interface FrontendTelemetryRuntime {
   readonly metricsEnabled: boolean
   recordCheck(featureKey: string, variant: string): void
   recordUsage(featureKey: string, variant?: string): void
+  use: <T>(
+    featureKey: string,
+    fn: (scope: import('./telemetry/usage-scope.js').FeatureUsageScope) => Promise<T>,
+    variant?: string,
+  ) => Promise<T>
   recordView(featureKey: string, variant?: string): void
   incrementCounter(metricKey: string, value?: number): void
   setGauge(metricKey: string, value: number): void
@@ -73,6 +78,12 @@ export interface TrustedTelemetryRuntime {
   recordDefinitionCacheMiss(): void
   recordCheck(featureKey: string, enabled: boolean, identity?: string): void
   recordUsage(featureKey: string, identity?: string, variant?: string): void
+  use: <T>(
+    featureKey: string,
+    fn: (scope: import('./telemetry/usage-scope.js').FeatureUsageScope) => Promise<T>,
+    identity?: string,
+    variant?: string,
+  ) => Promise<T>
   recordView(featureKey: string, identity?: string, variant?: string): void
   measure(metricKey: string, value: number, options?: { feature?: string; variant?: string }): void
   incrementCounter(metricKey: string, value?: number, options?: { feature?: string; variant?: string }): void
@@ -429,6 +440,14 @@ export interface TogglyClient {
 
   /** Record a feature "used" interaction (usage telemetry). */
   recordUsage(featureKey: string, identity?: string, variant?: string): void
+
+  /** Run work inside a usage scope (attempt, duration, errors). */
+  use: <T>(
+    featureKey: string,
+    fn: (scope: import('./telemetry/usage-scope.js').FeatureUsageScope) => Promise<T>,
+    identity?: string,
+    variant?: string,
+  ) => Promise<T>
 
   /** Record a feature "viewed" event (usage telemetry). */
   recordView(featureKey: string, identity?: string, variant?: string): void

@@ -98,4 +98,24 @@ class UsageBatcherTest {
         assertThat(payload.getStats()).extracting(FeatureStatPayload.StatMessage::getFeature)
                 .containsExactlyInAnyOrder("FeatureA", "FeatureB");
     }
+    @Test
+    void recordsUsageScopeDurationAndErrors() {
+        UsageBatcher batcher = new UsageBatcher("app", "Production", null, null);
+        batcher.recordUsage("Checkout", "user-1", "enabled");
+        batcher.recordUsageDuration("Checkout", 40, "enabled", false);
+        batcher.recordUsage("Checkout", "user-1", "enabled");
+        batcher.recordUsageError("Checkout", "enabled", 1);
+        batcher.recordUsageDuration("Checkout", 15, "enabled", true);
+        // ignore non-positive duration
+        batcher.recordUsageDuration("Checkout", 0, "enabled", false);
+        batcher.recordUsageError("Checkout", "enabled", 0);
+
+        FeatureStatPayload payload = batcher.buildAndReset();
+        var vs = payload.getStats().get(0).getVariantStats().get("enabled");
+        assertThat(vs.getUsedCount()).isEqualTo(2);
+        assertThat(vs.getDurationSumMs()).isEqualTo(40);
+        assertThat(vs.getErrorCount()).isEqualTo(1);
+        assertThat(vs.getErrorDurationSumMs()).isEqualTo(15);
+    }
+
 }

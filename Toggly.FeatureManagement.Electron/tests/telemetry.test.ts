@@ -72,6 +72,58 @@ async function owner(extra: any = {}) {
   await client.init()
   return { client, ...wire }
 }
+it('records usage scope attempts with duration and error slots', async () => {
+  const { client, packets } = await owner()
+  const pause = () => new Promise((resolve) => setTimeout(resolve, 5))
+  await client.use('Checkout', async () => {
+    await pause()
+    return 'ok'
+  })
+  await client.use('Checkout', async (scope) => {
+    scope.fail()
+    await pause()
+    return 'soft'
+  })
+  await expect(
+    client.use('Checkout', async () => {
+      await pause()
+      throw new Error('boom')
+    }),
+  ).rejects.toThrow('boom')
+  await client.flushTelemetry()
+  const enabled = packets[0].f.Checkout.enabled as number[]
+  expect(enabled[1]).toBe(3)
+  expect(enabled[3]).toBe(2)
+  expect(enabled[4]).toBeGreaterThan(0)
+  expect(enabled[5]).toBeGreaterThan(0)
+})
+
+it('module use without singleton runs noop scope', async () => {
+  closeToggly()
+  const { use: moduleUse } = await import('../src/main/client.js')
+  await expect(moduleUse('Absent', async () => 'ok')).resolves.toBe('ok')
+  await expect(
+    moduleUse('Absent', async () => {
+      throw new Error('no-singleton')
+    }),
+  ).rejects.toThrow('no-singleton')
+})
+
+it('recordUsageScopeCompletion records success, failure, and ignores no-op durations', async () => {
+  const { client, packets } = await owner()
+  client.recordUsage('Scoped')
+  client.recordUsageScopeCompletion('Scoped', 'enabled', false, 0)
+  client.recordUsageScopeCompletion('Scoped', 'enabled', false, 12)
+  client.recordUsageScopeCompletion('Scoped', 'enabled', true, 0)
+  client.recordUsageScopeCompletion('Scoped', 'enabled', true, 9)
+  await client.flushTelemetry()
+  const enabled = packets[0].f.Scoped.enabled as number[]
+  expect(enabled[1]).toBe(1)
+  expect(enabled[3]).toBe(2)
+  expect(enabled[4]).toBe(12)
+  expect(enabled[5]).toBe(9)
+})
+
 it('records effective cached leaves once after gates and before negation, and keeps explicit events private', async () => {
   const { client, packets, requests } = await owner()
   client.getFlags()
@@ -182,6 +234,26 @@ it('validates IPC sender, main frame and compact arguments without losing accept
   sync.get(IPC_CHANNELS.isFeatureOn)!(event, 'On')
   expect(event.returnValue).toBe(true)
   sync.get(IPC_CHANNELS.recordUsage)!(event, 'Action', 'enabled')
+  sync.get(IPC_CHANNELS.recordUsageScopeCompletion)!(
+    event,
+    'Action',
+    'enabled',
+    false,
+    15,
+  )
+  sync.get(IPC_CHANNELS.recordUsageScopeCompletion)!(
+    event,
+    'Action',
+    'enabled',
+    true,
+    8,
+  )
+  sync.get(IPC_CHANNELS.recordUsageScopeCompletion)!(
+    event,
+    'Action',
+    'enabled',
+    true,
+  )
   for (const invalid of [
     { ...event, sender: {} },
     { ...event, senderFrame: {} },
@@ -194,6 +266,12 @@ it('validates IPC sender, main frame and compact arguments without losing accept
     ['Bad', 'enabled', { appKey: 'evil' }],
   ])
     sync.get(IPC_CHANNELS.recordUsage)!(event, ...args)
+  for (const args of [
+    ['Action', 'enabled', 'yes', 1],
+    ['Action', 'enabled', true, -1],
+    ['Action', 'enabled', true, 86_400_001],
+  ])
+    sync.get(IPC_CHANNELS.recordUsageScopeCompletion)!(event, ...args)
   for (const value of [-1, 1.5, Infinity, 1000001, '2'])
     sync.get(IPC_CHANNELS.incrementCounter)!(event, 'orders', value)
   sync.get(IPC_CHANNELS.incrementCounter)!(event, 'orders', 2)
@@ -203,7 +281,10 @@ it('validates IPC sender, main frame and compact arguments without losing accept
       k: 'ipc',
       e: 'Production',
       u: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
-      f: { On: { enabled: [1] }, Action: { enabled: [0, 1] } },
+      f: {
+        On: { enabled: [1] },
+        Action: { enabled: [0, 1, 0, 2, 15, 8] },
+      },
       m: { orders: 2 },
     },
   ])

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.7.1
+
+2026-10-15
+
+### Fixed
+- `with_usage` catches `:exit` and `:throw` so process exits and throws record
+  error duration instead of leaving a dangling attempt [OPS-1758].
+
+## 0.7.0
+
+2026-10-11
+
+### Added
+- Feature usage scopes via `Toggly.with_usage/4`, `Toggly.use/4`, and flush fields
+  `errorCount`, `durationSumMs`, and `errorDurationSumMs` on variant stats [OPS-1758].
+
 ## 0.6.0
 
 2026-10-04

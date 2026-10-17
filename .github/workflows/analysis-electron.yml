@@ -8,6 +8,7 @@ on:
     paths:
       - 'Toggly.FeatureManagement.Electron/**'
       - 'toggly-segments/**'
+      - 'toggly-client-telemetry/**'
       - '.github/workflows/analysis-electron.yml'
       - '.github/workflows/analysis-electron.test.mjs'
       - '.github/actions/verify-required-jobs/**'
@@ -49,9 +50,10 @@ jobs:
           set -euo pipefail
           (cd toggly-segments && (npm ci || npm install) && npm run build)
 
-      - name: Install dependencies
-        working-directory: Toggly.FeatureManagement.Electron
-        run: npm ci || npm install
+      - name: Install dependencies with local client-telemetry
+        uses: ./.github/actions/install-local-client-telemetry
+        with:
+          package-dir: Toggly.FeatureManagement.Electron
 
       - name: Build package
         working-directory: Toggly.FeatureManagement.Electron
@@ -68,9 +70,15 @@ jobs:
         # browser path instead of using a single-process test-only fallback.
         run: xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npm run test:coverage
 
+      # Registry packed-host gate: unset local tarball so packed-hosts.mjs
+      # resolves @ops-ai/toggly-client-telemetry from public npm.
       - name: Run packed Electron floor and current hosts
         working-directory: Toggly.FeatureManagement.Electron
-        run: xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npm run test:hosts
+        env:
+          TOGGLY_CLIENT_TELEMETRY_TARBALL: ''
+        run: |
+          unset TOGGLY_CLIENT_TELEMETRY_TARBALL
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npm run test:hosts
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7

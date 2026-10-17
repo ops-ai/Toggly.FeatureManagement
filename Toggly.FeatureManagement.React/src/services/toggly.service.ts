@@ -1,4 +1,9 @@
-import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry'
+import {
+  createTelemetryReporter,
+  runFeatureUsageScope,
+  type FeatureUsageScope,
+  type TelemetryReporter,
+} from '@ops-ai/toggly-client-telemetry'
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser'
 import type {
   CacheLruIndex,
@@ -358,6 +363,11 @@ export interface TogglyService {
   /** @internal Silent projection for cached UI state or an already evaluated component gate. */
   _getVariantSnapshot?: (featureKey: string) => VariantResult | null
   recordUsage: (featureKey: string, variant?: string) => void
+  use: <T>(
+    featureKey: string,
+    fn: (scope: FeatureUsageScope) => Promise<T>,
+    variant?: string,
+  ) => Promise<T>
   recordView: (featureKey: string, variant?: string) => void
   incrementCounter: (metricKey: string, value?: number) => void
   setGauge: (metricKey: string, value: number) => void
@@ -1083,6 +1093,19 @@ export class Toggly implements TogglyService {
   /** Record explicit usage without evaluating a feature. */
   recordUsage(featureKey: string, variant = 'enabled'): void {
     this._ensureTelemetry()?.recordUsage(featureKey, variant)
+  }
+
+  use<T>(
+    featureKey: string,
+    fn: (scope: FeatureUsageScope) => Promise<T>,
+    variant = 'enabled',
+  ): Promise<T> {
+    const reporter = this._ensureTelemetry()
+    if (reporter) return reporter.use(featureKey, fn, variant)
+    return runFeatureUsageScope(
+      { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
+      fn,
+    )
   }
 
   /** Record a view without evaluating a feature. */

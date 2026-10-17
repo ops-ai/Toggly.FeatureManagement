@@ -1,9 +1,19 @@
-import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
+import {
+  createTelemetryReporter,
+  runFeatureUsageScope,
+  type FeatureUsageScope,
+  type TelemetryReporter,
+} from '@ops-ai/toggly-client-telemetry';
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
 import type { TogglyConfig } from '../core/types';
 
 export interface FrontendTelemetry {
   recordUsage(featureKey: string, variant?: string): void;
+  use: <T>(
+    featureKey: string,
+    fn: (scope: FeatureUsageScope) => Promise<T>,
+    variant?: string,
+  ) => Promise<T>;
   recordView(featureKey: string, variant?: string): void;
   incrementCounter(metricKey: string, value?: number): void;
   setGauge(metricKey: string, value: number): void;
@@ -38,6 +48,7 @@ export function createBrowserTelemetry(config: TogglyConfig) {
     try {config.onError?.('Frontend telemetry pre-commit event rejected.');} catch { /* Diagnostics are isolated. */ }
   };
   const getReporter = () => {
+    if (disposed) return undefined;
     if (!reporter) {
       reporter = createTelemetryReporter({appKey: config.appKey, environment: config.environment, ...context,
         metricsBaseUrl: config.metricsBaseUrl, telemetryFlushIntervalMs: config.telemetryFlushIntervalMs,
@@ -48,6 +59,7 @@ export function createBrowserTelemetry(config: TogglyConfig) {
   };
   function replay(entry: Entry) {
     const target = getReporter();
+    if (!target) return;
     target.setContext(entry.context);
     if (entry.kind === 'feature') {
       const methods = ['recordCheck', 'recordUsage', 'recordView'] as const;
@@ -100,6 +112,22 @@ export function createBrowserTelemetry(config: TogglyConfig) {
   }
   const api: FrontendTelemetry = {
     recordUsage: (key, variant = 'enabled') => feature(key, variant, 1),
+    use: (key, fn, variant = 'enabled') => {
+      if (!usage || disposed) {
+        return runFeatureUsageScope(
+          { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
+          fn,
+        );
+      }
+      const target = getReporter();
+      if (!target) {
+        return runFeatureUsageScope(
+          { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
+          fn,
+        );
+      }
+      return target.use(key, fn, variant);
+    },
     recordView: (key, variant = 'enabled') => feature(key, variant, 2),
     incrementCounter: (key, value = 1) => event({partition, context, key, kind: 'counter', values: [value]}),
     setGauge: (key, value) => event({partition, context, key, kind: 'gauge', values: [value]}),
@@ -116,7 +144,9 @@ export function createBrowserTelemetry(config: TogglyConfig) {
     captureCheck(): (key: string, result: boolean | string) => void {
       if (disposed || !usage) return () => {};
       if (active) {
-        const record = getReporter().captureCheck();
+        const target = getReporter();
+        if (!target) return () => {};
+        const record = target.captureCheck();
         return (key, result) => record(key, checkVariantLabel(result));
       }
       const attribution = context;

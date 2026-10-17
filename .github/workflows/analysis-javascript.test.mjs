@@ -268,7 +268,7 @@ test('runs evaluator through only its locked dependency install', () => {
 
   const evaluatorInstalls = installSteps.filter((step) => guardSelectsSdk(step.guard, 'Evaluator'));
   assert.deepEqual(evaluatorInstalls.map(({ name, command }) => ({ name, command })), [{
-    name: 'Install locked standalone package dependencies',
+    name: 'Install locked Client-Telemetry / Evaluator / Local-Gates dependencies',
     command: 'npm ci',
   }]);
 });
@@ -374,9 +374,9 @@ test('runs the current Gatsby packed host on Node 24', () => {
   assert.match(testJob, /node-version: \$\{\{ matrix\.node-version \|\| 'lts\/\*' \}\}/);
   assert.match(testJob, /run: \$\{\{ matrix\.test-cmd \}\}/);
   const install = testJob.match(/- name: Install locked standalone package dependencies\n[\s\S]*?(?=\n\s+- name:)/)?.[0] ?? '';
-  assert.match(install, /if: matrix\.sdk == 'Gatsby' \|\|/);
-  assert.match(install, /working-directory: \$\{\{ matrix\.path \}\}\s+run: npm ci/);
-  assert.doesNotMatch(install, /continue-on-error|npm ci \|\|/);
+  assert.match(install, /if: matrix\.sdk == 'Gatsby' \|\| matrix\.sdk == 'Client-Core'/);
+  assert.match(install, /uses: \.\/\.github\/actions\/install-local-client-telemetry/);
+  assert.doesNotMatch(install, /continue-on-error/);
 });
 
 test('runs Vue packed browser telemetry checks with an explicit Chrome executable', () => {
@@ -405,7 +405,11 @@ test('selects system Chrome before packed Client-Core tests', () => {
   assert.match(workflow, /matrix\.sdk != 'Client-Core'/);
   assert.match(
     workflow,
-    /if: matrix\.sdk == 'Gatsby' \|\| matrix\.sdk == 'Client-Telemetry' \|\| matrix\.sdk == 'Client-Core'/,
+    /if: matrix\.sdk == 'Gatsby' \|\| matrix\.sdk == 'Client-Core'/,
+  );
+  assert.match(
+    workflow,
+    /if: matrix\.sdk == 'Client-Telemetry' \|\| matrix\.sdk == 'Evaluator' \|\| matrix\.sdk == 'Local-Gates'/,
   );
 });
 
@@ -424,7 +428,7 @@ test('classifies the JavaScript packed browser harness as test code in both scan
 
 test('installs the packed Solid host browser with its own resolved Playwright CLI before verification', () => {
   const job = workflow.match(/\n  solidstart-host:[\s\S]*?(?=\n  [a-z][\w-]*:|$)/)?.[0] ?? '';
-  assert.match(job, /run: node tests\/install-host\.mjs/);
+  assert.match(job, /node tests\/install-host\.mjs/);
   assert.doesNotMatch(job, /npx|cd tests\/host/);
   assertRequiredHost('SolidJS', 'solidstart-host');
   const installer = readFileSync(new URL('../../Toggly.FeatureManagement.Solid/tests/install-host.mjs', import.meta.url), 'utf8');

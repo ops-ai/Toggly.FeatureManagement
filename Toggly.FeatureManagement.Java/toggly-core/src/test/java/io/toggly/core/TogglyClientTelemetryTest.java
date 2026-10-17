@@ -6,6 +6,7 @@ import io.toggly.core.model.FeatureDefinition;
 import io.toggly.core.model.FeatureFilter;
 import io.toggly.core.snapshot.InMemorySnapshotProvider;
 import io.toggly.core.telemetry.FeatureStatPayload;
+import io.toggly.core.telemetry.FeatureUsageScope;
 import io.toggly.core.telemetry.MetricsGrpcClient;
 import io.toggly.core.telemetry.MetricStatPayload;
 import io.toggly.core.telemetry.TelemetryRuntime;
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.*;
 
 class TogglyClientTelemetryTest {
@@ -119,4 +121,176 @@ class TogglyClientTelemetryTest {
         assertThat(metricsSent.get(0).getCounters()).isNotEmpty();
         assertThat(metricsSent.get(0).getObservations()).isNotEmpty();
     }
+    @Test
+    void useScopeRecordsDurationAndErrors() {
+        client.use("always-on", scope -> "ok");
+        client.use("always-on", scope -> {
+            scope.fail();
+            return null;
+        });
+        assertThatThrownBy(() -> client.use("always-on", scope -> {
+            throw new IllegalStateException("boom");
+        })).isInstanceOf(IllegalStateException.class);
+        client.flushTelemetry();
+
+        assertThat(usageSent).isNotEmpty();
+        var vs = usageSent.get(0).getStats().stream()
+                .filter(s -> "always-on".equals(s.getFeature()))
+                .findFirst()
+                .orElseThrow()
+                .getVariantStats()
+                .get("enabled");
+        assertThat(vs.getUsedCount()).isGreaterThanOrEqualTo(3);
+        assertThat(vs.getErrorCount()).isGreaterThanOrEqualTo(2);
+        assertThat(vs.getDurationSumMs() + vs.getErrorDurationSumMs()).isGreaterThanOrEqualTo(0);
+    }
+
+    @Test
+    void useCallableInterruptedIsCancellation() {
+        assertThatThrownBy(() -> client.useCallable("always-on", () -> {
+            throw new InterruptedException("stop");
+        })).isInstanceOf(InterruptedException.class);
+        assertThat(Thread.interrupted()).isTrue();
+        client.flushTelemetry();
+
+        var vs = usageSent.get(0).getStats().stream()
+                .filter(s -> "always-on".equals(s.getFeature()))
+                .findFirst()
+                .orElseThrow()
+                .getVariantStats()
+                .get("enabled");
+        assertThat(vs.getUsedCount()).isEqualTo(1);
+        assertThat(vs.getErrorCount()).isZero();
+        assertThat(vs.getDurationSumMs()).isZero();
+        assertThat(vs.getErrorDurationSumMs()).isZero();
+    }
+
+    @Test
+    void useCallableSuccessAndFailurePaths() throws Exception {
+        assertThat(client.useCallable("always-on", () -> "ok")).isEqualTo("ok");
+        assertThatThrownBy(() -> client.useCallable("always-on", () -> {
+            throw new IllegalStateException("boom");
+        })).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> client.useCallable("always-on", null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(client.useCallable("", () -> 7)).isEqualTo(7);
+        client.flushTelemetry();
+
+        var vs = usageSent.get(0).getStats().stream()
+                .filter(s -> "always-on".equals(s.getFeature()))
+                .findFirst()
+                .orElseThrow()
+                .getVariantStats()
+                .get("enabled");
+        assertThat(vs.getUsedCount()).isGreaterThanOrEqualTo(2);
+        assertThat(vs.getErrorCount()).isGreaterThanOrEqualTo(1);
+    }
+
+    @Test
+    void useTreatsWrappedInterruptedAsCancellation() {
+        assertThatThrownBy(() -> client.use("always-on", scope -> {
+            throw new RuntimeException(new InterruptedException("wrapped"));
+        })).isInstanceOf(RuntimeException.class);
+        assertThat(Thread.interrupted()).isTrue();
+        client.flushTelemetry();
+
+        var vs = usageSent.get(0).getStats().stream()
+                .filter(s -> "always-on".equals(s.getFeature()))
+                .findFirst()
+                .orElseThrow()
+                .getVariantStats()
+                .get("enabled");
+        assertThat(vs.getUsedCount()).isEqualTo(1);
+        assertThat(vs.getErrorCount()).isZero();
+    }
+
+    @Test
+    void useTreatsThreadInterruptFlagAsCancellation() {
+        assertThatThrownBy(() -> client.use("always-on", scope -> {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("flagged");
+        })).isInstanceOf(IllegalStateException.class);
+        assertThat(Thread.interrupted()).isTrue();
+        client.flushTelemetry();
+
+        var vs = usageSent.get(0).getStats().stream()
+                .filter(s -> "always-on".equals(s.getFeature()))
+                .findFirst()
+                .orElseThrow()
+                .getVariantStats()
+                .get("enabled");
+        assertThat(vs.getUsedCount()).isEqualTo(1);
+        assertThat(vs.getErrorCount()).isZero();
+    }
+
+    @Test
+    void useCallableTreatsWrappedInterruptedAsCancellation() {
+        assertThatThrownBy(() -> client.useCallable("always-on", () -> {
+            throw new Exception(new InterruptedException("wrapped"));
+        })).isInstanceOf(Exception.class);
+        assertThat(Thread.interrupted()).isTrue();
+        client.flushTelemetry();
+
+        var vs = usageSent.get(0).getStats().stream()
+                .filter(s -> "always-on".equals(s.getFeature()))
+                .findFirst()
+                .orElseThrow()
+                .getVariantStats()
+                .get("enabled");
+        assertThat(vs.getUsedCount()).isEqualTo(1);
+        assertThat(vs.getErrorCount()).isZero();
+    }
+
+    @Test
+    void beginUsageNoopForBlankFeature() {
+        try (var scope = client.beginUsage("")) {
+            scope.fail();
+        }
+        client.flushTelemetry();
+        assertThat(usageSent).isEmpty();
+    }
+
+    @Test
+    void useRunnableAndBeginUsageWithIdentity() {
+        final boolean[] ran = {false};
+        client.use("always-on", () -> ran[0] = true);
+        assertThat(ran[0]).isTrue();
+        try (FeatureUsageScope scope = client.beginUsage("always-on", "user-x", "blue")) {
+            assertThat(scope).isNotNull();
+        }
+        client.flushTelemetry();
+        assertThat(usageSent).isNotEmpty();
+        boolean sawBlue = usageSent.stream()
+                .flatMap(p -> p.getStats().stream())
+                .anyMatch(s -> s.getVariantStats().containsKey("blue"));
+        assertThat(sawBlue).isTrue();
+    }
+
+    @Test
+    void useAppliesActionWhenTelemetryNullPathUsesNoop() {
+        TogglyConfig config = TogglyConfig.builder()
+                .appKey("test-app-key")
+                .environment("Test")
+                .enableUsageTracking(false)
+                .enableMetrics(false)
+                .build();
+        try (TogglyClient disabled = new TogglyClient(config, snapshotProvider)) {
+            Integer value = disabled.use("always-on", scope -> {
+                scope.fail();
+                return 42;
+            });
+            assertThat(value).isEqualTo(42);
+        }
+    }
+
+    @Test
+    void useRejectsNullAction() {
+        assertThatThrownBy(() -> client.use("always-on", (java.util.function.Function<FeatureUsageScope, Object>) null))
+                .isInstanceOf(IllegalArgumentException.class);
+        Integer nullKey = client.use((String) null, scope -> 1);
+        Integer emptyKey = client.use("", scope -> 2);
+        assertThat(nullKey).isEqualTo(1);
+        assertThat(emptyKey).isEqualTo(2);
+    }
+
 }

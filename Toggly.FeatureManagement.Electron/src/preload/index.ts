@@ -23,6 +23,15 @@ export function exposeToggly(): void {
     recordUsage(key, variant = 'enabled') {
       ipcRenderer.sendSync(IPC_CHANNELS.recordUsage, key, variant)
     },
+    recordUsageScopeCompletion(key, variant, failed, durationMs) {
+      ipcRenderer.sendSync(
+        IPC_CHANNELS.recordUsageScopeCompletion,
+        key,
+        variant,
+        failed,
+        durationMs,
+      )
+    },
     recordView(key, variant = 'enabled') {
       ipcRenderer.sendSync(IPC_CHANNELS.recordView, key, variant)
     },

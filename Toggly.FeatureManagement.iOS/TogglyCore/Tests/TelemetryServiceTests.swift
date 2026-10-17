@@ -134,4 +134,41 @@ final class TelemetryServiceTests: XCTestCase {
         let bodies = await requests.bodies
         XCTAssertEqual(bodies.count, 1)
     }
+    func testUseScopeRecordsUsageDurationAndErrors() async throws {
+        struct Boom: Error {}
+        let requests = Requests()
+        var config = TogglyConfig(
+            appKey: "public-app",
+            identity: "scope-user",
+            featureDefaults: ["on": true],
+            refreshInterval: 0,
+            enableLiveUpdates: false
+        )
+        config.telemetryTransport = { request in
+            try await requests.append(request)
+            return HTTPURLResponse(url: request.url!, statusCode: 202, httpVersion: nil, headerFields: nil)!
+        }
+        let service = TogglyService(config: config)
+        await service.setNetworkState(.disconnected)
+        await service.initialize()
+        let value = try await service.use("on") { _ in 5 }
+        XCTAssertEqual(value, 5)
+        _ = try await service.use("on") { fail in
+            fail()
+            return 0
+        }
+        do {
+            _ = try await service.use("on") { _ -> Int in throw Boom() }
+            XCTFail("expected throw")
+        } catch is Boom {
+        }
+        await service.flushTelemetry()
+        let bodies = await requests.bodies
+        XCTAssertFalse(bodies.isEmpty)
+        let features = try XCTUnwrap(bodies[0]["f"] as? [String: [String: [Int]]])
+        let enabled = try XCTUnwrap(features["on"]?["enabled"])
+        XCTAssertGreaterThanOrEqual(enabled.count, 2)
+        XCTAssertEqual(enabled[1], 3)
+    }
+
 }

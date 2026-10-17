@@ -113,6 +113,24 @@ describe('Angular frontend telemetry', () => {
     expect(sent[0].body).toEqual({k:'telemetry-test',e:'Production',f:{On:{enabled:[0,1],'experiment-a':[0,0,1]}},m:{orders:3,cart:3}});
     expect(evaluation).not.toHaveBeenCalled(); expect(definitionRequests).toEqual([]);
   });
+  it('use() records attempt and soft-fail error slots', async () => {
+    const service = create();
+    await service.use('Scoped', async () => undefined);
+    await service.use('Scoped', async (scope) => { scope.fail(); });
+    await service.flushTelemetry();
+    expect(sent).toHaveSize(1);
+    expect(sent[0].body.f.Scoped.enabled[1]).toBe(2);
+    expect(sent[0].body.f.Scoped.enabled[3]).toBe(1);
+  });
+  it('use() without telemetry still invokes the callback', async () => {
+    const service = create({enableTelemetry:false});
+    let ran = false;
+    await service.use('Offline', async (scope) => { scope.fail(); ran = true; });
+    expect(ran).toBeTrue();
+    await service.flushTelemetry();
+    expect(sent).toEqual([]);
+  });
+
   it('keeps hydration, refresh and context replacement silent until evaluation', async () => {
     localStorage.setItem(`toggly:flags:telemetry-test:Production:${evaluationContextCacheKey({identity:'cached-user'})}`, JSON.stringify({Cached:true}));
     const service = create({persistCache:true,identity:'cached-user'}); await service.flushTelemetry(); expect(sent).toEqual([]);

@@ -27,7 +27,10 @@ const hosts = [
 
 try {
   const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
-  if (manifest.dependencies['@ops-ai/toggly-client-telemetry'] !== '^1.1.0') throw new Error('Reporter transition API minimum must be ^1.1.0');
+  const telemetryRange = manifest.dependencies['@ops-ai/toggly-client-telemetry'];
+  if (telemetryRange !== '^1.1.0' && telemetryRange !== '^1.2.0') {
+    throw new Error(`Reporter transition API minimum must be ^1.1.0 or ^1.2.0 (got ${telemetryRange})`);
+  }
   await run('npm', ['run', 'build'], root);
   await run(process.execPath, ['--test', join(root, 'scripts/browser-cleanup.test.mjs')], root);
   await run('npm', ['pack', '--pack-destination', temporary], root);

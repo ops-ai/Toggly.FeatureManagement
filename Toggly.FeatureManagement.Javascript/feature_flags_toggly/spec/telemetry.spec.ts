@@ -132,6 +132,28 @@ test('explicit events and metrics flush without causing feature checks', async (
   }]);
 });
 
+test('use() records attempt and soft-fail error slots', async () => {
+  definitions = { Sale: true };
+  await initialize();
+  await Toggly.use('Scoped', async () => undefined);
+  await Toggly.use('Scoped', async (scope) => { scope.fail(); });
+  await flush();
+  const body = telemetryBodies()[0];
+  expect(body.f.Scoped.enabled[1]).toBe(2);
+  expect(body.f.Scoped.enabled[3]).toBe(1);
+});
+
+test('use() without telemetry still invokes the callback', async () => {
+  definitions = { On: true };
+  await initialize({ enableTelemetry: false });
+  let ran = false;
+  await Toggly.use('Offline', async (scope) => { scope.fail(); ran = true; });
+  expect(ran).toBe(true);
+  await flush();
+  expect(telemetryBodies()).toEqual([]);
+});
+
+
 test('opt-out and keyless initialization stay silent and allow feature evaluation', async () => {
   definitions = { On: true };
   const add = jest.spyOn(window, 'addEventListener');

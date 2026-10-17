@@ -1,11 +1,27 @@
 /** Payload-free, bounded diagnostic codes; no application or event data. */
 export type TelemetryDiagnostic = 'invalid-option' | 'invalid-event' | 'buffer-full' | 'metric-kind-conflict' | 'transport-drop' | 'compression-fallback';
+export interface FeatureUsageScope {
+  /** Marks the scope as failed without throwing. */
+  fail(): void;
+}
+
 export interface TelemetryReporter {
   recordCheck(featureKey: string, variant: string): void;
   /** @internal Capture this owner's check attribution before invoking host callbacks. */
   captureCheck(): (featureKey: string, variant: string) => void;
   recordUsage(featureKey: string, variant?: string): void;
   recordView(featureKey: string, variant?: string): void;
+  /** Increment usage-scope error count (feature value index 3). */
+  recordUsageError(featureKey: string, variant?: string, count?: number): void;
+  /** Add usage-scope duration ms to success (index 4) or failure (index 5) sum. */
+  recordUsageDuration(featureKey: string, durationMs: number, variant?: string, failed?: boolean): void;
+  recordUsageScopeOutcome(
+    featureKey: string,
+    outcome: { errorCount?: number; durationSumMs?: number; errorDurationSumMs?: number },
+    variant?: string,
+  ): void;
+  /** Run an action inside a usage scope (used count, duration, errors). */
+  use<T>(featureKey: string, fn: (scope: FeatureUsageScope) => Promise<T>, variant?: string): Promise<T>;
   incrementCounter(metricKey: string, value?: number): void;
   setGauge(metricKey: string, value: number): void;
   /** Atomically replace attribution; omitted routing fields retain their current values. */

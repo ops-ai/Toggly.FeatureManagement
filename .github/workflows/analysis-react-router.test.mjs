@@ -255,8 +255,14 @@ test('preserves Node tests, both packed Router hosts, shared dependencies and co
   assert.match(step(job('build-shared-js-deps'), 'Build shared packages'), /packages: signed-defs,eval,hooks-types,local-gates,segments/);
   assert.match(step(tests, 'Run tests with coverage'), /run: npm run test:coverage/);
   assert.match(step(tests, 'Upload coverage (Node 20 only)'), /name: coverage-react-router/);
-  assert.match(step(tests, 'Install dependencies'), /run: npm ci \|\| npm install/);
-  assert.match(step(hosts, 'Install dependencies'), /run: npm ci \|\| npm install/);
+  assert.match(
+    step(tests, 'Install dependencies with local client-telemetry'),
+    /uses: \.\/\.github\/actions\/install-local-client-telemetry/,
+  );
+  assert.match(
+    step(hosts, 'Install dependencies with local client-telemetry'),
+    /uses: \.\/\.github\/actions\/install-local-client-telemetry/,
+  );
   const sonar = job('sonar');
   assert.match(step(sonar, 'Install dependencies for TypeScript analysis'), /run: npm ci \|\| npm install/);
   assert.match(step(sonar, 'Resolve Sonar project version'), /manifest: Toggly.FeatureManagement.ReactRouter\/react-router-toggly\/package.json/);

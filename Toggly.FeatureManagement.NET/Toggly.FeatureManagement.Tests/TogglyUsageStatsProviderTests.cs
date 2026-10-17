@@ -460,13 +460,14 @@ public class TogglyUsageStatsProviderTests : IDisposable
     public void StatType_HasExpectedValues()
     {
         // Assert
-        Enum.GetValues<TogglyUsageStatsProvider.StatType>().Should().HaveCount(6);
+        Enum.GetValues<TogglyUsageStatsProvider.StatType>().Should().HaveCount(7);
         TogglyUsageStatsProvider.StatType.Enabled.Should().Be((TogglyUsageStatsProvider.StatType)0);
         TogglyUsageStatsProvider.StatType.Disabled.Should().Be((TogglyUsageStatsProvider.StatType)1);
         TogglyUsageStatsProvider.StatType.UniqueRequestEnabled.Should().Be((TogglyUsageStatsProvider.StatType)2);
         TogglyUsageStatsProvider.StatType.UniqueRequestDisabled.Should().Be((TogglyUsageStatsProvider.StatType)3);
         TogglyUsageStatsProvider.StatType.Used.Should().Be((TogglyUsageStatsProvider.StatType)4);
         TogglyUsageStatsProvider.StatType.Viewed.Should().Be((TogglyUsageStatsProvider.StatType)5);
+        TogglyUsageStatsProvider.StatType.Error.Should().Be((TogglyUsageStatsProvider.StatType)6);
     }
 
     #endregion
@@ -2717,6 +2718,131 @@ public class TogglyUsageStatsProviderTests : IDisposable
     private static Dictionary<(string FeatureKey, byte Type), int> GetPendingStats(TogglyUsageStatsProvider provider) =>
         new((System.Collections.Concurrent.ConcurrentDictionary<(string FeatureKey, byte Type), int>)typeof(TogglyUsageStatsProvider)
             .GetField("_stats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(provider)!);
+
+    private static Dictionary<string, long> GetDurationSums(TogglyUsageStatsProvider provider) =>
+        new((System.Collections.Concurrent.ConcurrentDictionary<string, long>)typeof(TogglyUsageStatsProvider)
+            .GetField("_durationSumMs", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(provider)!);
+
+    private static Dictionary<string, long> GetErrorDurationSums(TogglyUsageStatsProvider provider) =>
+        new((System.Collections.Concurrent.ConcurrentDictionary<string, long>)typeof(TogglyUsageStatsProvider)
+            .GetField("_errorDurationSumMs", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(provider)!);
+
+    #region Usage Scope Tests
+
+    [Fact]
+    public async Task UseAsync_OnSuccess_RecordsUsedAndDuration()
+    {
+        _provider = CreateProvider();
+        await _provider.UseAsync("ScopeFeature", async () => await Task.Delay(5));
+
+        var stats = GetPendingStats(_provider);
+        Assert.Equal(1, stats[("ScopeFeature", (byte)TogglyUsageStatsProvider.StatType.Used)]);
+        Assert.False(stats.ContainsKey(("ScopeFeature", (byte)TogglyUsageStatsProvider.StatType.Error)));
+        Assert.True(GetDurationSums(_provider)["ScopeFeature"] >= 0);
+        Assert.Empty(GetErrorDurationSums(_provider));
+    }
+
+    [Fact]
+    public async Task UseAsync_OnException_RecordsErrorAndRethrows()
+    {
+        _provider = CreateProvider();
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _provider.UseAsync("FailFeature", async () =>
+            {
+                await Task.Delay(5);
+                throw new InvalidOperationException("boom");
+            }));
+
+        var stats = GetPendingStats(_provider);
+        Assert.Equal(1, stats[("FailFeature", (byte)TogglyUsageStatsProvider.StatType.Used)]);
+        Assert.Equal(1, stats[("FailFeature", (byte)TogglyUsageStatsProvider.StatType.Error)]);
+        Assert.True(GetErrorDurationSums(_provider)["FailFeature"] > 0);
+    }
+
+    [Fact]
+    public async Task UseAsync_OnInstantException_SkipsZeroErrorDuration()
+    {
+        _provider = CreateProvider();
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _provider.UseAsync("InstantFail", () => throw new InvalidOperationException("boom")));
+
+        var stats = GetPendingStats(_provider);
+        Assert.Equal(1, stats[("InstantFail", (byte)TogglyUsageStatsProvider.StatType.Used)]);
+        Assert.Equal(1, stats[("InstantFail", (byte)TogglyUsageStatsProvider.StatType.Error)]);
+        Assert.False(GetErrorDurationSums(_provider).ContainsKey("InstantFail"));
+    }
+
+    [Fact]
+    public async Task UseAsync_OnCancellation_RecordsAttemptOnly()
+    {
+        _provider = CreateProvider();
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            _provider.UseAsync("CancelFeature", () => throw new OperationCanceledException()));
+
+        var stats = GetPendingStats(_provider);
+        Assert.Equal(1, stats[("CancelFeature", (byte)TogglyUsageStatsProvider.StatType.Used)]);
+        Assert.False(stats.ContainsKey(("CancelFeature", (byte)TogglyUsageStatsProvider.StatType.Error)));
+        Assert.Empty(GetDurationSums(_provider));
+        Assert.Empty(GetErrorDurationSums(_provider));
+    }
+
+    [Fact]
+    public async Task UseAsync_ExplicitFail_RecordsErrorWithoutThrow()
+    {
+        _provider = CreateProvider();
+        await _provider.UseAsync("SoftFail", scope =>
+        {
+            scope.Fail();
+            return Task.CompletedTask;
+        });
+
+        var stats = GetPendingStats(_provider);
+        Assert.Equal(1, stats[("SoftFail", (byte)TogglyUsageStatsProvider.StatType.Used)]);
+        Assert.Equal(1, stats[("SoftFail", (byte)TogglyUsageStatsProvider.StatType.Error)]);
+    }
+
+    [Fact]
+    public async Task UseAsync_FailThenThrow_CountsErrorOnce()
+    {
+        _provider = CreateProvider();
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _provider.UseAsync("DoubleFail", scope =>
+            {
+                scope.Fail();
+                throw new InvalidOperationException();
+            }));
+
+        var stats = GetPendingStats(_provider);
+        Assert.Equal(1, stats[("DoubleFail", (byte)TogglyUsageStatsProvider.StatType.Error)]);
+    }
+
+    [Fact]
+    public async Task BeginUsageWithContextAsync_RecordsUsageForEachKey()
+    {
+        _provider = CreateProvider();
+        await using (var scope = await _provider.BeginUsageWithContextAsync("ctx-user", "A", "B"))
+        {
+            scope.Fail();
+        }
+
+        var stats = GetPendingStats(_provider);
+        Assert.Equal(1, stats[("A", (byte)TogglyUsageStatsProvider.StatType.Used)]);
+        Assert.Equal(1, stats[("B", (byte)TogglyUsageStatsProvider.StatType.Used)]);
+        Assert.Equal(1, stats[("A", (byte)TogglyUsageStatsProvider.StatType.Error)]);
+        Assert.Equal(1, stats[("B", (byte)TogglyUsageStatsProvider.StatType.Error)]);
+        Assert.False(stats.ContainsKey(("ctx-user", (byte)TogglyUsageStatsProvider.StatType.Used)));
+    }
+
+    [Fact]
+    public async Task BeginUsageAsync_EmptyKeys_Throws()
+    {
+        _provider = CreateProvider();
+        await Assert.ThrowsAsync<ArgumentException>(() => _provider.BeginUsageAsync());
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            _provider.BeginUsageWithContextAsync("ctx", Array.Empty<string>()));
+    }
+
+    #endregion
 
     [Fact]
     public async Task SendStats_ConcurrentApplicationUniqueUserHashAdds_DoesNotThrow()

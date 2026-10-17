@@ -30,6 +30,12 @@ namespace Toggly.FeatureManagement
 
         private readonly ConcurrentDictionary<(string FeatureKey, byte Type), int> _stats = new ConcurrentDictionary<(string, byte), int>();
 
+        /// <summary>Successful usage-scope duration sums (ms), keyed by feature.</summary>
+        private readonly ConcurrentDictionary<string, long> _durationSumMs = new ConcurrentDictionary<string, long>();
+
+        /// <summary>Failed usage-scope duration sums (ms), keyed by feature.</summary>
+        private readonly ConcurrentDictionary<string, long> _errorDurationSumMs = new ConcurrentDictionary<string, long>();
+
         public enum StatType : byte
         {
             Enabled,
@@ -37,7 +43,8 @@ namespace Toggly.FeatureManagement
             UniqueRequestEnabled,
             UniqueRequestDisabled,
             Used,
-            Viewed
+            Viewed,
+            Error
         }
 
         private readonly Timer _timer;
@@ -312,7 +319,8 @@ namespace Toggly.FeatureManagement
         {
             var pendingCacheHits = Volatile.Read(ref _definitionCacheHits);
             var pendingCacheMisses = Volatile.Read(ref _definitionCacheMisses);
-            return !_stats.IsEmpty || !_uniqueUserHashesSinceLastSend.IsEmpty || !_uniqueViewedUserHashesSinceLastSend.IsEmpty
+            return !_stats.IsEmpty || !_durationSumMs.IsEmpty || !_errorDurationSumMs.IsEmpty
+                || !_uniqueUserHashesSinceLastSend.IsEmpty || !_uniqueViewedUserHashesSinceLastSend.IsEmpty
                 || !_applicationUniqueUserHashesSinceLastSend.IsEmpty || pendingCacheHits != 0 || pendingCacheMisses != 0;
         }
 
@@ -321,9 +329,10 @@ namespace Toggly.FeatureManagement
             var batch = new UsageStatsBatch();
             try
             {
-                // Keep the capture/clear order and retain each completed snapshot if a later capture fails.
-                batch.Stats = new Dictionary<(string FeatureKey, byte Type), int>(_stats);
-                _stats.Clear();
+                // Drain via TryRemove so AddOrUpdate between snapshot and clear cannot lose values.
+                batch.Stats = DrainIntMap(_stats);
+                batch.DurationSumMs = DrainLongMap(_durationSumMs);
+                batch.ErrorDurationSumMs = DrainLongMap(_errorDurationSumMs);
                 batch.DefinitionCacheHits = Interlocked.Exchange(ref _definitionCacheHits, 0);
                 batch.DefinitionCacheMisses = Interlocked.Exchange(ref _definitionCacheMisses, 0);
                 batch.Enabled = new Dictionary<string, ConcurrentHashSet<int>>(_uniqueUsageEnabledMap);
@@ -399,7 +408,8 @@ namespace Toggly.FeatureManagement
             if (batch.DefinitionCacheMisses > 0) dataPacket.DefinitionCacheMisses = batch.DefinitionCacheMisses;
 
             var featureKeys = batch.Stats!.Keys.Select(stat => stat.FeatureKey).Distinct()
-                .Union(batch.UsedHashes.Keys).Union(batch.ViewedHashes.Keys).Distinct();
+                .Union(batch.UsedHashes.Keys).Union(batch.ViewedHashes.Keys)
+                .Union(batch.DurationSumMs.Keys).Union(batch.ErrorDurationSumMs.Keys).Distinct();
             foreach (var featureKey in featureKeys)
                 dataPacket.Stats.Add(CreateStatMessage(featureKey, batch));
             dataPacket.UniqueUserHashes.AddRange(batch.ApplicationHashes);
@@ -416,14 +426,22 @@ namespace Toggly.FeatureManagement
                 UniqueUsersUsedCount = batch.Used!.TryGetValue(featureKey, out var used) ? used.Count : 0
             };
             var viewedCount = GetStatCount(batch, featureKey, StatType.Viewed);
+            var errorCount = GetStatCount(batch, featureKey, StatType.Error);
+            batch.DurationSumMs.TryGetValue(featureKey, out var durationSumMs);
+            batch.ErrorDurationSumMs.TryGetValue(featureKey, out var errorDurationSumMs);
             var enabledVariant = new VariantStats
             {
                 CheckCount = GetStatCount(batch, featureKey, StatType.Enabled),
                 RequestCount = GetStatCount(batch, featureKey, StatType.UniqueRequestEnabled),
                 UsedCount = GetStatCount(batch, featureKey, StatType.Used),
-                ViewedCount = viewedCount > 0 ? viewedCount : 0
+                ViewedCount = viewedCount > 0 ? viewedCount : 0,
+                ErrorCount = errorCount,
+                DurationSumMs = durationSumMs,
+                ErrorDurationSumMs = errorDurationSumMs
             };
-            if (enabledVariant.CheckCount > 0 || enabledVariant.RequestCount > 0 || enabledVariant.UsedCount > 0 || enabledVariant.ViewedCount > 0)
+            if (enabledVariant.CheckCount > 0 || enabledVariant.RequestCount > 0 || enabledVariant.UsedCount > 0
+                || enabledVariant.ViewedCount > 0 || enabledVariant.ErrorCount > 0
+                || enabledVariant.DurationSumMs > 0 || enabledVariant.ErrorDurationSumMs > 0)
                 statMessage.VariantStats["enabled"] = enabledVariant;
 
             var disabledVariant = new VariantStats
@@ -441,11 +459,38 @@ namespace Toggly.FeatureManagement
         private static int GetStatCount(UsageStatsBatch batch, string featureKey, StatType type) =>
             batch.Stats!.TryGetValue((featureKey, (byte)type), out var count) ? count : 0;
 
+        private static Dictionary<TKey, int> DrainIntMap<TKey>(ConcurrentDictionary<TKey, int> source)
+            where TKey : notnull
+        {
+            var result = new Dictionary<TKey, int>();
+            foreach (var key in source.Keys)
+            {
+                if (source.TryRemove(key, out var value) && value != 0)
+                    result[key] = value;
+            }
+            return result;
+        }
+
+        private static Dictionary<string, long> DrainLongMap(ConcurrentDictionary<string, long> source)
+        {
+            var result = new Dictionary<string, long>();
+            foreach (var key in source.Keys)
+            {
+                if (source.TryRemove(key, out var value) && value != 0)
+                    result[key] = value;
+            }
+            return result;
+        }
+
         private void RestoreBatch(UsageStatsBatch batch)
         {
             if (batch.Stats != null)
                 foreach (var stat in batch.Stats)
                     _stats.AddOrUpdate(stat.Key, stat.Value, (_, oldValue) => oldValue + stat.Value);
+            foreach (var entry in batch.DurationSumMs)
+                _durationSumMs.AddOrUpdate(entry.Key, entry.Value, (_, oldValue) => oldValue + entry.Value);
+            foreach (var entry in batch.ErrorDurationSumMs)
+                _errorDurationSumMs.AddOrUpdate(entry.Key, entry.Value, (_, oldValue) => oldValue + entry.Value);
             RestoreUsageMaps(batch);
             RestoreUserHashes(batch);
             if (batch.DefinitionCacheHits > 0) Interlocked.Add(ref _definitionCacheHits, batch.DefinitionCacheHits);
@@ -490,6 +535,8 @@ namespace Toggly.FeatureManagement
         private sealed class UsageStatsBatch
         {
             public Dictionary<(string FeatureKey, byte Type), int>? Stats { get; set; }
+            public Dictionary<string, long> DurationSumMs { get; set; } = new Dictionary<string, long>();
+            public Dictionary<string, long> ErrorDurationSumMs { get; set; } = new Dictionary<string, long>();
             public Dictionary<string, ConcurrentHashSet<int>>? Enabled { get; set; }
             public Dictionary<string, ConcurrentHashSet<int>>? Disabled { get; set; }
             public Dictionary<string, ConcurrentHashSet<int>>? Used { get; set; }
@@ -567,6 +614,75 @@ namespace Toggly.FeatureManagement
                     RecordApplicationUniqueUserId(uniqueIdentifier);
                 }
             }
+        }
+
+        /// <inheritdoc/>
+        public async Task<IFeatureUsageScope> BeginUsageAsync(params string[] featureKeys)
+        {
+            if (featureKeys == null || featureKeys.Length == 0)
+                throw new ArgumentException("At least one feature key is required.", nameof(featureKeys));
+            foreach (var featureKey in featureKeys)
+                await RecordUsageAsync(featureKey).ConfigureAwait(false);
+            return new FeatureUsageScope(this, featureKeys);
+        }
+
+        /// <inheritdoc/>
+        public async Task<IFeatureUsageScope> BeginUsageWithContextAsync<TContext>(TContext context, params string[] featureKeys)
+        {
+            if (featureKeys == null || featureKeys.Length == 0)
+                throw new ArgumentException("At least one feature key is required.", nameof(featureKeys));
+            foreach (var featureKey in featureKeys)
+                await RecordUsageAsync(featureKey, context).ConfigureAwait(false);
+            return new FeatureUsageScope(this, featureKeys);
+        }
+
+        /// <inheritdoc/>
+        public Task UseAsync(string featureKey, Func<Task> action) =>
+            UseAsync(featureKey, async _ => await action().ConfigureAwait(false));
+
+        /// <inheritdoc/>
+        public async Task UseAsync(string featureKey, Func<IFeatureUsageScope, Task> action)
+        {
+#if NET6_0_OR_GREATER
+            ArgumentNullException.ThrowIfNull(action);
+#else
+            if (action == null)
+                throw new ArgumentNullException(nameof(action));
+#endif
+            await using var scope = await BeginUsageAsync(featureKey).ConfigureAwait(false);
+            try
+            {
+                await action(scope).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                scope.MarkCancelled();
+                throw;
+            }
+            catch (Exception)
+            {
+                // Mark soft-fail so dispose records error duration, then rethrow for the caller.
+                scope.Fail();
+                throw;
+            }
+        }
+
+        /// <summary>Records successful usage-scope duration (called from <see cref="FeatureUsageScope"/>).</summary>
+        internal void RecordUsageScopeSuccess(string featureKey, long durationMs)
+        {
+            if (durationMs > 0)
+                _durationSumMs.AddOrUpdate(featureKey, durationMs, (_, existing) => existing + durationMs);
+        }
+
+        /// <summary>Records failed usage-scope error count and duration (called from <see cref="FeatureUsageScope"/>).</summary>
+        internal void RecordUsageScopeFailure(string featureKey, long durationMs)
+        {
+            _stats.AddOrUpdate(
+                (featureKey, (byte)StatType.Error),
+                1,
+                (_, existingValue) => existingValue + 1);
+            if (durationMs > 0)
+                _errorDurationSumMs.AddOrUpdate(featureKey, durationMs, (_, existing) => existing + durationMs);
         }
 
         /// <inheritdoc/>

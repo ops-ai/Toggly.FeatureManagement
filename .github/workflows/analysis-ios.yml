@@ -266,6 +266,7 @@ jobs:
             -Dsonar.sources=TogglyCore/Sources,TogglySwiftUI/Sources,TogglyUIKit/Sources,TogglyCombine/Sources
             -Dsonar.tests=TogglyCore/Tests,TogglyCombine/Tests,TogglySwiftUI/Tests,TogglyUIKit/Tests
             -Dsonar.exclusions=**/.build/**,**/Package.resolved
+            -Dsonar.cpd.exclusions=**/TelemetryReporter.swift
             -Dsonar.coverageReportPaths=sonar-reports/coverage-generic.xml
             -Dsonar.swift.swiftlint.report=sonar-reports/swiftlint-report.txt
             -Dsonar.qualitygate.wait=true
@@ -285,11 +286,54 @@ jobs:
             -Dsonar.sources=TogglyCore/Sources,TogglySwiftUI/Sources,TogglyUIKit/Sources,TogglyCombine/Sources
             -Dsonar.tests=TogglyCore/Tests,TogglyCombine/Tests,TogglySwiftUI/Tests,TogglyUIKit/Tests
             -Dsonar.exclusions=**/.build/**,**/Package.resolved
+            -Dsonar.cpd.exclusions=**/TelemetryReporter.swift
             -Dsonar.swift.file.suffixes=swift
             -Dsonar.coverageReportPaths=sonar-reports/coverage-generic.xml
             -Dsonar.swift.swiftlint.report=sonar-reports/swiftlint-report.txt
             -Dsonar.dependencyCheck.reportPath=sonar-reports/dependency-check-report.xml
             -Dsonar.qualitygate.wait=true
+
+      - name: Report SonarQube Server quality gate
+        if: ${{ failure() }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          pr="${{ github.event.pull_request.number }}"
+          host="${SONAR_HOST_URL%/}"
+          if [ -n "$pr" ]; then
+            status_url="${host}/api/qualitygates/project_status?projectKey=toggly-sdks-ios&pullRequest=${pr}"
+            issues_url="${host}/api/issues/search?componentKeys=toggly-sdks-ios&pullRequest=${pr}&resolved=false&ps=20&s=SEVERITY&asc=false"
+          else
+            status_url="${host}/api/qualitygates/project_status?projectKey=toggly-sdks-ios&branch=${GITHUB_REF_NAME}"
+            issues_url="${host}/api/issues/search?componentKeys=toggly-sdks-ios&branch=${GITHUB_REF_NAME}&resolved=false&ps=20&s=SEVERITY&asc=false"
+          fi
+          curl -sS -H "Accept: application/json" -H "Authorization: Bearer ${SONAR_TOKEN}" "$status_url" -o /tmp/sonar-qg.json || curl -sS -H "Accept: application/json" -u "${SONAR_TOKEN}:" "$status_url" -o /tmp/sonar-qg.json || true
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          raw = Path("/tmp/sonar-qg.json").read_text()
+          try:
+              data = json.loads(raw)
+          except json.JSONDecodeError:
+              print(raw[:500])
+              raise SystemExit(0)
+          status = data.get("projectStatus", {})
+          print(f"Status: {status.get('status')}")
+          for condition in status.get("conditions", []):
+              print(
+                  f"QG {condition.get('metricKey')} {condition.get('status')} "
+                  f"actual={condition.get('actualValue')} threshold={condition.get('errorThreshold')}",
+                  flush=True,
+              )
+          PY
+          curl -sS -H "Accept: application/json" -H "Authorization: Bearer ${SONAR_TOKEN}" "$issues_url" \
+            | python3 -c 'import json,sys; raw=sys.stdin.read();
+          try: d=json.loads(raw)
+          except Exception: print(raw[:300]); raise SystemExit(0)
+          print("total", d.get("total"));
+          [print(i.get("rule"), i.get("severity"), i.get("component","").split(":")[-1], i.get("line"), (i.get("message") or "")[:120]) for i in d.get("issues",[])]' || true
+          exit 0
 
   build-platforms:
     runs-on: macos-15

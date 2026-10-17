@@ -1,0 +1,79 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+RSpec.describe "Toggly::VERSION" do
+  it "exposes the package version string" do
+    expect(Toggly::VERSION).to match(/\A\d+\.\d+\.\d+\z/)
+  end
+end
+
+RSpec.describe Toggly::Telemetry::UsageScopeRunner do
+  let(:batcher) { Toggly::Telemetry::UsageBatcher.new("app", "Production") }
+
+  def handlers(feature)
+    [
+      -> { batcher.record_usage(feature) },
+      ->(ms) { batcher.record_usage_duration(feature, ms) },
+      lambda { |ms|
+        batcher.record_usage_error(feature)
+        batcher.record_usage_duration(feature, ms, failed: true)
+      }
+    ]
+  end
+
+  it "records duration on success" do
+    result = described_class.run(handlers("Feat")) { |_scope| :ok }
+    expect(result).to eq(:ok)
+    stat = batcher.build_and_reset[:stats].first
+    vs = stat[:variantStats]["enabled"]
+    expect(vs[:usedCount]).to eq(1)
+    expect(vs[:errorCount]).to eq(0)
+    expect(vs[:durationSumMs]).to be >= 0
+  end
+
+  it "records error on failure" do
+    expect do
+      described_class.run(handlers("Fail")) { |_scope| raise "boom" }
+    end.to raise_error(RuntimeError)
+    vs = batcher.build_and_reset[:stats].first[:variantStats]["enabled"]
+    expect(vs[:errorCount]).to eq(1)
+  end
+
+  it "records error on explicit fail" do
+    described_class.run(handlers("Soft"), &:fail)
+    vs = batcher.build_and_reset[:stats].first[:variantStats]["enabled"]
+    expect(vs[:errorCount]).to eq(1)
+  end
+
+  it "does not inherit an enclosing rescue exception on a clean return" do
+    begin
+      raise "outer"
+    rescue StandardError
+      described_class.run(handlers("Nested")) { |_scope| :ok }
+    end
+    vs = batcher.build_and_reset[:stats].first[:variantStats]["enabled"]
+    expect(vs[:usedCount]).to eq(1)
+    expect(vs[:errorCount]).to eq(0)
+  end
+
+  it "treats Interrupt as attempt-only" do
+    expect do
+      described_class.run(handlers("Stop")) { |_scope| raise Interrupt }
+    end.to raise_error(Interrupt)
+    vs = batcher.build_and_reset[:stats].first[:variantStats]["enabled"]
+    expect(vs[:usedCount]).to eq(1)
+    expect(vs[:errorCount]).to eq(0)
+    expect(vs[:durationSumMs]).to eq(0)
+  end
+
+  it "records error for Exception subclasses that bypass StandardError" do
+    expect do
+      # SystemStackError inherits Exception, not StandardError.
+      described_class.run(handlers("Fatal")) { |_scope| raise SystemStackError, "fatal" }
+    end.to raise_error(SystemStackError)
+    vs = batcher.build_and_reset[:stats].first[:variantStats]["enabled"]
+    expect(vs[:errorCount]).to eq(1)
+    expect(vs[:usedCount]).to eq(1)
+  end
+end

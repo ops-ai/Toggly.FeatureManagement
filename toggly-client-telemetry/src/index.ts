@@ -1,6 +1,8 @@
-import type { TelemetryOptions, TelemetryReporter, TelemetryDiagnostic, TelemetryResponse, TelemetryContext } from './types.js';
+import type { TelemetryOptions, TelemetryReporter, TelemetryDiagnostic, TelemetryResponse, TelemetryContext, FeatureUsageScope } from './types.js';
 import { registerOwner, removeOwner } from './lifecycle.js';
-export type { TelemetryOptions, TelemetryReporter, TelemetryDiagnostic, TelemetryFetch, TelemetryResponse, TelemetryRequestInit, TelemetryAbortSignal, TelemetryContext } from './types.js';
+import { runFeatureUsageScope } from './usage-scope.js';
+export type { TelemetryOptions, TelemetryReporter, TelemetryDiagnostic, TelemetryFetch, TelemetryResponse, TelemetryRequestInit, TelemetryAbortSignal, TelemetryContext, FeatureUsageScope } from './types.js';
+export { isUsageCancellation, runFeatureUsageScope } from './usage-scope.js';
 
 type Context = Pick<Envelope, 'k' | 'e' | 'i' | 'u'>;
 type Entry = { context: Context; key: string; variant?: string; kind: 'feature' | 'counter' | 'gauge'; values: number[] };
@@ -189,7 +191,10 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
     const entries = allEntries();
     if (conflictsWithBufferedMetricKind(entries, entry)) { diagnostic('metric-kind-conflict'); return; }
     if (hasReachedVariantLimit(entries, entry)) { diagnostic('buffer-full'); return; }
-    if (old && entry.kind !== 'gauge') entry.values = entry.values.map((v, i) => v + old.values[i]);
+    if (old && entry.kind !== 'gauge') {
+      const len = Math.max(entry.values.length, old.values.length);
+      entry.values = Array.from({ length: len }, (_, i) => (entry.values[i] ?? 0) + (old.values[i] ?? 0));
+    }
     const rejected = admissionFailure(entries, entry, old);
     if (rejected) { diagnostic(rejected); return; }
     if (current) pending.set(id, entry);
@@ -201,11 +206,31 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
       schedule();
     }
   }
-  function feature(featureKey: string, variant: string, index: number, captured = context): void {
+  function feature(
+    featureKey: string,
+    variant: string,
+    index: number,
+    amount = 1,
+    captured = context,
+  ): void {
     if (optedOut || disposed || !validName(captured.k)) return;
     if (!validName(featureKey) || !validVariant(variant)) { diagnostic('invalid-event'); return; }
-    const values = [0, 0, 0]; values[index] = 1;
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    // Count slots must be whole; duration slots (4/5) round to whole ms for ingest.
+    const normalized = index <= 3 ? amount : Math.round(amount);
+    if (!Number.isInteger(normalized) || normalized <= 0) { diagnostic('invalid-event'); return; }
+    const values = [0, 0, 0, 0, 0, 0];
+    values[index] = Math.min(MAX_VALUE, normalized);
     accept({ context: captured, key: featureKey, variant, kind: 'feature', values });
+  }
+  function recordUsageScopeOutcome(
+    featureKey: string,
+    outcome: { errorCount?: number; durationSumMs?: number; errorDurationSumMs?: number },
+    variant = 'enabled',
+  ): void {
+    if (outcome.errorCount) feature(featureKey, variant, 3, outcome.errorCount);
+    if (outcome.durationSumMs) feature(featureKey, variant, 4, outcome.durationSumMs);
+    if (outcome.errorDurationSumMs) feature(featureKey, variant, 5, outcome.errorDurationSumMs);
   }
   function metric(metricKey: string, value: number, kind: 'counter' | 'gauge'): void {
     if (!enabled() || disposed) return;
@@ -300,10 +325,30 @@ export function createTelemetryReporter(options: TelemetryOptions): TelemetryRep
     recordCheck: (featureKey, variant) => feature(featureKey, variant, 0),
     captureCheck() {
       const captured = context;
-      return (featureKey, variant) => feature(featureKey, variant, 0, captured);
+      return (featureKey, variant) => feature(featureKey, variant, 0, 1, captured);
     },
     recordUsage: (featureKey, variant = 'enabled') => feature(featureKey, variant, 1),
     recordView: (featureKey, variant = 'enabled') => feature(featureKey, variant, 2),
+    recordUsageError: (featureKey, variant = 'enabled', count = 1) => feature(featureKey, variant, 3, count),
+    recordUsageDuration: (featureKey, durationMs, variant = 'enabled', failed = false) =>
+      feature(featureKey, variant, failed ? 5 : 4, durationMs),
+    recordUsageScopeOutcome,
+    use<T>(featureKey: string, fn: (scope: FeatureUsageScope) => Promise<T>, variant = 'enabled'): Promise<T> {
+      // Pin attribution for the whole scope so mid-flight setContext cannot split metrics.
+      const pinned = context;
+      return runFeatureUsageScope(
+        {
+          recordAttempt: () => feature(featureKey, variant, 1, 1, pinned),
+          recordSuccessDuration: (durationMs) =>
+            feature(featureKey, variant, 4, durationMs, pinned),
+          recordFailure: (durationMs) => {
+            feature(featureKey, variant, 3, 1, pinned);
+            feature(featureKey, variant, 5, durationMs, pinned);
+          },
+        },
+        fn,
+      );
+    },
     incrementCounter: (metricKey, value = 1) => metric(metricKey, value, 'counter'),
     setGauge: (metricKey, value) => metric(metricKey, value, 'gauge'),
     setContext(next) {

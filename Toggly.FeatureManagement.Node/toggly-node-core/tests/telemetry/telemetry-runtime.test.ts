@@ -37,6 +37,14 @@ describe('TelemetryRuntime', () => {
 
     runtime.recordCheck('FeatureA', true, 'user-1')
     runtime.recordUsage('FeatureA', 'user-1')
+    await runtime.use('FeatureA', async () => undefined, 'user-1')
+    await runtime.use('FeatureA', async (scope) => {
+      scope.fail()
+    }, 'user-1')
+    runtime.recordUsageError('FeatureA', 'user-1')
+    runtime.recordUsageDuration('FeatureA', 40, 'user-1')
+    runtime.recordUsageDuration('FeatureA', 15, 'user-1', 'enabled', true)
+    runtime.recordUsageScopeOutcome('FeatureA', { failed: true, durationMs: 9 }, 'user-1')
     runtime.measure('revenue', 9)
     runtime.incrementCounter('clicks')
     runtime.observe('depth', 2)
@@ -45,10 +53,26 @@ describe('TelemetryRuntime', () => {
 
     expect(sendStats).toHaveBeenCalledTimes(1)
     const usagePayload = sendStats.mock.calls[0][0] as {
-      stats: Array<{ feature: string; variantStats: Record<string, { checkCount: number }> }>
+      stats: Array<{
+        feature: string
+        variantStats: Record<
+          string,
+          {
+            checkCount: number
+            usedCount: number
+            errorCount: number
+            durationSumMs: number
+            errorDurationSumMs: number
+          }
+        >
+      }>
     }
     expect(usagePayload.stats[0].feature).toBe('FeatureA')
     expect(usagePayload.stats[0].variantStats.enabled.checkCount).toBe(1)
+    expect(usagePayload.stats[0].variantStats.enabled.usedCount).toBeGreaterThanOrEqual(3)
+    expect(usagePayload.stats[0].variantStats.enabled.errorCount).toBeGreaterThanOrEqual(2)
+    expect(usagePayload.stats[0].variantStats.enabled.durationSumMs).toBeGreaterThan(0)
+    expect(usagePayload.stats[0].variantStats.enabled.errorDurationSumMs).toBeGreaterThan(0)
 
     expect(sendMetrics).toHaveBeenCalledTimes(1)
     const metricsPayload = sendMetrics.mock.calls[0][0] as {

@@ -186,6 +186,9 @@ def feature_stat_from_payload(payload: Mapping[str, Any]) -> Any:
                     requestCount=int(vs.get("requestCount", 0)),
                     usedCount=int(vs.get("usedCount", 0)),
                     viewedCount=int(vs.get("viewedCount", 0)),
+                    errorCount=int(vs.get("errorCount", 0)),
+                    durationSumMs=int(vs.get("durationSumMs", 0)),
+                    errorDurationSumMs=int(vs.get("errorDurationSumMs", 0)),
                 )
                 sm.variantStats[str(name)].CopyFrom(entry)
     return msg

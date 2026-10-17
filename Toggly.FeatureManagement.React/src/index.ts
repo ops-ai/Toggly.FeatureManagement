@@ -11,4 +11,5 @@ export {
   type UseFeatureGateOptions,
 } from './hooks/useFeatureFlag'
 export type { EvaluatedDefinitions, TogglyEntityContext } from './services/toggly.service'
+export type { FeatureUsageScope } from '@ops-ai/toggly-client-telemetry'
 export { isEntityGate, mapEntityContext, registerContext } from './services/toggly.service'

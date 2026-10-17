@@ -1,5 +1,7 @@
 import {
   createTelemetryReporter,
+  runFeatureUsageScope,
+  type FeatureUsageScope,
   type TelemetryReporter,
 } from '@ops-ai/toggly-client-telemetry'
 import { gzip } from 'node:zlib'
@@ -554,6 +556,30 @@ export class ElectronTogglyClient {
   recordUsage(key: string, variant = 'enabled'): void {
     this.telemetry.recordUsage(key, variant)
   }
+  use<T>(
+    key: string,
+    fn: (scope: FeatureUsageScope) => Promise<T>,
+    variant = 'enabled',
+  ): Promise<T> {
+    return this.telemetry.use(key, fn, variant)
+  }
+  /** @internal Renderer IPC — record scope duration/errors after attempt. */
+  recordUsageScopeCompletion(
+    key: string,
+    variant: string,
+    failed: boolean,
+    durationMs: number,
+  ): void {
+    if (durationMs <= 0 && !failed) return
+    if (failed) {
+      this.telemetry.recordUsageError(key, variant)
+      if (durationMs > 0) {
+        this.telemetry.recordUsageDuration(key, durationMs, variant, true)
+      }
+    } else if (durationMs > 0) {
+      this.telemetry.recordUsageDuration(key, durationMs, variant, false)
+    }
+  }
   recordView(key: string, variant = 'enabled'): void {
     this.telemetry.recordView(key, variant)
   }
@@ -1102,6 +1128,19 @@ export function __resetTogglyForTests(): void {
 
 export function recordUsage(key: string, variant = 'enabled'): void {
   singleton?.recordUsage(key, variant)
+}
+export function use<T>(
+  key: string,
+  fn: (scope: FeatureUsageScope) => Promise<T>,
+  variant = 'enabled',
+): Promise<T> {
+  if (singleton) {
+    return singleton.use(key, fn, variant)
+  }
+  return runFeatureUsageScope(
+    { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
+    fn,
+  )
 }
 export function recordView(key: string, variant = 'enabled'): void {
   singleton?.recordView(key, variant)

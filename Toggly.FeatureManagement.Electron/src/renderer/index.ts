@@ -1,3 +1,7 @@
+import {
+  runFeatureUsageScope,
+  type FeatureUsageScope,
+} from '@ops-ai/toggly-client-telemetry'
 import { decodeVariantValue } from '../decode-variant-value.js'
 import type {
   EntityContextInput,
@@ -135,6 +139,24 @@ export { decodeVariantValue } from '../decode-variant-value.js'
 export function recordUsage(key: string, variant = 'enabled'): void {
   tryBridge()?.recordUsage(key, variant)
 }
+export async function use<T>(
+  key: string,
+  fn: (scope: FeatureUsageScope) => Promise<T>,
+  variant = 'enabled',
+): Promise<T> {
+  const bridge = tryBridge()
+  return runFeatureUsageScope(
+    {
+      recordAttempt: () => bridge?.recordUsage(key, variant),
+      recordSuccessDuration: (durationMs) =>
+        bridge?.recordUsageScopeCompletion?.(key, variant, false, durationMs),
+      recordFailure: (durationMs) =>
+        bridge?.recordUsageScopeCompletion?.(key, variant, true, durationMs),
+    },
+    fn,
+  )
+}
+export type { FeatureUsageScope } from '@ops-ai/toggly-client-telemetry'
 export function recordView(key: string, variant = 'enabled'): void {
   tryBridge()?.recordView(key, variant)
 }

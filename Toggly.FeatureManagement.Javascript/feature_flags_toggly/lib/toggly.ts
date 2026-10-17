@@ -1,5 +1,12 @@
 import { v4 as uuidv4 } from 'uuid';
-import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
+import {
+  createTelemetryReporter,
+  runFeatureUsageScope,
+  type FeatureUsageScope,
+  type TelemetryReporter,
+} from '@ops-ai/toggly-client-telemetry';
+
+export type { FeatureUsageScope } from '@ops-ai/toggly-client-telemetry';
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
 import { FeatureRequirement, StorageKeys, TogglyConfig, VariantResult, EvaluatedVariantDef } from './models';
 import { decodeVariantValue } from './decode-variant-value';
@@ -413,6 +420,18 @@ export class Toggly {
 
   static recordUsage(featureKey: string, variant = 'enabled'): void {
     Toggly._telemetry?.recordUsage(featureKey, variant);
+  }
+
+  static use<T>(
+    featureKey: string,
+    fn: (scope: FeatureUsageScope) => Promise<T>,
+    variant = 'enabled',
+  ): Promise<T> {
+    if (Toggly._telemetry) return Toggly._telemetry.use(featureKey, fn, variant);
+    return runFeatureUsageScope(
+      { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
+      fn,
+    );
   }
 
   static recordView(featureKey: string, variant = 'enabled'): void {

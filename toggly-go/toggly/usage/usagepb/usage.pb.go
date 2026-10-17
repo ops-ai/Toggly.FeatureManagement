@@ -291,13 +291,16 @@ func (x *StatMessage) GetUniqueViewedUserHashes() []int32 {
 }
 
 type VariantStats struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CheckCount    int32                  `protobuf:"varint,1,opt,name=checkCount,proto3" json:"checkCount,omitempty"`
-	RequestCount  int32                  `protobuf:"varint,2,opt,name=requestCount,proto3" json:"requestCount,omitempty"`
-	UsedCount     int32                  `protobuf:"varint,3,opt,name=usedCount,proto3" json:"usedCount,omitempty"`
-	ViewedCount   int32                  `protobuf:"varint,4,opt,name=viewedCount,proto3" json:"viewedCount,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	CheckCount         int32                  `protobuf:"varint,1,opt,name=checkCount,proto3" json:"checkCount,omitempty"`
+	RequestCount       int32                  `protobuf:"varint,2,opt,name=requestCount,proto3" json:"requestCount,omitempty"`
+	UsedCount          int32                  `protobuf:"varint,3,opt,name=usedCount,proto3" json:"usedCount,omitempty"`
+	ViewedCount        int32                  `protobuf:"varint,4,opt,name=viewedCount,proto3" json:"viewedCount,omitempty"`
+	ErrorCount         int32                  `protobuf:"varint,5,opt,name=errorCount,proto3" json:"errorCount,omitempty"`
+	DurationSumMs      int64                  `protobuf:"varint,6,opt,name=durationSumMs,proto3" json:"durationSumMs,omitempty"`
+	ErrorDurationSumMs int64                  `protobuf:"varint,7,opt,name=errorDurationSumMs,proto3" json:"errorDurationSumMs,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *VariantStats) Reset() {
@@ -354,6 +357,27 @@ func (x *VariantStats) GetUsedCount() int32 {
 func (x *VariantStats) GetViewedCount() int32 {
 	if x != nil {
 		return x.ViewedCount
+	}
+	return 0
+}
+
+func (x *VariantStats) GetErrorCount() int32 {
+	if x != nil {
+		return x.ErrorCount
+	}
+	return 0
+}
+
+func (x *VariantStats) GetDurationSumMs() int64 {
+	if x != nil {
+		return x.DurationSumMs
+	}
+	return 0
+}
+
+func (x *VariantStats) GetErrorDurationSumMs() int64 {
+	if x != nil {
+		return x.ErrorDurationSumMs
 	}
 	return 0
 }
@@ -443,14 +467,19 @@ const file_usage_proto_rawDesc = "" +
 	"\x16uniqueViewedUserHashes\x18\f \x03(\x05R\x16uniqueViewedUserHashes\x1aT\n" +
 	"\x11VariantStatsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12)\n" +
-	"\x05value\x18\x02 \x01(\v2\x13.Usage.VariantStatsR\x05value:\x028\x01\"\x92\x01\n" +
+	"\x05value\x18\x02 \x01(\v2\x13.Usage.VariantStatsR\x05value:\x028\x01\"\x88\x02\n" +
 	"\fVariantStats\x12\x1e\n" +
 	"\n" +
 	"checkCount\x18\x01 \x01(\x05R\n" +
 	"checkCount\x12\"\n" +
 	"\frequestCount\x18\x02 \x01(\x05R\frequestCount\x12\x1c\n" +
 	"\tusedCount\x18\x03 \x01(\x05R\tusedCount\x12 \n" +
-	"\vviewedCount\x18\x04 \x01(\x05R\vviewedCount\"0\n" +
+	"\vviewedCount\x18\x04 \x01(\x05R\vviewedCount\x12\x1e\n" +
+	"\n" +
+	"errorCount\x18\x05 \x01(\x05R\n" +
+	"errorCount\x12$\n" +
+	"\rdurationSumMs\x18\x06 \x01(\x03R\rdurationSumMs\x12.\n" +
+	"\x12errorDurationSumMs\x18\a \x01(\x03R\x12errorDurationSumMs\"0\n" +
 	"\n" +
 	"StatResult\x12\"\n" +
 	"\ffeatureCount\x18\x01 \x01(\x05R\ffeatureCount2;\n" +

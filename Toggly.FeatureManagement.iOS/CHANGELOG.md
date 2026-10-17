@@ -2,6 +2,37 @@
 
 All notable changes to the Toggly iOS SDK are documented in this file.
 
+## 1.8.2
+
+2026-10-16
+
+### Fixed
+- Telemetry clock uses `CLOCK_MONOTONIC_RAW` so usage durations and the
+  300s batch expiry keep advancing while the device sleeps (parity with
+  Android `elapsedRealtime`), without wall-clock NTP skew [OPS-1758].
+- Default monotonic clock is a file-level function so watchOS / tvOS builds
+  accept the init default without covariant `Self` [OPS-1758].
+- `use` treats `URLError.cancelled` as attempt-only cancellation, matching
+  `CancellationError` (URLSession task cancel) [OPS-1758].
+
+## 1.8.1
+
+2026-10-15
+
+### Fixed
+- Usage-scope timing uses monotonic `systemUptime`; duration paths validate
+  variants; `pendingResources` accounts for all six delta fields; `use`
+  restores pinned attribution after `await` so mid-scope `setContext` cannot
+  split attempt vs duration metrics [OPS-1758].
+
+## 1.8.0
+
+2026-10-11
+
+### Added
+- Feature usage scopes via `TogglyService.use` and telemetry compact-array slots
+  for `errorCount`, `durationSumMs`, and `errorDurationSumMs` [OPS-1758].
+
 ## 1.7.1
 
 2026-09-27

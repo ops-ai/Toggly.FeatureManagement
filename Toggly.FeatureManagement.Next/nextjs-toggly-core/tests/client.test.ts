@@ -791,4 +791,57 @@ describe('createTogglyClient', () => {
       vi.useRealTimers()
     })
   })
+
+  describe('usage scope', () => {
+    it('use() records attempt and soft-fail through server telemetry', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse({
+          features: [{ featureKey: 'feature-a', enabled: true }],
+        }),
+      )
+      const sendStats = vi.fn().mockResolvedValue({ featureCount: 1 })
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        enableUsageTracking: true,
+        enableMetrics: false,
+        usageFlushInterval: 0,
+        usageClient: { sendStats, close: vi.fn() },
+      })
+      await client.init()
+      await client.use('Scoped', async () => undefined)
+      await client.use('Scoped', async (scope) => {
+        scope.fail()
+      })
+      await client.flushTelemetry()
+
+      expect(sendStats).toHaveBeenCalled()
+      const payload = sendStats.mock.calls[0][0] as {
+        stats: Array<{
+          feature: string
+          variantStats: Record<string, { usedCount: number; errorCount: number }>
+        }>
+      }
+      const enabled = payload.stats.find((s) => s.feature === 'Scoped')!.variantStats.enabled
+      expect(enabled.usedCount).toBe(2)
+      expect(enabled.errorCount).toBe(1)
+      client.destroy()
+    })
+
+    it('use() without telemetry still invokes the callback', async () => {
+      const client = createTogglyClient({
+        appKey: 'test-key',
+        enableUsageTracking: false,
+        enableMetrics: false,
+        featureDefaults: { 'feature-a': true },
+      })
+      await client.init()
+      let ran = false
+      await client.use('Offline', async (scope) => {
+        scope.fail()
+        ran = true
+      })
+      expect(ran).toBe(true)
+      client.destroy()
+    })
+  })
 })

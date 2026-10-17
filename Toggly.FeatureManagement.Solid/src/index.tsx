@@ -28,10 +28,12 @@ import {
   type VariantResult,
 } from './client';
 export * from './client';
+export type { FeatureUsageScope } from '@ops-ai/toggly-client-telemetry';
 
 export interface Toggly {
   client: TogglyClient;
   recordUsage: TogglyClient['recordUsage'];
+  use: TogglyClient['use'];
   recordView: TogglyClient['recordView'];
   incrementCounter: TogglyClient['incrementCounter'];
   setGauge: TogglyClient['setGauge'];
@@ -110,6 +112,7 @@ export function createToggly(
   return {
     client: created,
     recordUsage: created.recordUsage,
+    use: created.use,
     recordView: created.recordView,
     incrementCounter: created.incrementCounter,
     setGauge: created.setGauge,

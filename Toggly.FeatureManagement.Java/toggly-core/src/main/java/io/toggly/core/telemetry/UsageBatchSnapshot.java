@@ -58,6 +58,9 @@ final class UsageBatchSnapshot {
                 dst.requestCount = src.requestCount;
                 dst.usedCount = src.usedCount;
                 dst.viewedCount = src.viewedCount;
+                dst.errorCount = src.errorCount;
+                dst.durationSumMs = src.durationSumMs;
+                dst.errorDurationSumMs = src.errorDurationSumMs;
                 copy.variantStats.put(entry.getKey(), dst);
             }
             copy.uniqueUsersEnabled.addAll(uniqueUsersEnabled);
@@ -75,5 +78,8 @@ final class UsageBatchSnapshot {
         int requestCount;
         int usedCount;
         int viewedCount;
+        int errorCount;
+        long durationSumMs;
+        long errorDurationSumMs;
     }
 }

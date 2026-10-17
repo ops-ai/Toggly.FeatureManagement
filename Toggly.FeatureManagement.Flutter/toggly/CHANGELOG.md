@@ -1,3 +1,28 @@
+## 1.14.2
+
+2026-10-16
+
+### Fixed
+- `use()` measures duration with a monotonic stopwatch so NTP / manual clock
+  changes cannot inflate or zero `durationSumMs` / `errorDurationSumMs`
+  (wall clock stays for Retry-After only) [OPS-1758].
+
+## 1.14.1
+
+2026-10-15
+
+### Fixed
+- `use()` pins attribution at scope start so mid-flight `setContext` cannot
+  split attempt vs duration metrics across identities [OPS-1758].
+
+## 1.14.0
+
+2026-10-11
+
+### Added
+- Feature usage scopes via `Toggly.use` and telemetry compact-array slots for
+  `errorCount`, `durationSumMs`, and `errorDurationSumMs` [OPS-1758].
+
 ## 1.13.1
 
 2026-09-27

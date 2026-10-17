@@ -1,3 +1,16 @@
+## 1.16.1 — 2026-10-16
+
+### Fixed
+- Usage-scope durations use monotonic `performance.now()` instead of
+  `Date.now()` [OPS-1758].
+
+## 1.16.0 — 2026-10-11
+
+### Added
+- Usage scope metrics on `VariantStats` (`errorCount`, `durationSumMs`,
+  `errorDurationSumMs`) and batcher APIs `recordUsageError`, `recordUsageDuration`,
+  `recordUsageScopeOutcome` (proto fields 5–7).
+
 ## 1.15.2 — 2026-09-28
 
 ### Fixed

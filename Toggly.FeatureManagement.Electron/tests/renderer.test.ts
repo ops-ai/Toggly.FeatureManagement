@@ -9,12 +9,14 @@ import {
   setContext,
   clearContext,
   onFlagsUpdated,
+  use,
 } from '../src/renderer/index.js'
 import type { TogglyBridge } from '../src/types.js'
 
 describe('renderer wrappers', () => {
   const bridge: TogglyBridge = {
     recordUsage: vi.fn(),
+    recordUsageScopeCompletion: vi.fn(),
     recordView: vi.fn(),
     incrementCounter: vi.fn(),
     setGauge: vi.fn(),
@@ -72,5 +74,53 @@ describe('renderer wrappers', () => {
     globalThis.window = {}
     await expect(setContext({ identity: 'x' })).rejects.toThrow(/window.toggly/)
     await expect(clearContext()).rejects.toThrow(/window.toggly/)
+  })
+
+  it('records usage scope attempt and completion through the bridge', async () => {
+    await expect(use('Checkout', async () => 'ok')).resolves.toBe('ok')
+    expect(bridge.recordUsage).toHaveBeenCalledWith('Checkout', 'enabled')
+    expect(bridge.recordUsageScopeCompletion).toHaveBeenCalledWith(
+      'Checkout',
+      'enabled',
+      false,
+      expect.any(Number),
+    )
+
+    await expect(
+      use('Checkout', async (scope) => {
+        scope.fail()
+        return 'soft'
+      }, 'blue'),
+    ).resolves.toBe('soft')
+    expect(bridge.recordUsage).toHaveBeenCalledWith('Checkout', 'blue')
+    expect(bridge.recordUsageScopeCompletion).toHaveBeenCalledWith(
+      'Checkout',
+      'blue',
+      true,
+      expect.any(Number),
+    )
+
+    await expect(
+      use('Checkout', async () => {
+        throw new Error('renderer-boom')
+      }),
+    ).rejects.toThrow('renderer-boom')
+    expect(bridge.recordUsageScopeCompletion).toHaveBeenCalledWith(
+      'Checkout',
+      'enabled',
+      true,
+      expect.any(Number),
+    )
+  })
+
+  it('runs usage scope without a bridge', async () => {
+    // @ts-expect-error test global
+    globalThis.window = {}
+    await expect(use('Checkout', async () => 'ok')).resolves.toBe('ok')
+    await expect(
+      use('Checkout', async () => {
+        throw new Error('no-bridge')
+      }),
+    ).rejects.toThrow('no-bridge')
   })
 })
