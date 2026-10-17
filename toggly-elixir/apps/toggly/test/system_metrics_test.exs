@@ -60,7 +60,6 @@ defmodule Toggly.SystemMetricsTest do
     assert :ok = SystemMetrics.detach_exception_handler("string-client")
   end
 
-
   test "default_sample emits ExceptionCount without draining the counter" do
     {2, samples, _cpu} = SystemMetrics.default_sample(2)
     assert {"ExceptionCount", 2.0} in samples
