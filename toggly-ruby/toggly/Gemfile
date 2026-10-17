@@ -11,7 +11,7 @@ group :development, :test do
   gem "rubocop", "~> 1.90", require: false
   gem "rubocop-rspec", "~> 2.24", require: false
   gem "simplecov", "~> 1.2", require: false
-  gem "webmock", "~> 3.26"
+  gem "webmock", "~> 3.27"
   gem "websocket-client-simple", "~> 0.8"
   gem "yard", "~> 0.9", require: false
 end
