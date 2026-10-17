@@ -46,11 +46,12 @@ private enum UncaughtExceptionBridge {
         guard installs > 0 else { return }
         installs -= 1
         if installs == 0 {
-            // Only restore when we still own the slot.
+            // Only restore/clear when we still own the slot. If another handler
+            // wrapped ours, keep `previous` so callPrevious can still forward.
             if sameUncaughtHandler(NSGetUncaughtExceptionHandler(), togglySystemMetricsUncaughtHandler) {
                 NSSetUncaughtExceptionHandler(previous)
+                previous = nil
             }
-            previous = nil
         }
     }
 

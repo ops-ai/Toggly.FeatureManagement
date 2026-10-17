@@ -76,7 +76,11 @@ defmodule Toggly.SystemMetrics do
     wall = max(wall_delta, 1)
     pct = run_delta / wall / schedulers * 100.0
 
-    if pct >= 0 and pct <= 100, do: pct, else: nil
+    cond do
+      not is_number(pct) or pct < 0 -> nil
+      pct > 100.0 -> 100.0
+      true -> pct
+    end
   rescue
     _ -> nil
   end

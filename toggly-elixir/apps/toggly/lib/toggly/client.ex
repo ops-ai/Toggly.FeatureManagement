@@ -176,6 +176,8 @@ defmodule Toggly.Client do
     end
   end
 
+  def handle_info({:EXIT, _pid, _reason}, state), do: {:noreply, state}
+
   def handle_info({:DOWN, _, :process, pid, _}, state),
     do: {:noreply, %{state | subscribers: Map.delete(state.subscribers, pid)}}
 
@@ -509,17 +511,21 @@ defmodule Toggly.Client do
       if pending >= SystemMetrics.max_pending() do
         state
       else
-        state =
-          state
-          |> Map.update!(:system_metrics_pending, &Map.put(&1, metric, pending + 1))
-          |> then(fn s ->
-            case MetricsBatcher.observe(s.metrics, metric, value * 1.0, %{}) do
-              metrics -> %{s | metrics: metrics}
-            end
-          end)
+        prev_obs = length(state.metrics.observations)
+        metrics = MetricsBatcher.observe(state.metrics, metric, value * 1.0, %{})
+        accepted = length(metrics.observations) > prev_obs
 
-        if metric == "ExceptionCount" do
-          %{state | system_metrics_exceptions: 0}
+        state = %{state | metrics: metrics}
+
+        if accepted do
+          state =
+            Map.update!(state, :system_metrics_pending, &Map.put(&1, metric, pending + 1))
+
+          if metric == "ExceptionCount" do
+            %{state | system_metrics_exceptions: 0}
+          else
+            state
+          end
         else
           state
         end

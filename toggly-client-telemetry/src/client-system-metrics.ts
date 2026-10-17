@@ -119,12 +119,18 @@ export class ClientSystemMetricsCollector {
   private defaultSample(): ClientSystemMetricObservation[] {
     const out: ClientSystemMetricObservation[] = [];
     if (this.exceptionCount > 0) {
-      out.push({ metric: 'ExceptionCount', value: this.exceptionCount });
-      this.exceptionCount = 0;
+      const pending = this.pendingByMetric.get('ExceptionCount') ?? 0;
+      if (pending < CLIENT_SYSTEM_METRICS_MAX_PENDING) {
+        out.push({ metric: 'ExceptionCount', value: this.exceptionCount });
+        this.exceptionCount = 0;
+      }
     }
     if (this.longTaskCount > 0) {
-      out.push({ metric: 'LongTaskCount', value: this.longTaskCount });
-      this.longTaskCount = 0;
+      const pending = this.pendingByMetric.get('LongTaskCount') ?? 0;
+      if (pending < CLIENT_SYSTEM_METRICS_MAX_PENDING) {
+        out.push({ metric: 'LongTaskCount', value: this.longTaskCount });
+        this.longTaskCount = 0;
+      }
     }
     return out;
   }

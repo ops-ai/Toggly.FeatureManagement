@@ -27,7 +27,9 @@ class SystemMetricsCollector {
   var _started = false;
   var _exceptionCount = 0;
   FlutterExceptionHandler? _previousFlutterHandler;
+  FlutterExceptionHandler? _ourFlutterHandler;
   bool Function(Object error, StackTrace stack)? _previousPlatformHandler;
+  bool Function(Object error, StackTrace stack)? _ourPlatformHandler;
 
   void start() {
     if (_started) return;
@@ -69,30 +71,41 @@ class SystemMetricsCollector {
   List<SystemMetricSample> _defaultSample() {
     final out = <SystemMetricSample>[];
     if (_exceptionCount > 0) {
-      out.add(SystemMetricSample('ExceptionCount', _exceptionCount.toDouble()));
-      _exceptionCount = 0;
+      final pending = _pendingByMetric['ExceptionCount'] ?? 0;
+      if (pending < maxPending) {
+        out.add(SystemMetricSample('ExceptionCount', _exceptionCount.toDouble()));
+        _exceptionCount = 0;
+      }
     }
     return out;
   }
 
   void _attachExceptionHandlers() {
     _previousFlutterHandler = FlutterError.onError;
-    FlutterError.onError = (details) {
+    _ourFlutterHandler = (details) {
       _exceptionCount++;
       _previousFlutterHandler?.call(details);
     };
+    FlutterError.onError = _ourFlutterHandler;
     _previousPlatformHandler = PlatformDispatcher.instance.onError;
-    PlatformDispatcher.instance.onError = (error, stack) {
+    _ourPlatformHandler = (error, stack) {
       _exceptionCount++;
       final handled = _previousPlatformHandler?.call(error, stack) ?? false;
       return handled;
     };
+    PlatformDispatcher.instance.onError = _ourPlatformHandler;
   }
 
   void _detachExceptionHandlers() {
-    FlutterError.onError = _previousFlutterHandler;
-    _previousFlutterHandler = null;
-    PlatformDispatcher.instance.onError = _previousPlatformHandler;
-    _previousPlatformHandler = null;
+    if (FlutterError.onError == _ourFlutterHandler) {
+      FlutterError.onError = _previousFlutterHandler;
+      _previousFlutterHandler = null;
+      _ourFlutterHandler = null;
+    }
+    if (PlatformDispatcher.instance.onError == _ourPlatformHandler) {
+      PlatformDispatcher.instance.onError = _previousPlatformHandler;
+      _previousPlatformHandler = null;
+      _ourPlatformHandler = null;
+    }
   }
 }

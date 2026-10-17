@@ -226,7 +226,9 @@ class SystemMetricsCollector:
         previous_thread = threading.excepthook
 
         def thread_hook(args: threading.ExceptHookArgs) -> None:
-            self._exception_count += 1
+            # SystemExit is how worker threads finish cleanly — do not count it.
+            if args.exc_type is not SystemExit:
+                self._exception_count += 1
             previous_thread(args)
 
         self._previous_thread_excepthook = cast(Optional[Callable[..., None]], previous_thread)

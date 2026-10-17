@@ -169,9 +169,12 @@ export class SystemMetricsCollector {
     if (!hist) return null
     try {
       const meanNs = hist.mean
+      const resolutionNs = typeof hist.resolution === 'number' ? hist.resolution : 0
       hist.reset()
       if (!Number.isFinite(meanNs) || meanNs < 0) return null
-      return meanNs / 1e6
+      // monitorEventLoopDelay mean includes the resolution floor; subtract it
+      // so an idle loop reports near-zero delay instead of ~resolution ms.
+      return Math.max(0, meanNs - resolutionNs) / 1e6
     } catch {
       return null
     }

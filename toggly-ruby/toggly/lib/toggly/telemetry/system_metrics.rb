@@ -21,7 +21,13 @@ module Toggly
         def read_rusage
           return nil unless defined?(@getrusage) && @getrusage
 
-          ptr = Fiddle::Pointer.malloc(Fiddle::SIZEOF_LONG * 18)
+          # RUBY_FREE auto-releases when the pointer is GC'd / goes out of scope.
+          freer = defined?(Fiddle::RUBY_FREE) ? Fiddle::RUBY_FREE : nil
+          ptr = if freer
+                  Fiddle::Pointer.malloc(Fiddle::SIZEOF_LONG * 18, freer)
+                else
+                  Fiddle::Pointer.malloc(Fiddle::SIZEOF_LONG * 18)
+                end
           begin
             return nil if @getrusage.call(RUSAGE_SELF, ptr) != 0
 
@@ -36,7 +42,13 @@ module Toggly
               maxrss: maxrss
             }
           ensure
-            ptr.free if ptr.respond_to?(:free)
+            if freer.nil? && ptr
+              if ptr.respond_to?(:call_free)
+                ptr.call_free
+              elsif ptr.respond_to?(:free) && ptr.free.respond_to?(:call)
+                ptr.free.call(ptr)
+              end
+            end
           end
         rescue StandardError
           nil
@@ -80,8 +92,8 @@ module Toggly
 
         def stop
           @mutex.synchronize { @closed = true }
-          @thread&.wakeup
-          @thread&.join(2.0)
+          @thread&.wakeup if @thread&.alive?
+          @thread&.join(2.0) if @thread&.alive?
           @thread = nil
           disable_exception_handler
         end
@@ -169,7 +181,15 @@ module Toggly
           line = File.read("/proc/self/statm").split
           pages = line[1].to_i
           page_size = begin
-            Integer(ENV.fetch("PAGESIZE", 4096))
+            if Process.respond_to?(:getpagesize)
+              Process.getpagesize
+            elsif defined?(Etc::SC_PAGESIZE)
+              Etc.sysconf(Etc::SC_PAGESIZE)
+            elsif defined?(Etc::SC_PAGE_SIZE)
+              Etc.sysconf(Etc::SC_PAGE_SIZE)
+            else
+              Integer(ENV.fetch("PAGESIZE", 4096))
+            end
           rescue StandardError
             4096
           end
@@ -187,8 +207,9 @@ module Toggly
             thread = tp.self
             next if thread == Thread.main
             next if thread.status == "aborting"
-            next unless thread.status.nil?
 
+            # status may still be "run"/"sleep" during :thread_end; join(0)
+            # raises when the thread died with an unhandled exception.
             begin
               thread.join(0)
             rescue StandardError, ScriptError
