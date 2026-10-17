@@ -25,6 +25,7 @@ class TelemetryReporter {
     Dio? httpClient,
     Future<void> Function(Duration)? delay,
     DateTime Function()? clock,
+
     /// Monotonic elapsed ms for usage-scope duration (not wall clock).
     int Function()? monotonicElapsedMs,
     double Function()? random,
