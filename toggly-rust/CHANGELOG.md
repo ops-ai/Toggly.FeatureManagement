@@ -45,6 +45,10 @@
 - Commit the workspace `Cargo.lock` so SonarCloud security analysis sees pinned
   dependency versions (clears `text:S8570` on member `Cargo.toml` files that
   blocked the develop quality gate after `toggly-axum08` 0.1.1).
+- Align Rust Sonar scans with Java/JS: suppress `rust:S4790` only on
+  `jwks.rs` where SHA-1 is required for ES256 JWK `kid` validation
+  (`hex(sha1(x||y)) + "ES256"`), so `new_security_rating` can pass without
+  changing the wire protocol.
 
 ### Changed
 

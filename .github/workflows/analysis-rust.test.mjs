@@ -79,6 +79,17 @@ test('rust SonarCloud and Server scans require credentials and distinct quality 
   assert.match(server, /if:.*steps\.validate-sonarqube-server-credentials\.outcome == 'success'/);
 });
 
+test('rust Sonar ignores protocol SHA-1 kid on jwks (rust:S4790)', () => {
+  const cloud = stepBlock(rustWorkflow, 'SonarCloud Scan');
+  const server = stepBlock(rustWorkflow, 'SonarQube Server Scan');
+  for (const scan of [cloud, server]) {
+    assert.match(scan, /-Dsonar\.issue\.ignore\.multicriteria=kidSha1\n/);
+    assert.doesNotMatch(scan, /multicriteria=kidSha1 \\|multicriteria=kidSha1 \\$/);
+    assert.match(scan, /-Dsonar\.issue\.ignore\.multicriteria\.kidSha1\.ruleKey=rust:S4790/);
+    assert.match(scan, /-Dsonar\.issue\.ignore\.multicriteria\.kidSha1\.resourceKey=\*\*\/jwks\.rs/);
+  }
+});
+
 test('rust Sonar is required except for intentional fork and non-reporting skips', () => {
   const sonar = rustWorkflow.slice(rustWorkflow.indexOf('\n  sonar:'), rustWorkflow.indexOf('\n  dependency-check:'));
   const summary = rustWorkflow.slice(rustWorkflow.indexOf('\n  summary:'));
