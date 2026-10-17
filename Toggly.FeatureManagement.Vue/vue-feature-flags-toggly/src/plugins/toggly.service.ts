@@ -1,4 +1,9 @@
-import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry'
+import {
+  createTelemetryReporter,
+  runFeatureUsageScope,
+  type FeatureUsageScope,
+  type TelemetryReporter,
+} from '@ops-ai/toggly-client-telemetry'
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser'
 import type {
   CacheLruIndex,
@@ -370,6 +375,11 @@ export interface TogglyOptions {
 
 export interface TogglyService {
   recordUsage(featureKey: string, variant?: string): void
+  use<T>(
+    featureKey: string,
+    fn: (scope: FeatureUsageScope) => Promise<T>,
+    variant?: string,
+  ): Promise<T>
   recordView(featureKey: string, variant?: string): void
   incrementCounter(metricKey: string, value?: number): void
   setGauge(metricKey: string, value: number): void
@@ -780,6 +790,18 @@ export class Toggly implements TogglyService {
   }
 
   recordUsage(featureKey: string, variant = 'enabled'): void { this._reporter()?.recordUsage(featureKey, variant) }
+  use<T>(
+    featureKey: string,
+    fn: (scope: FeatureUsageScope) => Promise<T>,
+    variant = 'enabled',
+  ): Promise<T> {
+    const reporter = this._reporter()
+    if (reporter) return reporter.use(featureKey, fn, variant)
+    return runFeatureUsageScope(
+      { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
+      fn,
+    )
+  }
   recordView(featureKey: string, variant = 'enabled'): void { this._reporter()?.recordView(featureKey, variant) }
   incrementCounter(metricKey: string, value = 1): void { this._reporter()?.incrementCounter(metricKey, value) }
   setGauge(metricKey: string, value: number): void { this._reporter()?.setGauge(metricKey, value) }

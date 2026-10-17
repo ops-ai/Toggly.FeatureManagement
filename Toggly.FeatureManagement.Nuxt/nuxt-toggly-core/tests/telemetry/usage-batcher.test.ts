@@ -110,6 +110,26 @@ describe('UsageBatcher', () => {
     expect(batcher.buildAndReset()?.payload.definitionCacheHits).toBe(1)
   })
 
+  it('aggregates usage-scope error and duration metrics in variantStats', () => {
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
+    batcher.recordUsage('FeatureA', 'user-1')
+    batcher.recordUsageDuration('FeatureA', 12, 'user-1')
+    batcher.recordUsageError('FeatureA', 'user-1')
+    batcher.recordUsageDuration('FeatureA', 8, 'user-1', 'enabled', true)
+    batcher.recordUsageScopeOutcome('FeatureB', { failed: true, durationMs: 5 }, 'user-2', 'treatment')
+    batcher.recordUsage('FeatureB', 'user-2', 'treatment')
+
+    const payload = batcher.buildAndReset()!.payload
+    const enabled = payload.stats.find((s) => s.feature === 'FeatureA')!.variantStats.enabled
+    expect(enabled.usedCount).toBe(1)
+    expect(enabled.errorCount).toBe(1)
+    expect(enabled.durationSumMs).toBe(12)
+    expect(enabled.errorDurationSumMs).toBe(8)
+    const treatment = payload.stats.find((s) => s.feature === 'FeatureB')!.variantStats.treatment
+    expect(treatment.errorCount).toBe(1)
+    expect(treatment.errorDurationSumMs).toBe(5)
+  })
+
   it('restoreFromBundle merges definition cache counters with in-flight records', () => {
     const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
     batcher.recordCheck('FeatureA', true, 'user-1')

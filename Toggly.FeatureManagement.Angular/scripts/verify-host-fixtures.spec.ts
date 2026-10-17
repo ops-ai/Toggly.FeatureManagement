@@ -30,7 +30,11 @@ await withHostResources(async defer => {
     const cwd = path.join(temporaryRoot, entry.fixture);
     fs.cpSync(path.join(fixtures, entry.fixture), cwd, { recursive: true });
     fs.copyFileSync(path.join(fixtures, 'host.spec.ts'), path.join(cwd, 'src/host.spec.ts'));
-    const run = args => execFileSync(process.execPath, [npmCli, 'exec', '--yes', `--package=node@${entry.node}`, '--package=npm@10.8.2', '--', ...args], { cwd, stdio: 'inherit', env: commandEnvironment });
+    // Angular 21+ hits npm 10 `edgesOut` null on any install after `npm ci`.
+    // npm 11 completes the same classic tarball install. Older hosts stay on 10.8.2.
+    const angularMajor = Number(String(entry.angular || '0').split('.')[0]);
+    const npmVersion = angularMajor >= 21 ? '11.6.2' : '10.8.2';
+    const run = args => execFileSync(process.execPath, [npmCli, 'exec', '--yes', `--package=node@${entry.node}`, `--package=npm@${npmVersion}`, '--', ...args], { cwd, stdio: 'inherit', env: commandEnvironment });
     console.log(`HOST ${JSON.stringify(entry)}`);
     run(['node', '--version']);
     run(['npm', 'ci', '--no-audit', '--no-fund']);
@@ -64,7 +68,18 @@ await withHostResources(async defer => {
       .map(([name, packageName]) => [name, JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules', packageName, 'package.json'))).version]));
     if (Object.entries(host).some(([name, version]) => version !== entry[name])) throw new Error(`Installed host versions drifted: ${JSON.stringify(host)}`);
     console.log(`INSTALLED HOST ${JSON.stringify({ fixture: entry.fixture, ...host })}`);
-    if (installed.version !== metadata.version || installed.dependencies['@ops-ai/toggly-client-telemetry'] !== '^1.1.0' || installed.dependencies['@ops-ai/toggly-signed-defs'] !== '^1.2.6') throw new Error('Unexpected packed graph');
+    const telemetryRange = installed.dependencies['@ops-ai/toggly-client-telemetry'];
+    if (
+      installed.version !== metadata.version ||
+      (telemetryRange !== '^1.1.0' && telemetryRange !== '^1.2.0') ||
+      installed.dependencies['@ops-ai/toggly-signed-defs'] !== '^1.2.6'
+    ) {
+      throw new Error('Unexpected packed graph');
+    }
+    const present = (name) => fs.existsSync(path.join(cwd, 'node_modules', ...name.split('/'), 'package.json'));
+    if (!present('@ops-ai/toggly-hooks-types') || !present('@ops-ai/toggly-local-gates')) {
+      throw new Error('Angular host is missing SDK peer/dependency modules');
+    }
     console.log(`PACKED SDK ${installed.version}; reporter ${reporter.version}; signer ${signer.version}; ${(process.env.TOGGLY_SIGNED_DEFS_TARBALL || process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) ? 'LOCAL INTEGRATION ARTIFACT' : 'REGISTRY RESOLUTION'}`);
     run(['npm', 'run', 'typecheck']);
     run(['npm', 'run', 'build']);

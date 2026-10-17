@@ -16,6 +16,10 @@ import java.util.Set;
  */
 public final class UsageBatcher {
 
+    private static final String FEATURE_PARAM = "feature";
+    private static final String DEFAULT_VARIANT = "enabled";
+    private static final String DISABLED_VARIANT = "disabled";
+
     private final String appKey;
     private final String environment;
     private final String instanceName;
@@ -69,10 +73,17 @@ public final class UsageBatcher {
             String identity,
             String variant,
             boolean uniqueRequest) {
-        Objects.requireNonNull(feature, "feature");
+        Objects.requireNonNull(feature, FEATURE_PARAM);
         synchronized (lock) {
             UsageBatchSnapshot.FeatureUsageAgg agg = get(feature);
-            String name = variant != null ? variant : (enabled ? "enabled" : "disabled");
+            String name;
+            if (variant != null) {
+                name = variant;
+            } else if (enabled) {
+                name = DEFAULT_VARIANT;
+            } else {
+                name = DISABLED_VARIANT;
+            }
             UsageBatchSnapshot.VariantStatsAgg stats = getVariant(agg, name);
             stats.checkCount++;
             if (uniqueRequest) {
@@ -91,12 +102,12 @@ public final class UsageBatcher {
     }
 
     public void recordUsage(String feature, String identity) {
-        recordUsage(feature, identity, "enabled");
+        recordUsage(feature, identity, DEFAULT_VARIANT);
     }
 
     public void recordUsage(String feature, String identity, String variant) {
-        Objects.requireNonNull(feature, "feature");
-        String v = variant != null && !variant.isEmpty() ? variant : "enabled";
+        Objects.requireNonNull(feature, FEATURE_PARAM);
+        String v = variant != null && !variant.isEmpty() ? variant : DEFAULT_VARIANT;
         synchronized (lock) {
             UsageBatchSnapshot.FeatureUsageAgg agg = get(feature);
             getVariant(agg, v).usedCount++;
@@ -110,12 +121,12 @@ public final class UsageBatcher {
     }
 
     public void recordView(String feature, String identity) {
-        recordView(feature, identity, "enabled");
+        recordView(feature, identity, DEFAULT_VARIANT);
     }
 
     public void recordView(String feature, String identity, String variant) {
-        Objects.requireNonNull(feature, "feature");
-        String v = variant != null && !variant.isEmpty() ? variant : "enabled";
+        Objects.requireNonNull(feature, FEATURE_PARAM);
+        String v = variant != null && !variant.isEmpty() ? variant : DEFAULT_VARIANT;
         synchronized (lock) {
             UsageBatchSnapshot.FeatureUsageAgg agg = get(feature);
             getVariant(agg, v).viewedCount++;
@@ -124,6 +135,33 @@ public final class UsageBatcher {
                 appUnique.add(hash);
                 agg.uniqueUsersViewed.add(hash);
                 agg.uniqueViewedUserHashes.add(hash);
+            }
+        }
+    }
+
+    public void recordUsageError(String feature, String variant, int count) {
+        if (count <= 0) {
+            return;
+        }
+        Objects.requireNonNull(feature, FEATURE_PARAM);
+        String v = variant != null && !variant.isEmpty() ? variant : DEFAULT_VARIANT;
+        synchronized (lock) {
+            getVariant(get(feature), v).errorCount += count;
+        }
+    }
+
+    public void recordUsageDuration(String feature, long durationMs, String variant, boolean failed) {
+        if (durationMs <= 0) {
+            return;
+        }
+        Objects.requireNonNull(feature, FEATURE_PARAM);
+        String v = variant != null && !variant.isEmpty() ? variant : DEFAULT_VARIANT;
+        synchronized (lock) {
+            UsageBatchSnapshot.VariantStatsAgg stats = getVariant(get(feature), v);
+            if (failed) {
+                stats.errorDurationSumMs += durationMs;
+            } else {
+                stats.durationSumMs += durationMs;
             }
         }
     }
@@ -158,11 +196,23 @@ public final class UsageBatcher {
                 for (Map.Entry<String, UsageBatchSnapshot.VariantStatsAgg> vs :
                         agg.variantStats.entrySet()) {
                     UsageBatchSnapshot.VariantStatsAgg s = vs.getValue();
-                    if (s.checkCount > 0 || s.requestCount > 0 || s.usedCount > 0 || s.viewedCount > 0) {
+                    if (s.checkCount > 0
+                            || s.requestCount > 0
+                            || s.usedCount > 0
+                            || s.viewedCount > 0
+                            || s.errorCount > 0
+                            || s.durationSumMs > 0
+                            || s.errorDurationSumMs > 0) {
                         variantStats.put(
                                 vs.getKey(),
                                 new FeatureStatPayload.VariantStats(
-                                        s.checkCount, s.requestCount, s.usedCount, s.viewedCount));
+                                        s.checkCount,
+                                        s.requestCount,
+                                        s.usedCount,
+                                        s.viewedCount,
+                                        s.errorCount,
+                                        s.durationSumMs,
+                                        s.errorDurationSumMs));
                     }
                 }
                 stats.add(new FeatureStatPayload.StatMessage(
@@ -227,6 +277,9 @@ public final class UsageBatcher {
                     stats.requestCount += snapStats.requestCount;
                     stats.usedCount += snapStats.usedCount;
                     stats.viewedCount += snapStats.viewedCount;
+                    stats.errorCount += snapStats.errorCount;
+                    stats.durationSumMs += snapStats.durationSumMs;
+                    stats.errorDurationSumMs += snapStats.errorDurationSumMs;
                 }
                 agg.uniqueUsersEnabled.addAll(snapAgg.uniqueUsersEnabled);
                 agg.uniqueUsersDisabled.addAll(snapAgg.uniqueUsersDisabled);

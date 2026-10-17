@@ -71,6 +71,20 @@ RSpec.describe Toggly::Telemetry::UsageBatcher do
     expect(batcher.build_and_reset).to be_nil
   end
 
+  it "aggregates usage scope error and duration metrics" do
+    batcher = described_class.new("app", "Production")
+    batcher.record_usage("FeatureA")
+    batcher.record_usage_error("FeatureA")
+    batcher.record_usage_duration("FeatureA", 100)
+    batcher.record_usage_duration("FeatureA", 50, failed: true)
+
+    vs = batcher.build_and_reset[:stats].first[:variantStats]["enabled"]
+    expect(vs[:usedCount]).to eq(1)
+    expect(vs[:errorCount]).to eq(1)
+    expect(vs[:durationSumMs]).to eq(100)
+    expect(vs[:errorDurationSumMs]).to eq(50)
+  end
+
   it "increments requestCount only when unique_request is true" do
     batcher = described_class.new("app", "Production")
     batcher.record_check("FeatureA", true, "user-1", unique_request: true)

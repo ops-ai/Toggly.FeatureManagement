@@ -83,12 +83,17 @@ final class FeatureFlagPublisherTests: XCTestCase {
         let subscriber = LimitedSubscriber(first: first)
         FeatureFlagPublisher("publisher-flag", service: service).receive(subscriber: subscriber)
         await fulfillment(of: [first], timeout: 1)
-        for _ in 0..<100 {
-            if await service.stateChangeHandlerCount > 0 { break }
-            await Task.yield()
+        // Initial emission can race ahead of async handler registration.
+        var handlerInstalled = false
+        for _ in 0..<200 {
+            if await service.stateChangeHandlerCount == 1 {
+                handlerInstalled = true
+                break
+            }
+            try await Task.sleep(nanoseconds: 10_000_000)
         }
-        let handlerCount = await service.stateChangeHandlerCount
-        XCTAssertEqual(handlerCount, 1)
+        XCTAssertTrue(handlerInstalled, "feature change handler was not installed")
+        guard handlerInstalled else { return }
 
         await service.notifyFeatureChanges(previousFlags: ["publisher-flag": true], newFlags: ["publisher-flag": false])
         XCTAssertEqual(subscriber.values, [true])

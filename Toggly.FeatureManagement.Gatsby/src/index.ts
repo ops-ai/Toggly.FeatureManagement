@@ -45,6 +45,7 @@ export {
   stopRefreshInterval,
   disposeTogglyClient,
   recordUsage,
+  useFeatureUsageScope,
   recordView,
   incrementCounter,
   setGauge,
@@ -52,6 +53,7 @@ export {
 } from './client/store.js';
 
 export { decodeVariantValue } from './decode-variant-value.js';
+export type { FeatureUsageScope } from '@ops-ai/toggly-client-telemetry';
 
 // Export server client (for SSR/SSG use cases)
 export { createTogglyServerClient, TogglyServer } from './server/toggly-server.js';

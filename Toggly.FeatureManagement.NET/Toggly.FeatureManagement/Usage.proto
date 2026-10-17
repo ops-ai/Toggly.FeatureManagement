@@ -49,7 +49,10 @@ message VariantStats {
 	int32 checkCount = 1; // Number of times this variant was checked
 	int32 requestCount = 2; // Unique requests for this variant
 	int32 usedCount = 3; // Number of times this variant was used
-	int32 viewedCount = 4; // NEW: Number of times this variant was viewed
+	int32 viewedCount = 4; // Number of times this variant was viewed
+	int32 errorCount = 5; // Failed usage scopes for this variant
+	int64 durationSumMs = 6; // Sum of successful usage-scope durations (ms)
+	int64 errorDurationSumMs = 7; // Sum of failed usage-scope durations (ms)
 }
 
 message StatResult {

@@ -11,6 +11,9 @@ export interface VariantStatsAgg {
   requestCount: number
   usedCount: number
   viewedCount: number
+  errorCount: number
+  durationSumMs: number
+  errorDurationSumMs: number
 }
 
 export interface FeatureUsageAgg {
@@ -71,7 +74,15 @@ export interface UsageFlushBundle {
 type UsageIdentitySnapshots = Omit<UsageFlushBundle, 'payload'>
 
 function emptyVariant(): VariantStatsAgg {
-  return { checkCount: 0, requestCount: 0, usedCount: 0, viewedCount: 0 }
+  return {
+    checkCount: 0,
+    requestCount: 0,
+    usedCount: 0,
+    viewedCount: 0,
+    errorCount: 0,
+    durationSumMs: 0,
+    errorDurationSumMs: 0,
+  }
 }
 
 function emptyFeature(): FeatureUsageAgg {
@@ -220,6 +231,46 @@ export class UsageBatcher {
     }
   }
 
+  recordUsageError(feature: string, _identity?: string, variant = 'enabled', count = 1): void {
+    if (count <= 0) return
+    const agg = this.get(feature)
+    if (!agg) return
+    this.getVariant(agg, variant).errorCount += count
+  }
+
+  recordUsageDuration(
+    feature: string,
+    durationMs: number,
+    _identity?: string,
+    variant = 'enabled',
+    failed = false,
+  ): void {
+    if (!Number.isFinite(durationMs) || durationMs <= 0) return
+    const ms = Math.floor(durationMs)
+    const agg = this.get(feature)
+    if (!agg) return
+    const stats = this.getVariant(agg, variant)
+    if (failed) stats.errorDurationSumMs += ms
+    else stats.durationSumMs += ms
+  }
+
+  recordUsageScopeOutcome(
+    feature: string,
+    outcome: { failed?: boolean; cancelled?: boolean; durationMs?: number },
+    identity?: string,
+    variant = 'enabled',
+  ): void {
+    if (outcome.cancelled) return
+    if (outcome.failed) {
+      this.recordUsageError(feature, identity, variant)
+      if (outcome.durationMs != null) {
+        this.recordUsageDuration(feature, outcome.durationMs, identity, variant, true)
+      }
+    } else if (outcome.durationMs != null) {
+      this.recordUsageDuration(feature, outcome.durationMs, identity, variant, false)
+    }
+  }
+
   isEmpty(): boolean {
     return (
       this.perFeature.size === 0 &&
@@ -263,7 +314,15 @@ export class UsageBatcher {
   ): void {
     const variantStats: Record<string, VariantStatsAgg> = {}
     for (const [name, stats] of agg.variantStats) {
-      if (stats.checkCount > 0 || stats.requestCount > 0 || stats.usedCount > 0 || stats.viewedCount > 0) {
+      if (
+        stats.checkCount > 0 ||
+        stats.requestCount > 0 ||
+        stats.usedCount > 0 ||
+        stats.viewedCount > 0 ||
+        stats.errorCount > 0 ||
+        stats.durationSumMs > 0 ||
+        stats.errorDurationSumMs > 0
+      ) {
         variantStats[name] = { ...stats }
       }
     }
@@ -339,6 +398,9 @@ export class UsageBatcher {
         target.requestCount += vs.requestCount ?? 0
         target.usedCount += vs.usedCount ?? 0
         target.viewedCount += vs.viewedCount ?? 0
+        target.errorCount += vs.errorCount ?? 0
+        target.durationSumMs += vs.durationSumMs ?? 0
+        target.errorDurationSumMs += vs.errorDurationSumMs ?? 0
       }
       for (const hash of stat.uniqueUserHashes ?? []) {
         this.addHashCapped(agg.uniqueUserHashes, hash, this.maxUniqueHashesPerFeature)

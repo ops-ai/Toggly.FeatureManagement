@@ -668,6 +668,20 @@ class TogglyService(
 
     /** Record explicit use; this does not evaluate the flag again. */
     fun recordUsage(featureKey: String, variant: String = "enabled") { synchronized(lifecycleLock) { telemetry?.recordUsage(featureKey, variant) } }
+
+    suspend fun <T> use(
+        featureKey: String,
+        variant: String = "enabled",
+        action: suspend (fail: () -> Unit) -> T,
+    ): T {
+        val reporter = synchronized(lifecycleLock) { telemetry }
+        // Prefer an explicit branch: `?: action {}` re-runs when T is nullable and action returns null.
+        return if (reporter != null) {
+            reporter.use(featureKey, variant, action)
+        } else {
+            action {}
+        }
+    }
     /** Record an explicit feature view. */
     fun recordView(featureKey: String, variant: String = "enabled") { synchronized(lifecycleLock) { telemetry?.recordView(featureKey, variant) } }
     /** Increment an app-level counter by an integer in 0..1,000,000. */

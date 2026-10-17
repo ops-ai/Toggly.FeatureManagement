@@ -79,7 +79,10 @@ jobs:
       - name: Resolve SDK filter
         id: filter
         env:
-          SDKS: ${{ github.event_name == 'workflow_call' && inputs.sdks || 'all' }}
+          # inputs.sdks is set on workflow_call (release gates). Do not key off
+          # github.event_name == 'workflow_call' — nested reusable runs keep the
+          # caller's event (e.g. workflow_dispatch), which incorrectly forced "all".
+          SDKS: ${{ inputs.sdks || 'all' }}
         run: node .github/package-registry/analysis-js-filter.mjs "$SDKS"
 
   build-shared-js-deps:
@@ -174,18 +177,26 @@ jobs:
 
       - name: Install locked SolidJS or SvelteKit dependencies
         if: matrix.sdk == 'SolidJS' || matrix.sdk == 'SvelteKit'
-        working-directory: ${{ matrix.path }}
-        run: npm ci
+        uses: ./.github/actions/install-local-client-telemetry
+        with:
+          package-dir: ${{ matrix.path }}
 
       - name: Install locked standalone package dependencies
-        if: matrix.sdk == 'Gatsby' || matrix.sdk == 'Client-Telemetry' || matrix.sdk == 'Client-Core' || matrix.sdk == 'Evaluator' || matrix.sdk == 'Local-Gates'
+        if: matrix.sdk == 'Gatsby' || matrix.sdk == 'Client-Core'
+        uses: ./.github/actions/install-local-client-telemetry
+        with:
+          package-dir: ${{ matrix.path }}
+
+      - name: Install locked Client-Telemetry / Evaluator / Local-Gates dependencies
+        if: matrix.sdk == 'Client-Telemetry' || matrix.sdk == 'Evaluator' || matrix.sdk == 'Local-Gates'
         working-directory: ${{ matrix.path }}
         run: npm ci
 
       - name: Install dependencies
         if: matrix.sdk != 'SolidJS' && matrix.sdk != 'SvelteKit' && matrix.sdk != 'Gatsby' && matrix.sdk != 'Client-Telemetry' && matrix.sdk != 'Client-Core' && matrix.sdk != 'Evaluator' && matrix.sdk != 'Local-Gates' && matrix.sdk != 'NestJS'
-        working-directory: ${{ matrix.path }}
-        run: npm ci || npm install
+        uses: ./.github/actions/install-local-client-telemetry
+        with:
+          package-dir: ${{ matrix.path }}
 
       # NestJS depends on unpublished @ops-ai/toggly-node-core from this PR.
       # OPS-1696 packed tarball paths use absolute RUNNER_TEMP artifacts
@@ -427,9 +438,10 @@ jobs:
           (cd toggly-eval && (npm ci || npm install) && npm run build)
           (cd Toggly.FeatureManagement.Node && pnpm install --frozen-lockfile && pnpm --filter @ops-ai/toggly-node-core build)
 
-      - name: Install locked dependencies
-        working-directory: ${{ matrix.host.path }}
-        run: npm ci
+      - name: Install locked dependencies with local client-telemetry
+        uses: ./.github/actions/install-local-client-telemetry
+        with:
+          package-dir: ${{ matrix.host.path }}
 
       - name: Install Chromium for packed SvelteKit host
         if: matrix.host.browser
@@ -747,7 +759,7 @@ jobs:
             -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.SvelteKit,Toggly.FeatureManagement.Solid,Toggly.FeatureManagement.Astro,Toggly.FeatureManagement.Gatsby,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,Toggly.FeatureManagement.NestJS,toggly-eval,toggly-local-gates/src,toggly-hooks-types,toggly-signed-defs/src,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook,toggly-client-telemetry
             -Dsonar.exclusions=Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs,**/host-fixtures/**,toggly-hooks-types/reference/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/test-setup.ts,toggly-client-telemetry/tests/**,toggly-client-telemetry/scripts/**,toggly-docusaurus-edge-sdk/cloudflare/pages-function/tests/**,toggly-docusaurus-edge-sdk/cloudflare/pages-function/scripts/**,Toggly.FeatureManagement.SvelteKit/tests/**,Toggly.FeatureManagement.SvelteKit/scripts/**,**/node_modules/**,**/dist/**,**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/tests/**/*.cjs,**/coverage/**,**/*.config.js,**/*.config.ts,**/*.conf.js,Toggly.FeatureManagement.ReactNative/**,Toggly.FeatureManagement.React/scripts/**,toggly-docusaurus-edge-sdk/libs/core/tests/**,Toggly.FeatureManagement.Next/**,Toggly.FeatureManagement.Nuxt/**,Toggly.FeatureManagement.Remix/**,Toggly.FeatureManagement.Css/**,Toggly.FeatureManagement.Wordpress/**,toggly-ruby/**,toggly-rust/**,Toggly.FeatureManagement.Node/eslint.config.mjs,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-koa/tests/compat/fixtures/**,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-check.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-cleanup.test.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/host-resources.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-browser-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Astro/tests/**,Toggly.FeatureManagement.Gatsby/tests/**
             -Dsonar.coverage.exclusions=**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/Demo.*/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts,**/*.conf.js,**/*.vue,toggly-docusaurus-edge-sdk/cloudflare/worker/**,toggly-docusaurus-edge-sdk/libs/core/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/**,toggly-hooks-types/reference/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/test-setup.ts,Toggly.FeatureManagement.React/scripts/build.mjs,Toggly.FeatureManagement.React/jest.webcrypto.setup.cjs,Toggly.FeatureManagement.React/scripts/clean.mjs,Toggly.FeatureManagement.React/scripts/normalize-distribution.mjs,Toggly.FeatureManagement.React/scripts/remove-intermediate-types.mjs
-            -Dsonar.cpd.exclusions=**/ws-sync.ts,**/decode-variant-value.ts,**/sdk-identity.ts,**/CHANGELOG.md,**/system-metrics.ts,**/client-system-metrics.ts,**/metrics-batcher.ts,**/https-client.ts
+-Dsonar.cpd.exclusions=**/ws-sync.ts,**/decode-variant-value.ts,**/sdk-identity.ts,**/CHANGELOG.md,**/system-metrics.ts,**/client-system-metrics.ts,**/metrics-batcher.ts,**/https-client.ts,**/usage-scope.ts,**/usage-batcher.ts,**/toggly.service.ts
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.SvelteKit,Toggly.FeatureManagement.Solid,Toggly.FeatureManagement.Astro,Toggly.FeatureManagement.Gatsby,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,Toggly.FeatureManagement.NestJS,toggly-eval,toggly-local-gates/src,toggly-hooks-types,toggly-signed-defs/src,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook,toggly-client-telemetry,tests
@@ -794,7 +806,7 @@ jobs:
             -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.SvelteKit,Toggly.FeatureManagement.Solid,Toggly.FeatureManagement.Astro,Toggly.FeatureManagement.Gatsby,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,Toggly.FeatureManagement.NestJS,toggly-eval,toggly-local-gates/src,toggly-hooks-types,toggly-signed-defs/src,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook,toggly-client-telemetry
             -Dsonar.exclusions=Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs,**/host-fixtures/**,toggly-hooks-types/reference/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/test-setup.ts,toggly-client-telemetry/tests/**,toggly-client-telemetry/scripts/**,toggly-docusaurus-edge-sdk/cloudflare/pages-function/tests/**,toggly-docusaurus-edge-sdk/cloudflare/pages-function/scripts/**,Toggly.FeatureManagement.SvelteKit/tests/**,Toggly.FeatureManagement.SvelteKit/scripts/**,**/node_modules/**,**/dist/**,**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/tests/**/*.cjs,**/coverage/**,**/*.config.js,**/*.config.ts,**/*.conf.js,Toggly.FeatureManagement.ReactNative/**,Toggly.FeatureManagement.React/scripts/**,toggly-docusaurus-edge-sdk/libs/core/tests/**,Toggly.FeatureManagement.Next/**,Toggly.FeatureManagement.Nuxt/**,Toggly.FeatureManagement.Remix/**,Toggly.FeatureManagement.Css/**,Toggly.FeatureManagement.Wordpress/**,toggly-ruby/**,toggly-rust/**,Toggly.FeatureManagement.Node/eslint.config.mjs,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-koa/tests/compat/fixtures/**,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-check.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-cleanup.test.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/host-resources.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-browser-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Astro/tests/**,Toggly.FeatureManagement.Gatsby/tests/**
             -Dsonar.coverage.exclusions=**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/Demo.*/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts,**/*.conf.js,**/*.vue,toggly-docusaurus-edge-sdk/cloudflare/worker/**,toggly-docusaurus-edge-sdk/libs/core/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/**,toggly-hooks-types/reference/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/test-setup.ts,Toggly.FeatureManagement.React/scripts/build.mjs,Toggly.FeatureManagement.React/jest.webcrypto.setup.cjs,Toggly.FeatureManagement.React/scripts/clean.mjs,Toggly.FeatureManagement.React/scripts/normalize-distribution.mjs,Toggly.FeatureManagement.React/scripts/remove-intermediate-types.mjs
-            -Dsonar.cpd.exclusions=**/ws-sync.ts,**/decode-variant-value.ts,**/sdk-identity.ts,**/CHANGELOG.md,**/system-metrics.ts,**/client-system-metrics.ts,**/metrics-batcher.ts,**/https-client.ts
+-Dsonar.cpd.exclusions=**/ws-sync.ts,**/decode-variant-value.ts,**/sdk-identity.ts,**/CHANGELOG.md,**/system-metrics.ts,**/client-system-metrics.ts,**/metrics-batcher.ts,**/https-client.ts,**/usage-scope.ts,**/usage-batcher.ts,**/toggly.service.ts
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.tests=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.SvelteKit,Toggly.FeatureManagement.Solid,Toggly.FeatureManagement.Astro,Toggly.FeatureManagement.Gatsby,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,Toggly.FeatureManagement.NestJS,toggly-eval,toggly-local-gates/src,toggly-hooks-types,toggly-signed-defs/src,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook,toggly-client-telemetry,tests
@@ -991,6 +1003,16 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - run: npm ci
+      - name: Install locked dependencies with local client-telemetry
+        uses: ./.github/actions/install-local-client-telemetry
+        with:
+          package-dir: Toggly.FeatureManagement.Solid
       - run: npm run build
-      - run: node tests/install-host.mjs
+      # Registry packed-host gate: unset local tarball so install-host.mjs
+      # resolves @ops-ai/toggly-client-telemetry from public npm.
+      - name: Verify packed SolidStart host against public registry
+        env:
+          TOGGLY_CLIENT_TELEMETRY_TARBALL: ''
+        run: |
+          unset TOGGLY_CLIENT_TELEMETRY_TARBALL
+          node tests/install-host.mjs

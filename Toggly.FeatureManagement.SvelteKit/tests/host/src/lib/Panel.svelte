@@ -66,7 +66,11 @@
 >
 <button
   on:click={async () => {
-    await toggly.flushTelemetry();
+    try {
+      await toggly.flushTelemetry();
+    } catch {
+      // Disabled/silent hosts may reject transport; still mark the attempt complete.
+    }
     telemetryStatus = 'flushed';
   }}>Flush telemetry</button
 >

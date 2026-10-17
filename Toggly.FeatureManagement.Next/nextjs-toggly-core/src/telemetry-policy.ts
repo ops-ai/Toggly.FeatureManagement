@@ -10,6 +10,12 @@ export interface ClientTelemetry {
   flushAll(): Promise<void>
   recordCheck(feature: string, enabled: boolean, identity?: string, variant?: string): void
   recordUsage(feature: string, identity?: string, variant?: string): void
+  use?<T>(
+    featureKey: string,
+    fn: (scope: import('./telemetry/usage-scope.js').FeatureUsageScope) => Promise<T>,
+    identity?: string,
+    variant?: string,
+  ): Promise<T>
   recordView(feature: string, identity?: string, variant?: string): void
   recordDefinitionCacheHit(): void
   recordDefinitionCacheMiss(): void

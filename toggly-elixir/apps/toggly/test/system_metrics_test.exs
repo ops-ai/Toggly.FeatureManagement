@@ -20,23 +20,46 @@ defmodule Toggly.SystemMetricsTest do
   end
 
   test "default_sample returns BEAM metrics with finite values" do
-    prev = SystemMetrics.cpu_snapshot()
+    {rt, wc} = prev = SystemMetrics.cpu_snapshot()
+    assert is_integer(rt) and rt >= 0
+    assert is_integer(wc) and wc >= 0
     Process.sleep(2)
 
-    {0, samples, next} = SystemMetrics.default_sample(0, prev)
+    {0, first, primed} = SystemMetrics.default_sample(0, nil)
+    refute Enum.any?(first, fn {m, _} -> m == "CpuUsage" end)
+    assert primed == prev or match?({_, _}, primed)
+
+    {0, samples, next} = SystemMetrics.default_sample(0, primed)
     metrics = Map.new(samples)
 
     assert is_tuple(next)
     assert Map.has_key?(metrics, "GCHeapSize")
     assert Map.has_key?(metrics, "ProcessCount")
+    assert Map.has_key?(metrics, "CpuUsage")
     assert metrics["GCHeapSize"] > 0
     assert metrics["ProcessCount"] > 0
-    # CpuUsage is best-effort; when present it must be a finite percentage.
-    if Map.has_key?(metrics, "CpuUsage") do
-      assert metrics["CpuUsage"] >= 0
-      assert metrics["CpuUsage"] <= 100
-    end
+    assert metrics["CpuUsage"] >= 0
+    assert metrics["CpuUsage"] <= 100
   end
+
+  test "parse_vm_rss reads VmRSS kibibytes" do
+    assert SystemMetrics.parse_vm_rss("Name:\tfoo\nVmRSS:\t  2048 kB\n") == 2048 * 1024.0
+    assert SystemMetrics.parse_vm_rss("no rss here\n") == nil
+  end
+
+  test "attach_exception_handler replaces an existing handler id" do
+    {:ok, pid} = Toggly.SystemMetricsTest.ExceptionClient.start_link([])
+    assert :ok = SystemMetrics.attach_exception_handler(:cov_handler_replace, pid)
+    assert :ok = SystemMetrics.attach_exception_handler(:cov_handler_replace, pid)
+    assert :ok = SystemMetrics.detach_exception_handler(:cov_handler_replace)
+  end
+
+  test "handler_id accepts non-atom client names via attach/detach" do
+    {:ok, pid} = Toggly.SystemMetricsTest.ExceptionClient.start_link([])
+    assert :ok = SystemMetrics.attach_exception_handler("string-client", pid)
+    assert :ok = SystemMetrics.detach_exception_handler("string-client")
+  end
+
 
   test "default_sample emits ExceptionCount without draining the counter" do
     {2, samples, _cpu} = SystemMetrics.default_sample(2)

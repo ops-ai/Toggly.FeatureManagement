@@ -17,6 +17,7 @@ import io.toggly.core.model.VariantResult;
 import io.toggly.core.snapshot.FeatureSnapshot;
 import io.toggly.core.snapshot.HttpSnapshotProvider;
 import io.toggly.core.snapshot.SnapshotProvider;
+import io.toggly.core.telemetry.FeatureUsageScope;
 import io.toggly.core.telemetry.MetricsFeatureOptions;
 import io.toggly.core.telemetry.TelemetryRuntime;
 import io.toggly.core.util.VariantValueCodec;
@@ -671,6 +672,108 @@ public final class TogglyClient implements AutoCloseable {
         } else {
             telemetry.recordUsage(featureKey, resolvedIdentity);
         }
+    }
+
+    /**
+     * Begin a usage scope (attempt recorded immediately; duration/errors on close).
+     * Does not evaluate the feature flag.
+     */
+    public FeatureUsageScope beginUsage(String featureKey, String identity, String variant) {
+        if (featureKey == null || featureKey.isEmpty() || telemetry == null) {
+            return FeatureUsageScope.noop();
+        }
+        String resolvedIdentity = identity != null ? identity : resolveIdentity();
+        return telemetry.beginUsage(resolvedIdentity, variant, featureKey);
+    }
+
+    /**
+     * Begin a usage scope for one feature (default variant {@code enabled}).
+     */
+    public FeatureUsageScope beginUsage(String featureKey) {
+        return beginUsage(featureKey, null, "enabled");
+    }
+
+    /**
+     * Run an action inside a usage scope. Failures propagate after counting.
+     */
+    public void use(String featureKey, Runnable action) {
+        use(featureKey, scope -> {
+            action.run();
+            return null;
+        });
+    }
+
+    /**
+     * Run an action with an explicit scope (for {@link FeatureUsageScope#fail()}).
+     * Prefer {@link #useCallable(String, java.util.concurrent.Callable)} when the work can
+     * throw checked {@link InterruptedException} (treated as cancellation).
+     */
+    public <T> T use(String featureKey, java.util.function.Function<FeatureUsageScope, T> action) {
+        if (action == null) {
+            throw new IllegalArgumentException("action");
+        }
+        if (featureKey == null || featureKey.isEmpty() || telemetry == null) {
+            return action.apply(FeatureUsageScope.noop());
+        }
+        try (FeatureUsageScope scope = beginUsage(featureKey)) {
+            try {
+                return action.apply(scope);
+            } catch (RuntimeException e) {
+                if (isInterrupted(e)) {
+                    scope.markCancelled();
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+                scope.fail();
+                throw e;
+            } catch (Error e) { // NOSONAR java:S1181 — usage scopes must not treat Error as success
+                // Must not complete as success when the JVM Error unwinds the scope.
+                scope.fail();
+                throw e;
+            }
+        }
+    }
+
+    /**
+     * Run callable work inside a usage scope. {@link InterruptedException} is cancellation
+     * (attempt only); other failures call {@link FeatureUsageScope#fail()}.
+     */
+    public <T> T useCallable(String featureKey, java.util.concurrent.Callable<T> action) throws Exception {
+        if (action == null) {
+            throw new IllegalArgumentException("action");
+        }
+        if (featureKey == null || featureKey.isEmpty() || telemetry == null) {
+            return action.call();
+        }
+        try (FeatureUsageScope scope = beginUsage(featureKey)) {
+            try {
+                return action.call();
+            } catch (InterruptedException e) {
+                scope.markCancelled();
+                Thread.currentThread().interrupt();
+                throw e;
+            } catch (Exception e) {
+                if (isInterrupted(e)) {
+                    scope.markCancelled();
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+                scope.fail();
+                throw e;
+            } catch (Error e) { // NOSONAR java:S1181 — usage scopes must not treat Error as success
+                scope.fail();
+                throw e;
+            }
+        }
+    }
+
+    private static boolean isInterrupted(Throwable error) {
+        for (Throwable cursor = error; cursor != null; cursor = cursor.getCause()) {
+            if (cursor instanceof InterruptedException) {
+                return true;
+            }
+        }
+        return Thread.currentThread().isInterrupted();
     }
 
     /**

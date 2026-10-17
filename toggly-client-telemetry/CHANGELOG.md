@@ -7,6 +7,32 @@
   `LongTaskCount` every 10s via `setGauge` when `systemMetrics: true` and
   telemetry is enabled. React Native hosts can enable chained `ErrorUtils`
   exception counting.
+## 1.2.3 — 2026-10-16
+
+### Fixed
+- `use()` pins telemetry attribution for the duration of the scope so a
+  mid-await `setContext` cannot split attempt vs duration metrics [OPS-1758].
+
+## 1.2.2 — 2026-10-16
+
+### Fixed
+- Usage-scope duration measurement uses monotonic `performance.now()` instead
+  of `Date.now()` [OPS-1758].
+
+## 1.2.1 — 2026-10-15
+
+### Fixed
+- Round usage-scope duration slots (indices 4 and 5) to whole milliseconds
+  before buffering so fractional `performance.now()` values are not sent on
+  the wire [OPS-1758].
+
+## 1.2.0 — 2026-10-11
+
+### Added
+- Optional feature value slots 3–5 for usage-scope `errorCount`,
+  `durationSumMs`, and `errorDurationSumMs` (indices match server ingest).
+- `recordUsageError`, `recordUsageDuration`, `recordUsageScopeOutcome`, and
+  `use()` async helper on `TelemetryReporter`.
 
 ## 1.1.2 — 2026-09-27
 

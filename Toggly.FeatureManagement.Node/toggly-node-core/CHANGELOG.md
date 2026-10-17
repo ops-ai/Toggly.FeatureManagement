@@ -6,6 +6,25 @@
 - Opt-in `systemMetrics: true` collects process CpuUsage, MemoryWorkingSet,
   GCHeapSize, ExceptionCount (uncaught only), TimeInGC, and EventLoopDelay
   every 10s when metrics telemetry is enabled [OPS-1765].
+## 0.13.1
+
+2026-10-16
+
+### Fixed
+- Usage-scope durations use monotonic `performance.now()` instead of
+  `Date.now()`, so NTP / manual clock changes do not skew duration metrics
+  [OPS-1758].
+
+## 0.13.0
+
+2026-10-11
+
+### Added
+- Usage scope metrics on `VariantStats`: `errorCount`, `durationSumMs`,
+  `errorDurationSumMs` (aligned with `Usage.proto`).
+- `recordUsageError`, `recordUsageDuration`, `recordUsageScopeOutcome`, and
+  `use()` on the client and `TelemetryRuntime` for timed usage scopes with
+  `scope.fail()` and `AbortError` cancellation handling.
 
 ## 0.12.0
 

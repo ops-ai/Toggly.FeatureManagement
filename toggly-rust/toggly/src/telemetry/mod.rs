@@ -13,6 +13,7 @@ mod runtime;
 mod system_metrics;
 mod transport;
 mod usage_batcher;
+mod usage_scope;
 
 #[cfg(feature = "telemetry")]
 pub(crate) mod pb {
@@ -47,6 +48,7 @@ pub use usage_batcher::{
     FeatureStatPayload, StatMessagePayload, UsageBatcher, UsageSnapshot, VariantStatsAgg,
     VariantStatsWire,
 };
+pub use usage_scope::FeatureUsageScope;
 
 #[cfg(feature = "telemetry")]
 pub use transport::NativeGrpcSenders;

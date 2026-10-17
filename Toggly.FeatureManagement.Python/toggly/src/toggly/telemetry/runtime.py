@@ -297,6 +297,33 @@ class TelemetryRuntime:
         if batcher is not None:
             batcher.record_view(feature, identity, variant)
 
+    def record_usage_scope_success(
+        self,
+        feature: str,
+        duration_ms: int,
+        *,
+        variant: str = "enabled",
+    ) -> None:
+        """Record successful usage-scope duration."""
+        with self._lock:
+            batcher = self._usage_batcher
+        if batcher is not None:
+            batcher.record_usage_duration(feature, duration_ms, variant=variant, failed=False)
+
+    def record_usage_scope_failure(
+        self,
+        feature: str,
+        duration_ms: int,
+        *,
+        variant: str = "enabled",
+    ) -> None:
+        """Record failed usage-scope error count and duration."""
+        with self._lock:
+            batcher = self._usage_batcher
+        if batcher is not None:
+            batcher.record_usage_error(feature, variant)
+            batcher.record_usage_duration(feature, duration_ms, variant=variant, failed=True)
+
     def record_definition_cache_hit(self) -> None:
         """Record a definition-refresh cache hit into the usage batcher."""
         with self._lock:

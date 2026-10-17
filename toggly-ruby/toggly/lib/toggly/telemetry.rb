@@ -2,6 +2,7 @@
 
 require_relative "telemetry/grpc_clients"
 require_relative "telemetry/usage_batcher"
+require_relative "telemetry/usage_scope"
 require_relative "telemetry/metrics_batcher"
 require_relative "telemetry/runtime"
 

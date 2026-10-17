@@ -145,8 +145,8 @@ pub use error::Error;
 pub use eval::{AssignmentReason, VariantAssignment};
 pub use segment_membership::SegmentMembershipClient;
 pub use telemetry::{
-    hash_identity, MetricsFeatureOptions, TelemetryRuntime, TelemetryRuntimeConfig,
-    TelemetrySenders,
+    hash_identity, FeatureUsageScope, MetricsFeatureOptions, TelemetryRuntime,
+    TelemetryRuntimeConfig, TelemetrySenders,
 };
 
 /// Requirement type for feature gates.

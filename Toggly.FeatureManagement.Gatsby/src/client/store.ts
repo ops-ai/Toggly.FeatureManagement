@@ -8,6 +8,8 @@
 import { atom, computed } from 'nanostores';
 import {
   createTelemetryReporter,
+  runFeatureUsageScope,
+  type FeatureUsageScope,
   type TelemetryReporter,
 } from '@ops-ai/toggly-client-telemetry';
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
@@ -283,6 +285,20 @@ class TogglyClientInstance {
 
   recordUsage(featureKey: string, variant?: string): void {
     if (this.config.enableUsageTracking) this.reporter?.recordUsage(featureKey, variant);
+  }
+
+  use<T>(
+    featureKey: string,
+    fn: (scope: FeatureUsageScope) => Promise<T>,
+    variant = 'enabled',
+  ): Promise<T> {
+    if (!this.config.enableUsageTracking || !this.reporter) {
+      return runFeatureUsageScope(
+        { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
+        fn,
+      );
+    }
+    return this.reporter.use(featureKey, fn, variant);
   }
 
   recordView(featureKey: string, variant?: string): void {
@@ -988,6 +1004,19 @@ export function notifyLocalGatesChanged(): void {
 /** Record an explicit feature usage in compact browser telemetry. */
 export function recordUsage(featureKey: string, variant?: string): void {
   clientStore.clientInstance?.recordUsage(featureKey, variant);
+}
+
+export function useFeatureUsageScope<T>(
+  featureKey: string,
+  fn: (scope: FeatureUsageScope) => Promise<T>,
+  variant = 'enabled',
+): Promise<T> {
+  const client = clientStore.clientInstance;
+  if (client) return client.use(featureKey, fn, variant);
+  return runFeatureUsageScope(
+    { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
+    fn,
+  );
 }
 
 /** Record an explicit feature view in compact browser telemetry. */

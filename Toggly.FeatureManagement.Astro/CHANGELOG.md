@@ -16,6 +16,14 @@
   and posted to `api/metrics` (same JSON shape as Next). `enableMetrics`
   defaults on with an app key; `TOGGLY_DISABLE_TELEMETRY=1` still wins. Soft-fail
   restore keeps the batch on network errors [OPS-1765].
+## 1.20.0
+
+2026-10-11
+
+### Added
+- Usage scope metrics on `VariantStats` (`errorCount`, `durationSumMs`,
+  `errorDurationSumMs`) and batcher `recordUsageError`, `recordUsageDuration`,
+  `recordUsageScopeOutcome`.
 
 ## 1.19.0
 

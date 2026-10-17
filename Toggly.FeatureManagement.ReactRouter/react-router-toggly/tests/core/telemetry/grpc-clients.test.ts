@@ -75,23 +75,27 @@ describe('grpc-clients helpers', () => {
     }
   })
 
-  it('loads package definitions when optional gRPC deps are present', async () => {
-    if (!isGrpcAvailable()) {
-      expect(createGrpcClients('https://app.toggly.io/')).toBeNull()
-      return
-    }
-    const clients = createGrpcClients('https://app.toggly.io/', 'ua-test')
-    expect(clients).not.toBeNull()
-    // Exercise stub wrappers (network will fail; still covers reject callback paths).
-    await expect(
-      clients!.usage.sendStats({ appKey: 'app', environment: 'Production', stats: [] }),
-    ).rejects.toBeDefined()
-    await expect(
-      clients!.metrics.sendMetrics({ appKey: 'app', environment: 'Production', metrics: {} }),
-    ).rejects.toBeDefined()
-    clients!.usage.close()
-    clients!.metrics.close()
-  })
+  it(
+    'loads package definitions when optional gRPC deps are present',
+    async () => {
+      if (!isGrpcAvailable()) {
+        expect(createGrpcClients('https://app.toggly.io/')).toBeNull()
+        return
+      }
+      const clients = createGrpcClients('https://app.toggly.io/', 'ua-test')
+      expect(clients).not.toBeNull()
+      // Exercise stub wrappers (network will fail; still covers reject callback paths).
+      await expect(
+        clients!.usage.sendStats({ appKey: 'app', environment: 'Production', stats: [] }),
+      ).rejects.toBeDefined()
+      await expect(
+        clients!.metrics.sendMetrics({ appKey: 'app', environment: 'Production', metrics: {} }),
+      ).rejects.toBeDefined()
+      clients!.usage.close()
+      clients!.metrics.close()
+    },
+    15000,
+  )
 
   it('createGrpcClients uses default metrics base URL', () => {
     if (!isGrpcAvailable()) {

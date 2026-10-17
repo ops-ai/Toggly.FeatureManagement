@@ -88,6 +88,23 @@ describe('UsageBatcher', () => {
     expect(bundle!.uniqueUsersUsed.FeatureA).toContain(hashIdentity('alice'))
   })
 
+  it('aggregates usage scope error and duration metrics in variantStats', () => {
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
+
+    batcher.recordUsage('FeatureA')
+    batcher.recordUsageError('FeatureA')
+    batcher.recordUsageDuration('FeatureA', 100)
+    batcher.recordUsageDuration('FeatureA', 50, undefined, 'enabled', true)
+    batcher.recordUsageScopeOutcome('FeatureA', { failed: true, durationMs: 12 })
+
+    const payload = batcher.buildAndReset()!.payload
+    const enabled = payload.stats[0].variantStats.enabled
+    expect(enabled.usedCount).toBe(1)
+    expect(enabled.errorCount).toBe(2)
+    expect(enabled.durationSumMs).toBe(100)
+    expect(enabled.errorDurationSumMs).toBe(62)
+  })
+
   it('drops new features once the per-batch feature cap is hit', () => {
     const batcher = new UsageBatcher({
       appKey: 'app',

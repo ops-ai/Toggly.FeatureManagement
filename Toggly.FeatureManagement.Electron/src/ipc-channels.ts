@@ -7,6 +7,7 @@ export const IPC_CHANNELS = {
   evaluateFeatureGate: `${IPC_PREFIX}evaluateFeatureGate`,
   getVariant: `${IPC_PREFIX}getVariant`,
   recordUsage: `${IPC_PREFIX}recordUsage`,
+  recordUsageScopeCompletion: `${IPC_PREFIX}recordUsageScopeCompletion`,
   recordView: `${IPC_PREFIX}recordView`,
   incrementCounter: `${IPC_PREFIX}incrementCounter`,
   setGauge: `${IPC_PREFIX}setGauge`,

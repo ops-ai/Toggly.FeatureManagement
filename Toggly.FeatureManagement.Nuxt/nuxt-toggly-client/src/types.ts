@@ -11,6 +11,11 @@ export type FeatureEvalContext = TogglyEntityContext | Record<string, unknown> |
 
 export interface BrowserTelemetry {
   recordUsage(featureKey: string, variant?: string): void
+  use: <T>(
+    featureKey: string,
+    fn: (scope: import('@ops-ai/toggly-client-telemetry').FeatureUsageScope) => Promise<T>,
+    variant?: string,
+  ) => Promise<T>
   recordView(featureKey: string, variant?: string): void
   incrementCounter(metricKey: string, value?: number): void
   setGauge(metricKey: string, value: number): void

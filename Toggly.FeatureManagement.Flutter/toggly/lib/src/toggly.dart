@@ -1371,6 +1371,14 @@ class Toggly with WidgetsBindingObserver {
   static void recordUsage(String featureKey, [String variant = 'enabled']) =>
       _telemetry?.recordUsage(featureKey, variant);
 
+  /// Runs [action] inside a usage scope (used count, duration, errors).
+  static Future<T> use<T>(
+    String featureKey,
+    Future<T> Function(void Function() fail) action, [
+    String variant = 'enabled',
+  ]) =>
+      _telemetry?.use(featureKey, action, variant) ?? action(() {});
+
   /// Records an explicit feature view without evaluating it.
   static void recordView(String featureKey, [String variant = 'enabled']) =>
       _telemetry?.recordView(featureKey, variant);

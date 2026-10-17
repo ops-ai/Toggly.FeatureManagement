@@ -323,6 +323,27 @@ export interface TogglyClient {
   recordUsage(featureKey: string, identity?: string, variant?: string): void
   /** Record a feature "viewed" event (usage telemetry). */
   recordView(featureKey: string, identity?: string, variant?: string): void
+  recordUsageError(featureKey: string, identity?: string, variant?: string, count?: number): void
+  recordUsageDuration(
+    featureKey: string,
+    durationMs: number,
+    identity?: string,
+    variant?: string,
+    failed?: boolean,
+  ): void
+  recordUsageScopeOutcome(
+    featureKey: string,
+    outcome: { failed?: boolean; cancelled?: boolean; durationMs?: number },
+    identity?: string,
+    variant?: string,
+  ): void
+  /** Run async work inside a usage scope (attempt, duration, errors). */
+  use<T>(
+    featureKey: string,
+    fn: (scope: import('./telemetry/usage-scope.js').FeatureUsageScope) => Promise<T>,
+    identity?: string,
+    variant?: string,
+  ): Promise<T>
   /** Aggregate a measurement (sum over the flush window). */
   measure(
     metricKey: string,

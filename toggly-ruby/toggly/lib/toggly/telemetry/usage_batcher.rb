@@ -4,8 +4,25 @@ module Toggly
   module Telemetry
     # In-memory feature usage aggregator (Usage.SendStats payload shape).
     class UsageBatcher
-      VariantStatsAgg = Struct.new(:check_count, :request_count, :used_count, :viewed_count, keyword_init: true) do
-        def initialize(check_count: 0, request_count: 0, used_count: 0, viewed_count: 0)
+      VariantStatsAgg = Struct.new(
+        :check_count,
+        :request_count,
+        :used_count,
+        :viewed_count,
+        :error_count,
+        :duration_sum_ms,
+        :error_duration_sum_ms,
+        keyword_init: true
+      ) do
+        def initialize(
+          check_count: 0,
+          request_count: 0,
+          used_count: 0,
+          viewed_count: 0,
+          error_count: 0,
+          duration_sum_ms: 0,
+          error_duration_sum_ms: 0
+        )
           super
         end
 
@@ -14,7 +31,10 @@ module Toggly
             checkCount: check_count,
             requestCount: request_count,
             usedCount: used_count,
-            viewedCount: viewed_count
+            viewedCount: viewed_count,
+            errorCount: error_count,
+            durationSumMs: duration_sum_ms,
+            errorDurationSumMs: error_duration_sum_ms
           }
         end
 
@@ -23,7 +43,10 @@ module Toggly
             check_count: check_count,
             request_count: request_count,
             used_count: used_count,
-            viewed_count: viewed_count
+            viewed_count: viewed_count,
+            error_count: error_count,
+            duration_sum_ms: duration_sum_ms,
+            error_duration_sum_ms: error_duration_sum_ms
           )
         end
       end
@@ -138,6 +161,27 @@ module Toggly
         end
       end
 
+      def record_usage_error(feature, variant: "enabled", count: 1)
+        return if count <= 0
+
+        @mutex.synchronize do
+          get_variant(get_feature(feature), variant.to_s).error_count += count
+        end
+      end
+
+      def record_usage_duration(feature, duration_ms, variant: "enabled", failed: false)
+        return if duration_ms <= 0
+
+        @mutex.synchronize do
+          stats = get_variant(get_feature(feature), variant.to_s)
+          if failed
+            stats.error_duration_sum_ms += duration_ms
+          else
+            stats.duration_sum_ms += duration_ms
+          end
+        end
+      end
+
       def empty?
         @mutex.synchronize { empty_unlocked? }
       end
@@ -180,6 +224,9 @@ module Toggly
               stats.request_count += snap_stats.request_count
               stats.used_count += snap_stats.used_count
               stats.viewed_count += snap_stats.viewed_count
+              stats.error_count += snap_stats.error_count
+              stats.duration_sum_ms += snap_stats.duration_sum_ms
+              stats.error_duration_sum_ms += snap_stats.error_duration_sum_ms
             end
             agg.unique_users_enabled.merge(snap_agg.unique_users_enabled)
             agg.unique_users_disabled.merge(snap_agg.unique_users_disabled)
@@ -250,7 +297,9 @@ module Toggly
         variant_stats = {}
         agg.variant_stats.each do |name, vs|
           next unless vs.check_count.positive? || vs.request_count.positive? ||
-                      vs.used_count.positive? || vs.viewed_count.positive?
+                      vs.used_count.positive? || vs.viewed_count.positive? ||
+                      vs.error_count.positive? || vs.duration_sum_ms.positive? ||
+                      vs.error_duration_sum_ms.positive?
 
           variant_stats[name] = vs.to_wire
         end

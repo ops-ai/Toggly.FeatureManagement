@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/toggly-client-telemetry",
-  "version": "1.2.1",
+  "version": "1.2.3",
   "description": "Portable bounded frontend telemetry for Toggly client SDKs",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",

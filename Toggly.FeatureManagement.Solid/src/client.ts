@@ -22,7 +22,12 @@ import { evaluateResolvedKeys, resolveEvaluatedDefinition } from '@ops-ai/toggly
 import { InMemoryJwksCache, fetchEvaluatedSignedDefinitions } from '@ops-ai/toggly-signed-defs';
 import { applyLocalGate, buildFlagGateIndex } from '@ops-ai/toggly-local-gates';
 import type { LocalGate } from '@ops-ai/toggly-local-gates';
-import { createTelemetryReporter, type TelemetryOptions } from '@ops-ai/toggly-client-telemetry';
+import {
+  createTelemetryReporter,
+  runFeatureUsageScope,
+  type FeatureUsageScope,
+  type TelemetryOptions,
+} from '@ops-ai/toggly-client-telemetry';
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
 import { decodeVariantValue } from './decode-variant-value.js';
 
@@ -405,6 +410,13 @@ export function createClient(options: TogglyOptions = {}, initialSnapshot?: Togg
     flags,
     recordUsage(key: string, variant = 'enabled') {
       reporter?.recordUsage(key, variant);
+    },
+    use<T>(key: string, fn: (scope: FeatureUsageScope) => Promise<T>, variant = 'enabled') {
+      if (reporter) return reporter.use(key, fn, variant);
+      return runFeatureUsageScope(
+        { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
+        fn,
+      );
     },
     recordView(key: string, variant = 'enabled') {
       reporter?.recordView(key, variant);

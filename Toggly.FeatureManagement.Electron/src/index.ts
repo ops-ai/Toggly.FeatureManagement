@@ -5,6 +5,7 @@
  */
 export {
   recordUsage,
+  use,
   recordView,
   incrementCounter,
   setGauge,

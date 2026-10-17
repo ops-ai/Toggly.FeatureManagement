@@ -1,5 +1,5 @@
 {
-  "name": "toggly-native-storage-3.1.1-myKlY3",
+  "name": "toggly-native-storage-3.1.1-K6aQs8",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
@@ -853,9 +853,9 @@
       }
     },
     "node_modules/@ops-ai/react-native-toggly-core": {
-      "version": "1.10.3",
+      "version": "1.11.0",
       "resolved": "file:core.tgz",
-      "integrity": "sha512-ha15pi8BkRv/JGdaypixtl1rzQ//vpGB6rRR/nVOCG2phzXx8ceC6C0H99KqcdjAZ3/II+oXZIRI2gHESwxykA==",
+      "integrity": "sha512-qTiUs9gWG+B6Di+gbeD7/fMe08Cw+YQE5iPkaTYxj3rEFcxwy8YkxJomW4ZmqnR1lOe55aerkPda+jf/G4PoBA==",
       "license": "MIT",
       "dependencies": {
         "@ops-ai/toggly-client-telemetry": "^1.2.0",

@@ -9,6 +9,7 @@ export * from './lib/models'
 // Service
 export * from './lib/toggly.service'
 export { decodeVariantValue } from './lib/decode-variant-value'
+export type { FeatureUsageScope } from '@ops-ai/toggly-client-telemetry'
 
 // Components & Directives (standalone)
 export * from './lib/feature-gate-builder.directive'

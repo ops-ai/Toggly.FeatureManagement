@@ -60,8 +60,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-${{ matrix.rust }}-
 
-      - name: Pin actix-server for MSRV
-        run: cargo update -p actix-server --precise 2.9.8
+      # Unlocked resolve picks actix-server 2.10 (rustc ≥1.89). Cap actix-web,
+      # pin actix-server 2.6, and pin actix-rt 2.10 (2.15 drops default net/signal
+      # features that 2.6 still expects) so the 1.88 matrix stays on MSRV.
+      - name: Pin MSRV-compatible actix stack
+        if: matrix.rust == '1.88.0'
+        run: |
+          perl -pi -e 's/actix-web = ">=4.4, <4.16"/actix-web = ">=4.4, <4.13"/' Cargo.toml
+          cargo generate-lockfile
+          cargo update -p actix-server --precise 2.6.0
+          cargo update -p actix-rt --precise 2.10.0
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -76,6 +84,7 @@ jobs:
         run: cargo test --all-features --workspace
 
       - name: Verify current framework package artifacts
+        if: matrix.rust == 'stable'
         run: |
           cargo update -p actix-web --precise 4.15.0
           cargo update -p actix-server --precise 2.9.8
@@ -186,6 +195,13 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.89.0
+
+      - name: Pin MSRV-compatible actix stack
+        run: |
+          perl -pi -e 's/actix-web = ">=4.4, <4.16"/actix-web = ">=4.4, <4.13"/' Cargo.toml
+          cargo generate-lockfile
+          cargo update -p actix-server --precise 2.6.0
+          cargo update -p actix-rt --precise 2.10.0
 
       - name: Check MSRV
         run: |

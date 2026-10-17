@@ -8,6 +8,17 @@
 - Opt-in `system_metrics` on `TogglyConfig` samples `CpuUsage`,
   `MemoryWorkingSet`, and `ExceptionCount` (panic hook chains the previous
   hook) every 10s when business metrics are enabled [OPS-1765].
+2026-10-11
+
+### Added
+- Feature usage scopes: `TogglyClient::use_feature`, `FeatureUsageScope::fail`, and
+  `VariantStats` wire fields `errorCount`, `durationSumMs`, and `errorDurationSumMs`
+  [OPS-1758].
+
+### Fixed
+- `use_feature` no longer holds the usage-batcher mutex across the user closure
+  (nested telemetry deadlocks), and panics inside the scope record as failures
+  [OPS-1758].
 
 ## 0.10.0
 

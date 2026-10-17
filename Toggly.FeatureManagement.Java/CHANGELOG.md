@@ -14,6 +14,23 @@
 ### Changed
 
 - User-Agent and live-update `sdkVersion` report `toggly-java/2.3.0`.
+## 2.3.1
+
+2026-10-15
+
+### Fixed
+- `use` / `useCallable` mark the scope failed for `Error` throwables so fatal
+  JVM errors are not recorded as successful usage [OPS-1758].
+
+## 2.3.0
+
+2026-10-11
+
+### Added
+- Feature usage scope on `TogglyClient` (`beginUsage`, `use`) with
+  `FeatureUsageScope.fail()` / `markCancelled()`. Usage batches send
+  `errorCount`, `durationSumMs`, and `errorDurationSumMs` on `VariantStats`
+  [OPS-1758].
 
 ## 2.2.2
 

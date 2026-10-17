@@ -216,6 +216,33 @@ for (const scenario of contract.endpointScenarios) {
     reporter.dispose();
   });
 }
+test('records usage scope slots and trims trailing zeros', async () => {
+  const { reporter, bodies } = setup();
+  reporter.recordUsage('flag', 'enabled');
+  reporter.recordUsageError('flag', 'enabled', 2);
+  reporter.recordUsageDuration('flag', 120, 'enabled', false);
+  reporter.recordUsageDuration('flag', 30, 'enabled', true);
+  await reporter.flush();
+  expect(bodies()[0].f.flag.enabled).toEqual([0, 1, 0, 2, 120, 30]);
+  reporter.dispose();
+});
+test('use helper records attempt, success duration, errors, and ignores AbortError', async () => {
+  jest.useFakeTimers();
+  const { reporter, bodies } = setup();
+  await reporter.use('flag', async () => {
+    jest.advanceTimersByTime(15);
+    return 'ok';
+  });
+  await reporter.flush();
+  expect(bodies()[0].f.flag.enabled).toEqual([0, 1, 0, 0, 15]);
+  const abort = new DOMException('Aborted', 'AbortError');
+  await expect(reporter.use('flag', async () => { throw abort; })).rejects.toBe(abort);
+  await reporter.use('flag', async (scope) => { scope.fail(); jest.advanceTimersByTime(10); });
+  await reporter.flush();
+  expect(bodies()[bodies().length - 1].f.flag.enabled).toEqual([0, 2, 0, 1, 0, 10]);
+  reporter.dispose();
+  jest.useRealTimers();
+});
 test('invalid variants have bounded diagnostics without changing valid queued observations', async () => {
   const diagnostics: string[] = [];
   const { reporter, bodies } = setup({ onDiagnostic: (d: string) => diagnostics.push(d) });

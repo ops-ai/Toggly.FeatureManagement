@@ -123,6 +123,23 @@ describe('Vue frontend telemetry', () => {
     expect(sent[0].url).toBe('https://collector.test/base/api/frontend/telemetry')
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+  it('use() records attempt and soft-fail error slots', async () => {
+    const service = client()
+    await service.use('Scoped', async () => undefined)
+    await service.use('Scoped', async (scope) => { scope.fail() })
+    await service.flushTelemetry()
+    expect(sent).toHaveLength(1)
+    expect(sent[0].body.f.Scoped.enabled[1]).toBe(2)
+    expect(sent[0].body.f.Scoped.enabled[3]).toBe(1)
+  })
+  it('use() without telemetry still invokes the callback', async () => {
+    const service = client({enableTelemetry: false})
+    let ran = false
+    await service.use('Offline', async (scope) => { scope.fail(); ran = true })
+    expect(ran).toBe(true)
+    await service.flushTelemetry()
+    expect(sent).toEqual([])
+  })
   it.each([{enableTelemetry: false}, {appKey: undefined, featureDefaults: {On: true}}])('stays silent with %j', async options => {
     const listeners = vi.spyOn(window, 'addEventListener')
     const service = client(options)

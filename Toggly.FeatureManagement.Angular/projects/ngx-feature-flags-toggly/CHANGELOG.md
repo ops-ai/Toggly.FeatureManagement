@@ -1,3 +1,19 @@
+## 2.11.1
+
+2026-10-15
+
+### Fixed
+- `use()` runs the caller callback inside `NgZone` so async UI updates still
+  trigger change detection while telemetry bookkeeping stays outside CD
+  [OPS-1758].
+
+## 2.11.0
+
+2026-10-11
+
+### Added
+- `use()` for timed feature usage scopes (attempt, duration, errors) via `@ops-ai/toggly-client-telemetry` [OPS-1758].
+
 ## 2.10.2
 
 2026-10-04

@@ -49,6 +49,27 @@ describe('UsageBatcher', () => {
     expect(batcher.buildAndReset()).toBeNull()
   })
 
+  it('aggregates usage scope error and duration metrics in variantStats', () => {
+    const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
+
+    batcher.recordUsage('FeatureA')
+    batcher.recordUsageError('FeatureA')
+    batcher.recordUsageError('FeatureA', undefined, 'enabled', 0)
+    batcher.recordUsageDuration('FeatureA', 100)
+    batcher.recordUsageDuration('FeatureA', Number.NaN)
+    batcher.recordUsageDuration('FeatureA', 50, undefined, 'enabled', true)
+    batcher.recordUsageScopeOutcome('FeatureA', { failed: true, durationMs: 12 })
+    batcher.recordUsageScopeOutcome('FeatureA', { cancelled: true, durationMs: 99 })
+    batcher.recordUsageScopeOutcome('FeatureA', { durationMs: 7 })
+
+    const payload = batcher.buildAndReset()!.payload
+    const enabled = payload.stats[0].variantStats.enabled
+    expect(enabled.usedCount).toBe(1)
+    expect(enabled.errorCount).toBe(2)
+    expect(enabled.durationSumMs).toBe(107)
+    expect(enabled.errorDurationSumMs).toBe(62)
+  })
+
   it('increments requestCount only when uniqueRequest is true', () => {
     const batcher = new UsageBatcher({ appKey: 'app', environment: 'Production' })
 
@@ -321,7 +342,15 @@ describe('UsageBatcher', () => {
 
     const bundle = batcher.buildAndReset()!
     expect(bundle.payload.stats[0].variantStats).toEqual({
-      enabled: { checkCount: 1, requestCount: 0, usedCount: 0, viewedCount: 0 },
+      enabled: {
+        checkCount: 1,
+        requestCount: 0,
+        usedCount: 0,
+        viewedCount: 0,
+        errorCount: 0,
+        durationSumMs: 0,
+        errorDurationSumMs: 0,
+      },
     })
     expect(bundle.uniqueUsersEnabled).toEqual({ Checkout: [7] })
     expect(bundle.uniqueUsersDisabled).toEqual({ Checkout: [8] })

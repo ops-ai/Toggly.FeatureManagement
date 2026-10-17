@@ -7,6 +7,27 @@
 - Opt-in `system_metrics=True` collects process CpuUsage, MemoryWorkingSet
   (`resource.getrusage`), and uncaught ExceptionCount every 10s when metrics
   telemetry is enabled [OPS-1765].
+## 1.3.2 - 2026-10-16
+
+### Fixed
+- `use` / `use_async` context managers treat `KeyboardInterrupt` and
+  `SystemExit` as attempt-only (same as `run_use` / `run_usage_scope`),
+  not as recorded failures [OPS-1758].
+
+## 1.3.1 - 2026-10-15
+
+### Fixed
+- Usage scopes record failures only for `Exception` subclasses;
+  `CancelledError`, `KeyboardInterrupt`, and `SystemExit` keep attempt-only
+  semantics [OPS-1758].
+
+## 1.3.0 - 2026-10-11
+
+### Added
+- Feature usage scope APIs (`use`, `run_use`, `use_async`) with attempt,
+  `errorCount`, `durationSumMs`, and `errorDurationSumMs` on `VariantStats`
+  (wire fields 5–7). Cancellation via `asyncio.CancelledError` records attempt
+  only [OPS-1758].
 
 ## 1.2.0 - 2026-10-04
 

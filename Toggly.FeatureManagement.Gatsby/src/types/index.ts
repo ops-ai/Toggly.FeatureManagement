@@ -268,6 +268,11 @@ export interface UseTogglyResult {
 /** Explicit compact browser telemetry helpers. These do not evaluate feature flags. */
 export interface TogglyTelemetry {
   recordUsage: (featureKey: string, variant?: string) => void;
+  use: <T>(
+    featureKey: string,
+    fn: (scope: import('@ops-ai/toggly-client-telemetry').FeatureUsageScope) => Promise<T>,
+    variant?: string,
+  ) => Promise<T>;
   recordView: (featureKey: string, variant?: string) => void;
   incrementCounter: (metricKey: string, value?: number) => void;
   setGauge: (metricKey: string, value: number) => void;

@@ -66,6 +66,40 @@ it('records only effective short-circuited leaves and explicit compact events wi
   expect(c.requests[0].credentials).toBe('omit');
   client.dispose();
 });
+it('use() records attempt and soft-fail error slots', async () => {
+  const c = collector();
+  const client = createClient(
+    {
+      appKey: 'app',
+      environment: 'QA',
+      metricsBaseUrl: 'https://collector.test/base',
+      telemetryFetch: c.telemetryFetch,
+    },
+    snapshot(),
+  );
+  await client.use('Scoped', async () => undefined);
+  await client.use('Scoped', async (scope) => {
+    scope.fail();
+  });
+  await client.flushTelemetry();
+  expect(c.bodies[0].f.Scoped.enabled[1]).toBe(2);
+  expect(c.bodies[0].f.Scoped.enabled[3]).toBe(1);
+  client.dispose();
+});
+it('use() without telemetry still invokes the callback', async () => {
+  const client = createClient(
+    { appKey: 'app', environment: 'QA', enableTelemetry: false },
+    snapshot(),
+  );
+  let ran = false;
+  await client.use('Offline', async (scope) => {
+    scope.fail();
+    ran = true;
+  });
+  expect(ran).toBe(true);
+  client.dispose();
+});
+
 it('memoizes UI checks and ignores loading/error projection while counting changed gates', async () => {
   const c = collector();
   let t!: Toggly;

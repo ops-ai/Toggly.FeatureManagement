@@ -80,3 +80,29 @@ test('pre-commit gauge ordering survives returning to a previous attribution', a
   expect(bodies.map(body => [body.u, body.m.cart])).toEqual([['alice',1],['bob',2],['alice',3]]);
   owner.dispose();
 });
+
+test('use() records attempt and soft-fail error slots', async () => {
+  const owner = createBrowserTelemetry(config);
+  owner.activate();
+  await owner.api.use('Scoped', async () => undefined);
+  await owner.api.use('Scoped', async (scope) => {
+    scope.fail();
+  });
+  await owner.api.flushTelemetry();
+  expect(bodies[0].f.Scoped.enabled[1]).toBe(2);
+  expect(bodies[0].f.Scoped.enabled[3]).toBe(1);
+  owner.dispose();
+});
+
+test('use() without telemetry still invokes the callback', async () => {
+  const owner = createBrowserTelemetry({...config, enableTelemetry: false});
+  let ran = false;
+  await owner.api.use('Offline', async (scope) => {
+    scope.fail();
+    ran = true;
+  });
+  expect(ran).toBe(true);
+  await owner.api.flushTelemetry();
+  expect(bodies).toEqual([]);
+  owner.dispose();
+});

@@ -1626,6 +1626,9 @@ export class TogglyService {
 
   /** Record an explicit feature usage; this does not evaluate the feature. */
   recordUsage(featureKey: string, variant = 'enabled'): void { this.telemetry.recordUsage(featureKey, variant); }
+  use<T>(featureKey: string, action: (scope: { fail(): void }) => Promise<T>, variant = 'enabled'): Promise<T> {
+    return this.telemetry.use(featureKey, action, variant);
+  }
   recordView(featureKey: string, variant = 'enabled'): void { this.telemetry.recordView(featureKey, variant); }
   incrementCounter(metricKey: string, value = 1): void { this.telemetry.incrementCounter(metricKey, value); }
   setGauge(metricKey: string, value: number): void { this.telemetry.setGauge(metricKey, value); }

@@ -1,6 +1,14 @@
 import { v4 as uuidv4 } from 'uuid';
 import * as clientTelemetry from '@ops-ai/toggly-client-telemetry';
-import { createTelemetryReporter, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
+import {
+  createTelemetryReporter,
+  runFeatureUsageScope,
+  type FeatureUsageScope,
+  type TelemetryReporter,
+} from '@ops-ai/toggly-client-telemetry';
+
+export type { FeatureUsageScope } from '@ops-ai/toggly-client-telemetry';
+
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
 
 // 1.2.1 exports attachClientSystemMetrics; CI/smoke may still resolve public 1.2.0.
@@ -446,6 +454,18 @@ export class Toggly {
 
   static recordUsage(featureKey: string, variant = 'enabled'): void {
     Toggly._telemetry?.recordUsage(featureKey, variant);
+  }
+
+  static use<T>(
+    featureKey: string,
+    fn: (scope: FeatureUsageScope) => Promise<T>,
+    variant = 'enabled',
+  ): Promise<T> {
+    if (Toggly._telemetry) return Toggly._telemetry.use(featureKey, fn, variant);
+    return runFeatureUsageScope(
+      { recordAttempt: () => {}, recordSuccessDuration: () => {}, recordFailure: () => {} },
+      fn,
+    );
   }
 
   static recordView(featureKey: string, variant = 'enabled'): void {

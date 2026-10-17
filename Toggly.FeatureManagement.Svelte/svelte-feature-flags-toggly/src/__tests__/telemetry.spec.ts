@@ -90,6 +90,28 @@ describe('Svelte frontend telemetry ownership and evaluations', () => {
     owner.dispose()
   })
 
+  it('use() records attempt and soft-fail error slots', async () => {
+    const owner = service()
+    await owner.use('Scoped', async () => undefined)
+    await owner.use('Scoped', async (scope) => { scope.fail() })
+    await owner.flushTelemetry()
+    expect(requests).toHaveLength(1)
+    expect(envelope(0).f.Scoped.enabled[1]).toBe(2)
+    expect(envelope(0).f.Scoped.enabled[3]).toBe(1)
+    owner.dispose()
+  })
+
+  it('use() without telemetry still invokes the callback', async () => {
+    const owner = service({ enableTelemetry: false })
+    let ran = false
+    await owner.use('Offline', async (scope) => { scope.fail(); ran = true })
+    expect(ran).toBe(true)
+    await owner.flushTelemetry()
+    expect(requests).toHaveLength(0)
+    owner.dispose()
+  })
+
+
   it.each([false, true])('hydrates token A→B→A conditional definitions with variants=%s', async enableVariants => {
     const seen: Array<{ url: URL; revision: string | null }> = []
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {

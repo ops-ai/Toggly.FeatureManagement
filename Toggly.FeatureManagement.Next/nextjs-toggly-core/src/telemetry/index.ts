@@ -8,6 +8,9 @@ import {
 import { MetricsBatcher, type MetricsFeatureOptions } from './metrics-batcher.js'
 import { UsageBatcher, type UsageFlushBundle } from './usage-batcher.js'
 import type { MetricStatPayload } from './metrics-batcher.js'
+import { runFeatureUsageScope } from './usage-scope.js'
+
+export type { FeatureUsageScope } from './usage-scope.js'
 
 export interface UsageSender {
   sendStats(request: Record<string, unknown>): Promise<unknown>
@@ -307,6 +310,41 @@ export class TelemetryRuntime {
 
   recordView(feature: string, identity?: string, variant?: string): void {
     this.usageBatcher?.recordView(feature, identity, variant)
+  }
+
+  recordUsageError(feature: string, identity?: string, variant = 'enabled', count = 1): void {
+    this.usageBatcher?.recordUsageError(feature, identity, variant, count)
+  }
+
+  recordUsageDuration(
+    feature: string,
+    durationMs: number,
+    identity?: string,
+    variant = 'enabled',
+    failed = false,
+  ): void {
+    this.usageBatcher?.recordUsageDuration(feature, durationMs, identity, variant, failed)
+  }
+
+  async use<T>(
+    featureKey: string,
+    fn: (scope: import('./usage-scope.js').FeatureUsageScope) => Promise<T>,
+    identity?: string,
+    variant = 'enabled',
+  ): Promise<T> {
+    const id = identity
+    return runFeatureUsageScope(
+      {
+        recordAttempt: () => this.recordUsage(featureKey, id, variant),
+        recordSuccessDuration: (durationMs) =>
+          this.recordUsageDuration(featureKey, durationMs, id, variant, false),
+        recordFailure: (durationMs) => {
+          this.recordUsageError(featureKey, id, variant)
+          this.recordUsageDuration(featureKey, durationMs, id, variant, true)
+        },
+      },
+      fn,
+    )
   }
 
   recordDefinitionCacheHit(): void {

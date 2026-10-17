@@ -65,8 +65,9 @@ jobs:
 
       - name: Install core dependencies (for other packages)
         if: matrix.sdk != 'Core'
-        working-directory: Toggly.FeatureManagement.ReactNative/libs/core
-        run: npm ci || npm install
+        uses: ./.github/actions/install-local-client-telemetry
+        with:
+          package-dir: Toggly.FeatureManagement.ReactNative/libs/core
 
       - name: Overlay local toggly-client-telemetry
         working-directory: Toggly.FeatureManagement.ReactNative/libs/core
@@ -81,9 +82,10 @@ jobs:
         working-directory: Toggly.FeatureManagement.ReactNative/libs/core
         run: npm run build
 
-      - name: Install dependencies
-        working-directory: ${{ matrix.path }}
-        run: npm ci || npm install
+      - name: Install dependencies with local client-telemetry
+        uses: ./.github/actions/install-local-client-telemetry
+        with:
+          package-dir: ${{ matrix.path }}
 
       - name: Overlay local toggly-client-telemetry into package
         if: matrix.sdk != 'Core'

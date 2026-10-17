@@ -1,0 +1,71 @@
+name: Install local client-telemetry
+description: >-
+  Build/pack in-repo @ops-ai/toggly-client-telemetry, export
+  TOGGLY_CLIENT_TELEMETRY_TARBALL for packed-host fixtures, install consumer
+  deps against a published range, then overlay the local package into
+  node_modules for compile/test.
+
+inputs:
+  package-dir:
+    description: Package directory containing package.json (relative or absolute)
+    required: true
+  use-npm-ci:
+    description: Unused; kept for call-site compatibility.
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Install with overlaid local @ops-ai/toggly-client-telemetry
+      shell: bash
+      run: |
+        set -euo pipefail
+        wd="${{ inputs.package-dir }}"
+        if [[ "$wd" != /* ]]; then
+          wd="$GITHUB_WORKSPACE/$wd"
+        fi
+        telemetry="$GITHUB_WORKSPACE/toggly-client-telemetry"
+        pkg_json="$wd/package.json"
+        pack_dir="${RUNNER_TEMP:-/tmp}/toggly-client-telemetry-pack"
+        mkdir -p "$pack_dir"
+        if [[ ! -f "$pkg_json" ]]; then
+          echo "Missing package.json under $wd" >&2
+          exit 1
+        fi
+        (cd "$telemetry" && (npm ci || npm install) && npm run build && npm pack --pack-destination "$pack_dir")
+        tgz="$(ls -1 "$pack_dir"/ops-ai-toggly-client-telemetry-*.tgz | head -1)"
+        test -f "$tgz"
+        echo "TOGGLY_CLIENT_TELEMETRY_TARBALL=$tgz" >> "$GITHUB_ENV"
+        echo "Exported TOGGLY_CLIENT_TELEMETRY_TARBALL=$tgz"
+        if ! PKG="$pkg_json" node -e "
+          const p = require(process.env.PKG);
+          const d = { ...p.dependencies, ...p.devDependencies, ...p.peerDependencies, ...p.optionalDependencies };
+          process.exit(d['@ops-ai/toggly-client-telemetry'] ? 0 : 1);
+        "; then
+          echo "Skip node_modules overlay (not a direct dependency of $wd)"
+          (cd "$wd" && (npm ci || npm install))
+          exit 0
+        fi
+        cp "$pkg_json" "$pkg_json.ops1758.bak"
+        PKG="$pkg_json" node -e "
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync(process.env.PKG, 'utf8'));
+          for (const key of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
+            if (pkg[key] && pkg[key]['@ops-ai/toggly-client-telemetry']) {
+              pkg[key]['@ops-ai/toggly-client-telemetry'] = '^1.2.0';
+            }
+          }
+          fs.writeFileSync(process.env.PKG, JSON.stringify(pkg, null, 2) + '\n');
+        "
+        (cd "$wd" && (npm ci || npm install))
+        mv "$pkg_json.ops1758.bak" "$pkg_json"
+        dest="$wd/node_modules/@ops-ai/toggly-client-telemetry"
+        mkdir -p "$(dirname "$dest")"
+        rm -rf "$dest"
+        mkdir -p "$dest"
+        # Copy only the publishable surface (package.json + dist). Including src/
+        # makes unbuild treat the package as local source and fail on implicit bundling.
+        cp "$telemetry/package.json" "$dest/package.json"
+        cp -R "$telemetry/dist" "$dest/dist"
+        echo "Overlaid local toggly-client-telemetry into $dest"

@@ -231,7 +231,10 @@ module Toggly
               checkCount: vs[:checkCount].to_i,
               requestCount: vs[:requestCount].to_i,
               usedCount: vs[:usedCount].to_i,
-              viewedCount: vs[:viewedCount].to_i
+              viewedCount: vs[:viewedCount].to_i,
+              errorCount: vs[:errorCount].to_i,
+              durationSumMs: vs[:durationSumMs].to_i,
+              errorDurationSumMs: vs[:errorDurationSumMs].to_i
             )
           end
           sm
