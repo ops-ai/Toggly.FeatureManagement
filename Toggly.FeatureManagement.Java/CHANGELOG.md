@@ -30,6 +30,14 @@
 
 - User-Agent and live-update `sdkVersion` report `toggly-java/2.2.2`.
 
+### Fixed
+
+- Maven Central Portal bundle validation for 2.2.2: pin `maven-clean-plugin` and
+  `maven-install-plugin` to the versions used for the last successful release, and
+  upgrade `central-publishing-maven-plugin` to 0.12.0 so staging metadata is removed
+  before the deployment bundle is uploaded (without this, Central rejects the bundle
+  with missing `.pom` paths under `io/toggly/*`).
+
 ## 2.2.1
 
 2026-10-06
