@@ -1,3 +1,12 @@
+## 1.14.2
+
+2026-10-16
+
+### Fixed
+- `use()` measures duration with a monotonic stopwatch so NTP / manual clock
+  changes cannot inflate or zero `durationSumMs` / `errorDurationSumMs`
+  (wall clock stays for Retry-After only) [OPS-1758].
+
 ## 1.14.1
 
 2026-10-15

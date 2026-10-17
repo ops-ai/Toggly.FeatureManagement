@@ -25,6 +25,8 @@ class TelemetryReporter {
     Dio? httpClient,
     Future<void> Function(Duration)? delay,
     DateTime Function()? clock,
+    /// Monotonic elapsed ms for usage-scope duration (not wall clock).
+    int Function()? monotonicElapsedMs,
     double Function()? random,
     void Function(String)? onDiagnostic,
     Uint8List? Function(Uint8List)? compressor,
@@ -40,6 +42,11 @@ class TelemetryReporter {
         _http = httpClient ?? Dio(),
         _delay = delay,
         _clock = clock ?? DateTime.now,
+        _monotonicElapsedMs = monotonicElapsedMs ??
+            (() {
+              final uptime = Stopwatch()..start();
+              return () => uptime.elapsedMilliseconds;
+            })(),
         _random = random ?? Random().nextDouble,
         _onDiagnostic = onDiagnostic,
         _compressor = compressor ?? gzipTelemetry,
@@ -87,6 +94,7 @@ class TelemetryReporter {
   final Dio _http;
   final Future<void> Function(Duration)? _delay;
   final DateTime Function() _clock;
+  final int Function() _monotonicElapsedMs;
   final double Function() _random;
   final void Function(String)? _onDiagnostic;
   final Uint8List? Function(Uint8List) _compressor;
@@ -148,12 +156,13 @@ class TelemetryReporter {
     // Pin attribution for the whole scope so mid-flight setContext cannot split metrics.
     final attribution = captureContext();
     _recordFeature(featureKey, variant, 1, attribution);
-    final started = _clock();
+    // Stopwatch-based monotonic elapsed — wall `_clock` is only for Retry-After.
+    final startedMs = _monotonicElapsedMs();
     var failed = false;
     void fail() => failed = true;
     try {
       final result = await action(fail);
-      final durationMs = max(0, _clock().difference(started).inMilliseconds);
+      final durationMs = max(0, _monotonicElapsedMs() - startedMs);
       if (failed) {
         _recordFeature(featureKey, variant, 3, attribution, 1);
         if (durationMs > 0) {
@@ -164,7 +173,7 @@ class TelemetryReporter {
       }
       return result;
     } catch (error, stack) {
-      final durationMs = max(0, _clock().difference(started).inMilliseconds);
+      final durationMs = max(0, _monotonicElapsedMs() - startedMs);
       _recordFeature(featureKey, variant, 3, attribution, 1);
       if (durationMs > 0) {
         _recordFeature(featureKey, variant, 5, attribution, durationMs);

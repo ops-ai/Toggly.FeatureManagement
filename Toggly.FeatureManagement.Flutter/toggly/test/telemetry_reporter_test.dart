@@ -868,6 +868,7 @@ void main() {
 
   test('use records attempt, duration, soft-fail, and thrown errors', () async {
     var now = DateTime.utc(2026, 1, 1);
+    var monoMs = 0;
     final sent = <dynamic>[];
     final dio = Dio()
       ..interceptors.add(InterceptorsWrapper(onRequest: (r, h) {
@@ -880,29 +881,30 @@ void main() {
       identity: 'alice',
       httpClient: dio,
       clock: () => now,
+      monotonicElapsedMs: () => monoMs,
     );
     expect(
         await reporter.use('Scoped', (fail) async {
-          now = now.add(const Duration(milliseconds: 12));
+          monoMs += 12;
           return 'ok';
         }),
         'ok');
     expect(
         await reporter.use('Scoped', (fail) async {
           fail();
-          now = now.add(const Duration(milliseconds: 9));
+          monoMs += 9;
           return 'soft';
         }),
         'soft');
     await expectLater(
         reporter.use('Scoped', (fail) async {
-          now = now.add(const Duration(milliseconds: 5));
+          monoMs += 5;
           throw StateError('boom');
         }),
         throwsA(isA<StateError>()));
     await reporter.use('Pinned', (fail) async {
       reporter.setContext(identity: 'bob');
-      now = now.add(const Duration(milliseconds: 8));
+      monoMs += 8;
     });
     await reporter.flushTelemetry();
     final aliceFeatures = sent
@@ -915,6 +917,34 @@ void main() {
     expect(aliceFeatures['Scoped'], [0, 3, 0, 2, 12, 14]);
     expect(aliceFeatures['Pinned'], [0, 1, 0, 0, 8]);
     expect(sent.any((b) => b['u'] == 'bob' && b['f'] != null), isFalse);
+    reporter.dispose();
+  });
+
+  test('use duration ignores wall-clock jumps', () async {
+    var now = DateTime.utc(2026, 1, 1);
+    var monoMs = 100;
+    final sent = <dynamic>[];
+    final dio = Dio()
+      ..interceptors.add(InterceptorsWrapper(onRequest: (r, h) {
+        sent.add(jsonDecode(
+            r.data is String ? r.data : utf8.decode(gzip.decode(r.data))));
+        h.resolve(Response(requestOptions: r, statusCode: 202));
+      }));
+    final reporter = TelemetryReporter(
+      appKey: 'key',
+      httpClient: dio,
+      clock: () => now,
+      monotonicElapsedMs: () => monoMs,
+    );
+    await reporter.use('Scoped', (fail) async {
+      now = now.add(const Duration(hours: 2));
+      monoMs += 15;
+    });
+    await reporter.flushTelemetry();
+    final enabled =
+        List<num>.from(sent.single['f']['Scoped']['enabled'] as List);
+    expect(enabled[1], 1);
+    expect(enabled[4], 15);
     reporter.dispose();
   });
 }
