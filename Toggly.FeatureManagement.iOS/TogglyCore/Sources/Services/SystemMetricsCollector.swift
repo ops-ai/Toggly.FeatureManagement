@@ -225,25 +225,28 @@ extension SystemMetricsCollector {
             togglySystemMetricsUncaughtHandler(exception)
         }
 
+        struct CpuPercentSample {
+            let userMicros: UInt64
+            let sysMicros: UInt64
+            let monotonicNs: UInt64
+        }
+
         static func computeCpuPercent(
-            previousUserMicros: UInt64,
-            previousSysMicros: UInt64,
-            previousMonotonicNs: UInt64,
-            currentUserMicros: UInt64,
-            currentSysMicros: UInt64,
-            currentMonotonicNs: UInt64
+            previous: CpuPercentSample,
+            current: CpuPercentSample
         ) -> Double? {
-            let previous = CpuSample(
-                userMicros: previousUserMicros,
-                sysMicros: previousSysMicros,
-                monotonicNs: previousMonotonicNs
+            SystemMetricsCollector.computeCpuPercent(
+                previous: CpuSample(
+                    userMicros: previous.userMicros,
+                    sysMicros: previous.sysMicros,
+                    monotonicNs: previous.monotonicNs
+                ),
+                current: CpuSample(
+                    userMicros: current.userMicros,
+                    sysMicros: current.sysMicros,
+                    monotonicNs: current.monotonicNs
+                )
             )
-            let current = CpuSample(
-                userMicros: currentUserMicros,
-                sysMicros: currentSysMicros,
-                monotonicNs: currentMonotonicNs
-            )
-            return SystemMetricsCollector.computeCpuPercent(previous: previous, current: current)
         }
     }
 }

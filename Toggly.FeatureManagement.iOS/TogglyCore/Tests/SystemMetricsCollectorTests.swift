@@ -262,21 +262,21 @@ final class SystemMetricsCollectorTests: XCTestCase {
     }
 
     func testComputeCpuPercentEdgeCases() {
+        typealias Sample = SystemMetricsCollector.Testing.CpuPercentSample
         XCTAssertNil(
             SystemMetricsCollector.Testing.computeCpuPercent(
-                previousUserMicros: 0, previousSysMicros: 0, previousMonotonicNs: 100,
-                currentUserMicros: 1, currentSysMicros: 0, currentMonotonicNs: 100
+                previous: Sample(userMicros: 0, sysMicros: 0, monotonicNs: 100),
+                current: Sample(userMicros: 1, sysMicros: 0, monotonicNs: 100)
             )
         )
         let zeroUsage = SystemMetricsCollector.Testing.computeCpuPercent(
-            previousUserMicros: 500, previousSysMicros: 500, previousMonotonicNs: 0,
-            currentUserMicros: 500, currentSysMicros: 500, currentMonotonicNs: 2_000_000_000
+            previous: Sample(userMicros: 500, sysMicros: 500, monotonicNs: 0),
+            current: Sample(userMicros: 500, sysMicros: 500, monotonicNs: 2_000_000_000)
         )
         XCTAssertEqual(zeroUsage, 0)
         let capped = SystemMetricsCollector.Testing.computeCpuPercent(
-            previousUserMicros: 0, previousSysMicros: 0, previousMonotonicNs: 0,
-            currentUserMicros: 10_000_000, currentSysMicros: 0,
-            currentMonotonicNs: 10_000_000
+            previous: Sample(userMicros: 0, sysMicros: 0, monotonicNs: 0),
+            current: Sample(userMicros: 10_000_000, sysMicros: 0, monotonicNs: 10_000_000)
         )
         XCTAssertEqual(capped, 100)
     }

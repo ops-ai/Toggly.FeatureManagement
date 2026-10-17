@@ -30,10 +30,14 @@ class TelemetryRuntimeSystemMetricsTest {
                 })
                 .metricsClient(new MetricsGrpcClient() {
                     @Override
-                    public void sendMetrics(MetricStatPayload payload) {}
+                    public void sendMetrics(MetricStatPayload payload) {
+                        // Unused: system metrics must not sample when disabled.
+                    }
 
                     @Override
-                    public void close() {}
+                    public void close() {
+                        // No channel opened by this stub.
+                    }
                 })
                 .build();
         runtime.start();
@@ -54,7 +58,9 @@ class TelemetryRuntimeSystemMetricsTest {
             }
 
             @Override
-            public void close() {}
+            public void close() {
+                // No channel opened by this stub.
+            }
         };
 
         TelemetryRuntime runtime = TelemetryRuntime.builder()
@@ -115,7 +121,9 @@ class TelemetryRuntimeSystemMetricsTest {
             }
 
             @Override
-            public void close() {}
+            public void close() {
+                // No channel opened by this stub.
+            }
         };
 
         TelemetryRuntime runtime = TelemetryRuntime.builder()

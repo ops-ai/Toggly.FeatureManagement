@@ -101,63 +101,72 @@ public final class TelemetryRuntime implements AutoCloseable, DefinitionCacheRec
     }
 
     public void start() {
-        if (closed.get()) {
+        if (closed.get() || (!enableUsageTracking && !enableMetrics)) {
+            return;
+        }
+        resolveClients();
+        createBatchers();
+        boolean needSystemMetrics = enableMetrics && systemMetrics;
+        maybeStartScheduler(needSystemMetrics);
+        if (needSystemMetrics) {
+            startSystemMetrics();
+        }
+        attachShutdownHook();
+    }
+
+    private void resolveClients() {
+        if (injectedUsageClient != null || injectedMetricsClient != null) {
+            clients = new GrpcClients(injectedUsageClient, injectedMetricsClient);
             return;
         }
         if (!enableUsageTracking && !enableMetrics) {
             return;
         }
-
-        if (injectedUsageClient != null || injectedMetricsClient != null) {
-            clients = new GrpcClients(injectedUsageClient, injectedMetricsClient);
-        } else if (enableUsageTracking || enableMetrics) {
-            clients = createGrpcClientsReflectively(metricsBaseUrl);
-            if (clients == null) {
-                LOGGER.warning(
-                        "Usage/metrics enabled but gRPC dependencies are not on the classpath. "
-                                + "Add optional deps grpc-netty-shaded, grpc-protobuf, grpc-stub, "
-                                + "and protobuf-java to send telemetry.");
-            }
+        clients = createGrpcClientsReflectively(metricsBaseUrl);
+        if (clients == null) {
+            LOGGER.warning(
+                    "Usage/metrics enabled but gRPC dependencies are not on the classpath. "
+                            + "Add optional deps grpc-netty-shaded, grpc-protobuf, grpc-stub, "
+                            + "and protobuf-java to send telemetry.");
         }
+    }
 
+    private void createBatchers() {
         if (enableUsageTracking) {
             usageBatcher = new UsageBatcher(appKey, environment, instanceName, appVersion);
         }
         if (enableMetrics) {
             metricsBatcher = new MetricsBatcher(appKey, environment, instanceName);
         }
+    }
 
-        boolean needSystemMetrics = enableMetrics && systemMetrics;
+    private void maybeStartScheduler(boolean needSystemMetrics) {
         boolean needScheduler =
                 (enableUsageTracking && usageFlushInterval.toMillis() > 0)
                         || (enableMetrics && metricsFlushInterval.toMillis() > 0)
                         || needSystemMetrics;
-        if (needScheduler) {
-            scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-                Thread t = new Thread(r, "toggly-telemetry");
-                t.setDaemon(true);
-                return t;
-            });
-            if (enableUsageTracking && usageFlushInterval.toMillis() > 0) {
-                usageFuture = scheduler.scheduleAtFixedRate(
-                        this::flushUsageSafe,
-                        usageFlushInterval.toMillis(),
-                        usageFlushInterval.toMillis(),
-                        TimeUnit.MILLISECONDS);
-            }
-            if (enableMetrics && metricsFlushInterval.toMillis() > 0) {
-                metricsFuture = scheduler.scheduleAtFixedRate(
-                        this::flushMetricsSafe,
-                        metricsFlushInterval.toMillis(),
-                        metricsFlushInterval.toMillis(),
-                        TimeUnit.MILLISECONDS);
-            }
+        if (!needScheduler) {
+            return;
         }
-
-        if (needSystemMetrics) {
-            startSystemMetrics();
+        scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "toggly-telemetry");
+            t.setDaemon(true);
+            return t;
+        });
+        if (enableUsageTracking && usageFlushInterval.toMillis() > 0) {
+            usageFuture = scheduler.scheduleAtFixedRate(
+                    this::flushUsageSafe,
+                    usageFlushInterval.toMillis(),
+                    usageFlushInterval.toMillis(),
+                    TimeUnit.MILLISECONDS);
         }
-        attachShutdownHook();
+        if (enableMetrics && metricsFlushInterval.toMillis() > 0) {
+            metricsFuture = scheduler.scheduleAtFixedRate(
+                    this::flushMetricsSafe,
+                    metricsFlushInterval.toMillis(),
+                    metricsFlushInterval.toMillis(),
+                    TimeUnit.MILLISECONDS);
+        }
     }
 
     private void startSystemMetrics() {

@@ -9,18 +9,18 @@ import (
 )
 
 func TestWithIntervalOverridesDefault(t *testing.T) {
-	c := New(func(string, float64) {}, WithInterval(3*time.Second))
+	c := New(func(string, float64) { /* observer unused in this construction test */ }, WithInterval(3*time.Second))
 	if c.interval != 3*time.Second {
 		t.Fatalf("interval = %v, want 3s", c.interval)
 	}
-	ignored := New(func(string, float64) {}, WithInterval(0))
+	ignored := New(func(string, float64) { /* observer unused in this construction test */ }, WithInterval(0))
 	if ignored.interval != DefaultInterval {
 		t.Fatalf("interval = %v, want default %v", ignored.interval, DefaultInterval)
 	}
 }
 
 func TestCollectorStartIsIdempotent(t *testing.T) {
-	c := New(func(string, float64) {}, WithSampler(func() []Observation {
+	c := New(func(string, float64) { /* observer unused in this construction test */ }, WithSampler(func() []Observation {
 		return nil
 	}), WithInterval(time.Hour))
 	c.Start()
@@ -29,7 +29,7 @@ func TestCollectorStartIsIdempotent(t *testing.T) {
 }
 
 func TestCollectorStopNoOpWhenNotStarted(t *testing.T) {
-	c := New(func(string, float64) {})
+	c := New(func(string, float64) { /* observer unused in this construction test */ })
 	c.Stop()
 }
 
@@ -67,7 +67,7 @@ func TestCollectorBuildSampleWithoutSampler(t *testing.T) {
 
 func TestSampleCPUSkipsZeroWallDuration(t *testing.T) {
 	now := time.Now()
-	c := New(func(string, float64) {})
+	c := New(func(string, float64) { /* observer unused in this construction test */ })
 	c.lastCPU = &cpuSample{userMicros: 100, systemMicros: 0, at: now}
 	if obs := c.sampleCPU(now); obs != nil {
 		t.Fatalf("expected nil observation for zero wall duration, got %+v", obs)
@@ -75,7 +75,7 @@ func TestSampleCPUSkipsZeroWallDuration(t *testing.T) {
 }
 
 func TestSampleCPURejectsRegressiveUsage(t *testing.T) {
-	c := New(func(string, float64) {})
+	c := New(func(string, float64) { /* observer unused in this construction test */ })
 	c.mu.Lock()
 	c.started = true
 	c.lastCPU = &cpuSample{
@@ -137,7 +137,7 @@ func TestCollectorTickNoOpWhenStopped(t *testing.T) {
 
 func TestSampleCPUProducesPercentAfterSecondTick(t *testing.T) {
 	// Drive ticks synchronously so the background Start loop cannot race -race.
-	c := New(func(string, float64) {})
+	c := New(func(string, float64) { /* observer unused in this construction test */ })
 	c.mu.Lock()
 	c.started = true
 	c.seedCPU()

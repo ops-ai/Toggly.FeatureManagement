@@ -17,6 +17,8 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.LongSupplier;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import com.sun.management.OperatingSystemMXBean;
 
@@ -28,6 +30,8 @@ public final class SystemMetricsCollector {
 
     public static final long SYSTEM_METRICS_INTERVAL_MS = 10_000L;
     public static final int SYSTEM_METRICS_MAX_PENDING = 30;
+
+    private static final Logger LOGGER = Logger.getLogger(SystemMetricsCollector.class.getName());
 
     @FunctionalInterface
     public interface Observe {
@@ -60,7 +64,8 @@ public final class SystemMetricsCollector {
     private long lastGcTimeMs = -1L;
     /** Cumulative allocated-bytes sample for AllocationRate (not live heap used). */
     private long lastAllocatedBytes = -1L;
-    private long lastSampleWallMs = -1L;
+    /** Monotonic nanoTime of the last default sample (not wall clock). */
+    private long lastSampleMonoNs = -1L;
 
     public SystemMetricsCollector(Observe observe) {
         this(observe, SYSTEM_METRICS_INTERVAL_MS, null, null, null);
@@ -109,7 +114,7 @@ public final class SystemMetricsCollector {
         lastGcTimeMs = totalGcCollectionTimeMs();
         Long allocatedAtStart = readTotalAllocatedBytes();
         lastAllocatedBytes = allocatedAtStart != null ? allocatedAtStart : -1L;
-        lastSampleWallMs = System.currentTimeMillis();
+        lastSampleMonoNs = nanoTime.getAsLong();
         attachUncaughtHandler();
         future = scheduler.scheduleAtFixedRate(
                 this::tickSafe,
@@ -140,21 +145,24 @@ public final class SystemMetricsCollector {
             return;
         }
         try {
-            List<Observation> samples = sampler.sample();
-            for (Observation sample : samples) {
-                if (!Double.isFinite(sample.value())) {
-                    continue;
-                }
-                int pending = pendingByMetric.getOrDefault(sample.metric(), 0);
-                if (pending >= SYSTEM_METRICS_MAX_PENDING) {
-                    continue;
-                }
-                pendingByMetric.put(sample.metric(), pending + 1);
-                observe.observe(sample.metric(), sample.value());
+            for (Observation sample : sampler.sample()) {
+                publishSample(sample);
             }
         } catch (RuntimeException ignored) {
             // Never disrupt the host process.
         }
+    }
+
+    private void publishSample(Observation sample) {
+        if (!Double.isFinite(sample.value())) {
+            return;
+        }
+        int pending = pendingByMetric.getOrDefault(sample.metric(), 0);
+        if (pending >= SYSTEM_METRICS_MAX_PENDING) {
+            return;
+        }
+        pendingByMetric.put(sample.metric(), pending + 1);
+        observe.observe(sample.metric(), sample.value());
     }
 
     /** Call after a successful metrics flush to free the pending cap. */
@@ -172,11 +180,7 @@ public final class SystemMetricsCollector {
 
     private List<Observation> defaultSample() {
         List<Observation> out = new ArrayList<>();
-        long nowMs = System.currentTimeMillis();
-        double intervalSec = lastSampleWallMs > 0
-                ? Math.max(0.001, (nowMs - lastSampleWallMs) / 1000.0)
-                : intervalMs / 1000.0;
-        lastSampleWallMs = nowMs;
+        double intervalSec = advanceSampleIntervalSec();
 
         Double cpu = sampleCpuPercent();
         if (cpu != null) {
@@ -193,31 +197,49 @@ public final class SystemMetricsCollector {
             out.add(new Observation("GCHeapSize", heapUsed));
         }
 
-        Long allocated = readTotalAllocatedBytes();
-        if (allocated != null) {
-            if (lastAllocatedBytes >= 0 && allocated >= lastAllocatedBytes && intervalSec > 0) {
-                double rate = (allocated - lastAllocatedBytes) / intervalSec;
-                if (Double.isFinite(rate) && rate >= 0) {
-                    out.add(new Observation("AllocationRate", rate));
-                }
-            }
-            lastAllocatedBytes = allocated;
-        }
+        appendAllocationRate(out, intervalSec);
 
         Double timeInGc = sampleTimeInGcPercent(intervalSec);
         if (timeInGc != null) {
             out.add(new Observation("TimeInGC", timeInGc));
         }
 
-        int pendingExceptions = pendingByMetric.getOrDefault("ExceptionCount", 0);
-        if (pendingExceptions < SYSTEM_METRICS_MAX_PENDING) {
-            int exceptions = exceptionCount.getAndSet(0);
-            if (exceptions > 0) {
-                out.add(new Observation("ExceptionCount", exceptions));
+        appendExceptionCount(out);
+        return out;
+    }
+
+    private double advanceSampleIntervalSec() {
+        long nowNs = nanoTime.getAsLong();
+        double intervalSec = lastSampleMonoNs > 0
+                ? Math.max(0.001, (nowNs - lastSampleMonoNs) / 1_000_000_000.0)
+                : intervalMs / 1000.0;
+        lastSampleMonoNs = nowNs;
+        return intervalSec;
+    }
+
+    private void appendAllocationRate(List<Observation> out, double intervalSec) {
+        Long allocated = readTotalAllocatedBytes();
+        if (allocated == null) {
+            return;
+        }
+        if (lastAllocatedBytes >= 0 && allocated >= lastAllocatedBytes && intervalSec > 0) {
+            double rate = (allocated - lastAllocatedBytes) / intervalSec;
+            if (Double.isFinite(rate) && rate >= 0) {
+                out.add(new Observation("AllocationRate", rate));
             }
         }
+        lastAllocatedBytes = allocated;
+    }
 
-        return out;
+    private void appendExceptionCount(List<Observation> out) {
+        int pendingExceptions = pendingByMetric.getOrDefault("ExceptionCount", 0);
+        if (pendingExceptions >= SYSTEM_METRICS_MAX_PENDING) {
+            return;
+        }
+        int exceptions = exceptionCount.getAndSet(0);
+        if (exceptions > 0) {
+            out.add(new Observation("ExceptionCount", exceptions));
+        }
     }
 
     private Double sampleCpuPercent() {
@@ -295,31 +317,44 @@ public final class SystemMetricsCollector {
             if (!hotspot.isThreadAllocatedMemoryEnabled()) {
                 hotspot.setThreadAllocatedMemoryEnabled(true);
             }
-            // Prefer JVM total API when present (JDK 21+). Reflect on the
-            // public HotSpot interface so module encapsulation does not block
-            // Method.invoke on the concrete MXBean class.
-            try {
-                var method = com.sun.management.ThreadMXBean.class
-                        .getMethod("getTotalThreadAllocatedBytes");
-                Object value = method.invoke(hotspot);
-                if (value instanceof Long total && total >= 0L) {
-                    return total;
-                }
-            } catch (ReflectiveOperationException | NoSuchMethodError ignored) {
-                // Fall through to per-thread sum (JDK 17 / older HotSpot).
+            Long hotspotTotal = tryHotspotTotalAllocatedBytes(hotspot);
+            if (hotspotTotal != null) {
+                return hotspotTotal;
             }
-            long[] ids = hotspot.getAllThreadIds();
-            long[] bytes = hotspot.getThreadAllocatedBytes(ids);
-            long total = 0L;
-            for (long allocated : bytes) {
-                if (allocated > 0L) {
-                    total += allocated;
-                }
-            }
-            return total;
+            return sumThreadAllocatedBytes(hotspot);
         } catch (RuntimeException | LinkageError ignored) {
             return null;
         }
+    }
+
+    /**
+     * Prefer JVM total API when present (JDK 21+). Reflect on the public HotSpot
+     * interface so module encapsulation does not block Method.invoke.
+     */
+    private static Long tryHotspotTotalAllocatedBytes(com.sun.management.ThreadMXBean hotspot) {
+        try {
+            var method = com.sun.management.ThreadMXBean.class
+                    .getMethod("getTotalThreadAllocatedBytes");
+            Object value = method.invoke(hotspot);
+            if (value instanceof Long total && total >= 0L) {
+                return total;
+            }
+        } catch (ReflectiveOperationException | NoSuchMethodError ignored) {
+            // Fall through to per-thread sum (JDK 17 / older HotSpot).
+        }
+        return null;
+    }
+
+    private static long sumThreadAllocatedBytes(com.sun.management.ThreadMXBean hotspot) {
+        long[] ids = hotspot.getAllThreadIds();
+        long[] bytes = hotspot.getThreadAllocatedBytes(ids);
+        long total = 0L;
+        for (long allocated : bytes) {
+            if (allocated > 0L) {
+                total += allocated;
+            }
+        }
+        return total;
     }
 
     private static long totalGcCollectionTimeMs() {
@@ -364,19 +399,10 @@ public final class SystemMetricsCollector {
                 return null;
             }
             for (String line : Files.readAllLines(statusPath)) {
-                if (!line.startsWith("VmRSS:")) {
-                    continue;
+                Long rss = parseVmRssLine(line);
+                if (rss != null) {
+                    return rss;
                 }
-                String digits = line.replace("VmRSS:", "").trim();
-                int space = digits.indexOf(' ');
-                if (space > 0) {
-                    digits = digits.substring(0, space);
-                }
-                long kb = Long.parseLong(digits.trim());
-                if (kb < 0) {
-                    return null;
-                }
-                return kb * 1024L;
             }
         } catch (IOException | NumberFormatException ignored) {
             return null;
@@ -384,9 +410,25 @@ public final class SystemMetricsCollector {
         return null;
     }
 
-    /** Package-visible for tests: first default sample interval when wall clock was not primed. */
-    void resetLastSampleWallMsForTest(long wallMs) {
-        lastSampleWallMs = wallMs;
+    private static Long parseVmRssLine(String line) {
+        if (!line.startsWith("VmRSS:")) {
+            return null;
+        }
+        String digits = line.replace("VmRSS:", "").trim();
+        int space = digits.indexOf(' ');
+        if (space > 0) {
+            digits = digits.substring(0, space);
+        }
+        long kb = Long.parseLong(digits.trim());
+        if (kb < 0) {
+            return null;
+        }
+        return kb * 1024L;
+    }
+
+    /** Package-visible for tests: prime monotonic sample baseline inside {@link #defaultSample()}. */
+    void resetLastSampleMonoNsForTest(long monoNs) {
+        lastSampleMonoNs = monoNs;
     }
 
     /** Package-visible for tests: prime GC baseline inside {@link #defaultSample()}. */
@@ -410,7 +452,7 @@ public final class SystemMetricsCollector {
                 } else {
                     // Avoid ThreadGroup.uncaughtException — with no prior default handler it
                     // recurses into this handler and overflows the stack.
-                    ex.printStackTrace(System.err);
+                    LOGGER.log(Level.SEVERE, "Uncaught exception with no prior handler", ex);
                 }
             };
             activeUncaughtHandler = ours;

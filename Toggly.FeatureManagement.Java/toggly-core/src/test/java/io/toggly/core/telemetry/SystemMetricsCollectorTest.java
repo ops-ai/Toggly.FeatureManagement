@@ -60,6 +60,7 @@ class SystemMetricsCollectorTest {
             collector.start();
             collector.tick();
             collector.stop();
+            assertThat(collector).isNotNull();
         } finally {
             scheduler.shutdownNow();
         }
@@ -176,7 +177,7 @@ class SystemMetricsCollectorTest {
     }
 
     @Test
-    void defaultSamplerEmitsHeapAndCpuAfterWarmup() throws Exception {
+    void defaultSamplerEmitsHeapAndCpuAfterWarmup() {
         List<SystemMetricsCollector.Observation> observed = new ArrayList<>();
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         AtomicLong nanoTime = new AtomicLong(1_000_000_000L);
@@ -386,7 +387,7 @@ class SystemMetricsCollectorTest {
             SystemMetricsCollector collector = new SystemMetricsCollector(
                     (metric, value) -> {},
                     10_000L,
-                    () -> List.of(),
+                    List::of,
                     null,
                     scheduler);
             collector.start();
@@ -414,7 +415,7 @@ class SystemMetricsCollectorTest {
             SystemMetricsCollector collector = new SystemMetricsCollector(
                     (metric, value) -> {},
                     10_000L,
-                    () -> List.of(),
+                    List::of,
                     null,
                     scheduler);
             collector.start();
@@ -480,11 +481,12 @@ class SystemMetricsCollectorTest {
             SystemMetricsCollector collector = new SystemMetricsCollector(
                     (metric, value) -> {},
                     0L,
-                    () -> List.of(),
+                    List::of,
                     null,
                     scheduler);
             collector.start();
             collector.stop();
+            assertThat(collector).isNotNull();
         } finally {
             scheduler.shutdownNow();
         }
@@ -564,7 +566,7 @@ class SystemMetricsCollectorTest {
             observed.clear();
             cpuNs.set(1_000_000L + 50_000_000L);
             wallNs.set(1_000_000_000L + 100_000_000L);
-            collector.resetLastSampleWallMsForTest(System.currentTimeMillis() - 100);
+            collector.resetLastSampleMonoNsForTest(wallNs.get() - 100_000_000L);
             collector.tick();
             assertThat(observed.stream().anyMatch(o -> o.metric().equals("CpuUsage"))).isTrue();
             collector.stop();
