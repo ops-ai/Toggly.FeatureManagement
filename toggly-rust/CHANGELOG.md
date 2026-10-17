@@ -13,6 +13,8 @@
 - `use_feature` no longer holds the usage-batcher mutex across the user closure
   (nested telemetry deadlocks), and panics inside the scope record as failures
   [OPS-1758].
+- Commit the workspace `Cargo.lock` so dependency resolution stays reproducible
+  for CI and clears Sonar `text:S8570` on the published graph [OPS-1758].
 
 ## 0.10.0
 

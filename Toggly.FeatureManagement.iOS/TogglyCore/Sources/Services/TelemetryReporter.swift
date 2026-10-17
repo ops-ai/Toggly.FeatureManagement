@@ -418,6 +418,9 @@ public actor TelemetryReporter {
         } catch let error as CancellationError {
             // Attempt already recorded; cancellation is not an error and has no duration.
             throw error
+        } catch let error as URLError where error.code == .cancelled {
+            // URLSession maps task cancel to URLError.cancelled, not CancellationError.
+            throw error
         } catch {
             let after = attribution
             useAttribution(pinned)

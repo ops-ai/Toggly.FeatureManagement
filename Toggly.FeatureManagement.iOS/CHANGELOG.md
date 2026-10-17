@@ -12,6 +12,8 @@ All notable changes to the Toggly iOS SDK are documented in this file.
   Android `elapsedRealtime`), without wall-clock NTP skew [OPS-1758].
 - Default monotonic clock is a file-level function so watchOS / tvOS builds
   accept the init default without covariant `Self` [OPS-1758].
+- `use` treats `URLError.cancelled` as attempt-only cancellation, matching
+  `CancellationError` (URLSession task cancel) [OPS-1758].
 
 ## 1.8.1
 

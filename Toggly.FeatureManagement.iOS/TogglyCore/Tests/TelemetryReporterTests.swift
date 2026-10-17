@@ -812,6 +812,14 @@ final class TelemetryReporterTests: XCTestCase {
             XCTFail("expected throw")
         } catch is Boom {
         }
+        do {
+            _ = try await reporter.use("checkout", variant: "enabled") { _ -> Int in
+                throw URLError(.cancelled)
+            }
+            XCTFail("expected cancel")
+        } catch let error as URLError {
+            XCTAssertEqual(error.code, .cancelled)
+        }
         await reporter.flushTelemetry()
         let captured = await requests.requests
         XCTAssertEqual(captured.count, 1)
@@ -826,9 +834,10 @@ final class TelemetryReporterTests: XCTestCase {
         }
         let features = try XCTUnwrap(decoded["f"] as? [String: [String: [Int]]])
         let enabled = try XCTUnwrap(features["checkout"]?["enabled"])
-        // used=3, errors/duration slots present
-        XCTAssertGreaterThanOrEqual(enabled.count, 2)
-        XCTAssertEqual(enabled[1], 3)
+        // used=4 (success + soft-fail + boom + URL cancel); cancel adds no error
+        XCTAssertGreaterThanOrEqual(enabled.count, 4)
+        XCTAssertEqual(enabled[1], 4)
+        XCTAssertEqual(enabled[3], 2)
     }
 
     func testTogglyServiceUseNoOpWhenTelemetryDisabled() async throws {
