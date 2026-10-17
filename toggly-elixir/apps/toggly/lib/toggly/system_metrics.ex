@@ -77,7 +77,7 @@ defmodule Toggly.SystemMetrics do
     pct = run_delta / wall / schedulers * 100.0
 
     cond do
-      not is_number(pct) or pct < 0 -> nil
+      pct < 0 -> nil
       pct > 100.0 -> 100.0
       true -> pct
     end

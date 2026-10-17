@@ -73,7 +73,8 @@ class SystemMetricsCollector {
     if (_exceptionCount > 0) {
       final pending = _pendingByMetric['ExceptionCount'] ?? 0;
       if (pending < maxPending) {
-        out.add(SystemMetricSample('ExceptionCount', _exceptionCount.toDouble()));
+        out.add(
+            SystemMetricSample('ExceptionCount', _exceptionCount.toDouble()));
         _exceptionCount = 0;
       }
     }

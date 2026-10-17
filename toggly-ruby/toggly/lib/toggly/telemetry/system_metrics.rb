@@ -79,6 +79,7 @@ module Toggly
           @thread = nil
           @closed = false
           @trace = nil
+          @ended_threads = []
           install_exception_handler
         end
 
@@ -101,6 +102,7 @@ module Toggly
         def tick
           return if @closed
 
+          drain_ended_threads
           samples = @sampler ? @sampler.call : default_sample
           samples.each do |metric, value|
             next unless value.is_a?(Numeric) && value.finite? && value >= 0
@@ -201,24 +203,33 @@ module Toggly
         def install_exception_handler
           return if @trace
 
-          # Count threads that died with an unhandled exception. Skip
-          # Thread#kill ("aborting") so intentional kills are not counted.
+          # Do not call Thread#join/#value inside TracePoint — that raises
+          # ThreadError for normal exits. Queue ended threads and inspect on tick.
           @trace = TracePoint.new(:thread_end) do |tp|
             thread = tp.self
             next if thread == Thread.main
             next if thread.status == "aborting"
 
-            # status may still be "run"/"sleep" during :thread_end; join(0)
-            # raises when the thread died with an unhandled exception.
+            @mutex.synchronize { @ended_threads << thread }
+          end
+          @trace.enable
+        end
+
+        def drain_ended_threads
+          ended = @mutex.synchronize do
+            list = @ended_threads
+            @ended_threads = []
+            list
+          end
+          ended.each do |thread|
             begin
-              thread.join(0)
+              thread.value
             rescue StandardError, ScriptError
               @mutex.synchronize { @exception_count += 1 }
             rescue Exception # rubocop:disable Lint/RescueException
               nil
             end
           end
-          @trace.enable
         end
 
         def disable_exception_handler
@@ -226,6 +237,7 @@ module Toggly
 
           @trace.disable
           @trace = nil
+          drain_ended_threads
         end
       end
     end
