@@ -1730,9 +1730,9 @@ checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 
 [[package]]
 name = "libc"
-version = "0.2.191"
+version = "0.2.190"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a"
+checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
 
 [[package]]
 name = "linux-raw-sys"
@@ -3309,7 +3309,7 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "toggly"
-version = "0.11.0"
+version = "0.10.0"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -3347,7 +3347,7 @@ dependencies = [
 
 [[package]]
 name = "toggly-actix"
-version = "0.11.0"
+version = "0.10.0"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -3363,7 +3363,7 @@ dependencies = [
 
 [[package]]
 name = "toggly-axum"
-version = "0.11.0"
+version = "0.10.0"
 dependencies = [
  "axum 0.7.9",
  "axum-test",
@@ -3409,7 +3409,7 @@ dependencies = [
 
 [[package]]
 name = "toggly-macros"
-version = "0.11.0"
+version = "0.10.0"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -3421,7 +3421,7 @@ dependencies = [
 
 [[package]]
 name = "toggly-rocket"
-version = "0.11.0"
+version = "0.10.0"
 dependencies = [
  "rocket",
  "serde",

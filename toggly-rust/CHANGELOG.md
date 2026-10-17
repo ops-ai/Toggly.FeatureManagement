@@ -13,8 +13,6 @@
 - `use_feature` no longer holds the usage-batcher mutex across the user closure
   (nested telemetry deadlocks), and panics inside the scope record as failures
   [OPS-1758].
-- Commit the workspace `Cargo.lock` so dependency resolution stays reproducible
-  for CI and clears Sonar `text:S8570` on the published graph [OPS-1758].
 
 ## 0.10.0
 
@@ -41,6 +39,12 @@
   `get_variant_value` is unchanged [OPS-1365].
 
 ## Unreleased
+
+### Fixed
+
+- Commit the workspace `Cargo.lock` so SonarCloud security analysis sees pinned
+  dependency versions (clears `text:S8570` on member `Cargo.toml` files that
+  blocked the develop quality gate after `toggly-axum08` 0.1.1).
 
 ### Changed
 
