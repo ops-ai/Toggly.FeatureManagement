@@ -374,6 +374,25 @@ internal class TelemetryReporter(
             if (disposed && finalAttempted) return
             disposed.also { if (it) finalAttempted = true }
         }
+        val request = telemetryRequest(batch, finalSend)
+        var attempt = 0
+        while (!expired(batch)) {
+            val response = postTelemetry(request) ?: return
+            if (response.status == 202) {
+                onBatchAccepted?.invoke()
+                return
+            }
+            if (!canRetry(response.status, attempt)) {
+                diagnose("http-failure"); return
+            }
+            val wait = maxOf(if (attempt == 0) 30_000L else 60_000L, retryAfter(response.retryAfter))
+            if (wait >= 300_000 - (now() - batch.createdAt)) return
+            if (!awaitRetry(wait)) return
+            attempt++
+        }
+    }
+
+    private fun telemetryRequest(batch: Batch, finalSend: Boolean): Request {
         val compressed = if (finalSend) null else runCatching { compressor(batch.bytes) }.getOrNull()
         val bytes = compressed ?: batch.bytes
         // OkHttp must not automatically replay POSTs (including 503/Retry-After: 0 follow-ups).
@@ -383,33 +402,33 @@ internal class TelemetryReporter(
             override fun isOneShot() = true
             override fun writeTo(sink: BufferedSink) { sink.write(bytes) }
         }
-        val request = Request.Builder().url(endpoint!!).post(body).apply {
+        return Request.Builder().url(endpoint!!).post(body).apply {
             if (compressed != null) header("Content-Encoding", "gzip")
         }.build()
-        var attempt = 0
-        while (!expired(batch)) {
-            val response = try {
-                withTimeout(5_000) { transport?.invoke(request) ?: execute(request) }
-            } catch (_: TimeoutCancellationException) {
-                diagnose("transport-failure"); return
-            } catch (cancelled: CancellationException) { throw cancelled
-            } catch (_: Exception) { diagnose("transport-failure"); return }
-            if (response.status == 202) {
-                onBatchAccepted?.invoke()
-                return
-            }
-            if (response.status !in listOf(429, 503) || attempt == 2 || synchronized(lock) { disposed }) {
-                diagnose("http-failure"); return
-            }
-            val wait = maxOf(if (attempt == 0) 30_000L else 60_000L, retryAfter(response.retryAfter))
-            if (wait >= 300_000 - (now() - batch.createdAt)) return
-            val sleeping = synchronized(lock) {
-                if (disposed) return
-                owner.launch(start = CoroutineStart.LAZY) { sleep(wait) }.also { retry = it; it.start() }
-            }
-            sleeping.join()
-            synchronized(lock) { retry = null; if (disposed) return }
-            attempt++
+    }
+
+    private suspend fun postTelemetry(request: Request): TelemetryResponse? = try {
+        withTimeout(5_000) { transport?.invoke(request) ?: execute(request) }
+    } catch (_: TimeoutCancellationException) {
+        diagnose("transport-failure"); null
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        diagnose("transport-failure"); null
+    }
+
+    private fun canRetry(status: Int, attempt: Int): Boolean =
+        status in listOf(429, 503) && attempt < 2 && !synchronized(lock) { disposed }
+
+    private suspend fun awaitRetry(wait: Long): Boolean {
+        val sleeping = synchronized(lock) {
+            if (disposed) return false
+            owner.launch(start = CoroutineStart.LAZY) { sleep(wait) }.also { retry = it; it.start() }
+        }
+        sleeping.join()
+        return synchronized(lock) {
+            retry = null
+            !disposed
         }
     }
 
