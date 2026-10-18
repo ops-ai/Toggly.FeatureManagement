@@ -427,7 +427,8 @@ test('uses one aggregate Sonar project and requires the full coverage bundle', (
   assert.equal(aggregateSonarConfig().projectKey, 'toggly-sdks-javascript');
   assert.ok(REQUIRED_COVERAGE_SDKS.includes('React'));
   assert.ok(REQUIRED_COVERAGE_SDKS.includes('Node-Core'));
-  assert.ok(!REQUIRED_COVERAGE_SDKS.includes('Local-Gates'));
+  assert.ok(REQUIRED_COVERAGE_SDKS.includes('Local-Gates'));
+  assert.ok(REQUIRED_COVERAGE_SDKS.includes('Docusaurus'));
   const releaseGate = readFileSync(new URL('./javascript-aggregate-release-gate.yml', import.meta.url), 'utf8');
   const reactRelease = readFileSync(new URL('./sdk-react-release.yml', import.meta.url), 'utf8');
   assert.match(releaseGate, /wait-javascript-aggregate-analysis\.mjs/);
