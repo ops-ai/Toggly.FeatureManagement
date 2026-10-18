@@ -178,8 +178,7 @@ struct Inner {
 impl TelemetryRuntime {
     /// Create and start batchers / flush timers when either side is enabled.
     pub fn start(mut config: TelemetryRuntimeConfig) -> Self {
-        let (enable_usage, enable_metrics, warn_feature_off) =
-            Self::resolve_enablement(&config);
+        let (enable_usage, enable_metrics, warn_feature_off) = Self::resolve_enablement(&config);
         let (cancel_tx, cancel_rx) = watch::channel(false);
         let inner = Arc::new(Inner {
             enable_usage,
