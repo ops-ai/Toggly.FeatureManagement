@@ -244,7 +244,7 @@ export function filterAnalysisJs(sdksInput = 'all') {
     }
   }
   let needSharedDeps = testMatrix.some(
-    (row) => !['SolidJS', 'SvelteKit', 'Gatsby', 'Client-Telemetry', 'Client-Core', 'Evaluator', 'Local-Gates'].includes(row.sdk),
+    (row) => !['SolidJS', 'SvelteKit', 'Client-Telemetry', 'Client-Core', 'Evaluator', 'Local-Gates'].includes(row.sdk),
   );
   for (const special of specials) {
     const cfg = SPECIAL_FILTERS[special];
