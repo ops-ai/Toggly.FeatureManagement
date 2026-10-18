@@ -17,12 +17,7 @@ private func togglyTestCountingPreviousHandler(_: NSException) {
     togglyTestStubPreviousCalls += 1
 }
 
-final class SystemMetricsCollectorTests: XCTestCase {
-    override func setUp() {
-        super.setUp()
-        SystemMetricsCollector.Testing.resetUncaughtBridgeState()
-    }
-
+final class SystemMetricsCollectorTests: SystemMetricsTestCase {
     func testDoesNotStartSamplingWhenDisabledBySampler() {
         let collector = SystemMetricsCollector(observe: { _, _ in }, sampler: { [] })
         collector.start()
