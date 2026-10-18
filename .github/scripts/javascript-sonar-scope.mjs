@@ -330,17 +330,18 @@ export function resolveJavaScriptSonarScope(sdksInput = 'all') {
   }
 
   const tokens = raw.split(',').map((token) => token.trim()).filter(Boolean);
-  const specials = tokens.filter((token) => token === 'node-server' || token === 'shared-deps');
-  const sdkNames = tokens.filter((token) => token !== 'node-server' && token !== 'shared-deps');
-
   const scopes = [];
-  if (specials.includes('node-server')) {
-    scopes.push(NODE_SERVER_SCOPE);
-  }
-  for (const name of sdkNames) {
-    const scope = SDK_SCOPES[name];
+  for (const token of tokens) {
+    if (token === 'shared-deps') {
+      continue;
+    }
+    if (token === 'node-server') {
+      scopes.push(NODE_SERVER_SCOPE);
+      continue;
+    }
+    const scope = SDK_SCOPES[token];
     if (!scope) {
-      throw new Error(`Unknown Sonar scope SDK: ${name}`);
+      throw new Error(`Unknown Sonar scope SDK: ${token}`);
     }
     scopes.push(scope);
   }
@@ -349,6 +350,7 @@ export function resolveJavaScriptSonarScope(sdksInput = 'all') {
   }
 
   const merged = mergeScopes(scopes);
+  merged.manifest = scopes[0].manifest;
   const projectKey = `${AGGREGATE_PROJECT_KEY}-${merged.slug}`;
 
   return {

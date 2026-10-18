@@ -981,8 +981,8 @@ jobs:
           echo "- GA4 Hook" >> $GITHUB_STEP_SUMMARY
           echo "- Application Insights Hook" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Check SonarCloud for detailed results: https://sonarcloud.io/project/overview?id=toggly-sdks-javascript" >> $GITHUB_STEP_SUMMARY
-          echo "Check SonarQube Server for detailed results: ${{ secrets.SONAR_HOST_URL }}/dashboard?id=toggly-sdks-javascript" >> $GITHUB_STEP_SUMMARY
+          echo "Check SonarCloud for detailed results: https://sonarcloud.io/project/overview?id=${{ needs.prepare.outputs.sonar_project_key }}" >> $GITHUB_STEP_SUMMARY
+          echo "Check SonarQube Server for detailed results: ${{ secrets.SONAR_HOST_URL }}/dashboard?id=${{ needs.prepare.outputs.sonar_project_key }}" >> $GITHUB_STEP_SUMMARY
 
   solidstart-host:
     name: SolidStart packed production host
