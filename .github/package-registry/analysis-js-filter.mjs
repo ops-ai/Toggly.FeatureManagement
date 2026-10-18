@@ -230,8 +230,6 @@ export function filterAnalysisJs(sdksInput = 'all') {
   }
 
   const jobSet = new Set();
-  // OWASP and Sonar always run for release gates; javascript-sonar-scope.mjs
-  // narrows their inputs when sdks is not "all".
   jobSet.add('sonar');
   jobSet.add('dependency-check');
   if (testMatrix.length) {

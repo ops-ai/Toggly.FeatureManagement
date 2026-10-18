@@ -109,16 +109,16 @@ test('keeps flattened artifact validation fail-closed with HTML payloads', async
   }
 });
 
-test('skips out-of-scope coverage artifacts for narrowed release gates', async () => {
+test('fails when required SDK coverage is missing from the aggregate bundle', async () => {
   await withFixture({
     'coverage-React/artifact-name.txt': 'coverage-React\n',
     'coverage-React/lcov.info': lcov('src/index.ts'),
-    'coverage-Signed-Defs/artifact-name.txt': 'coverage-Signed-Defs\n',
-    'coverage-Signed-Defs/lcov.info': lcov('src/verify.ts'),
   }, async ({ organizeCoverage, downloadDir, outputDir }) => {
-    await organizeCoverage({ downloadDir, outputDir, coverageSdkKeys: ['React'] });
-    assert.ok(existsSync(join(outputDir, 'React-lcov.info')));
-    assert.equal(existsSync(join(outputDir, 'Signed-Defs-lcov.info')), false);
+    await assert.rejects(
+      organizeCoverage({ downloadDir, outputDir, requireFull: true }),
+      /Incomplete coverage bundle/,
+    );
+    assert.equal(existsSync(outputDir), false);
   });
 });
 

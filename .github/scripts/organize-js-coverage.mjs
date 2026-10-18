@@ -33,6 +33,34 @@ const SDK_PATHS = {
   'Node-Koa': 'Toggly.FeatureManagement.Node/toggly-koa',
 };
 
+/** Coverage artifacts required for a full aggregate Sonar scan (Local-Gates has no LCOV). */
+export const REQUIRED_COVERAGE_SDKS = [
+  'Angular',
+  'AppInsights-Hook',
+  'Astro',
+  'Clarity-Hook',
+  'Client-Core',
+  'Client-Telemetry',
+  'Docusaurus-Pages',
+  'Evaluator',
+  'GA4-Hook',
+  'Gatsby',
+  'Hooks-Types',
+  'JavaScript',
+  'NestJS',
+  'Node-Core',
+  'Node-Express',
+  'Node-Fastify',
+  'Node-Hono',
+  'Node-Koa',
+  'React',
+  'Signed-Defs',
+  'SolidJS',
+  'Svelte',
+  'SvelteKit',
+  'Vue',
+];
+
 function lcovFiles(directory) {
   if (!existsSync(directory)) return [];
   return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
@@ -61,16 +89,15 @@ function containsArtifactContainer(directory) {
   );
 }
 
-function parseCoverageSdkKeys(raw) {
-  const value = String(raw ?? '').trim();
-  if (!value) return null;
-  return value.split(',').map((part) => part.trim()).filter(Boolean);
+function requireFullCoverage() {
+  const raw = String(process.env.REQUIRE_FULL_JS_COVERAGE ?? 'false').trim().toLowerCase();
+  return raw === 'true' || raw === '1';
 }
 
 export async function organizeCoverage({
   downloadDir = 'coverage-artifacts',
   outputDir = 'coverage',
-  coverageSdkKeys = parseCoverageSdkKeys(process.env.COVERAGE_SDK_KEYS),
+  requireFull = requireFullCoverage(),
 } = {}) {
   const files = lcovFiles(downloadDir);
   if (files.length === 0) throw new Error('No LCOV reports were downloaded');
@@ -97,10 +124,6 @@ export async function organizeCoverage({
     }
     const sdkName = artifactName.startsWith('coverage-') ? artifactName.slice('coverage-'.length) : '';
     if (!Object.hasOwn(SDK_PATHS, sdkName)) throw new Error(`Unknown coverage artifact: ${artifactName}`);
-    if (coverageSdkKeys && !coverageSdkKeys.includes(sdkName)) {
-      console.log(`Skipping coverage-${sdkName} (outside release gate scope)`);
-      continue;
-    }
     const prefix = SDK_PATHS[sdkName];
     if (reports.has(sdkName)) throw new Error(`Duplicate LCOV report for ${sdkName}`);
 
@@ -115,10 +138,27 @@ export async function organizeCoverage({
 
   if (reports.size === 0) throw new Error('No LCOV reports were downloaded');
 
+  if (requireFull) {
+    const missing = REQUIRED_COVERAGE_SDKS.filter((sdk) => !reports.has(sdk));
+    if (missing.length) {
+      throw new Error(
+        `Incomplete coverage bundle for aggregate Sonar scan (missing ${missing.length}): ${missing.join(', ')}`,
+      );
+    }
+  }
+
   mkdirSync(outputDir, { recursive: true });
   for (const [sdkName, content] of reports) {
     writeFileSync(join(outputDir, `${sdkName}-lcov.info`), content);
     console.log(`Mapped coverage-${sdkName} to ${SDK_PATHS[sdkName]}`);
+  }
+
+  const lineHits = [...reports.values()].join('').match(/^DA:\d+,\d+/gm)?.length ?? 0;
+  console.log(
+    `Aggregate coverage bundle: ${reports.size} mapped LCOV report(s); REQUIRED_COVERAGE_SDKS=${REQUIRED_COVERAGE_SDKS.length}`,
+  );
+  if (lineHits) {
+    console.log(`LCOV line entries (DA records) across bundle: ${lineHits}`);
   }
 }
 

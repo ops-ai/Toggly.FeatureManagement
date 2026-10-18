@@ -10,7 +10,8 @@ import {
   splitJobList,
   verifyRequiredJobs,
 } from '../actions/verify-required-jobs/verify-required-jobs.mjs';
-import { resolveJavaScriptSonarScope } from '../scripts/javascript-sonar-scope.mjs';
+import { aggregateSonarConfig, AGGREGATE_PROJECT_KEY } from '../scripts/javascript-sonar-aggregate.mjs';
+import { REQUIRED_COVERAGE_SDKS } from '../scripts/organize-js-coverage.mjs';
 
 const workflow = readFileSync(new URL('./analysis-javascript.yml', import.meta.url), 'utf8');
 const docusaurusFixture = readFileSync(
@@ -86,9 +87,9 @@ test('requires current packed browser-host validation in the analysis summary', 
   assert.match(summary, /needs-json: \$\{\{ toJSON\(needs\) \}\}/);
   assert.match(summary, /required-jobs: \$\{\{ needs\.prepare\.outputs\.required_jobs \}\}/);
   assert.match(prepare, /required_jobs: \$\{\{ steps\.filter\.outputs\.required_jobs \}\}/);
-  assert.match(prepare, /run: node \.github\/package-registry\/analysis-js-filter\.mjs "\$SDKS"/);
-  assert.match(prepare, /run: node \.github\/scripts\/javascript-sonar-scope\.mjs "\$SDKS"/);
-  assert.match(prepare, /sonar_project_key: \$\{\{ steps\.sonar_scope\.outputs\.sonar_project_key \}\}/);
+  assert.match(prepare, /run: node \.github\/package-registry\/analysis-js-filter\.mjs all/);
+  assert.match(prepare, /run: node \.github\/scripts\/javascript-sonar-aggregate\.mjs/);
+  assert.match(prepare, /sonar_project_key: \$\{\{ steps\.sonar_aggregate\.outputs\.sonar_project_key \}\}/);
   assert.match(prepare, /run_test_current_browser_hosts: \$\{\{ steps\.filter\.outputs\.run_test_current_browser_hosts \}\}/);
   assert.match(workflow, /test-current-browser-hosts:[\s\S]*?if: needs\.prepare\.outputs\.run_test_current_browser_hosts == 'true'/);
   for (const sdks of ['all', 'Vue', 'Svelte', 'SvelteKit']) {
@@ -118,6 +119,7 @@ test('requires authenticated SonarCloud and Server quality gates', () => {
   assert.match(cloud, /SONAR_HOST_URL: https:\/\/sonarcloud\.io/);
   assert.match(cloud, /-Dsonar\.organization=ops-ai/);
   assert.match(cloud, /-Dsonar\.projectKey=\$\{\{ needs\.prepare\.outputs\.sonar_project_key \}\}/);
+  assert.equal(AGGREGATE_PROJECT_KEY, 'toggly-sdks-javascript');
   assert.match(cloud, /-Dsonar\.sources=\$\{\{ needs\.prepare\.outputs\.sonar_sources \}\}/);
   assert.match(cloud, /-Dsonar\.tests=\$\{\{ needs\.prepare\.outputs\.sonar_tests \}\}/);
   assert.match(cloud, /-Dsonar\.qualitygate\.wait=true/);
@@ -159,13 +161,9 @@ test('requires Sonar and rejects fork skips while allowing reporting-disabled re
   const sonar = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   const dependencyCheck = workflow.match(/\n  dependency-check:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
 
-  assert.match(sonar, /toJSON\(inputs\.run_reporting\) != 'false'/);
   assert.match(sonar, /github\.event_name != 'pull_request' \|\| !github\.event\.pull_request\.head\.repo\.fork/);
   assert.match(dependencyCheck, /github\.event_name != 'pull_request' \|\| !github\.event\.pull_request\.head\.repo\.fork/);
-  assert.match(summary, /allow-skipped:.*toJSON\(inputs\.run_reporting\) == 'false'/);
-  assert.doesNotMatch(summary, /allow-skipped:.*github\.event_name == 'pull_request'.*github\.event\.pull_request\.head\.repo\.fork/);
-  assert.match(summary, /allow-skipped:.*dependency-check,sonar/);
-  assert.match(summary, /allow-skipped:.*\|\| 'none'/);
+  assert.match(summary, /allow-skipped: none/);
 
   for (const sdks of ['all', 'GA4-Hook', 'node-server']) {
     assert.ok(selectAnalysis(sdks).requiredJobs.includes('sonar'), `${sdks} must require Sonar`);
@@ -207,7 +205,7 @@ test('uploads signed definitions coverage and includes its source in both Sonar 
   assert.match(organizer, /run: node \.github\/scripts\/organize-js-coverage\.mjs/);
   assert.doesNotMatch(organizer, /continue-on-error/);
 
-  const aggregate = resolveJavaScriptSonarScope('all');
+  const aggregate = aggregateSonarConfig();
   for (const property of ['sources', 'tests']) {
     const value = property === 'sources' ? aggregate.sources : aggregate.tests;
     assert.ok(value.split(',').includes('toggly-signed-defs/src'), `signed-defs source missing from ${property}`);
@@ -222,36 +220,30 @@ test('uploads signed definitions coverage and includes its source in both Sonar 
 });
 
 test('maps evaluator source, tests, and LCOV into both Sonar scans', () => {
-  const aggregate = resolveJavaScriptSonarScope('all');
-  const evaluator = resolveJavaScriptSonarScope('Evaluator');
+  const aggregate = aggregateSonarConfig();
   const lcov = [...workflow.matchAll(/-Dsonar\.(?:javascript|typescript)\.lcov\.reportPaths=([^\n]+)/g)].map((match) => match[1]);
   const sonarSetup = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
 
   assert.ok(aggregate.sources.split(',').includes('toggly-eval'));
   assert.ok(aggregate.tests.split(',').includes('toggly-eval'));
-  assert.equal(evaluator.sources, 'toggly-eval');
-  assert.equal(evaluator.coverageKeys, 'Evaluator');
   assert.equal(lcov.length, 4, 'both scanners must receive JavaScript and TypeScript LCOV paths');
   for (const value of lcov) assert.equal(value, 'coverage/*-lcov.info');
   assert.match(sonarSetup, /run: node \.github\/scripts\/organize-js-coverage\.mjs/);
-  assert.match(sonarSetup, /COVERAGE_SDK_KEYS: \$\{\{ needs\.prepare\.outputs\.coverage_sdk_keys \}\}/);
+  assert.match(sonarSetup, /REQUIRE_FULL_JS_COVERAGE: 'true'/);
   assert.match(sonarSetup, /SONAR_NPM_INSTALL_DIRS: \$\{\{ needs\.prepare\.outputs\.sonar_npm_install_dirs \}\}/);
   assert.match(testJob, /matrix\.sdk == 'Evaluator'/);
 });
 
-test('maps local gates source, tests, and LCOV into both Sonar scans', () => {
-  const aggregate = resolveJavaScriptSonarScope('all');
-  const localGates = resolveJavaScriptSonarScope('Local-Gates');
+test('maps local gates source and tests into both Sonar scans', () => {
+  const aggregate = aggregateSonarConfig();
   const sonarSetup = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
 
   assert.ok(aggregate.sources.split(',').includes('toggly-local-gates/src'));
   assert.ok(!aggregate.sources.split(',').includes('toggly-local-gates'));
-  assert.equal(localGates.sources, 'toggly-local-gates/src');
   assert.match(sonarSetup, /run: node \.github\/scripts\/organize-js-coverage\.mjs/);
   assert.match(testJob, /matrix\.sdk == 'Local-Gates'/);
-  assert.match(testJob, /name: coverage-\$\{\{ matrix\.sdk \}\}/);
   assert.match(sonarSetup, /-Dsonar\.test\.inclusions=.*\*\*\/\*\.spec\.ts/);
 });
 
@@ -312,7 +304,8 @@ test('requires the packed Docusaurus production host with a locked Node 24 insta
   }
   const pullRequest = workflow.match(/\n  pull_request:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   assert.match(pullRequest, /'tests\/docusaurus-consumer-fixtures\/\*\*'/);
-  assert.match(workflow, /workflow_call:\s+inputs:\s+sdks:/);
+  assert.match(workflow, /push:\s+branches:\s+- develop/);
+  assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
   assert.match(docusaurusFixture, /const currentReact = '19\.3\.0'/);
   assert.ok(docusaurusFixture.includes('`react@${currentReact}`'));
   assert.ok(docusaurusFixture.includes('`react-dom@${currentReact}`'));
@@ -358,8 +351,8 @@ test('excludes fixture and packaging lockfiles from the JS OWASP Node Audit scan
   assert.ok(owasp.includes('--disableNodeAudit'));
   assert.match(owasp, /path: \$\{\{ needs\.prepare\.outputs\.owasp_scan_paths \}\}/);
   assert.match(owasp, /project: \$\{\{ needs\.prepare\.outputs\.sonar_project_key \}\}/);
-  const reactScope = resolveJavaScriptSonarScope('React');
-  assert.ok(reactScope.owaspPaths.includes('Toggly.FeatureManagement.React'));
+  const aggregate = aggregateSonarConfig();
+  assert.ok(aggregate.owaspPaths.includes('Toggly.FeatureManagement.Angular/projects/ngx-feature-flags-toggly'));
 });
 
 test('runs the current Gatsby packed host on Node 24', () => {
@@ -430,13 +423,16 @@ test('classifies the JavaScript packed browser harness as test code in both scan
   }
 });
 
-test('narrows release-gate Sonar projects so concurrent develop publishes do not clobber each other', () => {
-  const react = resolveJavaScriptSonarScope('React');
-  const vue = resolveJavaScriptSonarScope('Vue');
-  assert.notEqual(react.projectKey, vue.projectKey);
-  assert.match(react.projectKey, /^toggly-sdks-javascript-/);
-  assert.equal(react.coverageKeys, 'React');
-  assert.equal(vue.coverageKeys, 'Vue');
+test('uses one aggregate Sonar project and requires the full coverage bundle', () => {
+  assert.equal(aggregateSonarConfig().projectKey, 'toggly-sdks-javascript');
+  assert.ok(REQUIRED_COVERAGE_SDKS.includes('React'));
+  assert.ok(REQUIRED_COVERAGE_SDKS.includes('Node-Core'));
+  assert.ok(!REQUIRED_COVERAGE_SDKS.includes('Local-Gates'));
+  const releaseGate = readFileSync(new URL('./javascript-aggregate-release-gate.yml', import.meta.url), 'utf8');
+  const reactRelease = readFileSync(new URL('./sdk-react-release.yml', import.meta.url), 'utf8');
+  assert.match(releaseGate, /wait-javascript-aggregate-analysis\.mjs/);
+  assert.match(reactRelease, /uses: \.\/\.github\/workflows\/javascript-aggregate-release-gate\.yml/);
+  assert.doesNotMatch(reactRelease, /uses: \.\/\.github\/workflows\/analysis-javascript\.yml/);
 });
 
 test('installs the packed Solid host browser with its own resolved Playwright CLI before verification', () => {

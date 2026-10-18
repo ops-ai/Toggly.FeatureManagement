@@ -1,0 +1,30 @@
+name: JavaScript aggregate analysis release gate
+
+# Waits for one full toggly-sdks-javascript analysis on the release commit.
+# Develop pushes also trigger analysis-javascript.yml; this gate never runs a narrowed scan.
+on:
+  workflow_call:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  wait-for-aggregate-analysis:
+    name: Wait for full JavaScript analysis
+    runs-on: ubuntu-latest
+    concurrency:
+      group: javascript-aggregate-release-gate-${{ github.sha }}
+      cancel-in-progress: false
+    steps:
+      - name: Wait for successful aggregate analysis on this commit
+        env:
+          MAX_WAIT_MINUTES: '150'
+          POLL_INTERVAL_MS: '30000'
+        run: node .github/scripts/wait-javascript-aggregate-analysis.mjs
+
+      - name: Gate summary
+        run: |
+          echo "## JavaScript aggregate release gate" >> "$GITHUB_STEP_SUMMARY"
+          echo "Passed: full \`toggly-sdks-javascript\` analysis succeeded on \`${GITHUB_SHA}\`." >> "$GITHUB_STEP_SUMMARY"
+          echo "SonarCloud: https://sonarcloud.io/project/overview?id=toggly-sdks-javascript" >> "$GITHUB_STEP_SUMMARY"

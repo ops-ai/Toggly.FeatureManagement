@@ -2,7 +2,52 @@ name: JavaScript/TypeScript SDKs - Tests & Analysis
 # OPS-1765: Angular host script-only pushes still need this workflow path matched.
 # OPS-1765: keep path-filter PR triggers healthy when only Angular scripts change
 
+concurrency:
+  group: >-
+    javascript-aggregate-${{
+      github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) ||
+      github.event_name == 'push' && format('develop-{0}', github.sha) ||
+      format('run-{0}', github.run_id)
+    }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'Toggly.FeatureManagement.Angular/**'
+      - 'Toggly.FeatureManagement.React/**'
+      - 'tests/react-consumer-fixtures/**'
+      - 'tests/docusaurus-consumer-fixtures/**'
+      - 'Toggly.FeatureManagement.Vue/**'
+      - 'Toggly.FeatureManagement.Svelte/**'
+      - 'Toggly.FeatureManagement.SvelteKit/**'
+      - 'Toggly.FeatureManagement.Solid/**'
+      - 'Toggly.FeatureManagement.Astro/**'
+      - 'Toggly.FeatureManagement.Gatsby/**'
+      - 'toggly-docusaurus-edge-sdk/**'
+      - 'Toggly.FeatureManagement.Javascript/**'
+      - 'Toggly.FeatureManagement.Node/**'
+      - 'Toggly.FeatureManagement.NestJS/**'
+      - 'toggly-eval/**'
+      - 'toggly-segments/**'
+      - 'toggly-local-gates/**'
+      - 'toggly-hooks-types/**'
+      - 'toggly-client-telemetry/**'
+      - 'tests/frontend-telemetry/**'
+      - '.github/package-registry/analysis-js-filter.mjs'
+      - 'toggly-signed-defs/**'
+      - 'toggly-clarity-hook/**'
+      - 'toggly-ga4-hook/**'
+      - 'toggly-appinsights-hook/**'
+      - '.github/workflows/analysis-javascript.yml'
+      - '.github/scripts/javascript-sonar-aggregate.mjs'
+      - '.github/scripts/organize-js-coverage*.mjs'
+      - '.github/actions/build-shared-js-deps/**'
+      - '.github/actions/upload-shared-js-deps/**'
+      - '.github/actions/download-shared-js-deps/**'
+      - '.github/actions/overlay-shared-js-deps/**'
   pull_request:
     branches:
       - develop
@@ -34,32 +79,13 @@ on:
       - 'toggly-ga4-hook/**'
       - 'toggly-appinsights-hook/**'
       - '.github/workflows/analysis-javascript.yml'
-      - '.github/scripts/javascript-sonar-scope.mjs'
+      - '.github/scripts/javascript-sonar-aggregate.mjs'
       - '.github/scripts/organize-js-coverage*.mjs'
       - '.github/actions/build-shared-js-deps/**'
       - '.github/actions/upload-shared-js-deps/**'
       - '.github/actions/download-shared-js-deps/**'
       - '.github/actions/overlay-shared-js-deps/**'
   workflow_dispatch:
-    inputs:
-      sdks:
-        description: 'Comma-separated matrix SDK names, node-server, or all (for scoped Sonar verification)'
-        type: string
-        default: 'all'
-  workflow_call:
-    inputs:
-      sdks:
-        description: 'Comma-separated matrix SDK names, node-server, or all'
-        type: string
-        default: 'all'
-      run_reporting:
-        description: 'When false, skip Sonar and OWASP reporting jobs'
-        type: boolean
-        default: true
-      run_sonar_server_reporting:
-        description: 'When false, skip only the SonarQube Server scan (SonarCloud still runs when run_reporting is true)'
-        type: boolean
-        default: true
 
 permissions:
   contents: read
@@ -83,32 +109,23 @@ jobs:
       required_jobs: ${{ steps.filter.outputs.required_jobs }}
       test_matrix: ${{ steps.filter.outputs.test_matrix }}
       browser_host_matrix: ${{ steps.filter.outputs.browser_host_matrix }}
-      sonar_scoped: ${{ steps.sonar_scope.outputs.sonar_scoped }}
-      sonar_project_key: ${{ steps.sonar_scope.outputs.sonar_project_key }}
-      sonar_project_name: ${{ steps.sonar_scope.outputs.sonar_project_name }}
-      sonar_sources: ${{ steps.sonar_scope.outputs.sonar_sources }}
-      sonar_tests: ${{ steps.sonar_scope.outputs.sonar_tests }}
-      sonar_manifest: ${{ steps.sonar_scope.outputs.sonar_manifest }}
-      coverage_sdk_keys: ${{ steps.sonar_scope.outputs.coverage_sdk_keys }}
-      owasp_scan_paths: ${{ steps.sonar_scope.outputs.owasp_scan_paths }}
-      sonar_npm_install_dirs: ${{ steps.sonar_scope.outputs.sonar_npm_install_dirs }}
+      sonar_project_key: ${{ steps.sonar_aggregate.outputs.sonar_project_key }}
+      sonar_project_name: ${{ steps.sonar_aggregate.outputs.sonar_project_name }}
+      sonar_sources: ${{ steps.sonar_aggregate.outputs.sonar_sources }}
+      sonar_tests: ${{ steps.sonar_aggregate.outputs.sonar_tests }}
+      sonar_manifest: ${{ steps.sonar_aggregate.outputs.sonar_manifest }}
+      owasp_scan_paths: ${{ steps.sonar_aggregate.outputs.owasp_scan_paths }}
+      sonar_npm_install_dirs: ${{ steps.sonar_aggregate.outputs.sonar_npm_install_dirs }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      - name: Resolve SDK filter
+      - name: Resolve full SDK analysis matrix
         id: filter
-        env:
-          # inputs.sdks is set on workflow_call (release gates). Do not key off
-          # github.event_name == 'workflow_call' — nested reusable runs keep the
-          # caller's event (e.g. workflow_dispatch), which incorrectly forced "all".
-          SDKS: ${{ inputs.sdks || 'all' }}
-        run: node .github/package-registry/analysis-js-filter.mjs "$SDKS"
+        run: node .github/package-registry/analysis-js-filter.mjs all
 
-      - name: Resolve Sonar scope
-        id: sonar_scope
-        env:
-          SDKS: ${{ inputs.sdks || 'all' }}
-        run: node .github/scripts/javascript-sonar-scope.mjs "$SDKS"
+      - name: Resolve aggregate Sonar configuration
+        id: sonar_aggregate
+        run: node .github/scripts/javascript-sonar-aggregate.mjs
 
   build-shared-js-deps:
     name: Build shared JS deps
@@ -695,7 +712,6 @@ jobs:
     needs: [prepare, build-shared-js-deps, test, test-node-server, test-docusaurus-host, dependency-check]
     if: |
       always() &&
-      toJSON(inputs.run_reporting) != 'false' &&
       (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork)
 
     steps:
@@ -720,24 +736,17 @@ jobs:
 
       - name: Install dependencies for TypeScript analysis
         env:
-          SONAR_SOURCES: ${{ needs.prepare.outputs.sonar_sources }}
-          SONAR_SCOPED: ${{ needs.prepare.outputs.sonar_scoped }}
           SONAR_NPM_INSTALL_DIRS: ${{ needs.prepare.outputs.sonar_npm_install_dirs }}
         run: |
-          # Install dependencies in each scoped SDK so SonarQube can resolve tsconfig extends chains
           while IFS= read -r dir; do
             [ -z "$dir" ] && continue
             echo "Installing dependencies in $dir"
             npm install --ignore-scripts --no-audit --no-fund --prefix "$dir" || true
           done <<< "$SONAR_NPM_INSTALL_DIRS"
-          if [ "$SONAR_SCOPED" != "true" ] || [[ "$SONAR_SOURCES" == *"Toggly.FeatureManagement.Node"* ]]; then
-            echo "Installing Node.js server SDK dependencies"
-            pnpm install --ignore-scripts --dir Toggly.FeatureManagement.Node || true
-          fi
-          if [ "$SONAR_SCOPED" != "true" ] || [[ "$SONAR_SOURCES" == *"toggly-docusaurus-edge-sdk"* ]]; then
-            echo "Installing toggly-docusaurus-edge-sdk workspace dependencies"
-            pnpm install --ignore-scripts --dir toggly-docusaurus-edge-sdk || true
-          fi
+          echo "Installing Node.js server SDK dependencies"
+          pnpm install --ignore-scripts --dir Toggly.FeatureManagement.Node || true
+          echo "Installing toggly-docusaurus-edge-sdk workspace dependencies"
+          pnpm install --ignore-scripts --dir toggly-docusaurus-edge-sdk || true
         continue-on-error: true
 
       - name: Download all coverage reports
@@ -748,7 +757,7 @@ jobs:
 
       - name: Organize coverage files
         env:
-          COVERAGE_SDK_KEYS: ${{ needs.prepare.outputs.coverage_sdk_keys }}
+          REQUIRE_FULL_JS_COVERAGE: 'true'
         run: node .github/scripts/organize-js-coverage.mjs
 
       - name: Resolve Sonar project version
@@ -805,30 +814,14 @@ jobs:
 
       - name: Validate SonarQube Server credentials
         id: validate-sonarqube-server-credentials
-        if: ${{ (success() || failure()) && toJSON(inputs.run_sonar_server_reporting) != 'false' }}
+        if: ${{ success() || failure() }}
         env:
           SONAR_SERVER_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: test -n "${SONAR_SERVER_TOKEN}" && test -n "${SONAR_HOST_URL}" || { echo "SonarQube Server credentials are required"; exit 1; }
 
-      - name: Resolve SonarQube Server branch parameters
-        id: sonar_server_branch
-        if: ${{ (success() || failure()) && toJSON(inputs.run_sonar_server_reporting) != 'false' && steps.validate-sonarqube-server-credentials.outcome == 'success' }}
-        env:
-          SONAR_SCOPED: ${{ needs.prepare.outputs.sonar_scoped }}
-        run: |
-          EXTRA=""
-          if [ "$SONAR_SCOPED" = "true" ]; then
-            if [ "${{ github.event_name }}" = "pull_request" ]; then
-              EXTRA="-Dsonar.pullrequest.key=${{ github.event.pull_request.number }} -Dsonar.pullrequest.branch=${{ github.head_ref }} -Dsonar.pullrequest.base=${{ github.base_ref }}"
-            elif [ "${{ github.ref_name }}" = "develop" ]; then
-              EXTRA="-Dsonar.branch.name=develop"
-            fi
-          fi
-          echo "extra=$EXTRA" >> "$GITHUB_OUTPUT"
-
       - name: SonarQube Server Scan
-        if: ${{ (success() || failure()) && toJSON(inputs.run_sonar_server_reporting) != 'false' && steps.validate-sonarqube-server-credentials.outcome == 'success' }}
+        if: ${{ (success() || failure()) && steps.validate-sonarqube-server-credentials.outcome == 'success' }}
         uses: SonarSource/sonarqube-scan-action@v8.3.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
@@ -858,7 +851,6 @@ jobs:
             -Dsonar.issue.ignore.multicriteria.hookAwait.ruleKey=typescript:S9382
             -Dsonar.issue.ignore.multicriteria.hookAwait.resourceKey=**/hooks.ts
             -Dsonar.qualitygate.wait=true
-            ${{ steps.sonar_server_branch.outputs.extra }}
 
       - name: Report SonarQube Server quality gate
         if: ${{ failure() && steps.validate-sonarqube-server-credentials.outcome == 'success' }}
@@ -911,7 +903,7 @@ jobs:
   dependency-check:
     name: OWASP Dependency Check
     needs: [prepare]
-    if: ${{ toJSON(inputs.run_reporting) != 'false' && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork }}
     runs-on: ubuntu-latest
 
     steps:
@@ -976,7 +968,7 @@ jobs:
         with:
           needs-json: ${{ toJSON(needs) }}
           required-jobs: ${{ needs.prepare.outputs.required_jobs }}
-          allow-skipped: ${{ toJSON(inputs.run_reporting) == 'false' && 'dependency-check,sonar' || 'none' }}
+          allow-skipped: none
 
       - name: Check test results
         run: |

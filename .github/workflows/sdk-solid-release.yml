@@ -86,10 +86,7 @@ jobs:
   gates:
     needs: resolve
     if: needs.resolve.outputs.action == 'publish'
-    uses: ./.github/workflows/analysis-javascript.yml
-    with:
-      sdks: SolidJS
-      run_reporting: true
+    uses: ./.github/workflows/javascript-aggregate-release-gate.yml
     secrets: inherit
 
   publish:
