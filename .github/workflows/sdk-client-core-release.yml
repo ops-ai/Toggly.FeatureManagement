@@ -92,6 +92,7 @@ jobs:
     permissions:
       actions: write
       contents: read
+      checks: read
     uses: ./.github/workflows/javascript-aggregate-release-gate.yml
     secrets: inherit
 

@@ -11,9 +11,9 @@ export const WORKFLOW_PATH = '.github/workflows/analysis-javascript.yml';
 export const WORKFLOW_NAME = 'JavaScript/TypeScript SDKs - Tests & Analysis';
 
 export function resolveTargetSha(env = process.env) {
-  const sha = String(env.GITHUB_SHA || '').trim();
+  const sha = String(env.COMMIT_SHA || env.GITHUB_SHA || '').trim();
   if (!sha) {
-    throw new Error('GITHUB_SHA is required');
+    throw new Error('COMMIT_SHA or GITHUB_SHA is required');
   }
   return sha;
 }
@@ -73,7 +73,33 @@ export function createGithubClient({ owner, repo, token, fetchImpl = fetch }) {
 }
 
 export function pickRelevantRun(runs, workflowName = WORKFLOW_NAME) {
-  return runs.find((run) => run.name === workflowName) ?? runs[0];
+  const relevant = runs
+    .filter((run) => run.name === workflowName)
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  const success = relevant.find(
+    (run) => run.status === 'completed' && run.conclusion === 'success',
+  );
+  if (success) return success;
+  return relevant[0];
+}
+
+export async function listAggregateRuns(github, targetSha) {
+  const byWorkflow = await github(
+    `/actions/runs?head_sha=${encodeURIComponent(targetSha)}&per_page=30`,
+  );
+  const runs = (byWorkflow.workflow_runs || []).filter((run) => run.name === WORKFLOW_NAME);
+  if (runs.length > 0) {
+    return runs;
+  }
+  const workflows = await github('/actions/workflows?per_page=100');
+  const workflow = workflows.workflows.find((entry) => entry.path === WORKFLOW_PATH);
+  if (!workflow) {
+    throw new Error(`Workflow not found at ${WORKFLOW_PATH}`);
+  }
+  const scoped = await github(
+    `/actions/workflows/${workflow.id}/runs?head_sha=${encodeURIComponent(targetSha)}&per_page=20`,
+  );
+  return scoped.workflow_runs || [];
 }
 
 export async function waitForAggregateAnalysis({
@@ -100,10 +126,7 @@ export async function waitForAggregateAnalysis({
   let dispatched = false;
 
   while (Date.now() - started < maxMs) {
-    const data = await github(
-      `/actions/workflows/${workflow.id}/runs?head_sha=${encodeURIComponent(sha)}&per_page=20`,
-    );
-    const runs = data.workflow_runs || [];
+    const runs = await listAggregateRuns(github, sha);
     const run = pickRelevantRun(runs);
 
     if (run?.head_sha && run.head_sha !== sha) {

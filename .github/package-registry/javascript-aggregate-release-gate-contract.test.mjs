@@ -22,6 +22,7 @@ test('every JS release workflow grants actions:write on the aggregate gate job',
     assert.ok(gateBlock, `${path.basename(filePath)} must define a gates job calling the aggregate gate`);
     assert.match(gateBlock, /permissions:\s*\n\s+actions: write/);
     assert.match(gateBlock, /contents: read/);
+    assert.match(gateBlock, /checks: read/);
     assert.doesNotMatch(gateBlock, /uses: \.\/\.github\/workflows\/analysis-javascript\.yml/);
   }
 });
