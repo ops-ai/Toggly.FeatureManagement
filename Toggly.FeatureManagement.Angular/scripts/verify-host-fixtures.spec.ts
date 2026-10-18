@@ -43,14 +43,24 @@ await withHostResources(async defer => {
       if (locked.version !== '2.8.1') throw new Error('Retained consumer baseline drifted');
       console.log('Retained locked Angular SDK baseline 2.8.1 installed before upgrade');
     }
-    const install = ['npm', 'install', '--no-save', '--package-lock=false', '--no-audit', '--no-fund', tarball];
-    if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) {
-      install.push(path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL));
+    // Temp hosts may update their lockfile; avoid --package-lock=false — npm@10
+    // arborist crashes with edgesOut null on Angular 21+ when overlaying a tarball
+    // without a lock update (retries alone do not clear it).
+    const install = ['npm', 'install', '--no-save', '--no-audit', '--no-fund', tarball];
+    if (process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL) install.push(path.resolve(process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL));
+    if (process.env.TOGGLY_SIGNED_DEFS_TARBALL) install.push(path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL));
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        run(install);
+        break;
+      } catch (error) {
+        if (attempt === 2) throw error;
+        console.warn(`npm install failed on ${entry.fixture}; retry ${attempt + 1}/2`);
+        for (const name of ['ngx-feature-flags-toggly', 'toggly-client-telemetry', 'toggly-signed-defs']) {
+          fs.rmSync(path.join(cwd, 'node_modules/@ops-ai', name), { recursive: true, force: true });
+        }
+      }
     }
-    if (process.env.TOGGLY_SIGNED_DEFS_TARBALL) {
-      install.push(path.resolve(process.env.TOGGLY_SIGNED_DEFS_TARBALL));
-    }
-    run(install);
     const installed = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/ngx-feature-flags-toggly/package.json')));
     const reporter = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-client-telemetry/package.json')));
     const signer = JSON.parse(fs.readFileSync(path.join(cwd, 'node_modules/@ops-ai/toggly-signed-defs/package.json')));

@@ -8,6 +8,7 @@ import logging
 import os
 import signal
 import threading
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
@@ -25,9 +26,23 @@ from toggly.telemetry.metrics_batcher import (
     MetricsFeatureOptions,
     options_from_mapping,
 )
+from toggly.telemetry.system_metrics import (
+    SYSTEM_METRICS_INTERVAL_SECONDS,
+    SystemMetricsCollector,
+    SystemMetricsSampler,
+)
 from toggly.telemetry.usage_batcher import UsageBatcher
 
 logger = logging.getLogger("toggly.telemetry")
+
+
+@dataclass(frozen=True)
+class SystemMetricsOptions:
+    """Opt-in process metrics knobs for :class:`TelemetryRuntime`."""
+
+    enabled: bool = False
+    sampler: SystemMetricsSampler | None = None
+    interval_seconds: float | None = None
 
 
 class TelemetryRuntime:
@@ -49,8 +64,7 @@ class TelemetryRuntime:
         app_version: str | None = None,
         usage_client: Any = None,
         metrics_client: Any = None,
-        usage_client_provided: bool = False,
-        metrics_client_provided: bool = False,
+        system_metrics: SystemMetricsOptions | bool = False,
     ) -> None:
         """Create a telemetry runtime for one app/environment pair."""
         has_app_key = bool(app_key)
@@ -82,14 +96,27 @@ class TelemetryRuntime:
         self._app_version = app_version
         self._injected_usage = usage_client
         self._injected_metrics = metrics_client
-        self._usage_client_provided = usage_client_provided
-        self._metrics_client_provided = metrics_client_provided
+        self._usage_client_provided = usage_client is not None
+        self._metrics_client_provided = metrics_client is not None
+        metrics_opts = (
+            system_metrics
+            if isinstance(system_metrics, SystemMetricsOptions)
+            else SystemMetricsOptions(enabled=bool(system_metrics))
+        )
+        self._system_metrics = metrics_opts.enabled is True
+        self._system_metrics_sampler = metrics_opts.sampler
+        self._system_metrics_interval_seconds = (
+            SYSTEM_METRICS_INTERVAL_SECONDS
+            if metrics_opts.interval_seconds is None
+            else float(metrics_opts.interval_seconds)
+        )
 
         self._usage_batcher: UsageBatcher | None = None
         self._metrics_batcher: MetricsBatcher | None = None
         self._clients: GrpcClients | None = None
         self._usage_timer: threading.Timer | None = None
         self._metrics_timer: threading.Timer | None = None
+        self._system_metrics_collector: SystemMetricsCollector | None = None
         self._sending_usage = False
         self._sending_metrics = False
         self._closed = False
@@ -149,7 +176,18 @@ class TelemetryRuntime:
             if self._metrics_flush_interval > 0:
                 self._schedule_metrics_flush()
 
+        self._start_system_metrics()
         self._attach_exit_handlers()
+
+    def _start_system_metrics(self) -> None:
+        if not self._enable_metrics or not self._system_metrics or self._closed:
+            return
+        self._system_metrics_collector = SystemMetricsCollector(
+            self.observe,
+            interval_seconds=self._system_metrics_interval_seconds,
+            sampler=self._system_metrics_sampler,
+        )
+        self._system_metrics_collector.start()
 
     def _schedule_usage_flush(self) -> None:
         if self._closed or self._usage_flush_interval <= 0:
@@ -437,8 +475,16 @@ class TelemetryRuntime:
 
         try:
             client.send_metrics(payload)
+            collector = self._system_metrics_collector
+            if collector is not None:
+                collector.on_flushed()
         except Exception as exc:
             logger.error("Failed to send metrics: %s", exc)
+            # Batch already drained; clear system-metrics backpressure so
+            # collection resumes after recovery instead of stalling at the cap.
+            collector = self._system_metrics_collector
+            if collector is not None:
+                collector.on_flushed()
         finally:
             with self._lock:
                 self._sending_metrics = False
@@ -460,6 +506,9 @@ class TelemetryRuntime:
             if self._metrics_timer is not None:
                 self._metrics_timer.cancel()
                 self._metrics_timer = None
+            if self._system_metrics_collector is not None:
+                self._system_metrics_collector.stop()
+                self._system_metrics_collector = None
 
         self._detach_exit_handlers()
 

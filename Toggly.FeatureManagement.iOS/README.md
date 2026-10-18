@@ -29,7 +29,8 @@ let service = TogglyService(config: TogglyConfig(
     environment: "Production",
     enableTelemetry: true,                 // Set false to opt out.
     metricsBaseUrl: "https://metrics.toggly.io",
-    telemetryFlushIntervalMs: 45_000      // 30_000...60_000; invalid values use 45_000.
+    telemetryFlushIntervalMs: 45_000,     // 30_000...60_000; invalid values use 45_000.
+    systemMetrics: false                  // Opt-in CpuUsage + ExceptionCount every 10s.
 ))
 
 await service.recordUsage("new-checkout")

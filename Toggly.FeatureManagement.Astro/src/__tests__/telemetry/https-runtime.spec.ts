@@ -377,4 +377,105 @@ describe('UsageTelemetryRuntime', () => {
       })(),
     ).resolves.toBeUndefined()
   })
+
+  it('posts measure, incrementCounter, and observe to api/metrics', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true })
+    const runtime = new UsageTelemetryRuntime({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: false,
+      enableMetrics: true,
+      usageFlushInterval: 0,
+      metricsFlushInterval: 0,
+      attachProcessHandlers: false,
+      metricsBaseUrl: 'https://gw.example',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      instanceName: 'astro-ssr',
+    })
+    runtime.start()
+    runtime.measure('latency', 12.5, { feature: 'Checkout' })
+    runtime.incrementCounter('orders', 2)
+    runtime.observe('CpuUsage', 8)
+    await runtime.flush()
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchImpl.mock.calls[0]!
+    expect(String(url)).toBe('https://gw.example/api/metrics')
+    const body = JSON.parse(String((init as RequestInit).body))
+    expect(body.appKey).toBe('app')
+    expect(body.instanceName).toBe('astro-ssr')
+    expect(body.stats).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          metric: 'latency',
+          feature: 'Checkout',
+          variantValues: { enabled: 12.5 },
+        }),
+      ]),
+    )
+    expect(body.counters).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ metric: 'orders', variantValues: { enabled: 2 } }),
+      ]),
+    )
+    expect(body.observations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ metric: 'CpuUsage', variantValues: { enabled: 8 } }),
+      ]),
+    )
+    await runtime.close()
+  })
+
+  it('restores metrics batch on soft-fail', async () => {
+    const sendMetrics = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: true })
+
+    const runtime = new UsageTelemetryRuntime({
+      appKey: 'app',
+      environment: 'Production',
+      enableUsageTracking: false,
+      enableMetrics: true,
+      metricsFlushInterval: 0,
+      attachProcessHandlers: false,
+      metricsClient: { sendMetrics, close: vi.fn() },
+    })
+    runtime.start()
+    runtime.incrementCounter('orders', 1)
+    await runtime.flush()
+    expect(sendMetrics).toHaveBeenCalledTimes(1)
+
+    runtime.incrementCounter('orders', 1)
+    await runtime.flush()
+    expect(sendMetrics.mock.calls[1]![0]).toMatchObject({
+      counters: expect.arrayContaining([
+        expect.objectContaining({ metric: 'orders', variantValues: { enabled: 2 } }),
+      ]),
+    })
+    await runtime.close()
+  })
+
+  it('preserves observation timestamps across restore so samples do not collide', async () => {
+    const { MetricsBatcher } = await import('../../telemetry/metrics-batcher.js')
+    const batcher = new MetricsBatcher({
+      appKey: 'app',
+      environment: 'Production',
+    })
+    batcher.observe('CpuUsage', 10)
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    batcher.observe('CpuUsage', 20)
+    const payload = batcher.buildAndReset()
+    expect(payload?.observations).toHaveLength(2)
+
+    batcher.restoreFromPayload(payload!)
+    const restored = batcher.buildAndReset()
+    expect(restored?.observations).toHaveLength(2)
+    const values = restored!.observations
+      .map((row) => row.variantValues.enabled)
+      .sort((a, b) => a - b)
+    expect(values).toEqual([10, 20])
+    expect(restored!.observations[0]!.time).toEqual(payload!.observations[0]!.time)
+    expect(restored!.observations[1]!.time).toEqual(payload!.observations[1]!.time)
+  })
 })

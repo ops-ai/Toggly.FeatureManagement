@@ -1,3 +1,10 @@
+## 1.10.3
+
+2026-10-12
+
+### Added
+- Opt-in `systemMetrics: true` publishes browser `ExceptionCount` and
+  `LongTaskCount` gauges every 10 seconds when frontend telemetry is enabled.
 ## 1.11.0
 
 2026-10-11

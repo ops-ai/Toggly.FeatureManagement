@@ -25,9 +25,19 @@ a no-op (a warning is logged when telemetry is enabled).
 |--------|---------|--------|
 | `enableUsageTracking` | `true` when `appKey` is set | Auto-records checks on `isFeatureOn` / `evaluateFeatureGate` |
 | `enableMetrics` | `true` when `appKey` is set | `measure` / `incrementCounter` / `observe` |
+| `systemMetrics` | `false` | Opt-in process metrics (`CpuUsage`, `MemoryWorkingSet`, …) every 10s when metrics are enabled |
 | `metricsBaseUrl` | `https://app.toggly.io/` | gRPC host (separate from definitions `baseUrl`) |
 | `usageFlushInterval` / `metricsFlushInterval` | `60000` | ms; `0` disables the timer |
 | `instanceName` / `appVersion` | unset | Included on wire payloads |
+
+### System metrics
+
+Set `systemMetrics: true` to publish process observations as Toggly observation
+metrics: `CpuUsage` (percent of all host CPUs), `MemoryWorkingSet` (RSS bytes),
+`GCHeapSize`, `ExceptionCount` (uncaught exceptions in the window; unlike .NET
+this does not include handled throws), `TimeInGC`, and `EventLoopDelay` when
+`perf_hooks` can supply them. Define those metric names in the Toggly app so
+series are stored.
 
 ```ts
 const client = createTogglyClient({

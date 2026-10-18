@@ -9,6 +9,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/autoflush"
@@ -84,6 +85,20 @@ func (c *Client) StartAutoFlush(interval time.Duration) {
 		c.flush = autoflush.New()
 	}
 	c.flush.Start(interval, c.Flush)
+}
+
+// NewClientForTest wires a metrics client with an injected gRPC API (integration tests).
+func NewClientForTest(api metricspb.MetricsClient, appKey, env, instance string) (*Client, error) {
+	conn, err := grpc.NewClient("localhost:1", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, err
+	}
+	return &Client{
+		conn:    conn,
+		api:     api,
+		batcher: NewBatcher(appKey, env, instance),
+		flush:   autoflush.New(),
+	}, nil
 }
 
 func grpcTarget(baseURL string) (string, error) {

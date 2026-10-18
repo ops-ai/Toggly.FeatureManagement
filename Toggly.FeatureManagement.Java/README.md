@@ -184,6 +184,7 @@ client.flushTelemetry(); // optional; also flushes on close()
 |---------|---------|---------|
 | `enableUsageTracking` | `true` | Feature checks / used / viewed via `Usage.SendStats` |
 | `enableMetrics` | `true` | `measure` / `incrementCounter` / `observe` via `Metrics.SendMetrics` |
+| `systemMetrics` | `false` | Opt-in process metrics (`CpuUsage`, `MemoryWorkingSet`, …) every 10s when metrics are enabled |
 | `metricsBaseUrl` | `https://app.toggly.io/` | gRPC endpoint (not the definitions CDN) |
 | `usageFlushInterval` | `1m` | Usage batch flush interval (`toggly.usage-flush-interval`) |
 | `metricsFlushInterval` | `1m` | Metrics batch flush interval (`toggly.metrics-flush-interval`) |

@@ -101,7 +101,9 @@ data class TogglyConfig(
      * (instead of `evaluated-signed`) and enable [TogglyService.getVariant] /
      * [TogglyService.getVariantValue].
      */
-    val enableVariants: Boolean = false
+    val enableVariants: Boolean = false,
+    /** Opt-in CpuUsage and ExceptionCount gauges every 10s when telemetry is enabled. */
+    val systemMetrics: Boolean = false
 )
 
 /**

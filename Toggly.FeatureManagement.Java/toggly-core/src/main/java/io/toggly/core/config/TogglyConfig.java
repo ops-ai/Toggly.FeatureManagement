@@ -32,6 +32,7 @@ public final class TogglyConfig {
     private final boolean enableAutoRefresh;
     private final boolean enableUsageTracking;
     private final boolean enableMetrics;
+    private final boolean systemMetrics;
     private final Duration usageFlushInterval;
     private final Duration metricsFlushInterval;
     private final String instanceName;
@@ -57,6 +58,7 @@ public final class TogglyConfig {
         this.enableAutoRefresh = builder.enableAutoRefresh;
         this.enableUsageTracking = builder.enableUsageTracking;
         this.enableMetrics = builder.enableMetrics;
+        this.systemMetrics = builder.systemMetrics;
         this.usageFlushInterval = builder.usageFlushInterval;
         this.metricsFlushInterval = builder.metricsFlushInterval;
         this.instanceName = builder.instanceName;
@@ -147,6 +149,14 @@ public final class TogglyConfig {
      */
     public boolean isEnableMetrics() {
         return enableMetrics;
+    }
+
+    /**
+     * Opt-in automatic JVM process metrics (CpuUsage, MemoryWorkingSet, …).
+     * Requires {@link #isEnableMetrics()}.
+     */
+    public boolean isSystemMetrics() {
+        return systemMetrics;
     }
 
     public Duration getUsageFlushInterval() {
@@ -259,6 +269,7 @@ public final class TogglyConfig {
                 .enableAutoRefresh(enableAutoRefresh)
                 .enableUsageTracking(enableUsageTracking)
                 .enableMetrics(enableMetrics)
+                .systemMetrics(systemMetrics)
                 .usageFlushInterval(usageFlushInterval)
                 .metricsFlushInterval(metricsFlushInterval)
                 .instanceName(instanceName)
@@ -288,6 +299,7 @@ public final class TogglyConfig {
         private boolean enableAutoRefresh = false;
         private boolean enableUsageTracking = true;
         private boolean enableMetrics = true;
+        private boolean systemMetrics;
         private Duration usageFlushInterval = Duration.ofMinutes(1);
         private Duration metricsFlushInterval = Duration.ofMinutes(1);
         private String instanceName;
@@ -422,6 +434,14 @@ public final class TogglyConfig {
          */
         public Builder enableMetrics(boolean enableMetrics) {
             this.enableMetrics = enableMetrics;
+            return this;
+        }
+
+        /**
+         * Opt-in automatic JVM process metrics. Requires {@link #enableMetrics(boolean)}.
+         */
+        public Builder systemMetrics(boolean systemMetrics) {
+            this.systemMetrics = systemMetrics;
             return this;
         }
 

@@ -35,7 +35,16 @@ Public usage APIs on `toggly.Client`:
 
 Checks from `IsEnabled` are recorded automatically when usage is enabled. Wire payloads use multi-variant maps (`variantStats` / `variantValues`) aligned with the .NET SDK.
 
-**Non-goal:** Go does not ship a .NET-style `IMetricsRegistryService` / SystemMetrics pull-collector registry. Call `MetricsClient().Measure|Increment|Observe` directly (optional `feature` + `variant`; empty variant defaults to `enabled`). Experiment auto-correlation (metric → linked features) is also out of scope — pass the feature argument when you need correlation.
+Set `SystemMetrics: true` (default `false`) on `toggly.Config` to sample process
+observations every 10s when `EnableMetrics` is on: `CpuUsage`, `MemoryWorkingSet`
+(Linux/Android `/proc/self/statm` current RSS only; omitted elsewhere),
+`GCHeapSize`, `AllocationRate`, and `GoroutineCount` (stdlib only; no
+`ExceptionCount`). Define those metric names in your Toggly app.
+
+Call `MetricsClient().Measure|Increment|Observe` directly for custom business
+metrics (optional `feature` + `variant`; empty variant defaults to `enabled`).
+Experiment auto-correlation (metric → linked features) is out of scope — pass
+the feature argument when you need correlation.
 
 ## Get started
 

@@ -73,6 +73,7 @@ internal class TelemetryReporter(
     private data class Stored<T>(val value: T, val entries: Int, val upperBytes: Long)
     private data class Batch(val bytes: ByteArray, val entries: Int, val createdAt: Long)
     private data class Item(val feature: FeatureKey? = null, val delta: Feature? = null, val metric: String? = null, val value: Double = 0.0)
+    var onBatchAccepted: (() -> Unit)? = null
     private val lock = Any()
     private var currentInstanceId = instanceId?.trim()?.takeIf { it.isNotEmpty() }
     private var currentIdentity = identity?.trim()?.takeIf { it.isNotEmpty() }
@@ -373,6 +374,34 @@ internal class TelemetryReporter(
             if (disposed && finalAttempted) return
             disposed.also { if (it) finalAttempted = true }
         }
+        deliverWithRetries(batch, telemetryRequest(batch, finalSend))
+    }
+
+    private suspend fun deliverWithRetries(batch: Batch, request: Request) {
+        var attempt = 0
+        while (!expired(batch)) {
+            if (!retryAfterAttempt(batch, request, attempt)) return
+            attempt++
+        }
+    }
+
+    /** Returns true when another attempt should run. */
+    private suspend fun retryAfterAttempt(batch: Batch, request: Request, attempt: Int): Boolean {
+        val response = postTelemetry(request) ?: return false
+        if (response.status == 202) {
+            onBatchAccepted?.invoke()
+            return false
+        }
+        if (!canRetry(response.status, attempt)) {
+            diagnose("http-failure")
+            return false
+        }
+        val wait = maxOf(if (attempt == 0) 30_000L else 60_000L, retryAfter(response.retryAfter))
+        if (wait >= 300_000 - (now() - batch.createdAt)) return false
+        return awaitRetry(wait)
+    }
+
+    private fun telemetryRequest(batch: Batch, finalSend: Boolean): Request {
         val compressed = if (finalSend) null else runCatching { compressor(batch.bytes) }.getOrNull()
         val bytes = compressed ?: batch.bytes
         // OkHttp must not automatically replay POSTs (including 503/Retry-After: 0 follow-ups).
@@ -382,30 +411,33 @@ internal class TelemetryReporter(
             override fun isOneShot() = true
             override fun writeTo(sink: BufferedSink) { sink.write(bytes) }
         }
-        val request = Request.Builder().url(endpoint!!).post(body).apply {
+        return Request.Builder().url(endpoint!!).post(body).apply {
             if (compressed != null) header("Content-Encoding", "gzip")
         }.build()
-        var attempt = 0
-        while (!expired(batch)) {
-            val response = try {
-                withTimeout(5_000) { transport?.invoke(request) ?: execute(request) }
-            } catch (_: TimeoutCancellationException) {
-                diagnose("transport-failure"); return
-            } catch (cancelled: CancellationException) { throw cancelled
-            } catch (_: Exception) { diagnose("transport-failure"); return }
-            if (response.status == 202) return
-            if (response.status !in listOf(429, 503) || attempt == 2 || synchronized(lock) { disposed }) {
-                diagnose("http-failure"); return
-            }
-            val wait = maxOf(if (attempt == 0) 30_000L else 60_000L, retryAfter(response.retryAfter))
-            if (wait >= 300_000 - (now() - batch.createdAt)) return
-            val sleeping = synchronized(lock) {
-                if (disposed) return
-                owner.launch(start = CoroutineStart.LAZY) { sleep(wait) }.also { retry = it; it.start() }
-            }
-            sleeping.join()
-            synchronized(lock) { retry = null; if (disposed) return }
-            attempt++
+    }
+
+    private suspend fun postTelemetry(request: Request): TelemetryResponse? = try {
+        withTimeout(5_000) { transport?.invoke(request) ?: execute(request) }
+    } catch (_: TimeoutCancellationException) {
+        diagnose("transport-failure"); null
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        diagnose("transport-failure"); null
+    }
+
+    private fun canRetry(status: Int, attempt: Int): Boolean =
+        status in listOf(429, 503) && attempt < 2 && !synchronized(lock) { disposed }
+
+    private suspend fun awaitRetry(wait: Long): Boolean {
+        val sleeping = synchronized(lock) {
+            if (disposed) return false
+            owner.launch(start = CoroutineStart.LAZY) { sleep(wait) }.also { retry = it; it.start() }
+        }
+        sleeping.join()
+        return synchronized(lock) {
+            retry = null
+            !disposed
         }
     }
 

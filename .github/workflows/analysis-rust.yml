@@ -87,6 +87,7 @@ jobs:
         if: matrix.rust == 'stable'
         run: |
           cargo update -p actix-web --precise 4.15.0
+          cargo update -p actix-server --precise 2.9.8
           cargo test -p toggly-actix -p toggly-axum -p toggly-axum08 -p toggly-rocket
           cargo package -p toggly-axum08 --allow-dirty --no-verify
           ver="$(sed -n 's/^version = "\([^"]*\)"/\1/p' toggly-axum08/Cargo.toml | head -1)"
@@ -203,7 +204,10 @@ jobs:
           cargo update -p actix-rt --precise 2.10.0
 
       - name: Check MSRV
-        run: cargo check --all-features --workspace
+        run: |
+          # actix-server 2.10+ requires rustc 1.89; keep MSRV 1.88 green.
+          cargo update -p actix-server --precise 2.9.8
+          cargo check --all-features --workspace
 
   security:
     name: Security Audit
@@ -361,6 +365,48 @@ jobs:
             -Dsonar.issue.ignore.multicriteria.kidSha1.ruleKey=rust:S4790
             -Dsonar.issue.ignore.multicriteria.kidSha1.resourceKey=**/jwks.rs
             -Dsonar.qualitygate.wait=true
+
+      - name: Report SonarQube Server quality gate
+        if: ${{ failure() }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          pr="${{ github.event.pull_request.number }}"
+          host="${SONAR_HOST_URL%/}"
+          if [ -n "$pr" ]; then
+            status_url="${host}/api/qualitygates/project_status?projectKey=toggly-sdks-rust&pullRequest=${pr}"
+            issues_url="${host}/api/issues/search?componentKeys=toggly-sdks-rust&pullRequest=${pr}&resolved=false&ps=20&s=SEVERITY&asc=false"
+          else
+            status_url="${host}/api/qualitygates/project_status?projectKey=toggly-sdks-rust&branch=${GITHUB_REF_NAME}"
+            issues_url="${host}/api/issues/search?componentKeys=toggly-sdks-rust&branch=${GITHUB_REF_NAME}&resolved=false&ps=20&s=SEVERITY&asc=false"
+          fi
+          curl -sS -H "Accept: application/json" -H "Authorization: Bearer ${SONAR_TOKEN}" "$status_url" -o /tmp/sonar-qg.json || curl -sS -H "Accept: application/json" -u "${SONAR_TOKEN}:" "$status_url" -o /tmp/sonar-qg.json || true
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          raw = Path("/tmp/sonar-qg.json").read_text()
+          try:
+              data = json.loads(raw)
+          except json.JSONDecodeError:
+              print(raw[:500])
+              raise SystemExit(0)
+          status = data.get("projectStatus", {})
+          print(f"Status: {status.get('status')}")
+          for condition in status.get("conditions", []):
+              print(
+                  f"QG {condition.get('metricKey')} {condition.get('status')} "
+                  f"actual={condition.get('actualValue')} threshold={condition.get('errorThreshold')}",
+                  flush=True,
+              )
+          PY
+          curl -sS -H "Accept: application/json" -H "Authorization: Bearer ${SONAR_TOKEN}" "$issues_url" \
+            | python3 -c 'import json,sys; raw=sys.stdin.read();
+          try: d=json.loads(raw)
+          except Exception: print(raw[:300]); raise SystemExit(0)
+          print("total", d.get("total"));
+          [print(i.get("rule"), i.get("severity"), i.get("component","").split(":")[-1], i.get("line"), (i.get("message") or "")[:120]) for i in d.get("issues",[])]' || true
+          exit 0
 
   dependency-check:
     name: OWASP Dependency Check

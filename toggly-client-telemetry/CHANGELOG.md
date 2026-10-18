@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.3 — 2026-10-12
+
+### Added
+- Opt-in `attachClientSystemMetrics` samples `ExceptionCount` and browser
+  `LongTaskCount` every 10s via `setGauge` when `systemMetrics: true` and
+  telemetry is enabled. React Native hosts can enable chained `ErrorUtils`
+  exception counting.
 ## 1.2.3 — 2026-10-16
 
 ### Fixed

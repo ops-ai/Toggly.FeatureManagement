@@ -2,6 +2,12 @@
 
 ## 0.11.0
 
+2026-10-12
+
+### Added
+- Opt-in `system_metrics` on `TogglyConfig` samples `CpuUsage`,
+  `MemoryWorkingSet`, and `ExceptionCount` (panic hook chains the previous
+  hook) every 10s when business metrics are enabled [OPS-1765].
 2026-10-11
 
 ### Added

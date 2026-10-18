@@ -181,7 +181,9 @@ the identity clears the previous token unless a replacement is supplied.
 The application's **AcceptClientGeneratedIdentitiesForMetrics** server setting
 is off by default and decides whether `u` is accepted. A 202 response does not
 prove identity acceptance; unresolved tokens can also be ingested anonymously.
-Disable telemetry with `enableTelemetry: false` if reporting is not wanted.
+Disable telemetry with `enableTelemetry: false` if reporting is not wanted. Set
+`systemMetrics: true` on `TogglyConfig` to publish chained `ExceptionCount`
+gauges every 10 seconds.
 
 #### Delivery limits
 

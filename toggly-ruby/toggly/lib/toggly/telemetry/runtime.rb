@@ -25,6 +25,9 @@ module Toggly
         metrics_client: nil,
         usage_client_provided: false,
         metrics_client_provided: false,
+        system_metrics: false,
+        system_metrics_sampler: nil,
+        system_metrics_interval: nil,
         logger: nil
       )
         # rubocop:enable Metrics/ParameterLists
@@ -62,6 +65,10 @@ module Toggly
         @process_start_time = Time.now.utc
         @atexit_registered = false
         @warned_missing_grpc = false
+        @system_metrics = system_metrics ? true : false
+        @system_metrics_sampler = system_metrics_sampler
+        @system_metrics_interval = system_metrics_interval
+        @system_metrics_collector = nil
       end
 
       def usage_enabled?
@@ -101,6 +108,8 @@ module Toggly
           )
           schedule_metrics_flush if @metrics_flush_interval.positive?
         end
+
+        start_system_metrics if @enable_metrics && @system_metrics
 
         attach_exit_handlers
       end
@@ -172,6 +181,8 @@ module Toggly
 
         # Wait for flush loops (including in-flight sends) — do not Thread#kill.
         timers.each { |thread| join_timer(thread) }
+
+        stop_system_metrics
 
         begin
           flush_all
@@ -269,6 +280,23 @@ module Toggly
 
       def log_error(message)
         @logger&.error("[Toggly] #{message}")
+      end
+
+      def start_system_metrics
+        require_relative "system_metrics"
+        interval = @system_metrics_interval || SystemMetrics::INTERVAL_SECONDS
+        @system_metrics_collector = SystemMetrics::Collector.new(
+          observe: method(:observe),
+          sampler: @system_metrics_sampler,
+          interval: interval
+        )
+        @system_metrics_collector.start
+      end
+
+      def stop_system_metrics
+        collector = @system_metrics_collector
+        @system_metrics_collector = nil
+        collector&.stop
       end
     end
   end
