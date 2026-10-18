@@ -48,6 +48,11 @@ on:
       - '.github/actions/upload-shared-js-deps/**'
       - '.github/actions/download-shared-js-deps/**'
       - '.github/actions/overlay-shared-js-deps/**'
+      - '.github/workflows/javascript-aggregate-release-gate.yml'
+      - '.github/workflows/verify-javascript-aggregate-release-gate.yml'
+      - '.github/workflows/sdk-*-release.yml'
+      - '.github/scripts/wait-javascript-aggregate-analysis.mjs'
+      - '.github/package-registry/javascript-aggregate-release-gate-contract.test.mjs'
   pull_request:
     branches:
       - develop
@@ -85,6 +90,11 @@ on:
       - '.github/actions/upload-shared-js-deps/**'
       - '.github/actions/download-shared-js-deps/**'
       - '.github/actions/overlay-shared-js-deps/**'
+      - '.github/workflows/javascript-aggregate-release-gate.yml'
+      - '.github/workflows/verify-javascript-aggregate-release-gate.yml'
+      - '.github/workflows/sdk-*-release.yml'
+      - '.github/scripts/wait-javascript-aggregate-analysis.mjs'
+      - '.github/package-registry/javascript-aggregate-release-gate-contract.test.mjs'
   workflow_dispatch:
     inputs:
       target_sha:

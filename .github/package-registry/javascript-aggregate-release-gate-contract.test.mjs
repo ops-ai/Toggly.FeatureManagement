@@ -39,6 +39,25 @@ test('aggregate release gate workflow passes github.token to the wait script', (
   assert.match(gate, /statuses: read/);
 });
 
+const GATE_PATH_TRIGGERS = [
+  '.github/workflows/javascript-aggregate-release-gate.yml',
+  '.github/workflows/verify-javascript-aggregate-release-gate.yml',
+  '.github/scripts/wait-javascript-aggregate-analysis.mjs',
+  '.github/package-registry/javascript-aggregate-release-gate-contract.test.mjs',
+];
+
+test('analysis-javascript pull_request paths include every verify gate path trigger', () => {
+  const analysis = fs.readFileSync(
+    path.join(repository, '.github/workflows/analysis-javascript.yml'),
+    'utf8',
+  );
+  const prPaths = analysis.match(/pull_request:\n[\s\S]*?paths:\n([\s\S]*?)\n  workflow_dispatch:/)?.[1] ?? '';
+  for (const triggerPath of GATE_PATH_TRIGGERS) {
+    assert.match(prPaths, new RegExp(`- '${triggerPath.replaceAll('/', '\\/')}'`));
+  }
+  assert.match(prPaths, /sdk-\*-release\.yml/);
+});
+
 test('verify workflow passes PR head SHA into the aggregate gate', () => {
   const verify = fs.readFileSync(
     path.join(repository, '.github/workflows/verify-javascript-aggregate-release-gate.yml'),
