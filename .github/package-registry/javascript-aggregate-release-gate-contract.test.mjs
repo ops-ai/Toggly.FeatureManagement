@@ -33,4 +33,5 @@ test('aggregate release gate workflow passes github.token to the wait script', (
   );
   assert.doesNotMatch(gate, /concurrency:/);
   assert.match(gate, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.match(gate, /uses: actions\/checkout@v7/);
 });
