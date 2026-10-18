@@ -2,6 +2,15 @@
 
 All notable changes to the Toggly iOS SDK are documented in this file.
 
+## 1.8.3
+
+2026-10-18
+
+### Fixed
+- Preserve forwarding to the original crash reporter when system metrics
+  stop and restart after another reporter wraps Toggly's exception handler.
+  The external reporter keeps ownership of the exception handler slot.
+
 ## 1.7.2
 
 2026-10-12

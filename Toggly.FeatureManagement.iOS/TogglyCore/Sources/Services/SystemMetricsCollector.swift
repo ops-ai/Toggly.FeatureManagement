@@ -13,8 +13,11 @@ private enum UncaughtExceptionBridge {
     static let lock = NSLock()
     static var count = 0
     static var previous: UncaughtExceptionHandler?
+    /// Retained even without clients when an external reporter may still call us.
+    /// This is separate from `previous`, because a nil original is valid.
+    static var hasForwardingState = false
     static var installs = 0
-    /// Breaks cycles when a later crash reporter wraps our handler and we reinstall.
+    /// Breaks cycles if another crash reporter calls back into our handler.
     static var reentrant = false
 
     static func record() {
@@ -30,10 +33,14 @@ private enum UncaughtExceptionBridge {
     static func install() {
         lock.lock()
         defer { lock.unlock() }
-        if installs == 0 {
+        // An external slot owner may retain our callback. Re-wrapping it would
+        // replace the original target with a cycle (Toggly -> wrapper -> Toggly).
+        // Keep forwarding through the existing chain without taking its slot.
+        if installs == 0 && !hasForwardingState {
             let current = NSGetUncaughtExceptionHandler()
             if !sameUncaughtHandler(current, togglySystemMetricsUncaughtHandler) {
                 previous = current
+                hasForwardingState = true
                 NSSetUncaughtExceptionHandler(togglySystemMetricsUncaughtHandler)
             }
         }
@@ -51,6 +58,7 @@ private enum UncaughtExceptionBridge {
             if sameUncaughtHandler(NSGetUncaughtExceptionHandler(), togglySystemMetricsUncaughtHandler) {
                 NSSetUncaughtExceptionHandler(previous)
                 previous = nil
+                hasForwardingState = false
             }
         }
     }
@@ -217,6 +225,7 @@ extension SystemMetricsCollector {
             UncaughtExceptionBridge.count = 0
             UncaughtExceptionBridge.installs = 0
             UncaughtExceptionBridge.previous = nil
+            UncaughtExceptionBridge.hasForwardingState = false
             UncaughtExceptionBridge.reentrant = false
             UncaughtExceptionBridge.lock.unlock()
         }
