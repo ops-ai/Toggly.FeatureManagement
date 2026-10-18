@@ -262,7 +262,7 @@ final class SystemMetricsCollectorTests: XCTestCase {
     }
 
     func testComputeCpuPercentEdgeCases() {
-        typealias Sample = SystemMetricsCollector.Testing.CpuPercentSample
+        typealias Sample = SystemMetricsCollector.CpuPercentSample
         XCTAssertNil(
             SystemMetricsCollector.Testing.computeCpuPercent(
                 previous: Sample(userMicros: 0, sysMicros: 0, monotonicNs: 100),

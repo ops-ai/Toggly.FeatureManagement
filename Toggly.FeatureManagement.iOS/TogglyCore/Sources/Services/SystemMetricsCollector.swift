@@ -204,6 +204,12 @@ final class SystemMetricsCollector: @unchecked Sendable {
 
 // Internal hooks for TogglyCoreTests only (@testable import).
 extension SystemMetricsCollector {
+    struct CpuPercentSample {
+        let userMicros: UInt64
+        let sysMicros: UInt64
+        let monotonicNs: UInt64
+    }
+
     enum Testing {
         /// Resets bridge counters between tests; does not touch the process handler slot.
         static func resetUncaughtBridgeState() {
@@ -223,12 +229,6 @@ extension SystemMetricsCollector {
 
         static func invokeUncaughtHandler(_ exception: NSException) {
             togglySystemMetricsUncaughtHandler(exception)
-        }
-
-        struct CpuPercentSample {
-            let userMicros: UInt64
-            let sysMicros: UInt64
-            let monotonicNs: UInt64
         }
 
         static func computeCpuPercent(

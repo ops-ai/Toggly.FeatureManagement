@@ -102,16 +102,20 @@ class SystemMetricsCollector:
             return
         try:
             for sample in self._sampler():
-                value = float(sample.value)
-                if not math.isfinite(value):
-                    continue
-                pending = self._pending_by_metric.get(sample.metric, 0)
-                if pending >= SYSTEM_METRICS_MAX_PENDING:
-                    continue
-                self._pending_by_metric[sample.metric] = pending + 1
-                self._observe(sample.metric, value)
+                self._publish_sample(sample)
         except Exception:
-            pass
+            # Never disrupt the host process.
+            return
+
+    def _publish_sample(self, sample: SystemMetricObservation) -> None:
+        value = float(sample.value)
+        if not math.isfinite(value):
+            return
+        pending = self._pending_by_metric.get(sample.metric, 0)
+        if pending >= SYSTEM_METRICS_MAX_PENDING:
+            return
+        self._pending_by_metric[sample.metric] = pending + 1
+        self._observe(sample.metric, value)
 
     def on_flushed(self) -> None:
         """Clear pending-observation backpressure after a successful flush."""
@@ -193,18 +197,27 @@ class SystemMetricsCollector:
         try:
             with open("/proc/self/status", encoding="utf-8") as handle:
                 for line in handle:
-                    if not line.startswith("VmRSS:"):
-                        continue
-                    parts = line.split()
-                    if len(parts) < 2:
-                        return None
-                    kb = float(parts[1])
-                    if kb < 0 or not math.isfinite(kb):
-                        return None
-                    return kb * 1024.0
-        except Exception:
+                    rss = SystemMetricsCollector._parse_vm_rss_line(line)
+                    if rss is not None:
+                        return rss
+        except OSError:
             return None
         return None
+
+    @staticmethod
+    def _parse_vm_rss_line(line: str) -> Optional[float]:
+        if not line.startswith("VmRSS:"):
+            return None
+        parts = line.split()
+        if len(parts) < 2:
+            return None
+        try:
+            kb = float(parts[1])
+        except ValueError:
+            return None
+        if kb < 0 or not math.isfinite(kb):
+            return None
+        return kb * 1024.0
 
     def _attach_exception_hooks(self) -> None:
         previous_sys = sys.excepthook
