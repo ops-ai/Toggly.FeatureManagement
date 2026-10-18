@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  ACTIVE_RUN_STATUSES,
   buildWorkflowDispatchPayload,
   findSuccessfulAnalysisViaCheckRuns,
   pickRelevantRun,
@@ -127,6 +128,62 @@ test('waitForAggregateAnalysis returns when a successful run exists for the SHA'
   assert.equal(result.targetSha, sha);
   const dispatch = calls.find((call) => call.url.includes('/dispatches'));
   assert.equal(dispatch, undefined);
+});
+
+test('ACTIVE_RUN_STATUSES includes pending so waiters do not double-dispatch', () => {
+  assert.equal(ACTIVE_RUN_STATUSES.has('pending'), true);
+});
+
+test('waitForAggregateAnalysis waits on pending runs without dispatching', async () => {
+  const sha = 'pending123';
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push(url);
+    if (url.endsWith('/actions/workflows?per_page=100')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          workflows: [{ id: 99, path: '.github/workflows/analysis-javascript.yml' }],
+        }),
+      };
+    }
+    if (url.includes('/runs?head_sha=')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          workflow_runs: [
+            {
+              name: WORKFLOW_NAME,
+              status: 'pending',
+              head_sha: sha,
+              html_url: 'https://example.com/run/pending',
+            },
+          ],
+        }),
+      };
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  };
+
+  await assert.rejects(
+    () =>
+      waitForAggregateAnalysis({
+        owner: 'ops-ai',
+        repo: 'Toggly.FeatureManagement',
+        token: 'token',
+        targetSha: sha,
+        pollMs: 1,
+        maxMs: 3,
+        fetchImpl,
+        sleep: async () => {},
+        env: { GITHUB_REF: 'refs/heads/develop' },
+      }),
+    /Timed out/,
+  );
+
+  assert.equal(calls.some((url) => url.includes('/dispatches')), false);
 });
 
 test('waitForAggregateAnalysis dispatches with the commit SHA when no run exists', async () => {

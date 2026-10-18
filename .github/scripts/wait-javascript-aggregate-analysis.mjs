@@ -72,6 +72,14 @@ export function createGithubClient({ owner, repo, token, fetchImpl = fetch }) {
   };
 }
 
+export const ACTIVE_RUN_STATUSES = new Set([
+  'in_progress',
+  'queued',
+  'waiting',
+  'pending',
+  'requested',
+]);
+
 export function pickRelevantRun(runs, workflowName = WORKFLOW_NAME) {
   const relevant = runs
     .filter((run) => run.name === workflowName)
@@ -164,7 +172,7 @@ export async function waitForAggregateAnalysis({
       throw new Error(`Aggregate analysis failed (${run.conclusion}): ${run.html_url}`);
     }
 
-    if (run?.status === 'in_progress' || run?.status === 'queued' || run?.status === 'waiting') {
+    if (run && ACTIVE_RUN_STATUSES.has(run.status)) {
       console.log(`Waiting for aggregate analysis (${run.status}): ${run.html_url}`);
       await sleep(pollMs);
       continue;
