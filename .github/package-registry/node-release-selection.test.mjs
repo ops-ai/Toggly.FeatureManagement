@@ -135,12 +135,12 @@ test("selected suite failures fail the release command", () => {
     "@ops-ai/toggly-hono",
   ]);
 });
-test("release workflow uses analysis gates and retains Node publish matrix", () => {
+test("release workflow uses aggregate analysis gates and retains Node publish matrix", () => {
   assert.match(
     workflow,
-    /uses: \.\/\.github\/workflows\/analysis-javascript\.yml/,
+    /uses: \.\/\.github\/workflows\/javascript-aggregate-release-gate\.yml/,
   );
-  assert.match(workflow, /sdks: node-server/);
+  assert.doesNotMatch(workflow, /sdks: node-server/);
   assert.match(
     workflow,
     /RELEASE_PACKAGES: \$\{\{ github\.event\.inputs\.packages \|\| 'all' \}\}/,
