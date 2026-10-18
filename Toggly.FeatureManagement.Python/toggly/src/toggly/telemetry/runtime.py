@@ -8,6 +8,7 @@ import logging
 import os
 import signal
 import threading
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
@@ -35,6 +36,15 @@ from toggly.telemetry.usage_batcher import UsageBatcher
 logger = logging.getLogger("toggly.telemetry")
 
 
+@dataclass(frozen=True)
+class SystemMetricsOptions:
+    """Opt-in process metrics knobs for :class:`TelemetryRuntime`."""
+
+    enabled: bool = False
+    sampler: SystemMetricsSampler | None = None
+    interval_seconds: float | None = None
+
+
 class TelemetryRuntime:
     """Owns usage + metrics batchers, flush timers, and exit handlers."""
 
@@ -54,11 +64,7 @@ class TelemetryRuntime:
         app_version: str | None = None,
         usage_client: Any = None,
         metrics_client: Any = None,
-        usage_client_provided: bool = False,
-        metrics_client_provided: bool = False,
-        system_metrics: bool = False,
-        system_metrics_sampler: SystemMetricsSampler | None = None,
-        system_metrics_interval_seconds: float | None = None,
+        system_metrics: SystemMetricsOptions | bool = False,
     ) -> None:
         """Create a telemetry runtime for one app/environment pair."""
         has_app_key = bool(app_key)
@@ -90,14 +96,19 @@ class TelemetryRuntime:
         self._app_version = app_version
         self._injected_usage = usage_client
         self._injected_metrics = metrics_client
-        self._usage_client_provided = usage_client_provided
-        self._metrics_client_provided = metrics_client_provided
-        self._system_metrics = system_metrics is True
-        self._system_metrics_sampler = system_metrics_sampler
+        self._usage_client_provided = usage_client is not None
+        self._metrics_client_provided = metrics_client is not None
+        metrics_opts = (
+            system_metrics
+            if isinstance(system_metrics, SystemMetricsOptions)
+            else SystemMetricsOptions(enabled=bool(system_metrics))
+        )
+        self._system_metrics = metrics_opts.enabled is True
+        self._system_metrics_sampler = metrics_opts.sampler
         self._system_metrics_interval_seconds = (
             SYSTEM_METRICS_INTERVAL_SECONDS
-            if system_metrics_interval_seconds is None
-            else float(system_metrics_interval_seconds)
+            if metrics_opts.interval_seconds is None
+            else float(metrics_opts.interval_seconds)
         )
 
         self._usage_batcher: UsageBatcher | None = None

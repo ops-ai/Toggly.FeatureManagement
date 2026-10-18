@@ -2,7 +2,7 @@
 
 use super::hash::{DEFAULT_METRICS_BASE_URL, DEFAULT_TELEMETRY_FLUSH_SECS};
 use super::metrics_batcher::{MetricsBatcher, MetricsFeatureOptions};
-use super::system_metrics::SystemMetricsCollector;
+use super::system_metrics::{SystemMetricsCollector, SystemMetricsSampler};
 use super::transport::TelemetrySenders;
 use super::usage_batcher::UsageBatcher;
 use crate::TogglyConfig;
@@ -177,33 +177,18 @@ struct Inner {
 
 impl TelemetryRuntime {
     /// Create and start batchers / flush timers when either side is enabled.
-    pub fn start(config: TelemetryRuntimeConfig) -> Self {
-        let has_app_key = !config.app_key.is_empty();
-        let allowed = recording_allowed(config.senders_provided);
-        // Feature-off (no injected senders): defaults stay off — no unbounded buffering.
-        let default_on = allowed && has_app_key && !telemetry_env_disabled();
-
-        let mut enable_usage = resolve_enabled(config.enable_usage_tracking, default_on);
-        let mut enable_metrics = resolve_enabled(config.enable_metrics, default_on);
-
-        let warn_feature_off = !allowed
-            && (config.enable_usage_tracking == Some(true) || config.enable_metrics == Some(true));
-
-        if !allowed {
-            enable_usage = false;
-            enable_metrics = false;
-        }
-
+    pub fn start(mut config: TelemetryRuntimeConfig) -> Self {
+        let (enable_usage, enable_metrics, warn_feature_off) =
+            Self::resolve_enablement(&config);
         let (cancel_tx, cancel_rx) = watch::channel(false);
-
         let inner = Arc::new(Inner {
             enable_usage,
             enable_metrics,
-            metrics_base_url: config.metrics_base_url,
+            metrics_base_url: config.metrics_base_url.clone(),
             senders_provided: config.senders_provided,
             usage_batcher: Mutex::new(None),
             metrics_batcher: Mutex::new(None),
-            senders: Mutex::new(config.senders),
+            senders: Mutex::new(std::mem::take(&mut config.senders)),
             sending_usage: AtomicBool::new(false),
             sending_metrics: AtomicBool::new(false),
             closed: AtomicBool::new(false),
@@ -212,20 +197,38 @@ impl TelemetryRuntime {
             tasks: Mutex::new(Vec::new()),
             system_metrics: Mutex::new(None),
         });
-
         let runtime = Self {
             inner: inner.clone(),
         };
-
         if warn_feature_off {
             runtime.warn_feature_required();
         }
-
         if !enable_usage && !enable_metrics {
             return runtime;
         }
+        runtime.start_batchers(config, cancel_rx);
+        runtime
+    }
 
-        if enable_usage {
+    fn resolve_enablement(config: &TelemetryRuntimeConfig) -> (bool, bool, bool) {
+        let has_app_key = !config.app_key.is_empty();
+        let allowed = recording_allowed(config.senders_provided);
+        // Feature-off (no injected senders): defaults stay off — no unbounded buffering.
+        let default_on = allowed && has_app_key && !telemetry_env_disabled();
+        let mut enable_usage = resolve_enabled(config.enable_usage_tracking, default_on);
+        let mut enable_metrics = resolve_enabled(config.enable_metrics, default_on);
+        let warn_feature_off = !allowed
+            && (config.enable_usage_tracking == Some(true) || config.enable_metrics == Some(true));
+        if !allowed {
+            enable_usage = false;
+            enable_metrics = false;
+        }
+        (enable_usage, enable_metrics, warn_feature_off)
+    }
+
+    fn start_batchers(&self, config: TelemetryRuntimeConfig, cancel_rx: watch::Receiver<bool>) {
+        let inner = &self.inner;
+        if inner.enable_usage {
             *inner.usage_batcher.lock() = Some(Arc::new(UsageBatcher::new(
                 config.app_key.clone(),
                 config.environment.clone(),
@@ -234,36 +237,35 @@ impl TelemetryRuntime {
                 None,
             )));
             if !config.usage_flush_interval.is_zero() {
-                runtime.spawn_flush_loop(cancel_rx.clone(), config.usage_flush_interval, true);
+                self.spawn_flush_loop(cancel_rx.clone(), config.usage_flush_interval, true);
             }
         }
-
-        if enable_metrics {
-            *inner.metrics_batcher.lock() = Some(MetricsBatcher::new(
-                config.app_key,
-                config.environment,
-                config.instance_name,
-            ));
-            if !config.metrics_flush_interval.is_zero() {
-                runtime.spawn_flush_loop(cancel_rx, config.metrics_flush_interval, false);
-            }
-            if config.system_metrics {
-                let inner = runtime.inner.clone();
-                let observe = Arc::new(
-                    move |metric: &str, value: f64, options: Option<&MetricsFeatureOptions>| {
-                        if let Some(batcher) = inner.metrics_batcher.lock().as_ref() {
-                            batcher.observe(metric, value, options);
-                        }
-                    },
-                );
-                *runtime.inner.system_metrics.lock() = Some(SystemMetricsCollector::start(
-                    observe,
-                    config.system_metrics_sampler,
-                ));
-            }
+        if !inner.enable_metrics {
+            return;
         }
+        *inner.metrics_batcher.lock() = Some(MetricsBatcher::new(
+            config.app_key,
+            config.environment,
+            config.instance_name,
+        ));
+        if !config.metrics_flush_interval.is_zero() {
+            self.spawn_flush_loop(cancel_rx, config.metrics_flush_interval, false);
+        }
+        if config.system_metrics {
+            self.start_system_metrics(config.system_metrics_sampler);
+        }
+    }
 
-        runtime
+    fn start_system_metrics(&self, sampler: Option<SystemMetricsSampler>) {
+        let inner = self.inner.clone();
+        let observe = Arc::new(
+            move |metric: &str, value: f64, options: Option<&MetricsFeatureOptions>| {
+                if let Some(batcher) = inner.metrics_batcher.lock().as_ref() {
+                    batcher.observe(metric, value, options);
+                }
+            },
+        );
+        *self.inner.system_metrics.lock() = Some(SystemMetricsCollector::start(observe, sampler));
     }
 
     fn warn_feature_required(&self) {

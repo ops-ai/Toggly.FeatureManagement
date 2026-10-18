@@ -223,16 +223,15 @@ class SystemMetricsCollectorTest {
 
     @Test
     fun shortIntervalInvokesTickSafeViaScheduler() {
-        val observed = mutableListOf<Pair<String, Double>>()
+        val latch = java.util.concurrent.CountDownLatch(1)
         val collector = SystemMetricsCollector(
-            observe = { metric, value -> observed += metric to value },
+            observe = { _, _ -> latch.countDown() },
             intervalMs = 40L,
             sampler = { listOf("CpuUsage" to 1.0) },
         )
         collector.start()
-        Thread.sleep(150)
+        assertTrue(latch.await(2, java.util.concurrent.TimeUnit.SECONDS))
         collector.stop()
-        assertTrue(observed.isNotEmpty())
     }
 
     @Test

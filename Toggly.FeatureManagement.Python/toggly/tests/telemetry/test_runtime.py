@@ -7,6 +7,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from toggly.telemetry import TelemetryRuntime
+from toggly.telemetry.runtime import SystemMetricsOptions
 
 
 class FakeUsageClient:
@@ -61,8 +62,6 @@ class TestTelemetryRuntime:
             metrics_flush_interval=0,
             usage_client=usage,
             metrics_client=metrics,
-            usage_client_provided=True,
-            metrics_client_provided=True,
         )
         runtime.start()
 
@@ -101,8 +100,6 @@ class TestTelemetryRuntime:
             metrics_flush_interval=0,
             usage_client=usage,
             metrics_client=metrics,
-            usage_client_provided=True,
-            metrics_client_provided=True,
         )
         runtime.start()
         runtime.record_check("FeatureA", True)
@@ -125,8 +122,6 @@ class TestTelemetryRuntime:
             metrics_flush_interval=0,
             usage_client=IncompleteUsageClient(),
             metrics_client=None,
-            usage_client_provided=True,
-            metrics_client_provided=True,
         )
         runtime.start()
         runtime.record_check("FeatureA", True, "user-1")
@@ -154,8 +149,6 @@ class TestTelemetryRuntime:
             metrics_flush_interval=0,
             usage_client=None,
             metrics_client=IncompleteUsageClient(),
-            usage_client_provided=True,
-            metrics_client_provided=True,
         )
         runtime.start()
         runtime.measure("revenue", 9)
@@ -198,8 +191,6 @@ class TestTelemetryRuntime:
             metrics_flush_interval=0,
             usage_client=usage,
             metrics_client=None,
-            usage_client_provided=True,
-            metrics_client_provided=True,
         )
         runtime.start()
         runtime.record_check("FeatureA", True, "user-1")
@@ -251,8 +242,6 @@ class TestTelemetryRuntime:
             metrics_flush_interval=0,
             usage_client=usage,
             metrics_client=None,
-            usage_client_provided=True,
-            metrics_client_provided=True,
         )
         runtime.start()
         runtime.record_check("FeatureA", True, "user-1")
@@ -302,8 +291,6 @@ class TestTelemetryRuntime:
             metrics_flush_interval=0,
             usage_client=usage,
             metrics_client=None,
-            usage_client_provided=True,
-            metrics_client_provided=True,
         )
         runtime.start()
         runtime.record_check("FeatureA", True, "user-1")
@@ -333,11 +320,8 @@ class TestTelemetryRuntimeSystemMetrics:
             enable_usage_tracking=False,
             enable_metrics=True,
             metrics_flush_interval=0,
-            system_metrics=False,
-            system_metrics_interval_seconds=0.03,
-            system_metrics_sampler=sampler,
+            system_metrics=SystemMetricsOptions(enabled=False, interval_seconds=0.03, sampler=sampler),
             metrics_client=FakeMetricsClient(),
-            metrics_client_provided=True,
         )
         runtime.start()
         time.sleep(0.08)
@@ -360,11 +344,8 @@ class TestTelemetryRuntimeSystemMetrics:
             enable_usage_tracking=False,
             enable_metrics=True,
             metrics_flush_interval=0,
-            system_metrics=True,
-            system_metrics_interval_seconds=0.03,
-            system_metrics_sampler=sampler,
+            system_metrics=SystemMetricsOptions(enabled=True, interval_seconds=0.03, sampler=sampler),
             metrics_client=metrics,
-            metrics_client_provided=True,
         )
         runtime.start()
         assert sampled.wait(timeout=2.0)
@@ -386,9 +367,7 @@ class TestTelemetryRuntimeSystemMetrics:
             environment="Production",
             enable_usage_tracking=False,
             enable_metrics=False,
-            system_metrics=True,
-            system_metrics_interval_seconds=0.03,
-            system_metrics_sampler=sampler,
+            system_metrics=SystemMetricsOptions(enabled=True, interval_seconds=0.03, sampler=sampler),
         )
         runtime.start()
         time.sleep(0.08)
@@ -417,13 +396,10 @@ class TestTelemetryRuntimeSystemMetrics:
             enable_usage_tracking=False,
             enable_metrics=True,
             metrics_flush_interval=0,
-            system_metrics=True,
-            system_metrics_interval_seconds=60.0,
-            system_metrics_sampler=lambda: [
+            system_metrics=SystemMetricsOptions(enabled=True, interval_seconds=60.0, sampler=lambda: [
                 SystemMetricObservation("CpuUsage", 1.0)
-            ],
+            ]),
             metrics_client=metrics,
-            metrics_client_provided=True,
         )
         runtime.start()
         collector = runtime._system_metrics_collector
