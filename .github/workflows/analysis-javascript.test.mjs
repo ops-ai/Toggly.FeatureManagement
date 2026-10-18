@@ -10,6 +10,7 @@ import {
   splitJobList,
   verifyRequiredJobs,
 } from '../actions/verify-required-jobs/verify-required-jobs.mjs';
+import { resolveJavaScriptSonarScope } from '../scripts/javascript-sonar-scope.mjs';
 
 const workflow = readFileSync(new URL('./analysis-javascript.yml', import.meta.url), 'utf8');
 const docusaurusFixture = readFileSync(
@@ -86,6 +87,8 @@ test('requires current packed browser-host validation in the analysis summary', 
   assert.match(summary, /required-jobs: \$\{\{ needs\.prepare\.outputs\.required_jobs \}\}/);
   assert.match(prepare, /required_jobs: \$\{\{ steps\.filter\.outputs\.required_jobs \}\}/);
   assert.match(prepare, /run: node \.github\/package-registry\/analysis-js-filter\.mjs "\$SDKS"/);
+  assert.match(prepare, /run: node \.github\/scripts\/javascript-sonar-scope\.mjs "\$SDKS"/);
+  assert.match(prepare, /sonar_project_key: \$\{\{ steps\.sonar_scope\.outputs\.sonar_project_key \}\}/);
   assert.match(prepare, /run_test_current_browser_hosts: \$\{\{ steps\.filter\.outputs\.run_test_current_browser_hosts \}\}/);
   assert.match(workflow, /test-current-browser-hosts:[\s\S]*?if: needs\.prepare\.outputs\.run_test_current_browser_hosts == 'true'/);
   for (const sdks of ['all', 'Vue', 'Svelte', 'SvelteKit']) {
@@ -114,6 +117,9 @@ test('requires authenticated SonarCloud and Server quality gates', () => {
   assert.match(serverCredentials, /test -n "\$\{SONAR_SERVER_TOKEN\}" && test -n "\$\{SONAR_HOST_URL\}"/);
   assert.match(cloud, /SONAR_HOST_URL: https:\/\/sonarcloud\.io/);
   assert.match(cloud, /-Dsonar\.organization=ops-ai/);
+  assert.match(cloud, /-Dsonar\.projectKey=\$\{\{ needs\.prepare\.outputs\.sonar_project_key \}\}/);
+  assert.match(cloud, /-Dsonar\.sources=\$\{\{ needs\.prepare\.outputs\.sonar_sources \}\}/);
+  assert.match(cloud, /-Dsonar\.tests=\$\{\{ needs\.prepare\.outputs\.sonar_tests \}\}/);
   assert.match(cloud, /-Dsonar\.qualitygate\.wait=true/);
   assert.doesNotMatch(cloud, /continue-on-error/);
   assert.match(server, /SONAR_HOST_URL: \$\{\{ secrets\.SONAR_HOST_URL \}\}/);
@@ -201,12 +207,10 @@ test('uploads signed definitions coverage and includes its source in both Sonar 
   assert.match(organizer, /run: node \.github\/scripts\/organize-js-coverage\.mjs/);
   assert.doesNotMatch(organizer, /continue-on-error/);
 
+  const aggregate = resolveJavaScriptSonarScope('all');
   for (const property of ['sources', 'tests']) {
-    const values = [...sonarJob.matchAll(new RegExp(`-Dsonar\\.${property}=([^\\n]+)`, 'g'))].map((match) => match[1]);
-    assert.equal(values.length, 2, `both Sonar scans need ${property}`);
-    for (const value of values) {
-      assert.ok(value.split(',').includes('toggly-signed-defs/src'), `signed-defs source missing from ${property}`);
-    }
+    const value = property === 'sources' ? aggregate.sources : aggregate.tests;
+    assert.ok(value.split(',').includes('toggly-signed-defs/src'), `signed-defs source missing from ${property}`);
   }
   for (const property of ['javascript.lcov.reportPaths', 'typescript.lcov.reportPaths']) {
     const values = [...sonarJob.matchAll(new RegExp(`-Dsonar\\.${property.replaceAll('.', '\\.')}=([^\\n]+)`, 'g'))].map((match) => match[1]);
@@ -218,35 +222,33 @@ test('uploads signed definitions coverage and includes its source in both Sonar 
 });
 
 test('maps evaluator source, tests, and LCOV into both Sonar scans', () => {
-  const sources = [...workflow.matchAll(/-Dsonar\.sources=([^\n]+)/g)].map((match) => match[1]);
-  const tests = [...workflow.matchAll(/-Dsonar\.tests=([^\n]+)/g)].map((match) => match[1]);
+  const aggregate = resolveJavaScriptSonarScope('all');
+  const evaluator = resolveJavaScriptSonarScope('Evaluator');
   const lcov = [...workflow.matchAll(/-Dsonar\.(?:javascript|typescript)\.lcov\.reportPaths=([^\n]+)/g)].map((match) => match[1]);
   const sonarSetup = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
 
-  assert.equal(sources.length, 2, 'both Sonar scans must declare sources');
-  assert.equal(tests.length, 2, 'both Sonar scans must declare tests');
-  for (const value of [...sources, ...tests]) assert.ok(value.split(',').includes('toggly-eval'));
+  assert.ok(aggregate.sources.split(',').includes('toggly-eval'));
+  assert.ok(aggregate.tests.split(',').includes('toggly-eval'));
+  assert.equal(evaluator.sources, 'toggly-eval');
+  assert.equal(evaluator.coverageKeys, 'Evaluator');
   assert.equal(lcov.length, 4, 'both scanners must receive JavaScript and TypeScript LCOV paths');
   for (const value of lcov) assert.equal(value, 'coverage/*-lcov.info');
   assert.match(sonarSetup, /run: node \.github\/scripts\/organize-js-coverage\.mjs/);
-  const analysisInstall = sonarSetup.match(/for dir in \\\n([\s\S]*?)toggly-appinsights-hook; do/)?.[1] ?? '';
-  assert.ok(analysisInstall.includes('toggly-eval'));
+  assert.match(sonarSetup, /COVERAGE_SDK_KEYS: \$\{\{ needs\.prepare\.outputs\.coverage_sdk_keys \}\}/);
+  assert.match(sonarSetup, /SONAR_NPM_INSTALL_DIRS: \$\{\{ needs\.prepare\.outputs\.sonar_npm_install_dirs \}\}/);
   assert.match(testJob, /matrix\.sdk == 'Evaluator'/);
 });
 
 test('maps local gates source, tests, and LCOV into both Sonar scans', () => {
-  const sources = [...workflow.matchAll(/-Dsonar\.sources=([^\n]+)/g)].map((match) => match[1]);
-  const tests = [...workflow.matchAll(/-Dsonar\.tests=([^\n]+)/g)].map((match) => match[1]);
+  const aggregate = resolveJavaScriptSonarScope('all');
+  const localGates = resolveJavaScriptSonarScope('Local-Gates');
   const sonarSetup = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
 
-  assert.equal(sources.length, 2, 'both Sonar scans must declare sources');
-  assert.equal(tests.length, 2, 'both Sonar scans must declare tests');
-  for (const value of [...sources, ...tests]) {
-    assert.ok(value.split(',').includes('toggly-local-gates/src'));
-    assert.ok(!value.split(',').includes('toggly-local-gates'));
-  }
+  assert.ok(aggregate.sources.split(',').includes('toggly-local-gates/src'));
+  assert.ok(!aggregate.sources.split(',').includes('toggly-local-gates'));
+  assert.equal(localGates.sources, 'toggly-local-gates/src');
   assert.match(sonarSetup, /run: node \.github\/scripts\/organize-js-coverage\.mjs/);
   assert.match(testJob, /matrix\.sdk == 'Local-Gates'/);
   assert.match(testJob, /name: coverage-\$\{\{ matrix\.sdk \}\}/);
@@ -354,8 +356,10 @@ test('excludes fixture and packaging lockfiles from the JS OWASP Node Audit scan
   assert.ok(owasp.includes("--exclude '**/node_modules/**'"));
   assert.ok(owasp.includes("--exclude '**/packaging/**'"));
   assert.ok(owasp.includes('--disableNodeAudit'));
-  assert.ok(owasp.includes('Toggly.FeatureManagement.Angular/projects/ngx-feature-flags-toggly'));
-  assert.doesNotMatch(owasp, /path: >\s+Toggly\.FeatureManagement\.Angular\s/);
+  assert.match(owasp, /path: \$\{\{ needs\.prepare\.outputs\.owasp_scan_paths \}\}/);
+  assert.match(owasp, /project: \$\{\{ needs\.prepare\.outputs\.sonar_project_key \}\}/);
+  const reactScope = resolveJavaScriptSonarScope('React');
+  assert.ok(reactScope.owaspPaths.includes('Toggly.FeatureManagement.React'));
 });
 
 test('runs the current Gatsby packed host on Node 24', () => {
@@ -424,6 +428,15 @@ test('classifies the JavaScript packed browser harness as test code in both scan
   for (const [, value] of workflow.matchAll(/-Dsonar\.coverage\.exclusions=([^\n]+)/g)) {
     assert.ok(!value.includes('Toggly.FeatureManagement.Javascript'));
   }
+});
+
+test('narrows release-gate Sonar projects so concurrent develop publishes do not clobber each other', () => {
+  const react = resolveJavaScriptSonarScope('React');
+  const vue = resolveJavaScriptSonarScope('Vue');
+  assert.notEqual(react.projectKey, vue.projectKey);
+  assert.match(react.projectKey, /^toggly-sdks-javascript-/);
+  assert.equal(react.coverageKeys, 'React');
+  assert.equal(vue.coverageKeys, 'Vue');
 });
 
 test('installs the packed Solid host browser with its own resolved Playwright CLI before verification', () => {

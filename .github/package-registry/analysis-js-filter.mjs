@@ -230,9 +230,8 @@ export function filterAnalysisJs(sdksInput = 'all') {
   }
 
   const jobSet = new Set();
-  // OWASP Dependency Check always runs (it is not gated by the sdks filter),
-  // scanning the whole JS/TS dependency tree. Sonar also analyzes the full
-  // aggregate source set, so both reporting jobs must always be required.
+  // OWASP and Sonar always run for release gates; javascript-sonar-scope.mjs
+  // narrows their inputs when sdks is not "all".
   jobSet.add('sonar');
   jobSet.add('dependency-check');
   if (testMatrix.length) {

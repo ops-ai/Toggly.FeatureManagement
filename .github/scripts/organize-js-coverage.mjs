@@ -61,9 +61,16 @@ function containsArtifactContainer(directory) {
   );
 }
 
+function parseCoverageSdkKeys(raw) {
+  const value = String(raw ?? '').trim();
+  if (!value) return null;
+  return value.split(',').map((part) => part.trim()).filter(Boolean);
+}
+
 export async function organizeCoverage({
   downloadDir = 'coverage-artifacts',
   outputDir = 'coverage',
+  coverageSdkKeys = parseCoverageSdkKeys(process.env.COVERAGE_SDK_KEYS),
 } = {}) {
   const files = lcovFiles(downloadDir);
   if (files.length === 0) throw new Error('No LCOV reports were downloaded');
@@ -90,6 +97,10 @@ export async function organizeCoverage({
     }
     const sdkName = artifactName.startsWith('coverage-') ? artifactName.slice('coverage-'.length) : '';
     if (!Object.hasOwn(SDK_PATHS, sdkName)) throw new Error(`Unknown coverage artifact: ${artifactName}`);
+    if (coverageSdkKeys && !coverageSdkKeys.includes(sdkName)) {
+      console.log(`Skipping coverage-${sdkName} (outside release gate scope)`);
+      continue;
+    }
     const prefix = SDK_PATHS[sdkName];
     if (reports.has(sdkName)) throw new Error(`Duplicate LCOV report for ${sdkName}`);
 
