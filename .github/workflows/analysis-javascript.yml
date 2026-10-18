@@ -41,6 +41,11 @@ on:
       - '.github/actions/download-shared-js-deps/**'
       - '.github/actions/overlay-shared-js-deps/**'
   workflow_dispatch:
+    inputs:
+      sdks:
+        description: 'Comma-separated matrix SDK names, node-server, or all (for scoped Sonar verification)'
+        type: string
+        default: 'all'
   workflow_call:
     inputs:
       sdks:
