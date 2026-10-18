@@ -2,7 +2,57 @@ name: JavaScript/TypeScript SDKs - Tests & Analysis
 # OPS-1765: Angular host script-only pushes still need this workflow path matched.
 # OPS-1765: keep path-filter PR triggers healthy when only Angular scripts change
 
+concurrency:
+  group: >-
+    javascript-aggregate-${{
+      github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) ||
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && format('develop-{0}', github.event_name == 'workflow_dispatch' && inputs.target_sha || github.sha) ||
+      format('run-{0}', github.run_id)
+    }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 on:
+  push:
+    branches:
+      - develop
+    paths:
+      - 'Toggly.FeatureManagement.Angular/**'
+      - 'Toggly.FeatureManagement.React/**'
+      - 'tests/react-consumer-fixtures/**'
+      - 'tests/docusaurus-consumer-fixtures/**'
+      - 'Toggly.FeatureManagement.Vue/**'
+      - 'Toggly.FeatureManagement.Svelte/**'
+      - 'Toggly.FeatureManagement.SvelteKit/**'
+      - 'Toggly.FeatureManagement.Solid/**'
+      - 'Toggly.FeatureManagement.Astro/**'
+      - 'Toggly.FeatureManagement.Gatsby/**'
+      - 'toggly-docusaurus-edge-sdk/**'
+      - 'Toggly.FeatureManagement.Javascript/**'
+      - 'Toggly.FeatureManagement.Node/**'
+      - 'Toggly.FeatureManagement.NestJS/**'
+      - 'toggly-eval/**'
+      - 'toggly-segments/**'
+      - 'toggly-local-gates/**'
+      - 'toggly-hooks-types/**'
+      - 'toggly-client-telemetry/**'
+      - 'tests/frontend-telemetry/**'
+      - '.github/package-registry/analysis-js-filter.mjs'
+      - 'toggly-signed-defs/**'
+      - 'toggly-clarity-hook/**'
+      - 'toggly-ga4-hook/**'
+      - 'toggly-appinsights-hook/**'
+      - '.github/workflows/analysis-javascript.yml'
+      - '.github/scripts/javascript-sonar-aggregate.mjs'
+      - '.github/scripts/organize-js-coverage*.mjs'
+      - '.github/actions/build-shared-js-deps/**'
+      - '.github/actions/upload-shared-js-deps/**'
+      - '.github/actions/download-shared-js-deps/**'
+      - '.github/actions/overlay-shared-js-deps/**'
+      - '.github/workflows/javascript-aggregate-release-gate.yml'
+      - '.github/workflows/verify-javascript-aggregate-release-gate.yml'
+      - '.github/workflows/sdk-*-release.yml'
+      - '.github/scripts/wait-javascript-aggregate-analysis.mjs'
+      - '.github/package-registry/javascript-aggregate-release-gate-contract.test.mjs'
   pull_request:
     branches:
       - develop
@@ -34,26 +84,31 @@ on:
       - 'toggly-ga4-hook/**'
       - 'toggly-appinsights-hook/**'
       - '.github/workflows/analysis-javascript.yml'
+      - '.github/scripts/javascript-sonar-aggregate.mjs'
       - '.github/scripts/organize-js-coverage*.mjs'
       - '.github/actions/build-shared-js-deps/**'
       - '.github/actions/upload-shared-js-deps/**'
       - '.github/actions/download-shared-js-deps/**'
       - '.github/actions/overlay-shared-js-deps/**'
+      - '.github/workflows/javascript-aggregate-release-gate.yml'
+      - '.github/workflows/verify-javascript-aggregate-release-gate.yml'
+      - '.github/workflows/sdk-*-release.yml'
+      - '.github/scripts/wait-javascript-aggregate-analysis.mjs'
+      - '.github/package-registry/javascript-aggregate-release-gate-contract.test.mjs'
   workflow_dispatch:
-  workflow_call:
     inputs:
-      sdks:
-        description: 'Comma-separated matrix SDK names, node-server, or all'
+      target_sha:
+        description: 'Exact commit SHA to analyze (release gate dispatch)'
+        required: false
         type: string
-        default: 'all'
-      run_reporting:
-        description: 'When false, skip Sonar and OWASP reporting jobs'
-        type: boolean
-        default: true
 
 permissions:
   contents: read
   security-events: write
+
+env:
+  CHECKOUT_REF: >-
+    ${{ github.event_name == 'workflow_dispatch' && inputs.target_sha != '' && inputs.target_sha || github.sha }}
 
 jobs:
   prepare:
@@ -73,17 +128,26 @@ jobs:
       required_jobs: ${{ steps.filter.outputs.required_jobs }}
       test_matrix: ${{ steps.filter.outputs.test_matrix }}
       browser_host_matrix: ${{ steps.filter.outputs.browser_host_matrix }}
+      sonar_project_key: ${{ steps.sonar_aggregate.outputs.sonar_project_key }}
+      sonar_project_name: ${{ steps.sonar_aggregate.outputs.sonar_project_name }}
+      sonar_sources: ${{ steps.sonar_aggregate.outputs.sonar_sources }}
+      sonar_tests: ${{ steps.sonar_aggregate.outputs.sonar_tests }}
+      sonar_manifest: ${{ steps.sonar_aggregate.outputs.sonar_manifest }}
+      owasp_scan_paths: ${{ steps.sonar_aggregate.outputs.owasp_scan_paths }}
+      sonar_npm_install_dirs: ${{ steps.sonar_aggregate.outputs.sonar_npm_install_dirs }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-      - name: Resolve SDK filter
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
+      - name: Resolve full SDK analysis matrix
         id: filter
-        env:
-          # inputs.sdks is set on workflow_call (release gates). Do not key off
-          # github.event_name == 'workflow_call' — nested reusable runs keep the
-          # caller's event (e.g. workflow_dispatch), which incorrectly forced "all".
-          SDKS: ${{ inputs.sdks || 'all' }}
-        run: node .github/package-registry/analysis-js-filter.mjs "$SDKS"
+        run: node .github/package-registry/analysis-js-filter.mjs all
+
+      - name: Resolve aggregate Sonar configuration
+        id: sonar_aggregate
+        run: node .github/scripts/javascript-sonar-aggregate.mjs
 
   build-shared-js-deps:
     name: Build shared JS deps
@@ -94,6 +158,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
 
       - name: Build shared packages
         uses: ./.github/actions/build-shared-js-deps
@@ -146,6 +213,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 0  # Full history for SonarCloud
 
       # NestJS / SvelteKit need pnpm to build in-repo toggly-node-core.
@@ -294,22 +362,24 @@ jobs:
         working-directory: ${{ matrix.path }}
         run: npm run test:host
 
-      - name: Label coverage artifact
-        if: always()
+      - name: Require unit test coverage report
+        if: matrix.sdk != 'Docusaurus'
         working-directory: ${{ matrix.path }}
-        run: |
-          if [ -f coverage/lcov.info ]; then
-            printf '%s\n' 'coverage-${{ matrix.sdk }}' > coverage/artifact-name.txt
-          fi
+        run: find coverage -name lcov.info -size +0c -print -quit | grep -q .
+
+      - name: Label coverage artifact
+        if: matrix.sdk != 'Docusaurus'
+        working-directory: ${{ matrix.path }}
+        run: printf '%s\n' 'coverage-${{ matrix.sdk }}' > coverage/artifact-name.txt
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
-        if: always()
+        if: matrix.sdk != 'Docusaurus'
         with:
           name: coverage-${{ matrix.sdk }}
           path: ${{ matrix.path }}/coverage/
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   test-docusaurus-host:
     name: Current Docusaurus packed production host (Node 24)
@@ -320,6 +390,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
@@ -334,6 +407,18 @@ jobs:
       - name: Verify plugin types and coverage
         working-directory: toggly-docusaurus-edge-sdk/libs/docusaurus-plugin
         run: npm run typecheck && npm run test:coverage
+      - name: Label Docusaurus plugin coverage artifact
+        working-directory: toggly-docusaurus-edge-sdk/libs/docusaurus-plugin
+        run: |
+          test -s coverage/lcov.info
+          printf '%s\n' 'coverage-Docusaurus' > coverage/artifact-name.txt
+      - name: Upload Docusaurus plugin coverage artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-Docusaurus
+          path: toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/coverage/
+          retention-days: 7
+          if-no-files-found: error
       - name: Install locked Pages Function dependencies
         working-directory: toggly-docusaurus-edge-sdk/cloudflare/pages-function
         run: npm ci
@@ -341,15 +426,12 @@ jobs:
         working-directory: toggly-docusaurus-edge-sdk/cloudflare/pages-function
         run: npm run typecheck && npm run lint && npm run test:coverage
       - name: Label Pages Function coverage artifact
-        if: always()
         working-directory: toggly-docusaurus-edge-sdk/cloudflare/pages-function
         run: |
-          if [ -f coverage/lcov.info ]; then
-            printf '%s\n' 'coverage-Docusaurus-Pages' > coverage/artifact-name.txt
-          fi
+          test -s coverage/lcov.info
+          printf '%s\n' 'coverage-Docusaurus-Pages' > coverage/artifact-name.txt
       - name: Upload Pages Function coverage artifact
         uses: actions/upload-artifact@v7
-        if: always()
         with:
           name: coverage-Docusaurus-Pages
           path: toggly-docusaurus-edge-sdk/cloudflare/pages-function/coverage/
@@ -373,6 +455,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -416,6 +501,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
 
       - name: Install pnpm
         if: matrix.host.sdk == 'SvelteKit'
@@ -490,6 +578,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 0
 
       # Install pnpm before setup-node so action-setup uses the runner Node,
@@ -533,21 +622,20 @@ jobs:
         run: pnpm test:hosts
 
       - name: Label coverage artifact
-        if: always() && matrix.node-version == '20.x'
+        if: matrix.node-version == '20.x'
         working-directory: Toggly.FeatureManagement.Node/${{ matrix.config.dir }}
         run: |
-          if [ -f coverage/lcov.info ]; then
-            printf '%s\n' 'coverage-Node-${{ matrix.config.package }}' > coverage/artifact-name.txt
-          fi
+          test -s coverage/lcov.info
+          printf '%s\n' 'coverage-Node-${{ matrix.config.package }}' > coverage/artifact-name.txt
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
-        if: always() && matrix.node-version == '20.x'
+        if: matrix.node-version == '20.x'
         with:
           name: coverage-Node-${{ matrix.config.package }}
           path: Toggly.FeatureManagement.Node/${{ matrix.config.dir }}/coverage/
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   smoke-test:
     name: Smoke Test ${{ matrix.sdk }}
@@ -587,6 +675,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -627,6 +718,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
@@ -670,13 +764,13 @@ jobs:
     needs: [prepare, build-shared-js-deps, test, test-node-server, test-docusaurus-host, dependency-check]
     if: |
       always() &&
-      toJSON(inputs.run_reporting) != 'false' &&
       (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork)
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 0  # Full history for better analysis
 
       - name: Install pnpm
@@ -694,29 +788,14 @@ jobs:
         uses: ./.github/actions/download-shared-js-deps
 
       - name: Install dependencies for TypeScript analysis
+        env:
+          SONAR_NPM_INSTALL_DIRS: ${{ needs.prepare.outputs.sonar_npm_install_dirs }}
         run: |
-          # Install dependencies in each SDK so SonarQube can resolve tsconfig extends chains
-          for dir in \
-            Toggly.FeatureManagement.Solid \
-            Toggly.FeatureManagement.Angular \
-            Toggly.FeatureManagement.React \
-            "Toggly.FeatureManagement.Vue/vue-feature-flags-toggly" \
-            "Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/example" \
-            "Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly" \
-            Toggly.FeatureManagement.SvelteKit \
-            Toggly.FeatureManagement.Astro \
-            Toggly.FeatureManagement.NestJS \
-            "Toggly.FeatureManagement.Javascript/feature_flags_toggly" \
-            toggly-eval \
-            toggly-client-telemetry \
-            toggly-hooks-types \
-            toggly-clarity-hook \
-            toggly-ga4-hook \
-            toggly-appinsights-hook; do
+          while IFS= read -r dir; do
+            [ -z "$dir" ] && continue
             echo "Installing dependencies in $dir"
             npm install --ignore-scripts --no-audit --no-fund --prefix "$dir" || true
-          done
-          # Install pnpm workspaces (all sub-packages resolved in one pass)
+          done <<< "$SONAR_NPM_INSTALL_DIRS"
           echo "Installing Node.js server SDK dependencies"
           pnpm install --ignore-scripts --dir Toggly.FeatureManagement.Node || true
           echo "Installing toggly-docusaurus-edge-sdk workspace dependencies"
@@ -730,13 +809,15 @@ jobs:
           path: coverage-artifacts/
 
       - name: Organize coverage files
+        env:
+          REQUIRE_FULL_JS_COVERAGE: 'true'
         run: node .github/scripts/organize-js-coverage.mjs
 
       - name: Resolve Sonar project version
         id: sonar_version
         uses: ./.github/actions/sonar-project-version
         with:
-          manifest: Toggly.FeatureManagement.Javascript/feature_flags_toggly/package.json
+          manifest: ${{ needs.prepare.outputs.sonar_manifest }}
           suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
 
       - name: Validate SonarCloud credentials
@@ -752,17 +833,17 @@ jobs:
           SONAR_HOST_URL: https://sonarcloud.io
         with:
           args: >
-            -Dsonar.projectKey=toggly-sdks-javascript
+            -Dsonar.projectKey=${{ needs.prepare.outputs.sonar_project_key }}
             -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.organization=ops-ai
-            -Dsonar.projectName="Toggly SDKs - JavaScript/TypeScript"
-            -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.SvelteKit,Toggly.FeatureManagement.Solid,Toggly.FeatureManagement.Astro,Toggly.FeatureManagement.Gatsby,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,Toggly.FeatureManagement.NestJS,toggly-eval,toggly-local-gates/src,toggly-hooks-types,toggly-signed-defs/src,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook,toggly-client-telemetry
+            -Dsonar.projectName="${{ needs.prepare.outputs.sonar_project_name }}"
+            -Dsonar.sources=${{ needs.prepare.outputs.sonar_sources }}
             -Dsonar.exclusions=Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs,**/host-fixtures/**,toggly-hooks-types/reference/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/test-setup.ts,toggly-client-telemetry/tests/**,toggly-client-telemetry/scripts/**,toggly-docusaurus-edge-sdk/cloudflare/pages-function/tests/**,toggly-docusaurus-edge-sdk/cloudflare/pages-function/scripts/**,Toggly.FeatureManagement.SvelteKit/tests/**,Toggly.FeatureManagement.SvelteKit/scripts/**,**/node_modules/**,**/dist/**,**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/tests/**/*.cjs,**/coverage/**,**/*.config.js,**/*.config.ts,**/*.conf.js,Toggly.FeatureManagement.ReactNative/**,Toggly.FeatureManagement.React/scripts/**,toggly-docusaurus-edge-sdk/libs/core/tests/**,Toggly.FeatureManagement.Next/**,Toggly.FeatureManagement.Nuxt/**,Toggly.FeatureManagement.Remix/**,Toggly.FeatureManagement.Css/**,Toggly.FeatureManagement.Wordpress/**,toggly-ruby/**,toggly-rust/**,Toggly.FeatureManagement.Node/eslint.config.mjs,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-koa/tests/compat/fixtures/**,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-check.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-cleanup.test.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/host-resources.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-browser-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Astro/tests/**,Toggly.FeatureManagement.Gatsby/tests/**
             -Dsonar.coverage.exclusions=**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/Demo.*/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts,**/*.conf.js,**/*.vue,toggly-docusaurus-edge-sdk/cloudflare/worker/**,toggly-docusaurus-edge-sdk/libs/core/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/**,toggly-hooks-types/reference/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/test-setup.ts,Toggly.FeatureManagement.React/scripts/build.mjs,Toggly.FeatureManagement.React/jest.webcrypto.setup.cjs,Toggly.FeatureManagement.React/scripts/clean.mjs,Toggly.FeatureManagement.React/scripts/normalize-distribution.mjs,Toggly.FeatureManagement.React/scripts/remove-intermediate-types.mjs
             -Dsonar.cpd.exclusions=**/ws-sync.ts,**/decode-variant-value.ts,**/sdk-identity.ts,**/CHANGELOG.md,**/system-metrics.ts,**/client-system-metrics.ts,**/metrics-batcher.ts,**/https-client.ts,**/usage-scope.ts,**/usage-batcher.ts,**/toggly.service.ts
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
-            -Dsonar.tests=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.SvelteKit,Toggly.FeatureManagement.Solid,Toggly.FeatureManagement.Astro,Toggly.FeatureManagement.Gatsby,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,Toggly.FeatureManagement.NestJS,toggly-eval,toggly-local-gates/src,toggly-hooks-types,toggly-signed-defs/src,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook,toggly-client-telemetry,tests
+            -Dsonar.tests=${{ needs.prepare.outputs.sonar_tests }}
             -Dsonar.test.inclusions=Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs,**/host-fixtures/**,toggly-hooks-types/reference/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/test-setup.ts,toggly-client-telemetry/tests/**,toggly-docusaurus-edge-sdk/cloudflare/pages-function/tests/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/tests/**/*.cjs,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-express/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-hono/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-fastify/tests/packed-hosts.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-check.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-cleanup.test.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/host-resources.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-browser-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Astro/tests/**,Toggly.FeatureManagement.Gatsby/tests/**,tests/react-consumer-fixtures/**
             -Dsonar.test.exclusions=**/host-fixtures/**,Toggly.FeatureManagement.Node/toggly-koa/tests/compat/fixtures/**,Toggly.FeatureManagement.Angular/scripts/**
             -Dsonar.issue.ignore.multicriteria=angularLoadComplexity,kidSha1,anonRng,hookAwait
@@ -800,16 +881,16 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         with:
           args: >
-            -Dsonar.projectKey=toggly-sdks-javascript
+            -Dsonar.projectKey=${{ needs.prepare.outputs.sonar_project_key }}
             -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
-            -Dsonar.projectName="Toggly SDKs - JavaScript/TypeScript"
-            -Dsonar.sources=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.SvelteKit,Toggly.FeatureManagement.Solid,Toggly.FeatureManagement.Astro,Toggly.FeatureManagement.Gatsby,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,Toggly.FeatureManagement.NestJS,toggly-eval,toggly-local-gates/src,toggly-hooks-types,toggly-signed-defs/src,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook,toggly-client-telemetry
+            -Dsonar.projectName="${{ needs.prepare.outputs.sonar_project_name }}"
+            -Dsonar.sources=${{ needs.prepare.outputs.sonar_sources }}
             -Dsonar.exclusions=Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs,**/host-fixtures/**,toggly-hooks-types/reference/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/test-setup.ts,toggly-client-telemetry/tests/**,toggly-client-telemetry/scripts/**,toggly-docusaurus-edge-sdk/cloudflare/pages-function/tests/**,toggly-docusaurus-edge-sdk/cloudflare/pages-function/scripts/**,Toggly.FeatureManagement.SvelteKit/tests/**,Toggly.FeatureManagement.SvelteKit/scripts/**,**/node_modules/**,**/dist/**,**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/tests/**/*.cjs,**/coverage/**,**/*.config.js,**/*.config.ts,**/*.conf.js,Toggly.FeatureManagement.ReactNative/**,Toggly.FeatureManagement.React/scripts/**,toggly-docusaurus-edge-sdk/libs/core/tests/**,Toggly.FeatureManagement.Next/**,Toggly.FeatureManagement.Nuxt/**,Toggly.FeatureManagement.Remix/**,Toggly.FeatureManagement.Css/**,Toggly.FeatureManagement.Wordpress/**,toggly-ruby/**,toggly-rust/**,Toggly.FeatureManagement.Node/eslint.config.mjs,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-koa/tests/compat/fixtures/**,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-check.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-cleanup.test.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/host-resources.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-browser-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Astro/tests/**,Toggly.FeatureManagement.Gatsby/tests/**
             -Dsonar.coverage.exclusions=**/example/**,**/example-app/**,**/example-expo/**,**/examples/**,**/Demo.*/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts,**/*.conf.js,**/*.vue,toggly-docusaurus-edge-sdk/cloudflare/worker/**,toggly-docusaurus-edge-sdk/libs/core/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/**,toggly-hooks-types/reference/**,toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/test-setup.ts,Toggly.FeatureManagement.React/scripts/build.mjs,Toggly.FeatureManagement.React/jest.webcrypto.setup.cjs,Toggly.FeatureManagement.React/scripts/clean.mjs,Toggly.FeatureManagement.React/scripts/normalize-distribution.mjs,Toggly.FeatureManagement.React/scripts/remove-intermediate-types.mjs
             -Dsonar.cpd.exclusions=**/ws-sync.ts,**/decode-variant-value.ts,**/sdk-identity.ts,**/CHANGELOG.md,**/system-metrics.ts,**/client-system-metrics.ts,**/metrics-batcher.ts,**/https-client.ts,**/usage-scope.ts,**/usage-batcher.ts,**/toggly.service.ts
             -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
             -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
-            -Dsonar.tests=Toggly.FeatureManagement.Angular,Toggly.FeatureManagement.React,Toggly.FeatureManagement.Vue,Toggly.FeatureManagement.Svelte,Toggly.FeatureManagement.SvelteKit,Toggly.FeatureManagement.Solid,Toggly.FeatureManagement.Astro,Toggly.FeatureManagement.Gatsby,toggly-docusaurus-edge-sdk,Toggly.FeatureManagement.Javascript,Toggly.FeatureManagement.Node,Toggly.FeatureManagement.NestJS,toggly-eval,toggly-local-gates/src,toggly-hooks-types,toggly-signed-defs/src,toggly-clarity-hook,toggly-ga4-hook,toggly-appinsights-hook,toggly-client-telemetry,tests
+            -Dsonar.tests=${{ needs.prepare.outputs.sonar_tests }}
             -Dsonar.test.inclusions=Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs,toggly-client-telemetry/tests/**,toggly-docusaurus-edge-sdk/cloudflare/pages-function/tests/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/tests/**/*.cjs,Toggly.FeatureManagement.Node/toggly-node-core/tests/fixtures/generate-worker-fixture.mjs,Toggly.FeatureManagement.Node/toggly-express/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-hono/tests/packed-hosts.mjs,Toggly.FeatureManagement.Node/toggly-fastify/tests/packed-hosts.mjs,Toggly.FeatureManagement.NestJS/tests/**/*.mjs,Toggly.FeatureManagement.Solid/tests/**,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-check.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/browser-cleanup.test.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/host-resources.mjs,Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/scripts/test-browser-host.mjs,Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/tests/host/**,Toggly.FeatureManagement.Astro/tests/**,Toggly.FeatureManagement.Gatsby/tests/**,tests/react-consumer-fixtures/**
             -Dsonar.test.exclusions=**/host-fixtures/**,Toggly.FeatureManagement.Node/toggly-koa/tests/compat/fixtures/**,Toggly.FeatureManagement.Angular/scripts/**
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
@@ -829,15 +910,16 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_PROJECT_KEY: ${{ needs.prepare.outputs.sonar_project_key }}
         run: |
           pr="${{ github.event.pull_request.number }}"
-          echo "## SonarQube Server quality gate (toggly-sdks-javascript)" >> "$GITHUB_STEP_SUMMARY"
+          echo "## SonarQube Server quality gate (${SONAR_PROJECT_KEY})" >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$pr" ]; then
-            status_url="${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=toggly-sdks-javascript&pullRequest=${pr}"
-            issues_url="${SONAR_HOST_URL}/api/issues/search?componentKeys=toggly-sdks-javascript&pullRequest=${pr}&resolved=false&ps=20&s=SEVERITY&asc=false"
+            status_url="${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}&pullRequest=${pr}"
+            issues_url="${SONAR_HOST_URL}/api/issues/search?componentKeys=${SONAR_PROJECT_KEY}&pullRequest=${pr}&resolved=false&ps=20&s=SEVERITY&asc=false"
           else
-            status_url="${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=toggly-sdks-javascript&branch=${GITHUB_REF_NAME}"
-            issues_url="${SONAR_HOST_URL}/api/issues/search?componentKeys=toggly-sdks-javascript&branch=${GITHUB_REF_NAME}&resolved=false&ps=20&s=SEVERITY&asc=false"
+            status_url="${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}&branch=${GITHUB_REF_NAME}"
+            issues_url="${SONAR_HOST_URL}/api/issues/search?componentKeys=${SONAR_PROJECT_KEY}&branch=${GITHUB_REF_NAME}&resolved=false&ps=20&s=SEVERITY&asc=false"
           fi
           echo "GET ${status_url}"
           curl -sS -u "${SONAR_TOKEN}:" "$status_url" | tee /tmp/sonar-qg.json
@@ -862,9 +944,9 @@ jobs:
           curl -sS -u "${SONAR_TOKEN}:" "$issues_url" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("total", d.get("total"));
           [print(i.get("rule"), i.get("severity"), i.get("component","").split(":")[-1], i.get("line"), (i.get("message") or "")[:120]) for i in d.get("issues",[])]'
           if [ -n "$pr" ]; then
-            hotspots_url="${SONAR_HOST_URL}/api/hotspots/search?projectKey=toggly-sdks-javascript&pullRequest=${pr}&status=TO_REVIEW&ps=20"
+            hotspots_url="${SONAR_HOST_URL}/api/hotspots/search?projectKey=${SONAR_PROJECT_KEY}&pullRequest=${pr}&status=TO_REVIEW&ps=20"
           else
-            hotspots_url="${SONAR_HOST_URL}/api/hotspots/search?projectKey=toggly-sdks-javascript&branch=${GITHUB_REF_NAME}&status=TO_REVIEW&ps=20"
+            hotspots_url="${SONAR_HOST_URL}/api/hotspots/search?projectKey=${SONAR_PROJECT_KEY}&branch=${GITHUB_REF_NAME}&status=TO_REVIEW&ps=20"
           fi
           echo
           echo "Open security hotspots:"
@@ -874,12 +956,15 @@ jobs:
   dependency-check:
     name: OWASP Dependency Check
     needs: [prepare]
-    if: ${{ toJSON(inputs.run_reporting) != 'false' && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork }}
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
 
       - name: Cache OWASP Dependency Check database
         uses: actions/cache@v6
@@ -892,24 +977,8 @@ jobs:
       - name: Run OWASP Dependency Check
         uses: dependency-check/Dependency-Check_Action@main
         with:
-          project: 'toggly-sdks-javascript'
-          path: >
-            Toggly.FeatureManagement.Angular/projects/ngx-feature-flags-toggly
-            Toggly.FeatureManagement.React
-            Toggly.FeatureManagement.Vue
-            Toggly.FeatureManagement.Svelte
-            Toggly.FeatureManagement.SvelteKit
-            Toggly.FeatureManagement.Solid
-            Toggly.FeatureManagement.Astro
-            Toggly.FeatureManagement.Javascript
-            Toggly.FeatureManagement.Node
-            Toggly.FeatureManagement.NestJS
-            toggly-docusaurus-edge-sdk
-            toggly-client-telemetry
-            toggly-hooks-types
-            toggly-clarity-hook
-            toggly-ga4-hook
-            toggly-appinsights-hook
+          project: ${{ needs.prepare.outputs.sonar_project_key }}
+          path: ${{ needs.prepare.outputs.owasp_scan_paths }}
           format: 'ALL'
           args: >-
             --nvdApiKey ${{ secrets.NVD_API_KEY }}
@@ -949,13 +1018,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
 
       - name: Verify required jobs passed
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
           required-jobs: ${{ needs.prepare.outputs.required_jobs }}
-          allow-skipped: ${{ toJSON(inputs.run_reporting) == 'false' && 'dependency-check,sonar' || 'none' }}
+          allow-skipped: none
 
       - name: Check test results
         run: |
@@ -986,8 +1058,8 @@ jobs:
           echo "- GA4 Hook" >> $GITHUB_STEP_SUMMARY
           echo "- Application Insights Hook" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Check SonarCloud for detailed results: https://sonarcloud.io/project/overview?id=toggly-sdks-javascript" >> $GITHUB_STEP_SUMMARY
-          echo "Check SonarQube Server for detailed results: ${{ secrets.SONAR_HOST_URL }}/dashboard?id=toggly-sdks-javascript" >> $GITHUB_STEP_SUMMARY
+          echo "Check SonarCloud for detailed results: https://sonarcloud.io/project/overview?id=${{ needs.prepare.outputs.sonar_project_key }}" >> $GITHUB_STEP_SUMMARY
+          echo "Check SonarQube Server for detailed results: ${{ secrets.SONAR_HOST_URL }}/dashboard?id=${{ needs.prepare.outputs.sonar_project_key }}" >> $GITHUB_STEP_SUMMARY
 
   solidstart-host:
     name: SolidStart packed production host
@@ -1000,6 +1072,9 @@ jobs:
         working-directory: Toggly.FeatureManagement.Solid
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: '24'

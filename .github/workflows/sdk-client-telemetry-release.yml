@@ -37,9 +37,8 @@ permissions:
   security-events: write
 
 concurrency:
-  # Suffixed so a new dispatch is not blocked by a stuck pre-cancel-in-progress run.
   group: client-telemetry-sdk-release-v3
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   SDK_DIR: toggly-client-telemetry
@@ -88,12 +87,12 @@ jobs:
   gates:
     needs: resolve
     if: needs.resolve.outputs.action == 'publish'
-    uses: ./.github/workflows/analysis-javascript.yml
-    with:
-      sdks: Client-Telemetry
-      # Skip Sonar/OWASP reporting on release gates — publish already rebuilds
-      # and runs test:packed; reporting has blocked Client-Telemetry releases.
-      run_reporting: false
+    permissions:
+      actions: write
+      contents: read
+      checks: read
+      statuses: read
+    uses: ./.github/workflows/javascript-aggregate-release-gate.yml
     secrets: inherit
 
   publish:
@@ -130,10 +129,25 @@ jobs:
       - run: npm run build
       - run: npm run test:packed
 
+      - name: Detect already-published manifest version
+        id: npm_publish
+        run: |
+          if npm view "${{ env.NPM_PACKAGE }}@${{ needs.resolve.outputs.version }}" version >/dev/null 2>&1; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            echo "Already published: ${{ env.NPM_PACKAGE }}@${{ needs.resolve.outputs.version }}"
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish manifest version with provenance
+        if: steps.npm_publish.outputs.already_published != 'true'
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ''
+
+      - name: Skip publish when version already exists on npm
+        if: steps.npm_publish.outputs.already_published == 'true'
+        run: echo "Skipping npm publish; ${{ env.NPM_PACKAGE }}@${{ needs.resolve.outputs.version }} is already on the registry."
 
       - name: Commit version bump
         if: needs.resolve.outputs.manifest_changed == 'true'

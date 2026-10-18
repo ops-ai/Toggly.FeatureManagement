@@ -87,10 +87,12 @@ jobs:
   gates:
     needs: resolve
     if: needs.resolve.outputs.action == 'publish'
-    uses: ./.github/workflows/analysis-javascript.yml
-    with:
-      sdks: Astro
-      run_reporting: true
+    permissions:
+      actions: write
+      contents: read
+      checks: read
+      statuses: read
+    uses: ./.github/workflows/javascript-aggregate-release-gate.yml
     secrets: inherit
 
   publish:

@@ -69,10 +69,12 @@ jobs:
   # broader compatibility matrix than the release workflow's own build/test.
   gates:
     needs: prepare
-    uses: ./.github/workflows/analysis-javascript.yml
-    with:
-      sdks: node-server
-      run_reporting: true
+    permissions:
+      actions: write
+      contents: read
+      checks: read
+      statuses: read
+    uses: ./.github/workflows/javascript-aggregate-release-gate.yml
     secrets: inherit
 
   publish:

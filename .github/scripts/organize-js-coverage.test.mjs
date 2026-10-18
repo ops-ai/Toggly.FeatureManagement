@@ -109,6 +109,37 @@ test('keeps flattened artifact validation fail-closed with HTML payloads', async
   }
 });
 
+test('fails when Local-Gates coverage is missing from a full bundle', async () => {
+  const { REQUIRED_COVERAGE_SDKS } = await import(organizerUrl.href);
+  const files = {};
+  for (const sdk of REQUIRED_COVERAGE_SDKS) {
+    if (sdk === 'Local-Gates') continue;
+    const dir = `coverage-${sdk}`;
+    files[`${dir}/artifact-name.txt`] = `coverage-${sdk}\n`;
+    files[`${dir}/lcov.info`] = lcov('src/index.ts');
+  }
+  await withFixture(files, async ({ organizeCoverage, downloadDir, outputDir }) => {
+    await assert.rejects(
+      organizeCoverage({ downloadDir, outputDir, requireFull: true }),
+      /Incomplete coverage bundle.*Local-Gates/,
+    );
+    assert.equal(existsSync(outputDir), false);
+  });
+});
+
+test('fails when required SDK coverage is missing from the aggregate bundle', async () => {
+  await withFixture({
+    'coverage-React/artifact-name.txt': 'coverage-React\n',
+    'coverage-React/lcov.info': lcov('src/index.ts'),
+  }, async ({ organizeCoverage, downloadDir, outputDir }) => {
+    await assert.rejects(
+      organizeCoverage({ downloadDir, outputDir, requireFull: true }),
+      /Incomplete coverage bundle/,
+    );
+    assert.equal(existsSync(outputDir), false);
+  });
+});
+
 test('preserves separate named artifacts with matching bundled names', async () => {
   await withFixture({
     'coverage-Evaluator/artifact-name.txt': 'coverage-Evaluator\n',

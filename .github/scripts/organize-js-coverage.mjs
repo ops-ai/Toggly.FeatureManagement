@@ -3,35 +3,12 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, relative, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SDK_PATHS, listRequiredCoverageSdks } from './js-coverage-manifest.mjs';
 
-const SDK_PATHS = {
-  Angular: 'Toggly.FeatureManagement.Angular',
-  React: 'Toggly.FeatureManagement.React',
-  Vue: 'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly',
-  SolidJS: 'Toggly.FeatureManagement.Solid',
-  Svelte: 'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly',
-  SvelteKit: 'Toggly.FeatureManagement.SvelteKit',
-  Astro: 'Toggly.FeatureManagement.Astro',
-  Gatsby: 'Toggly.FeatureManagement.Gatsby',
-  JavaScript: 'Toggly.FeatureManagement.Javascript/feature_flags_toggly',
-  Docusaurus: 'toggly-docusaurus-edge-sdk/libs/docusaurus-plugin',
-  'Docusaurus-Pages': 'toggly-docusaurus-edge-sdk/cloudflare/pages-function',
-  'Client-Core': 'toggly-docusaurus-edge-sdk/libs/core',
-  'Clarity-Hook': 'toggly-clarity-hook',
-  'GA4-Hook': 'toggly-ga4-hook',
-  'AppInsights-Hook': 'toggly-appinsights-hook',
-  'Hooks-Types': 'toggly-hooks-types',
-  'Signed-Defs': 'toggly-signed-defs',
-  'Client-Telemetry': 'toggly-client-telemetry',
-  Evaluator: 'toggly-eval',
-  'Local-Gates': 'toggly-local-gates',
-  NestJS: 'Toggly.FeatureManagement.NestJS',
-  'Node-Core': 'Toggly.FeatureManagement.Node/toggly-node-core',
-  'Node-Express': 'Toggly.FeatureManagement.Node/toggly-express',
-  'Node-Fastify': 'Toggly.FeatureManagement.Node/toggly-fastify',
-  'Node-Hono': 'Toggly.FeatureManagement.Node/toggly-hono',
-  'Node-Koa': 'Toggly.FeatureManagement.Node/toggly-koa',
-};
+export { SDK_PATHS } from './js-coverage-manifest.mjs';
+
+/** Every manifest SDK must contribute LCOV in aggregate CI (no optional gaps). */
+export const REQUIRED_COVERAGE_SDKS = listRequiredCoverageSdks();
 
 function lcovFiles(directory) {
   if (!existsSync(directory)) return [];
@@ -61,9 +38,15 @@ function containsArtifactContainer(directory) {
   );
 }
 
+function requireFullCoverage() {
+  const raw = String(process.env.REQUIRE_FULL_JS_COVERAGE ?? 'false').trim().toLowerCase();
+  return raw === 'true' || raw === '1';
+}
+
 export async function organizeCoverage({
   downloadDir = 'coverage-artifacts',
   outputDir = 'coverage',
+  requireFull = requireFullCoverage(),
 } = {}) {
   const files = lcovFiles(downloadDir);
   if (files.length === 0) throw new Error('No LCOV reports were downloaded');
@@ -104,10 +87,27 @@ export async function organizeCoverage({
 
   if (reports.size === 0) throw new Error('No LCOV reports were downloaded');
 
+  if (requireFull) {
+    const missing = REQUIRED_COVERAGE_SDKS.filter((sdk) => !reports.has(sdk));
+    if (missing.length) {
+      throw new Error(
+        `Incomplete coverage bundle for aggregate Sonar scan (missing ${missing.length}): ${missing.join(', ')}`,
+      );
+    }
+  }
+
   mkdirSync(outputDir, { recursive: true });
   for (const [sdkName, content] of reports) {
     writeFileSync(join(outputDir, `${sdkName}-lcov.info`), content);
     console.log(`Mapped coverage-${sdkName} to ${SDK_PATHS[sdkName]}`);
+  }
+
+  const lineHits = [...reports.values()].join('').match(/^DA:\d+,\d+/gm)?.length ?? 0;
+  console.log(
+    `Aggregate coverage bundle: ${reports.size} mapped LCOV report(s); REQUIRED_COVERAGE_SDKS=${REQUIRED_COVERAGE_SDKS.length}`,
+  );
+  if (lineHits) {
+    console.log(`LCOV line entries (DA records) across bundle: ${lineHits}`);
   }
 }
 

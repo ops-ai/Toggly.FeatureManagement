@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const FULL_TEST_MATRIX = [
+export const FULL_TEST_MATRIX = [
   {
     sdk: 'Client-Telemetry',
     path: 'toggly-client-telemetry',
@@ -36,7 +36,7 @@ const FULL_TEST_MATRIX = [
   {
     sdk: 'Local-Gates',
     path: 'toggly-local-gates',
-    'test-cmd': 'npm test',
+    'test-cmd': 'npm run test:coverage',
     'has-lint': false,
   },
   {
@@ -230,9 +230,6 @@ export function filterAnalysisJs(sdksInput = 'all') {
   }
 
   const jobSet = new Set();
-  // OWASP Dependency Check always runs (it is not gated by the sdks filter),
-  // scanning the whole JS/TS dependency tree. Sonar also analyzes the full
-  // aggregate source set, so both reporting jobs must always be required.
   jobSet.add('sonar');
   jobSet.add('dependency-check');
   if (testMatrix.length) {
