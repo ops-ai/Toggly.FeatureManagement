@@ -200,6 +200,11 @@ impl MetricsBatcher {
             }
         }
         guard.observations.extend(snapshot.observations);
+        // Same cap as observe(): sustained upload failures must not grow unbound.
+        if guard.observations.len() > MAX_OBSERVATIONS_PER_BATCH {
+            let overflow = guard.observations.len() - MAX_OBSERVATIONS_PER_BATCH;
+            guard.observations.drain(0..overflow);
+        }
     }
 }
 
@@ -457,5 +462,20 @@ mod tests {
         batcher.observe("gauge", 2.0, None);
         let (payload, _) = batcher.build_and_reset().unwrap();
         assert_eq!(payload.observations.len(), 2);
+    }
+
+    #[test]
+    fn restore_snapshot_enforces_max_observations() {
+        let batcher = MetricsBatcher::new("app", "Production", None);
+        for i in 0..MAX_OBSERVATIONS_PER_BATCH {
+            batcher.observe("gauge", i as f64, None);
+        }
+        let (_, snapshot) = batcher.build_and_reset().unwrap();
+        for i in 0..10 {
+            batcher.observe("live", i as f64, None);
+        }
+        batcher.restore_snapshot(snapshot);
+        let (payload, _) = batcher.build_and_reset().unwrap();
+        assert_eq!(payload.observations.len(), MAX_OBSERVATIONS_PER_BATCH);
     }
 }

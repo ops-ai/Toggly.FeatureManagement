@@ -5,6 +5,9 @@ import type { MetricsFeatureOptions } from './metrics-batcher.js'
 export const SYSTEM_METRICS_INTERVAL_MS = 10_000
 /** Cap unsent samples per metric name if flush stalls. */
 export const SYSTEM_METRICS_MAX_PENDING = 30
+/** monitorEventLoopDelay sampling rate (ms); mean includes this floor. */
+const EVENT_LOOP_RESOLUTION_MS = 20
+const EVENT_LOOP_RESOLUTION_NS = EVENT_LOOP_RESOLUTION_MS * 1e6
 
 export type SystemMetricObservation = {
   metric: string
@@ -171,7 +174,9 @@ export class SystemMetricsCollector {
       const meanNs = hist.mean
       hist.reset()
       if (!Number.isFinite(meanNs) || meanNs < 0) return null
-      return meanNs / 1e6
+      // monitorEventLoopDelay mean includes the resolution floor; subtract it
+      // so EventLoopDelay matches the Node SDK (actual delay above the sampler).
+      return Math.max(0, meanNs - EVENT_LOOP_RESOLUTION_NS) / 1e6
     } catch {
       return null
     }
