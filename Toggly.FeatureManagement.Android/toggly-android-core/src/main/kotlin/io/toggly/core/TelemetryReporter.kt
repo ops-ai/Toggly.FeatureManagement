@@ -374,22 +374,31 @@ internal class TelemetryReporter(
             if (disposed && finalAttempted) return
             disposed.also { if (it) finalAttempted = true }
         }
-        val request = telemetryRequest(batch, finalSend)
+        deliverWithRetries(batch, telemetryRequest(batch, finalSend))
+    }
+
+    private suspend fun deliverWithRetries(batch: Batch, request: Request) {
         var attempt = 0
         while (!expired(batch)) {
-            val response = postTelemetry(request) ?: return
-            if (response.status == 202) {
-                onBatchAccepted?.invoke()
-                return
-            }
-            if (!canRetry(response.status, attempt)) {
-                diagnose("http-failure"); return
-            }
-            val wait = maxOf(if (attempt == 0) 30_000L else 60_000L, retryAfter(response.retryAfter))
-            if (wait >= 300_000 - (now() - batch.createdAt)) return
-            if (!awaitRetry(wait)) return
+            if (!retryAfterAttempt(batch, request, attempt)) return
             attempt++
         }
+    }
+
+    /** Returns true when another attempt should run. */
+    private suspend fun retryAfterAttempt(batch: Batch, request: Request, attempt: Int): Boolean {
+        val response = postTelemetry(request) ?: return false
+        if (response.status == 202) {
+            onBatchAccepted?.invoke()
+            return false
+        }
+        if (!canRetry(response.status, attempt)) {
+            diagnose("http-failure")
+            return false
+        }
+        val wait = maxOf(if (attempt == 0) 30_000L else 60_000L, retryAfter(response.retryAfter))
+        if (wait >= 300_000 - (now() - batch.createdAt)) return false
+        return awaitRetry(wait)
     }
 
     private fun telemetryRequest(batch: Batch, finalSend: Boolean): Request {
