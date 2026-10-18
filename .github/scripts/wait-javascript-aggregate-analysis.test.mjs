@@ -7,12 +7,19 @@ import {
   WORKFLOW_NAME,
 } from './wait-javascript-aggregate-analysis.mjs';
 
-test('dispatch payload pins ref and workflow input to the target SHA', () => {
+test('dispatch payload uses branch ref and pins target_sha input', () => {
   const sha = 'abc123def456';
-  assert.deepEqual(buildWorkflowDispatchPayload(sha), {
-    ref: sha,
-    inputs: { target_sha: sha },
-  });
+  assert.deepEqual(
+    buildWorkflowDispatchPayload(sha, { GITHUB_REF: 'refs/heads/develop' }),
+    { ref: 'develop', inputs: { target_sha: sha } },
+  );
+});
+
+test('dispatch is disabled on pull-request refs', () => {
+  assert.throws(
+    () => buildWorkflowDispatchPayload('abc', { GITHUB_REF: 'refs/pull/808/merge' }),
+    /Cannot dispatch/,
+  );
 });
 
 test('pickRelevantRun prefers the aggregate analysis workflow name', () => {
@@ -115,9 +122,13 @@ test('waitForAggregateAnalysis dispatches with the commit SHA when no run exists
         maxMs: 5,
         fetchImpl,
         sleep: async () => {},
+        env: { GITHUB_REF: 'refs/heads/develop' },
       }),
     /Timed out/,
   );
 
-  assert.deepEqual(dispatchBody, buildWorkflowDispatchPayload(sha));
+  assert.deepEqual(
+    dispatchBody,
+    buildWorkflowDispatchPayload(sha, { GITHUB_REF: 'refs/heads/develop' }),
+  );
 });

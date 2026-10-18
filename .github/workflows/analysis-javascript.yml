@@ -96,6 +96,10 @@ permissions:
   contents: read
   security-events: write
 
+env:
+  CHECKOUT_REF: >-
+    ${{ github.event_name == 'workflow_dispatch' && inputs.target_sha != '' && inputs.target_sha || github.sha }}
+
 jobs:
   prepare:
     name: Prepare analysis filter
@@ -125,7 +129,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.target_sha != '' && inputs.target_sha || github.sha }}
+          ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 0
       - name: Resolve full SDK analysis matrix
         id: filter
@@ -144,6 +148,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
 
       - name: Build shared packages
         uses: ./.github/actions/build-shared-js-deps
@@ -196,6 +203,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 0  # Full history for SonarCloud
 
       # NestJS / SvelteKit need pnpm to build in-repo toggly-node-core.
@@ -370,6 +378,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
@@ -423,6 +434,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -466,6 +480,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
 
       - name: Install pnpm
         if: matrix.host.sdk == 'SvelteKit'
@@ -540,6 +557,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 0
 
       # Install pnpm before setup-node so action-setup uses the runner Node,
@@ -637,6 +655,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -677,6 +698,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
@@ -726,6 +750,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 0  # Full history for better analysis
 
       - name: Install pnpm
@@ -917,6 +942,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
 
       - name: Cache OWASP Dependency Check database
         uses: actions/cache@v6
@@ -970,6 +998,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
 
       - name: Verify required jobs passed
         uses: ./.github/actions/verify-required-jobs
@@ -1021,6 +1052,9 @@ jobs:
         working-directory: Toggly.FeatureManagement.Solid
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
