@@ -40,6 +40,75 @@ test('maps a flattened single artifact using its bundled name', async () => {
   });
 });
 
+test('maps a flattened SolidJS artifact with its HTML report payload', async () => {
+  await withFixture({
+    'artifact-name.txt': 'coverage-SolidJS\n',
+    'lcov.info': lcov('src/client.ts'),
+    'lcov-report/index.html': '<html>SolidJS coverage</html>',
+    'lcov-report/client.ts.html': '<html>client.ts</html>',
+    'lcov-report/base.css': 'body { color: black; }',
+  }, async ({ organizeCoverage, downloadDir, outputDir }) => {
+    await organizeCoverage({ downloadDir, outputDir });
+    assert.equal(
+      readFileSync(join(outputDir, 'SolidJS-lcov.info'), 'utf8'),
+      lcov('Toggly.FeatureManagement.Solid/src/client.ts'),
+    );
+  });
+});
+
+test('prefers flattened root LCOV over nested payload reports', async () => {
+  await withFixture({
+    'artifact-name.txt': 'coverage-SvelteKit\n',
+    'lcov.info': lcov('src/server.ts'),
+    'tmp/lcov.info': lcov('src/ignored.ts'),
+  }, async ({ organizeCoverage, downloadDir, outputDir }) => {
+    await organizeCoverage({ downloadDir, outputDir });
+    assert.equal(
+      readFileSync(join(outputDir, 'SvelteKit-lcov.info'), 'utf8'),
+      lcov('Toggly.FeatureManagement.SvelteKit/src/server.ts'),
+    );
+  });
+});
+
+test('rejects flattened coverage combined with an actual named artifact without writing output', async () => {
+  for (const named of [
+    { 'coverage-Evaluator/lcov.info': lcov('src/engine.ts') },
+    { 'coverage-SolidJS/lcov.info': lcov('src/duplicate.ts') },
+    { 'coverage-Unknown/coverage-final.json': '{"src/index.ts":{}}' },
+    { 'unexpected/artifact-name.txt': 'coverage-Evaluator\n' },
+    { 'payload/nested/artifact-name.txt': 'coverage-Evaluator\n' },
+    { 'payload/coverage-Evaluator/coverage-final.json': '{"src/engine.ts":{}}' },
+  ]) {
+    await withFixture({
+      'artifact-name.txt': 'coverage-SolidJS\n',
+      'lcov.info': lcov('src/client.ts'),
+      ...named,
+    }, async ({ organizeCoverage, downloadDir, outputDir }) => {
+      await assert.rejects(
+        organizeCoverage({ downloadDir, outputDir }),
+        /Flattened and named coverage artifacts cannot be combined/,
+      );
+      assert.equal(existsSync(outputDir), false, 'mixed artifacts cannot produce partial scan input');
+    });
+  }
+});
+
+test('keeps flattened artifact validation fail-closed with HTML payloads', async () => {
+  for (const [files, error] of [
+    [{ 'lcov.info': lcov('src/client.ts') }, /Missing artifact name/],
+    [{ 'artifact-name.txt': 'coverage-Unknown\n', 'lcov.info': lcov('src/client.ts') }, /Unknown coverage artifact/],
+    [{ 'artifact-name.txt': 'coverage-SolidJS\n', 'lcov.info': 'TN:\nSF: \n' }, /no source files/],
+  ]) {
+    await withFixture({
+      ...files,
+      'lcov-report/index.html': '<html>coverage</html>',
+    }, async ({ organizeCoverage, downloadDir, outputDir }) => {
+      await assert.rejects(organizeCoverage({ downloadDir, outputDir }), error);
+      assert.equal(existsSync(outputDir), false, 'invalid coverage cannot produce partial scan input');
+    });
+  }
+});
+
 test('preserves separate named artifacts with matching bundled names', async () => {
   await withFixture({
     'coverage-Evaluator/artifact-name.txt': 'coverage-Evaluator\n',

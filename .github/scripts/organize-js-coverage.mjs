@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { relative, resolve, join } from 'node:path';
+import { basename, relative, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SDK_PATHS = {
@@ -52,6 +52,15 @@ function preferredLcov(directory) {
   return files[0] ?? null;
 }
 
+function containsArtifactContainer(directory) {
+  if (basename(directory).startsWith('coverage-') || existsSync(join(directory, 'artifact-name.txt'))) {
+    return true;
+  }
+  return readdirSync(directory, { withFileTypes: true }).some(entry =>
+    entry.isDirectory() && containsArtifactContainer(join(directory, entry.name)),
+  );
+}
+
 export async function organizeCoverage({
   downloadDir = 'coverage-artifacts',
   outputDir = 'coverage',
@@ -63,7 +72,9 @@ export async function organizeCoverage({
   const namedDirs = readdirSync(downloadDir, { withFileTypes: true })
     .filter(entry => entry.isDirectory())
     .map(entry => join(downloadDir, entry.name));
-  if (flatFile && namedDirs.length > 0) {
+  // A flattened artifact can include HTML and nested coverage report payloads.
+  // Artifact names or bundled markers identify genuinely mixed downloads.
+  if (flatFile && namedDirs.some(containsArtifactContainer)) {
     throw new Error('Flattened and named coverage artifacts cannot be combined');
   }
   const artifactDirs = flatFile ? [downloadDir] : namedDirs;
