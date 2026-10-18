@@ -78,7 +78,7 @@ export const timeWindow: FilterEvaluator = (_featureKey, params, _ctx) => {
 function isTargetingExcluded(
   identity: string,
   groups: string[],
-  params: Record<string, unknown>,
+  params: Record<string, unknown> | undefined,
   ignoreCase: boolean,
 ): boolean {
   const exclusionUsers = collectIndexedValues(params, [
