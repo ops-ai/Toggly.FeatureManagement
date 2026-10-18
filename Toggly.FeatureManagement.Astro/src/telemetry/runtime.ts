@@ -6,26 +6,48 @@ import {
   resolveMetricsBaseUrl,
   resolveTelemetryEnableFlag,
 } from './https-client.js'
-import { UsageBatcher } from './usage-batcher.js'
+import {
+  MetricsBatcher,
+  type MetricsFeatureOptions,
+  type MetricStatPayload,
+} from './metrics-batcher.js'
+import { UsageBatcher, type FeatureStatPayload } from './usage-batcher.js'
+import { SystemMetricsCollector, type SystemMetricsSampler } from './system-metrics.js'
 
 /** Bound wait for request-scoped / signal close so hung flush cannot stall forever. */
 export const REQUEST_SCOPED_CLOSE_TIMEOUT_MS = 2_000
 
 export interface UsageSender {
-  sendStats(request: Record<string, unknown>): Promise<unknown>
+  sendStats(request: FeatureStatPayload): Promise<unknown>
   close?(): void
 }
 
+export interface MetricsSender {
+  sendMetrics(request: MetricStatPayload): Promise<unknown>
+  close?(): void
+}
+
+function isSoftFailResult(result: unknown): boolean {
+  if (!result || typeof result !== 'object' || !('ok' in result)) return false
+  return result.ok === false
+}
+
 /**
- * Minimal usage-only telemetry config for Astro SSR.
- * Full Metrics.SendMetrics parity is deferred (OPS-911 follow-up).
+ * Usage + metrics telemetry config for Astro SSR.
  */
 export interface UsageTelemetryConfig {
   appKey: string
   environment: string
   metricsBaseUrl?: string
   enableUsageTracking?: boolean
+  enableMetrics?: boolean
+  /**
+   * Opt-in automatic process metrics (CpuUsage, MemoryWorkingSet, …).
+   * Requires `enableMetrics`. Default false.
+   */
+  systemMetrics?: boolean
   usageFlushInterval?: number
+  metricsFlushInterval?: number
   instanceName?: string
   appVersion?: string
   /**
@@ -38,7 +60,12 @@ export interface UsageTelemetryConfig {
   fetchImpl?: typeof fetch
   /** Injected client for tests. When unset, HTTPS `api/usage/stats` is used. */
   usageClient?: UsageSender | null
-  /** Abort hanging HTTPS usage posts after this many ms (default: 5000). */
+  /** Injected metrics client for tests. When unset, HTTPS `api/metrics` is used. */
+  metricsClient?: MetricsSender | null
+  /** Injected system-metrics sampler for tests. */
+  systemMetricsSampler?: SystemMetricsSampler
+  systemMetricsIntervalMs?: number
+  /** Abort hanging HTTPS posts after this many ms (default: 5000). */
   fetchTimeoutMs?: number
 }
 
@@ -49,14 +76,17 @@ export interface TelemetryLogger {
 }
 
 /**
- * Owns the usage batcher, flush timer, and soft-fail HTTPS restore.
- * Metrics batching is intentionally omitted for this Astro slice.
+ * Owns usage + metrics batchers, flush timers, and soft-fail HTTPS restore.
  */
 export class UsageTelemetryRuntime {
   private usageBatcher: UsageBatcher | null = null
+  private metricsBatcher: MetricsBatcher | null = null
+  private systemMetrics: SystemMetricsCollector | null = null
   private usageClient: UsageSender | null = null
+  private metricsClient: MetricsSender | null = null
   private httpsClient: HttpsTelemetryClient | null = null
   private usageTimer: ReturnType<typeof setInterval> | null = null
+  private metricsTimer: ReturnType<typeof setInterval> | null = null
   private flushInFlight: Promise<void> | null = null
   private pendingDrain = false
   private closed = false
@@ -71,12 +101,26 @@ export class UsageTelemetryRuntime {
   private readonly config: Required<
     Pick<
       UsageTelemetryConfig,
-      'appKey' | 'environment' | 'metricsBaseUrl' | 'enableUsageTracking' | 'usageFlushInterval'
+      | 'appKey'
+      | 'environment'
+      | 'metricsBaseUrl'
+      | 'enableUsageTracking'
+      | 'enableMetrics'
+      | 'systemMetrics'
+      | 'usageFlushInterval'
+      | 'metricsFlushInterval'
     >
   > &
     Pick<
       UsageTelemetryConfig,
-      'instanceName' | 'appVersion' | 'usageClient' | 'fetchImpl' | 'fetchTimeoutMs'
+      | 'instanceName'
+      | 'appVersion'
+      | 'usageClient'
+      | 'metricsClient'
+      | 'systemMetricsSampler'
+      | 'systemMetricsIntervalMs'
+      | 'fetchImpl'
+      | 'fetchTimeoutMs'
     >
 
   constructor(config: UsageTelemetryConfig, logger?: TelemetryLogger) {
@@ -88,10 +132,16 @@ export class UsageTelemetryRuntime {
       environment: config.environment,
       metricsBaseUrl: resolveMetricsBaseUrl(config.metricsBaseUrl ?? DEFAULT_METRICS_BASE_URL),
       enableUsageTracking: resolveTelemetryEnableFlag(config.enableUsageTracking, hasAppKey),
+      enableMetrics: resolveTelemetryEnableFlag(config.enableMetrics, hasAppKey),
+      systemMetrics: config.systemMetrics === true,
       usageFlushInterval: config.usageFlushInterval ?? DEFAULT_TELEMETRY_FLUSH_MS,
+      metricsFlushInterval: config.metricsFlushInterval ?? DEFAULT_TELEMETRY_FLUSH_MS,
       instanceName: config.instanceName,
       appVersion: config.appVersion,
       usageClient: config.usageClient,
+      metricsClient: config.metricsClient,
+      systemMetricsSampler: config.systemMetricsSampler,
+      systemMetricsIntervalMs: config.systemMetricsIntervalMs,
       fetchImpl: config.fetchImpl,
       fetchTimeoutMs: config.fetchTimeoutMs ?? DEFAULT_TELEMETRY_FETCH_TIMEOUT_MS,
     }
@@ -106,30 +156,42 @@ export class UsageTelemetryRuntime {
     return this.config.enableUsageTracking && !this.closed
   }
 
+  get metricsEnabled(): boolean {
+    return this.config.enableMetrics && !this.closed
+  }
+
   start(): void {
     if (this.closed) return
-    if (!this.config.enableUsageTracking) {
+    if (!this.config.enableUsageTracking && !this.config.enableMetrics) {
       return
     }
 
-    if (this.config.usageClient !== undefined) {
-      this.usageClient = this.config.usageClient
-    } else {
-      this.httpsClient = new HttpsTelemetryClient({
-        metricsBaseUrl: this.config.metricsBaseUrl,
-        fetchImpl: this.config.fetchImpl,
-        fetchTimeoutMs: this.config.fetchTimeoutMs,
-      })
-      this.usageClient = {
-        sendStats: async (request) => {
-          const ok = await this.httpsClient!.sendUsageStats(
-            request as unknown as Parameters<HttpsTelemetryClient['sendUsageStats']>[0],
-          )
-          return { ok }
-        },
-      }
+    this.ensureHttpsClient()
+    if (this.config.enableUsageTracking) {
+      this.startUsageTelemetry()
     }
+    if (this.config.enableMetrics) {
+      this.startMetricsTelemetry()
+    }
+    if (this.attachProcessHandlers) {
+      this.attachHandlers()
+    }
+  }
 
+  private ensureHttpsClient(): void {
+    const needsHttps =
+      (this.config.enableUsageTracking && this.config.usageClient === undefined) ||
+      (this.config.enableMetrics && this.config.metricsClient === undefined)
+    if (!needsHttps) return
+    this.httpsClient = new HttpsTelemetryClient({
+      metricsBaseUrl: this.config.metricsBaseUrl,
+      fetchImpl: this.config.fetchImpl,
+      fetchTimeoutMs: this.config.fetchTimeoutMs,
+    })
+  }
+
+  private startUsageTelemetry(): void {
+    this.usageClient = this.resolveUsageClient()
     this.usageBatcher = new UsageBatcher({
       appKey: this.config.appKey,
       environment: this.config.environment,
@@ -137,17 +199,52 @@ export class UsageTelemetryRuntime {
       appVersion: this.config.appVersion,
       processStartTime: this.processStartTime,
     })
-
     if (this.config.usageFlushInterval > 0) {
       this.usageTimer = setInterval(() => {
         void this.flush()
       }, this.config.usageFlushInterval)
       this.usageTimer.unref?.()
     }
+  }
 
-    if (this.attachProcessHandlers) {
-      this.attachHandlers()
+  private resolveUsageClient(): UsageSender | null {
+    if (this.config.usageClient === undefined) {
+      return {
+        sendStats: async (request) => {
+          const ok = await this.httpsClient!.sendUsageStats(request)
+          return { ok }
+        },
+      }
     }
+    return this.config.usageClient
+  }
+
+  private startMetricsTelemetry(): void {
+    this.metricsClient = this.resolveMetricsClient()
+    this.metricsBatcher = new MetricsBatcher({
+      appKey: this.config.appKey,
+      environment: this.config.environment,
+      instanceName: this.config.instanceName,
+    })
+    if (this.config.metricsFlushInterval > 0) {
+      this.metricsTimer = setInterval(() => {
+        void this.flush()
+      }, this.config.metricsFlushInterval)
+      this.metricsTimer.unref?.()
+    }
+    this.startSystemMetrics()
+  }
+
+  private resolveMetricsClient(): MetricsSender | null {
+    if (this.config.metricsClient === undefined) {
+      return {
+        sendMetrics: async (request) => {
+          const ok = await this.httpsClient!.sendMetrics(request)
+          return { ok }
+        },
+      }
+    }
+    return this.config.metricsClient
   }
 
   static readonly SIGNAL_FLUSH_TIMEOUT_MS = REQUEST_SCOPED_CLOSE_TIMEOUT_MS
@@ -225,12 +322,34 @@ export class UsageTelemetryRuntime {
     this.signalHandlers.length = 0
   }
 
+  private startSystemMetrics(): void {
+    if (!this.config.enableMetrics || !this.config.systemMetrics) return
+    this.systemMetrics = new SystemMetricsCollector({
+      observe: (metric, value, options) => this.observe(metric, value, options),
+      sampler: this.config.systemMetricsSampler,
+      intervalMs: this.config.systemMetricsIntervalMs,
+    })
+    this.systemMetrics.start()
+  }
+
   recordDefinitionCacheHit(): void {
     this.usageBatcher?.recordDefinitionCacheHit()
   }
 
   recordDefinitionCacheMiss(): void {
     this.usageBatcher?.recordDefinitionCacheMiss()
+  }
+
+  measure(metric: string, value: number, options?: MetricsFeatureOptions): void {
+    this.metricsBatcher?.measure(metric, value, options)
+  }
+
+  incrementCounter(metric: string, value = 1, options?: MetricsFeatureOptions): void {
+    this.metricsBatcher?.incrementCounter(metric, value, options)
+  }
+
+  observe(metric: string, value: number, options?: MetricsFeatureOptions): void {
+    this.metricsBatcher?.observe(metric, value, options)
   }
 
   async flush(): Promise<void> {
@@ -248,6 +367,7 @@ export class UsageTelemetryRuntime {
       while (this.pendingDrain) {
         this.pendingDrain = false
         await this.sendUsageOnce()
+        await this.sendMetricsOnce()
       }
     } finally {
       this.flushInFlight = null
@@ -271,14 +391,8 @@ export class UsageTelemetryRuntime {
     if (!bundle) return
 
     try {
-      const result = await client.sendStats(bundle.payload as unknown as Record<string, unknown>)
-      if (
-        this.restoreOnSendFailure &&
-        result &&
-        typeof result === 'object' &&
-        'ok' in result &&
-        (result as { ok: boolean }).ok === false
-      ) {
+      const result = await client.sendStats(bundle.payload)
+      if (this.restoreOnSendFailure && isSoftFailResult(result)) {
         batcher.restoreFromBundle(bundle)
         this.logger.debug('Usage HTTPS soft-fail; batch restored')
       }
@@ -290,12 +404,39 @@ export class UsageTelemetryRuntime {
     }
   }
 
+  private async sendMetricsOnce(): Promise<void> {
+    const batcher = this.metricsBatcher
+    if (!batcher) return
+
+    const client = this.metricsClient
+    if (!client?.sendMetrics) {
+      this.logger.debug('Metrics flush skipped: no metrics client')
+      return
+    }
+
+    const payload = batcher.buildAndReset()
+    if (!payload) return
+
+    try {
+      const result = await client.sendMetrics(payload)
+      if (this.restoreOnSendFailure && isSoftFailResult(result)) {
+        batcher.restoreFromPayload(payload)
+        this.logger.debug('Metrics HTTPS soft-fail; batch restored')
+      } else {
+        this.systemMetrics?.onFlushed()
+      }
+    } catch (error) {
+      if (this.restoreOnSendFailure) {
+        batcher.restoreFromPayload(payload)
+      }
+      this.logger.error('Failed to send metrics:', error)
+    }
+  }
+
   /**
-   * Flush remaining usage and tear down. When `timeoutMs` is set, abandon the
+   * Flush remaining telemetry and tear down. When `timeoutMs` is set, abandon the
    * await after that bound (flush may continue in the background) so callers
    * such as request middleware never stall on a hung telemetry endpoint.
-   * Cleanup (nulling the batcher) waits for flush completion so soft-fail
-   * restore cannot race a timed-out close.
    */
   async close(options?: { timeoutMs?: number }): Promise<void> {
     if (this.closed) return
@@ -305,6 +446,13 @@ export class UsageTelemetryRuntime {
       clearInterval(this.usageTimer)
       this.usageTimer = null
     }
+    if (this.metricsTimer) {
+      clearInterval(this.metricsTimer)
+      this.metricsTimer = null
+    }
+
+    this.systemMetrics?.stop()
+    this.systemMetrics = null
 
     this.detachProcessHandlers()
 
@@ -319,9 +467,16 @@ export class UsageTelemetryRuntime {
         } catch {
           // ignore
         }
+        try {
+          this.metricsClient?.close?.()
+        } catch {
+          // ignore
+        }
         this.usageClient = null
+        this.metricsClient = null
         this.httpsClient = null
         this.usageBatcher = null
+        this.metricsBatcher = null
       }
     }
 
@@ -335,7 +490,6 @@ export class UsageTelemetryRuntime {
           timer.unref?.()
         }),
       ])
-      // Timed-out callers return; finish() keeps running so restore still works.
       return
     }
 
@@ -344,3 +498,4 @@ export class UsageTelemetryRuntime {
 }
 
 export type { UsageFlushBundle } from './usage-batcher.js'
+export type { MetricsFeatureOptions, MetricStatPayload } from './metrics-batcher.js'

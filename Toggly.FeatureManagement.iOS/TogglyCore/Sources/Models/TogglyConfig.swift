@@ -71,6 +71,9 @@ public struct TogglyConfig: Sendable {
     /// Receives bounded reporter status codes without event payloads.
     public let onTelemetryDiagnostic: TelemetryReporter.Diagnostic?
 
+    /// Opt-in automatic CpuUsage and ExceptionCount gauges every 10s when telemetry is enabled.
+    public let systemMetrics: Bool
+
     // Internal transport seam for deterministic package tests.
     var telemetryTransport: TelemetryReporter.Transport?
 
@@ -115,7 +118,8 @@ public struct TogglyConfig: Sendable {
         metricsBaseUrl: String = "https://metrics.toggly.io",
         telemetryFlushIntervalMs: Int = 45_000,
         onTelemetryDiagnostic: TelemetryReporter.Diagnostic? = nil,
-        instanceId: String? = nil
+        instanceId: String? = nil,
+        systemMetrics: Bool = false
     ) {
         self.appKey = appKey
         self.environment = environment
@@ -139,6 +143,7 @@ public struct TogglyConfig: Sendable {
         self.metricsBaseUrl = metricsBaseUrl
         self.telemetryFlushIntervalMs = telemetryFlushIntervalMs
         self.onTelemetryDiagnostic = onTelemetryDiagnostic
+        self.systemMetrics = systemMetrics
         self.telemetryTransport = nil
     }
 }

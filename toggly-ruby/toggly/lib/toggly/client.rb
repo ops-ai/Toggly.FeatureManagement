@@ -536,6 +536,7 @@ module Toggly
         metrics_client: @config.metrics_client,
         usage_client_provided: usage_provided,
         metrics_client_provided: metrics_provided,
+        system_metrics: @config.system_metrics,
         logger: @config.logger
       )
       @telemetry.start

@@ -1,0 +1,483 @@
+package io.toggly.core.telemetry;
+
+import java.lang.management.GarbageCollectorMXBean;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
+import java.lang.management.MemoryUsage;
+import java.lang.management.ThreadMXBean;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.LongSupplier;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import com.sun.management.OperatingSystemMXBean;
+
+/**
+ * Opt-in JVM process metrics: CpuUsage, MemoryWorkingSet (Linux VmRSS), GCHeapSize,
+ * AllocationRate, TimeInGC, ExceptionCount (uncaught). Samples every 10s by default.
+ */
+public final class SystemMetricsCollector {
+
+    public static final long SYSTEM_METRICS_INTERVAL_MS = 10_000L;
+    public static final int SYSTEM_METRICS_MAX_PENDING = 30;
+
+    private static final Logger LOGGER = Logger.getLogger(SystemMetricsCollector.class.getName());
+
+    @FunctionalInterface
+    public interface Observe {
+        void observe(String metric, double value);
+    }
+
+    @FunctionalInterface
+    public interface Sampler {
+        List<Observation> sample();
+    }
+
+    public record Observation(String metric, double value) {}
+
+    private final Observe observe;
+    private final long intervalMs;
+    private final Sampler sampler;
+    private final LongSupplier nanoTime;
+    /** When set (tests), bypasses {@link OperatingSystemMXBean#getProcessCpuTime()}. */
+    private final LongSupplier processCpuTimeNs;
+    private final ScheduledExecutorService scheduler;
+    private final boolean ownsScheduler;
+
+    private ScheduledFuture<?> future;
+    private volatile boolean started;
+    private final Map<String, Integer> pendingByMetric = new ConcurrentHashMap<>();
+    private final AtomicInteger exceptionCount = new AtomicInteger();
+    private Thread.UncaughtExceptionHandler previousUncaughtHandler;
+
+    private CpuSnapshot lastCpu;
+    private long lastGcTimeMs = -1L;
+    /** Cumulative allocated-bytes sample for AllocationRate (not live heap used). */
+    private long lastAllocatedBytes = -1L;
+    /** Monotonic nanoTime of the last default sample (not wall clock). */
+    private long lastSampleMonoNs = -1L;
+
+    public SystemMetricsCollector(Observe observe) {
+        this(observe, SYSTEM_METRICS_INTERVAL_MS, null, null, null);
+    }
+
+    SystemMetricsCollector(
+            Observe observe,
+            long intervalMs,
+            Sampler sampler,
+            LongSupplier nanoTime,
+            ScheduledExecutorService scheduler) {
+        this(observe, intervalMs, sampler, nanoTime, scheduler, null);
+    }
+
+    SystemMetricsCollector(
+            Observe observe,
+            long intervalMs,
+            Sampler sampler,
+            LongSupplier nanoTime,
+            ScheduledExecutorService scheduler,
+            LongSupplier processCpuTimeNs) {
+        this.observe = observe;
+        this.intervalMs = intervalMs > 0 ? intervalMs : SYSTEM_METRICS_INTERVAL_MS;
+        this.sampler = sampler != null ? sampler : this::defaultSample;
+        this.nanoTime = nanoTime != null ? nanoTime : System::nanoTime;
+        this.processCpuTimeNs = processCpuTimeNs;
+        if (scheduler != null) {
+            this.scheduler = scheduler;
+            this.ownsScheduler = false;
+        } else {
+            this.scheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "toggly-system-metrics");
+                t.setDaemon(true);
+                return t;
+            });
+            this.ownsScheduler = true;
+        }
+    }
+
+    public void start() {
+        if (started) {
+            return;
+        }
+        started = true;
+        lastCpu = readCpuSnapshot();
+        lastGcTimeMs = totalGcCollectionTimeMs();
+        Long allocatedAtStart = readTotalAllocatedBytes();
+        lastAllocatedBytes = allocatedAtStart != null ? allocatedAtStart : -1L;
+        lastSampleMonoNs = nanoTime.getAsLong();
+        attachUncaughtHandler();
+        future = scheduler.scheduleAtFixedRate(
+                this::tickSafe,
+                intervalMs,
+                intervalMs,
+                TimeUnit.MILLISECONDS);
+    }
+
+    public void stop() {
+        if (!started) {
+            return;
+        }
+        started = false;
+        if (future != null) {
+            future.cancel(false);
+            future = null;
+        }
+        detachUncaughtHandler();
+        pendingByMetric.clear();
+        if (ownsScheduler) {
+            scheduler.shutdownNow();
+        }
+    }
+
+    /** Test helper: run one sample cycle immediately. */
+    public void tick() {
+        if (!started) {
+            return;
+        }
+        try {
+            for (Observation sample : sampler.sample()) {
+                publishSample(sample);
+            }
+        } catch (RuntimeException ignored) {
+            // Never disrupt the host process.
+        }
+    }
+
+    private void publishSample(Observation sample) {
+        if (!Double.isFinite(sample.value())) {
+            return;
+        }
+        int pending = pendingByMetric.getOrDefault(sample.metric(), 0);
+        if (pending >= SYSTEM_METRICS_MAX_PENDING) {
+            return;
+        }
+        pendingByMetric.put(sample.metric(), pending + 1);
+        observe.observe(sample.metric(), sample.value());
+    }
+
+    /** Call after a successful metrics flush to free the pending cap. */
+    public void onFlushed() {
+        pendingByMetric.clear();
+    }
+
+    private void tickSafe() {
+        try {
+            tick();
+        } catch (RuntimeException ignored) {
+            // Never disrupt the host process.
+        }
+    }
+
+    private List<Observation> defaultSample() {
+        List<Observation> out = new ArrayList<>();
+        double intervalSec = advanceSampleIntervalSec();
+
+        Double cpu = sampleCpuPercent();
+        if (cpu != null) {
+            out.add(new Observation("CpuUsage", cpu));
+        }
+
+        Long rss = readLinuxVmRssBytes();
+        if (rss != null) {
+            out.add(new Observation("MemoryWorkingSet", rss));
+        }
+
+        long heapUsed = currentHeapUsedBytes();
+        if (heapUsed >= 0) {
+            out.add(new Observation("GCHeapSize", heapUsed));
+        }
+
+        appendAllocationRate(out, intervalSec);
+
+        Double timeInGc = sampleTimeInGcPercent(intervalSec);
+        if (timeInGc != null) {
+            out.add(new Observation("TimeInGC", timeInGc));
+        }
+
+        appendExceptionCount(out);
+        return out;
+    }
+
+    private double advanceSampleIntervalSec() {
+        long nowNs = nanoTime.getAsLong();
+        double intervalSec = lastSampleMonoNs > 0
+                ? Math.max(0.001, (nowNs - lastSampleMonoNs) / 1_000_000_000.0)
+                : intervalMs / 1000.0;
+        lastSampleMonoNs = nowNs;
+        return intervalSec;
+    }
+
+    private void appendAllocationRate(List<Observation> out, double intervalSec) {
+        Long allocated = readTotalAllocatedBytes();
+        if (allocated == null) {
+            return;
+        }
+        if (lastAllocatedBytes >= 0 && allocated >= lastAllocatedBytes && intervalSec > 0) {
+            double rate = (allocated - lastAllocatedBytes) / intervalSec;
+            if (Double.isFinite(rate) && rate >= 0) {
+                out.add(new Observation("AllocationRate", rate));
+            }
+        }
+        lastAllocatedBytes = allocated;
+    }
+
+    private void appendExceptionCount(List<Observation> out) {
+        int pendingExceptions = pendingByMetric.getOrDefault("ExceptionCount", 0);
+        if (pendingExceptions >= SYSTEM_METRICS_MAX_PENDING) {
+            return;
+        }
+        int exceptions = exceptionCount.getAndSet(0);
+        if (exceptions > 0) {
+            out.add(new Observation("ExceptionCount", exceptions));
+        }
+    }
+
+    private Double sampleCpuPercent() {
+        CpuSnapshot current = readCpuSnapshot();
+        if (current == null) {
+            return null;
+        }
+        CpuSnapshot prev = lastCpu;
+        lastCpu = current;
+        if (prev == null) {
+            return null;
+        }
+        long wallNs = current.nanoTime - prev.nanoTime;
+        if (wallNs <= 0) {
+            return null;
+        }
+        long cpuNs = current.processCpuTimeNs - prev.processCpuTimeNs;
+        if (cpuNs < 0) {
+            return null;
+        }
+        int processors = Math.max(1, Runtime.getRuntime().availableProcessors());
+        double pct = (cpuNs * 100.0 / wallNs) / processors;
+        if (!Double.isFinite(pct) || pct < 0) {
+            return null;
+        }
+        return Math.min(100.0, pct);
+    }
+
+    private CpuSnapshot readCpuSnapshot() {
+        try {
+            long cpuTime;
+            if (processCpuTimeNs != null) {
+                cpuTime = processCpuTimeNs.getAsLong();
+            } else {
+                OperatingSystemMXBean os =
+                        (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
+                cpuTime = os.getProcessCpuTime();
+            }
+            if (cpuTime < 0) {
+                return null;
+            }
+            return new CpuSnapshot(cpuTime, nanoTime.getAsLong());
+        } catch (ClassCastException | LinkageError ignored) {
+            return null;
+        }
+    }
+
+    private static long currentHeapUsedBytes() {
+        return currentHeapUsedBytes(ManagementFactory.getMemoryMXBean());
+    }
+
+    static long currentHeapUsedBytes(MemoryMXBean memory) {
+        try {
+            MemoryUsage heap = memory.getHeapMemoryUsage();
+            long used = heap.getUsed();
+            return used >= 0 ? used : -1L;
+        } catch (RuntimeException ignored) {
+            return -1L;
+        }
+    }
+
+    /** Cumulative allocated bytes from HotSpot ThreadMXBean when supported. */
+    private static Long readTotalAllocatedBytes() {
+        return readTotalAllocatedBytes(ManagementFactory.getThreadMXBean());
+    }
+
+    static Long readTotalAllocatedBytes(ThreadMXBean threads) {
+        try {
+            if (!(threads instanceof com.sun.management.ThreadMXBean hotspot)) {
+                return null;
+            }
+            if (!hotspot.isThreadAllocatedMemorySupported()) {
+                return null;
+            }
+            if (!hotspot.isThreadAllocatedMemoryEnabled()) {
+                hotspot.setThreadAllocatedMemoryEnabled(true);
+            }
+            Long hotspotTotal = tryHotspotTotalAllocatedBytes(hotspot);
+            if (hotspotTotal != null) {
+                return hotspotTotal;
+            }
+            return sumThreadAllocatedBytes(hotspot);
+        } catch (RuntimeException | LinkageError ignored) {
+            return null;
+        }
+    }
+
+    /**
+     * Prefer JVM total API when present (JDK 21+). Reflect on the public HotSpot
+     * interface so module encapsulation does not block Method.invoke.
+     */
+    private static Long tryHotspotTotalAllocatedBytes(com.sun.management.ThreadMXBean hotspot) {
+        try {
+            var method = com.sun.management.ThreadMXBean.class
+                    .getMethod("getTotalThreadAllocatedBytes");
+            Object value = method.invoke(hotspot);
+            if (value instanceof Long total && total >= 0L) {
+                return total;
+            }
+        } catch (ReflectiveOperationException | NoSuchMethodError ignored) {
+            // Fall through to per-thread sum (JDK 17 / older HotSpot).
+        }
+        return null;
+    }
+
+    private static long sumThreadAllocatedBytes(com.sun.management.ThreadMXBean hotspot) {
+        long[] ids = hotspot.getAllThreadIds();
+        long[] bytes = hotspot.getThreadAllocatedBytes(ids);
+        long total = 0L;
+        for (long allocated : bytes) {
+            if (allocated > 0L) {
+                total += allocated;
+            }
+        }
+        return total;
+    }
+
+    private static long totalGcCollectionTimeMs() {
+        long total = 0;
+        for (GarbageCollectorMXBean gc : ManagementFactory.getGarbageCollectorMXBeans()) {
+            long t = gc.getCollectionTime();
+            if (t >= 0) {
+                total += t;
+            }
+        }
+        return total;
+    }
+
+    private Double sampleTimeInGcPercent(double intervalSec) {
+        long gcMs = totalGcCollectionTimeMs();
+        if (lastGcTimeMs < 0) {
+            lastGcTimeMs = gcMs;
+            return null;
+        }
+        long delta = gcMs - lastGcTimeMs;
+        lastGcTimeMs = gcMs;
+        if (delta <= 0 || intervalSec <= 0) {
+            return null;
+        }
+        double pct = (delta / (intervalSec * 1000.0)) * 100.0;
+        if (!Double.isFinite(pct) || pct < 0) {
+            return null;
+        }
+        return Math.min(100.0, pct);
+    }
+
+    static Long readLinuxVmRssBytes() {
+        return readLinuxVmRssBytes(System.getProperty("os.name"), Path.of("/proc/self/status"));
+    }
+
+    static Long readLinuxVmRssBytes(String osName, Path statusPath) {
+        if (!"Linux".equalsIgnoreCase(osName)) {
+            return null;
+        }
+        try {
+            if (!Files.isRegularFile(statusPath)) {
+                return null;
+            }
+            for (String line : Files.readAllLines(statusPath)) {
+                Long rss = parseVmRssLine(line);
+                if (rss != null) {
+                    return rss;
+                }
+            }
+        } catch (IOException | NumberFormatException ignored) {
+            return null;
+        }
+        return null;
+    }
+
+    private static Long parseVmRssLine(String line) {
+        if (!line.startsWith("VmRSS:")) {
+            return null;
+        }
+        String digits = line.replace("VmRSS:", "").trim();
+        int space = digits.indexOf(' ');
+        if (space > 0) {
+            digits = digits.substring(0, space);
+        }
+        long kb = Long.parseLong(digits.trim());
+        if (kb < 0) {
+            return null;
+        }
+        return kb * 1024L;
+    }
+
+    /** Package-visible for tests: prime monotonic sample baseline inside {@link #defaultSample()}. */
+    void resetLastSampleMonoNsForTest(long monoNs) {
+        lastSampleMonoNs = monoNs;
+    }
+
+    /** Package-visible for tests: prime GC baseline inside {@link #defaultSample()}. */
+    void resetLastGcTimeMsForTest(long gcTimeMs) {
+        lastGcTimeMs = gcTimeMs;
+    }
+
+    private Thread.UncaughtExceptionHandler activeUncaughtHandler;
+
+    private void attachUncaughtHandler() {
+        try {
+            Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+            if (previousUncaughtHandler == null) {
+                previousUncaughtHandler = previous;
+            }
+            Thread.UncaughtExceptionHandler ours = (thread, ex) -> {
+                exceptionCount.incrementAndGet();
+                Thread.UncaughtExceptionHandler prior = previousUncaughtHandler;
+                if (prior != null) {
+                    prior.uncaughtException(thread, ex);
+                } else {
+                    // Avoid ThreadGroup.uncaughtException — with no prior default handler it
+                    // recurses into this handler and overflows the stack.
+                    LOGGER.log(Level.SEVERE, "Uncaught exception with no prior handler", ex);
+                }
+            };
+            activeUncaughtHandler = ours;
+            if (Thread.getDefaultUncaughtExceptionHandler() != ours) {
+                Thread.setDefaultUncaughtExceptionHandler(ours);
+            }
+        } catch (RuntimeException ignored) {
+            previousUncaughtHandler = null;
+            activeUncaughtHandler = null;
+        }
+    }
+
+    private void detachUncaughtHandler() {
+        try {
+            // Only restore when we still own the default handler slot.
+            if (activeUncaughtHandler != null
+                    && Thread.getDefaultUncaughtExceptionHandler() == activeUncaughtHandler) {
+                Thread.setDefaultUncaughtExceptionHandler(previousUncaughtHandler);
+                previousUncaughtHandler = null;
+            }
+        } catch (RuntimeException ignored) {
+            // ignore
+        }
+        activeUncaughtHandler = null;
+    }
+
+    private record CpuSnapshot(long processCpuTimeNs, long nanoTime) {}
+}

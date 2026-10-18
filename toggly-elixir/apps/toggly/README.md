@@ -141,7 +141,9 @@ Evaluations emit `[:toggly, :evaluation, :start | :stop | :exception]` via `:tel
 
 Checks (including `get_variant/4`), and explicit `Toggly.record_usage(client, key, enabled, variant \\ nil)` / `record_view` calls, batch `variantStats` counters to **POST /api/usage/stats**. The counter key is the assigned variant name when known (e.g. from `get_variant/4`, or passed explicitly to `record_usage`/`record_view`), otherwise the boolean `enabled` / `disabled` label. Definition-refresh outcomes add `definitionCacheHits` / `definitionCacheMisses` when greater than zero; cache counters alone still flush. Batches retry after errors and never include identity/claims or unique-user hashes. Unknown keys are excluded to bound cardinality. `Toggly.flush/1` explicitly uploads a batch; flush before graceful shutdown if final counts matter. Counters are memory-only; a process crash can lose an unsent batch.
 
-`Toggly.metric(client, :counter | :measurement | :observation, key, value, metadata)` emits `[:toggly, :metric, kind]`. Attach your own Telemetry exporter. This version does **not** upload custom metrics through Toggly's gRPC metric service. Use metadata without personal data. Ecto/cache-specific adapters and automatic gRPC metrics export are separate integration extensions; built-in ETS reads/file snapshots need neither Ecto nor a cache service.
+`Toggly.metric(client, :counter | :measurement | :observation, key, value, metadata)` emits `[:toggly, :metric, kind]` and batches the sample for upload on `Toggly.flush/1` (and the periodic flush timer) via `POST api/metrics`. Optional metadata keys `feature` and `variant` (default `enabled`) match other SDKs. Set `metrics: false` to keep only the Telemetry event. Use metadata without personal data. A series is stored only when that metric is defined in the Toggly application.
+
+Set `system_metrics: true` (default `false`, requires `metrics: true`) to sample BEAM process metrics (`CpuUsage`, `GCHeapSize`, `ProcessCount`, `ExceptionCount`, and Linux `MemoryWorkingSet`) every 10 seconds into the same metrics batch.
 
 ## Local development
 

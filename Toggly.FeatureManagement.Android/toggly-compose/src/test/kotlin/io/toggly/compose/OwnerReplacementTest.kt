@@ -126,7 +126,9 @@ class OwnerReplacementTest {
                     assertFalse("Cross-owner telemetry: $packet", features.getJSONObject(feature).has("enabled"))
                 }
             }
-            old.dispose(); new.dispose(); owners.forEach { it.dispose() }
+            rule.runOnIdle {
+                old.dispose(); new.dispose(); owners.forEach { it.dispose() }
+            }
         }
     }
 }

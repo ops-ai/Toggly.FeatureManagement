@@ -11,6 +11,7 @@ public actor TogglyService {
     private let groups: [String]
     private let claims: [URLQueryItem]
     private let telemetry: TelemetryReporter?
+    private var systemMetricsCollector: SystemMetricsCollector?
 
     // MARK: - State
 
@@ -116,6 +117,28 @@ public actor TogglyService {
         } else {
             self.telemetry = nil
         }
+        self.systemMetricsCollector = nil
+    }
+
+    private func startSystemMetricsIfNeeded() {
+        guard systemMetricsCollector == nil,
+              config.systemMetrics,
+              config.enableTelemetry,
+              let telemetry else { return }
+        let collector = SystemMetricsCollector { [weak self] metric, value in
+            guard let self else { return }
+            Task {
+                // ExceptionCount is a per-window delta — counters sum across ticks.
+                if metric == "ExceptionCount" {
+                    await self.incrementCounter(metric, value: value)
+                } else {
+                    await self.setGauge(metric, value: value)
+                }
+            }
+        }
+        systemMetricsCollector = collector
+        collector.start()
+        Task { await telemetry.setOnBatchAccepted { collector.onFlushed() } }
     }
 
     // MARK: - Lifecycle
@@ -146,6 +169,7 @@ public actor TogglyService {
         guard !disposed else { return TogglyInitResponse(status: .defaults, flags: config.featureDefaults) }
         // Start refresh timer
         startRefreshTimer()
+        startSystemMetricsIfNeeded()
 
         // Perform initial refresh
         let response = await refresh()
@@ -200,6 +224,8 @@ public actor TogglyService {
         disposed = true
         contextGeneration += 1
         checkHandlers.removeAll()
+        systemMetricsCollector?.stop()
+        systemMetricsCollector = nil
         if let telemetry { Task { await telemetry.dispose() } }
         stopWebSocket()
         stopRefreshTimer()

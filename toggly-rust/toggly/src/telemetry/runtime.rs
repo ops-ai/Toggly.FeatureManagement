@@ -2,10 +2,12 @@
 
 use super::hash::{DEFAULT_METRICS_BASE_URL, DEFAULT_TELEMETRY_FLUSH_SECS};
 use super::metrics_batcher::{MetricsBatcher, MetricsFeatureOptions};
+use super::system_metrics::{SystemMetricsCollector, SystemMetricsSampler};
 use super::transport::TelemetrySenders;
 use super::usage_batcher::UsageBatcher;
 use crate::TogglyConfig;
 use parking_lot::Mutex;
+use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,7 +16,7 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, warn};
 
 /// Configuration for constructing a [`TelemetryRuntime`].
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct TelemetryRuntimeConfig {
     /// Application key.
     pub app_key: String,
@@ -38,6 +40,33 @@ pub struct TelemetryRuntimeConfig {
     pub senders: TelemetrySenders,
     /// When true, senders were provided by the caller (skip native dial).
     pub senders_provided: bool,
+    /// Opt-in process metrics every 10s (requires metrics).
+    pub system_metrics: bool,
+    /// Optional sampler override (tests / custom hosts).
+    pub system_metrics_sampler: Option<super::system_metrics::SystemMetricsSampler>,
+}
+
+impl fmt::Debug for TelemetryRuntimeConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TelemetryRuntimeConfig")
+            .field("app_key", &self.app_key)
+            .field("environment", &self.environment)
+            .field("metrics_base_url", &self.metrics_base_url)
+            .field("enable_usage_tracking", &self.enable_usage_tracking)
+            .field("enable_metrics", &self.enable_metrics)
+            .field("usage_flush_interval", &self.usage_flush_interval)
+            .field("metrics_flush_interval", &self.metrics_flush_interval)
+            .field("instance_name", &self.instance_name)
+            .field("app_version", &self.app_version)
+            .field("senders", &self.senders)
+            .field("senders_provided", &self.senders_provided)
+            .field("system_metrics", &self.system_metrics)
+            .field(
+                "system_metrics_sampler",
+                &self.system_metrics_sampler.as_ref().map(|_| "<sampler>"),
+            )
+            .finish()
+    }
 }
 
 impl TelemetryRuntimeConfig {
@@ -64,6 +93,8 @@ impl TelemetryRuntimeConfig {
             app_version: config.app_version.clone(),
             senders: TelemetrySenders::default(),
             senders_provided: false,
+            system_metrics: config.system_metrics,
+            system_metrics_sampler: None,
         }
     }
 }
@@ -141,58 +172,62 @@ struct Inner {
     warned_missing_transport: AtomicBool,
     cancel_tx: watch::Sender<bool>,
     tasks: Mutex<Vec<JoinHandle<()>>>,
+    system_metrics: Mutex<Option<Arc<SystemMetricsCollector>>>,
 }
 
 impl TelemetryRuntime {
     /// Create and start batchers / flush timers when either side is enabled.
-    pub fn start(config: TelemetryRuntimeConfig) -> Self {
-        let has_app_key = !config.app_key.is_empty();
-        let allowed = recording_allowed(config.senders_provided);
-        // Feature-off (no injected senders): defaults stay off — no unbounded buffering.
-        let default_on = allowed && has_app_key && !telemetry_env_disabled();
-
-        let mut enable_usage = resolve_enabled(config.enable_usage_tracking, default_on);
-        let mut enable_metrics = resolve_enabled(config.enable_metrics, default_on);
-
-        let warn_feature_off = !allowed
-            && (config.enable_usage_tracking == Some(true) || config.enable_metrics == Some(true));
-
-        if !allowed {
-            enable_usage = false;
-            enable_metrics = false;
-        }
-
+    pub fn start(mut config: TelemetryRuntimeConfig) -> Self {
+        let (enable_usage, enable_metrics, warn_feature_off) = Self::resolve_enablement(&config);
         let (cancel_tx, cancel_rx) = watch::channel(false);
-
         let inner = Arc::new(Inner {
             enable_usage,
             enable_metrics,
-            metrics_base_url: config.metrics_base_url,
+            metrics_base_url: config.metrics_base_url.clone(),
             senders_provided: config.senders_provided,
             usage_batcher: Mutex::new(None),
             metrics_batcher: Mutex::new(None),
-            senders: Mutex::new(config.senders),
+            senders: Mutex::new(std::mem::take(&mut config.senders)),
             sending_usage: AtomicBool::new(false),
             sending_metrics: AtomicBool::new(false),
             closed: AtomicBool::new(false),
             warned_missing_transport: AtomicBool::new(false),
             cancel_tx,
             tasks: Mutex::new(Vec::new()),
+            system_metrics: Mutex::new(None),
         });
-
         let runtime = Self {
             inner: inner.clone(),
         };
-
         if warn_feature_off {
             runtime.warn_feature_required();
         }
-
         if !enable_usage && !enable_metrics {
             return runtime;
         }
+        runtime.start_batchers(config, cancel_rx);
+        runtime
+    }
 
-        if enable_usage {
+    fn resolve_enablement(config: &TelemetryRuntimeConfig) -> (bool, bool, bool) {
+        let has_app_key = !config.app_key.is_empty();
+        let allowed = recording_allowed(config.senders_provided);
+        // Feature-off (no injected senders): defaults stay off — no unbounded buffering.
+        let default_on = allowed && has_app_key && !telemetry_env_disabled();
+        let mut enable_usage = resolve_enabled(config.enable_usage_tracking, default_on);
+        let mut enable_metrics = resolve_enabled(config.enable_metrics, default_on);
+        let warn_feature_off = !allowed
+            && (config.enable_usage_tracking == Some(true) || config.enable_metrics == Some(true));
+        if !allowed {
+            enable_usage = false;
+            enable_metrics = false;
+        }
+        (enable_usage, enable_metrics, warn_feature_off)
+    }
+
+    fn start_batchers(&self, config: TelemetryRuntimeConfig, cancel_rx: watch::Receiver<bool>) {
+        let inner = &self.inner;
+        if inner.enable_usage {
             *inner.usage_batcher.lock() = Some(Arc::new(UsageBatcher::new(
                 config.app_key.clone(),
                 config.environment.clone(),
@@ -201,22 +236,35 @@ impl TelemetryRuntime {
                 None,
             )));
             if !config.usage_flush_interval.is_zero() {
-                runtime.spawn_flush_loop(cancel_rx.clone(), config.usage_flush_interval, true);
+                self.spawn_flush_loop(cancel_rx.clone(), config.usage_flush_interval, true);
             }
         }
-
-        if enable_metrics {
-            *inner.metrics_batcher.lock() = Some(MetricsBatcher::new(
-                config.app_key,
-                config.environment,
-                config.instance_name,
-            ));
-            if !config.metrics_flush_interval.is_zero() {
-                runtime.spawn_flush_loop(cancel_rx, config.metrics_flush_interval, false);
-            }
+        if !inner.enable_metrics {
+            return;
         }
+        *inner.metrics_batcher.lock() = Some(MetricsBatcher::new(
+            config.app_key,
+            config.environment,
+            config.instance_name,
+        ));
+        if !config.metrics_flush_interval.is_zero() {
+            self.spawn_flush_loop(cancel_rx, config.metrics_flush_interval, false);
+        }
+        if config.system_metrics {
+            self.start_system_metrics(config.system_metrics_sampler);
+        }
+    }
 
-        runtime
+    fn start_system_metrics(&self, sampler: Option<SystemMetricsSampler>) {
+        let inner = self.inner.clone();
+        let observe = Arc::new(
+            move |metric: &str, value: f64, options: Option<&MetricsFeatureOptions>| {
+                if let Some(batcher) = inner.metrics_batcher.lock().as_ref() {
+                    batcher.observe(metric, value, options);
+                }
+            },
+        );
+        *self.inner.system_metrics.lock() = Some(SystemMetricsCollector::start(observe, sampler));
     }
 
     fn warn_feature_required(&self) {
@@ -385,6 +433,14 @@ impl TelemetryRuntime {
         }
     }
 
+    /// Sample system metrics once (test hook for wiring verification).
+    #[cfg(test)]
+    pub(crate) fn tick_system_metrics_for_test(&self) {
+        if let Some(collector) = self.inner.system_metrics.lock().as_ref() {
+            collector.tick();
+        }
+    }
+
     /// Flush usage and metrics once (soft-fail on transport errors).
     pub async fn flush_all(&self) {
         self.inner.flush_usage().await;
@@ -402,6 +458,9 @@ impl TelemetryRuntime {
             return;
         }
         let _ = self.inner.cancel_tx.send(true);
+        if let Some(collector) = self.inner.system_metrics.lock().take() {
+            collector.stop();
+        }
         let tasks: Vec<_> = std::mem::take(&mut *self.inner.tasks.lock());
         for task in &tasks {
             task.abort();
@@ -540,6 +599,8 @@ impl Inner {
             if let Some(batcher) = self.metrics_batcher.lock().as_ref() {
                 batcher.restore_snapshot(snapshot);
             }
+        } else if let Some(collector) = self.system_metrics.lock().as_ref() {
+            collector.on_flushed();
         }
     }
 }
@@ -547,6 +608,9 @@ impl Inner {
 impl Drop for TelemetryRuntime {
     fn drop(&mut self) {
         let _ = self.inner.cancel_tx.send(true);
+        if let Some(collector) = self.inner.system_metrics.lock().take() {
+            collector.stop();
+        }
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             let inner = self.inner.clone();
             handle.spawn(async move {
@@ -576,6 +640,7 @@ impl crate::definition_cache::DefinitionCacheRecorder for TelemetryRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::telemetry::system_metrics::{SystemMetricsSampler, SYSTEM_METRICS_INTERVAL};
     use crate::telemetry::transport::UsageSender;
     use crate::telemetry::usage_batcher::FeatureStatPayload;
     use crate::TogglyConfig;
@@ -596,6 +661,20 @@ mod tests {
             metrics_flush_interval,
             ..TogglyConfig::default()
         })
+    }
+
+    fn test_runtime_config_with_system_metrics(
+        enable_metrics: Option<bool>,
+        system_metrics: bool,
+    ) -> TelemetryRuntimeConfig {
+        let mut config = test_runtime_config(
+            Some(false),
+            enable_metrics,
+            Some(Duration::from_secs(0)),
+            Some(Duration::from_secs(0)),
+        );
+        config.system_metrics = system_metrics;
+        config
     }
 
     struct FailingUsage {
@@ -746,6 +825,141 @@ mod tests {
         assert_eq!(*failing.calls.lock().unwrap(), 1);
         runtime.flush_all().await;
         assert_eq!(*failing.calls.lock().unwrap(), 2);
+        runtime.close().await;
+    }
+
+    #[test]
+    fn from_client_config_propagates_system_metrics_flag() {
+        let client = TogglyConfig::builder()
+            .app_key("app")
+            .system_metrics(true)
+            .build();
+        let runtime_cfg = TelemetryRuntimeConfig::from_client_config(&client);
+        assert!(runtime_cfg.system_metrics);
+        assert!(runtime_cfg.system_metrics_sampler.is_none());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn system_metrics_disabled_does_not_invoke_sampler() {
+        let calls = Arc::new(StdMutex::new(0usize));
+        let calls2 = calls.clone();
+        let sampler: SystemMetricsSampler = Arc::new(move || {
+            *calls2.lock().unwrap() += 1;
+            vec![("CpuUsage".into(), 1.0)]
+        });
+
+        let mut config = test_runtime_config_with_system_metrics(Some(true), false);
+        config.system_metrics_sampler = Some(sampler);
+        config.senders_provided = true;
+        config.senders = TelemetrySenders::default();
+
+        let runtime = TelemetryRuntime::start(config);
+        tokio::time::advance(SYSTEM_METRICS_INTERVAL).await;
+        tokio::task::yield_now().await;
+        assert_eq!(*calls.lock().unwrap(), 0);
+        runtime.close().await;
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn system_metrics_not_started_when_metrics_disabled() {
+        let calls = Arc::new(StdMutex::new(0usize));
+        let calls2 = calls.clone();
+        let sampler: SystemMetricsSampler = Arc::new(move || {
+            *calls2.lock().unwrap() += 1;
+            vec![]
+        });
+
+        let mut config = test_runtime_config_with_system_metrics(Some(false), true);
+        config.system_metrics_sampler = Some(sampler);
+        config.senders_provided = true;
+
+        let runtime = TelemetryRuntime::start(config);
+        assert!(!runtime.metrics_enabled());
+        tokio::time::advance(SYSTEM_METRICS_INTERVAL).await;
+        tokio::task::yield_now().await;
+        assert_eq!(*calls.lock().unwrap(), 0);
+        runtime.close().await;
+    }
+
+    #[tokio::test]
+    async fn system_metrics_samples_and_flushes_through_batcher() {
+        use crate::telemetry::metrics_batcher::MetricStatPayload;
+        use crate::telemetry::transport::MetricsSender;
+
+        struct CapturingMetrics {
+            payloads: StdMutex<Vec<MetricStatPayload>>,
+        }
+
+        #[async_trait]
+        impl MetricsSender for CapturingMetrics {
+            async fn send_metrics(&self, payload: &MetricStatPayload) -> Result<(), String> {
+                self.payloads.lock().unwrap().push(payload.clone());
+                Ok(())
+            }
+        }
+
+        let sampler: SystemMetricsSampler = Arc::new(|| vec![("CpuUsage".into(), 9.0)]);
+
+        let metrics = Arc::new(CapturingMetrics {
+            payloads: StdMutex::new(Vec::new()),
+        });
+        let mut config = test_runtime_config_with_system_metrics(Some(true), true);
+        config.system_metrics_sampler = Some(sampler);
+        config.senders_provided = true;
+        config.senders = TelemetrySenders {
+            usage: None,
+            metrics: Some(metrics.clone()),
+        };
+
+        let runtime = TelemetryRuntime::start(config);
+        runtime.tick_system_metrics_for_test();
+        runtime.flush_all().await;
+        {
+            let payloads = metrics.payloads.lock().unwrap();
+            assert_eq!(payloads.len(), 1);
+            assert!(
+                payloads[0]
+                    .observations
+                    .iter()
+                    .any(|o| o.metric == "CpuUsage"),
+                "expected CpuUsage observation from system metrics wiring"
+            );
+        }
+        runtime.close().await;
+    }
+
+    #[tokio::test]
+    async fn successful_metrics_flush_clears_system_metrics_pending() {
+        use crate::telemetry::metrics_batcher::MetricStatPayload;
+        use crate::telemetry::system_metrics::SYSTEM_METRICS_MAX_PENDING;
+        use crate::telemetry::transport::MetricsSender;
+
+        struct OkMetrics;
+
+        #[async_trait]
+        impl MetricsSender for OkMetrics {
+            async fn send_metrics(&self, _payload: &MetricStatPayload) -> Result<(), String> {
+                Ok(())
+            }
+        }
+
+        let sampler: SystemMetricsSampler = Arc::new(|| vec![("CpuUsage".into(), 1.0)]);
+
+        let mut config = test_runtime_config_with_system_metrics(Some(true), true);
+        config.system_metrics_sampler = Some(sampler);
+        config.senders_provided = true;
+        config.senders = TelemetrySenders {
+            usage: None,
+            metrics: Some(Arc::new(OkMetrics)),
+        };
+
+        let runtime = TelemetryRuntime::start(config);
+        for _ in 0..(SYSTEM_METRICS_MAX_PENDING + 2) {
+            runtime.tick_system_metrics_for_test();
+        }
+        runtime.flush_all().await;
+        runtime.tick_system_metrics_for_test();
+        runtime.flush_all().await;
         runtime.close().await;
     }
 

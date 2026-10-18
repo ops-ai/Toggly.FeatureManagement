@@ -3,6 +3,25 @@ import { registerOwner, removeOwner } from './lifecycle.js';
 import { runFeatureUsageScope } from './usage-scope.js';
 export type { TelemetryOptions, TelemetryReporter, TelemetryDiagnostic, TelemetryFetch, TelemetryResponse, TelemetryRequestInit, TelemetryAbortSignal, TelemetryContext, FeatureUsageScope } from './types.js';
 export { isUsageCancellation, runFeatureUsageScope } from './usage-scope.js';
+export {
+  attachClientSystemMetrics,
+  attachBrowserExceptionSources,
+  attachReactNativeExceptionSources,
+  ClientSystemMetricsCollector,
+  CLIENT_SYSTEM_METRICS_INTERVAL_MS,
+  CLIENT_SYSTEM_METRICS_MAX_PENDING,
+} from './client-system-metrics.js';
+export type {
+  AttachClientSystemMetricsOptions,
+  ClientSystemMetricObservation,
+  ClientSystemMetricsClearInterval,
+  ClientSystemMetricsCollectorOptions,
+  ClientSystemMetricsSampler,
+  ClientSystemMetricsSetGauge,
+  ClientSystemMetricsSetInterval,
+  ClientSystemMetricsTimerHandle,
+} from './client-system-metrics.js';
+
 
 type Context = Pick<Envelope, 'k' | 'e' | 'i' | 'u'>;
 type Entry = { context: Context; key: string; variant?: string; kind: 'feature' | 'counter' | 'gauge'; values: number[] };

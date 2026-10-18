@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.9.1
+
+2026-10-12
+
+### Added
+- Opt-in `systemMetrics` on `TogglyConfig` publishes `CpuUsage` and chained
+  uncaught `ExceptionCount` gauges every 10 seconds when telemetry is enabled.
 ## 1.10.0
 
 2026-10-11

@@ -261,8 +261,6 @@ class TelemetryClientMixin:
         if not self._config.enable_usage_tracking and not self._config.enable_metrics:
             return
 
-        usage_provided = self._config.usage_client is not None
-        metrics_provided = self._config.metrics_client is not None
         self._telemetry = TelemetryRuntime(
             app_key=self._config.app_key,
             environment=self._config.environment,
@@ -275,7 +273,6 @@ class TelemetryClientMixin:
             app_version=self._config.app_version,
             usage_client=self._config.usage_client,
             metrics_client=self._config.metrics_client,
-            usage_client_provided=usage_provided,
-            metrics_client_provided=metrics_provided,
+            system_metrics=self._config.system_metrics,
         )
         self._telemetry.start()

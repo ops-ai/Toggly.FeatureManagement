@@ -46,6 +46,9 @@ class TogglyConfig {
   /// Receives bounded telemetry status codes without event payloads or keys.
   final void Function(String code)? onTelemetryDiagnostic;
 
+  /// Opt-in [ExceptionCount] gauges every 10s when telemetry is enabled.
+  final bool systemMetrics;
+
   /// Optional persistence backend for caches (flags, variants, JWKS).
   ///
   /// When `null` (the default) the SDK is memory-only and does not support
@@ -88,6 +91,7 @@ class TogglyConfig {
     this.metricsBaseUrl = 'https://metrics.toggly.io',
     this.telemetryFlushIntervalMs = 45000,
     this.onTelemetryDiagnostic,
+    this.systemMetrics = false,
     this.cacheProvider,
     this.maxCacheKeys,
     this.localGates,

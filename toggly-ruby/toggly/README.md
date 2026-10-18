@@ -87,6 +87,10 @@ gRPC metadata includes `ua` = `toggly-ruby/{VERSION}` against
 `metrics_base_url` (default `https://app.toggly.io/`). Without the optional
 `grpc` gem, evaluation still works; send is a no-op with a warning.
 
+Set `system_metrics: true` (default `false`) to sample `CpuUsage`,
+`MemoryWorkingSet`, and `ExceptionCount` every 10s when `enable_metrics` is on
+(stdlib Fiddle `getrusage` + Linux `/proc/self/statm`).
+
 ## Documentation
 
 See the [main README](../README.md) for full documentation.

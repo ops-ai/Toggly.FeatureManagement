@@ -6,7 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [1.4.2] - 2026-10-16
-
+### Added
+- Opt-in `system_metrics: true` on `Toggly::Config` samples `CpuUsage`,
+  `MemoryWorkingSet`, and `ExceptionCount` every 10s when `enable_metrics` is
+  on (Fiddle `getrusage` + Linux `/proc/self/statm`) [OPS-1765].
 ### Fixed
 - Usage scopes that raise `Exception` (not only `StandardError`) record an
   error outcome instead of treating the attempt as success [OPS-1758].
@@ -14,20 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exception from `$!` and records a failure [OPS-1758].
 - `Interrupt`, `SystemExit`, and `SignalException` are attempt-only (no
   error or duration), matching the Python usage-scope contract [OPS-1758].
-
 ## [1.4.1] - 2026-10-15
-
-### Fixed
 - `UsageScopeRunner` uses `ensure` so non-local exits still record success or
   failure duration after the attempt [OPS-1758].
-
 ## [1.4.0] - 2026-10-11
-
-### Added
 - `Client#use` usage scope (attempt + duration + errors) and `VariantStats`
   wire fields `errorCount`, `durationSumMs`, `errorDurationSumMs` [OPS-1758].
-
-### Fixed
 - `Client#use` and `UsageScopeRunner.run` return the block's value [OPS-1758].
 
 ## [1.3.0] - 2026-10-04

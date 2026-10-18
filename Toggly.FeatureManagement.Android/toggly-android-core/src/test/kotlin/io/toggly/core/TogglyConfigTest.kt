@@ -19,6 +19,7 @@ class TogglyConfigTest {
         assertFalse(config.useSignedDefinitions)
         assertFalse(config.verifySignatures)
         assertNull(config.maxSignatureAgeSeconds)
+        assertFalse(config.systemMetrics)
     }
 
     @Test

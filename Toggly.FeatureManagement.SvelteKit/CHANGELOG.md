@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2 — 2026-10-16
+
+### Changed
+
+- Widen `@ops-ai/toggly-node-core` dependency to `^0.11.0 || ^0.12.0 || ^0.13.0` so apps can use 0.13.x (system metrics) without npm overrides [OPS-1765].
+
 ## 0.5.1 — 2026-10-11
 
 ### Fixed
