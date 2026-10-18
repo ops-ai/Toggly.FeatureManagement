@@ -64,6 +64,91 @@ describe('builtin filters', () => {
     expect(evaluateDefinition(def, { identity: 'bob' })).toBe(false)
   })
 
+  it.each([
+    undefined,
+    {},
+    {
+      'Audience.Users:0': null,
+      'Audience.Groups:0': 42,
+      'Audience.Exclusion.Users:0': '',
+      'Audience.Exclusion.Groups:0': false,
+      'Audience.DefaultRolloutPercentage': 'invalid',
+    },
+  ])('Targeting missing or malformed audience (%j) fails closed', (parameters) => {
+    const def: FeatureDefinitionModel = {
+      featureKey: 'f',
+      filters: [{ name: 'Targeting', parameters }],
+    }
+    expect(evaluateDefinition(def)).toBe(false)
+    expect(evaluateDefinition(def, { identity: 'alice' })).toBe(false)
+    expect(
+      evaluateDefinition(def, { identity: 'alice', groups: ['beta'] }),
+    ).toBe(false)
+  })
+
+  it.each(['Audience.Exclusion.Users:0', 'Audience:Exclusion:Users:0'])(
+    'Targeting %s overrides group inclusion and rollout',
+    (exclusionKey) => {
+      const def: FeatureDefinitionModel = {
+        featureKey: 'f',
+        filters: [
+          {
+            name: 'Microsoft.Targeting',
+            parameters: {
+              [exclusionKey]: 'ALICE',
+              'Audience.Groups:0': 'beta',
+              'Audience.DefaultRolloutPercentage': 100,
+            },
+          },
+        ],
+      }
+      expect(
+        evaluateDefinition(def, { identity: 'alice', groups: ['beta'] }),
+      ).toBe(false)
+      expect(
+        evaluateDefinition(def, { identity: 'bob', groups: ['beta'] }),
+      ).toBe(true)
+    },
+  )
+
+  it.each(['Audience.Exclusion.Groups:0', 'Audience:Exclusion:Groups:0'])(
+    'Targeting %s overrides user inclusion and rollout',
+    (exclusionKey) => {
+      const parameters = {
+        [exclusionKey]: 'BANNED',
+        'Audience.Users:0': 'alice',
+        'Audience.DefaultRolloutPercentage': 100,
+      }
+      const def: FeatureDefinitionModel = {
+        featureKey: 'f',
+        filters: [{ name: 'Targeting', parameters }],
+      }
+      expect(
+        evaluateDefinition(def, { identity: 'alice', groups: ['banned'] }),
+      ).toBe(false)
+      expect(
+        evaluateDefinition(def, { identity: 'alice', groups: ['beta'] }),
+      ).toBe(true)
+
+      const caseSensitive: FeatureDefinitionModel = {
+        featureKey: 'f',
+        filters: [
+          { name: 'Targeting', parameters: { ...parameters, IgnoreCase: false } },
+        ],
+      }
+      expect(
+        evaluateDefinition(caseSensitive, {
+          identity: 'alice', groups: ['banned'],
+        }),
+      ).toBe(true)
+      expect(
+        evaluateDefinition(caseSensitive, {
+          identity: 'alice', groups: ['BANNED'],
+        }),
+      ).toBe(false)
+    },
+  )
+
   it('Targeting exclusion user wins over inclusion and rollout', () => {
     const def: FeatureDefinitionModel = {
       featureKey: 'f',

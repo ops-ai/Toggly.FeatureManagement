@@ -75,28 +75,37 @@ export const timeWindow: FilterEvaluator = (_featureKey, params, _ctx) => {
   return true
 }
 
-export const targeting: FilterEvaluator = (featureKey, params, ctx) => {
-  // Match Definitions default: IgnoreCase defaults to true when unset.
-  const ignoreCase = asBool(params, 'IgnoreCase') ?? true
-  const identity = ctx.identity ?? ''
-  const groups = ctx.groups ?? []
-
+function isTargetingExcluded(
+  identity: string,
+  groups: string[],
+  params: Record<string, unknown> | undefined,
+  ignoreCase: boolean,
+): boolean {
   const exclusionUsers = collectIndexedValues(params, [
     'Audience.Exclusion.Users',
     'Audience:Exclusion:Users',
   ])
   if (identity && contains(exclusionUsers, identity, ignoreCase)) {
-    return false
+    return true
   }
 
   const exclusionGroups = collectIndexedValues(params, [
     'Audience.Exclusion.Groups',
     'Audience:Exclusion:Groups',
   ])
-  if (
+  return (
     groups.length > 0 &&
     exclusionGroups.some((g) => contains(groups, g, ignoreCase))
-  ) {
+  )
+}
+
+export const targeting: FilterEvaluator = (featureKey, params, ctx) => {
+  // Match Definitions default: IgnoreCase defaults to true when unset.
+  const ignoreCase = asBool(params, 'IgnoreCase') ?? true
+  const identity = ctx.identity ?? ''
+  const groups = ctx.groups ?? []
+
+  if (isTargetingExcluded(identity, groups, params, ignoreCase)) {
     return false
   }
 

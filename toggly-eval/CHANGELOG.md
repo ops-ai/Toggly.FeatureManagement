@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.1
+
+2026-10-18
+
+### Changed
+- Simplified Targeting exclusion evaluation while preserving exclusion
+  precedence, optional audience parameters, and case matching behavior.
+
 ## 2.1.0
 
 2026-09-23
