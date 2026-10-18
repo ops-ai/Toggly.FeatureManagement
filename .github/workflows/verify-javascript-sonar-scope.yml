@@ -1,0 +1,39 @@
+name: Verify scoped JavaScript Sonar gates
+
+# Proves narrowed release-gate Sonar scope on PRs touching the resolver or
+# analysis workflow. workflow_dispatch supports manual sdks= verification when
+# Actions dispatch permissions allow it (OPS-1900).
+on:
+  pull_request:
+    paths:
+      - '.github/scripts/javascript-sonar-scope.mjs'
+      - '.github/workflows/analysis-javascript.yml'
+      - '.github/workflows/verify-javascript-sonar-scope.yml'
+  workflow_dispatch:
+    inputs:
+      sdks:
+        description: 'Comma-separated SDK filter (e.g. React or node-server)'
+        required: true
+        type: string
+        default: 'React'
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scoped-react:
+    if: github.event_name == 'pull_request' || inputs.sdks == 'React' || contains(inputs.sdks, 'React')
+    uses: ./.github/workflows/analysis-javascript.yml
+    with:
+      sdks: React
+      run_reporting: true
+    secrets: inherit
+
+  scoped-node-server:
+    if: github.event_name == 'pull_request' || inputs.sdks == 'node-server' || contains(inputs.sdks, 'node-server')
+    uses: ./.github/workflows/analysis-javascript.yml
+    with:
+      sdks: node-server
+      run_reporting: true
+    secrets: inherit
