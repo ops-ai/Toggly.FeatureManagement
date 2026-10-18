@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.0 — 2026-10-17
+
+### Added
+- Opt-in `attachClientSystemMetrics` and `ClientSystemMetricsCollector` APIs
+  for collecting client system metrics every 10 seconds. Exception and browser
+  long-task counts accumulate across samples before telemetry is flushed;
+  custom sampled metrics use gauges.
+- Browser exception listeners and optional chained React Native `ErrorUtils`
+  exception tracking, with cleanup through the returned detach function.
+  Collection requires `systemMetrics: true` and enabled telemetry; importing
+  the package starts no collection.
+
 ## 1.1.3 — 2026-10-12
 
 ### Added
