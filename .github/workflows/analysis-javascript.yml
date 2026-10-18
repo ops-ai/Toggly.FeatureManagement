@@ -365,7 +365,7 @@ jobs:
       - name: Require unit test coverage report
         if: matrix.sdk != 'Docusaurus'
         working-directory: ${{ matrix.path }}
-        run: test -s coverage/lcov.info
+        run: find coverage -name lcov.info -size +0c -print -quit | grep -q .
 
       - name: Label coverage artifact
         if: matrix.sdk != 'Docusaurus'
