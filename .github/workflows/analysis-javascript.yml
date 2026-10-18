@@ -56,6 +56,10 @@ on:
         description: 'When false, skip Sonar and OWASP reporting jobs'
         type: boolean
         default: true
+      run_sonar_server_reporting:
+        description: 'When false, skip only the SonarQube Server scan (SonarCloud still runs when run_reporting is true)'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -801,7 +805,7 @@ jobs:
 
       - name: Validate SonarQube Server credentials
         id: validate-sonarqube-server-credentials
-        if: ${{ success() || failure() }}
+        if: ${{ (success() || failure()) && toJSON(inputs.run_sonar_server_reporting) != 'false' }}
         env:
           SONAR_SERVER_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -809,7 +813,7 @@ jobs:
 
       - name: Resolve SonarQube Server branch parameters
         id: sonar_server_branch
-        if: ${{ (success() || failure()) && steps.validate-sonarqube-server-credentials.outcome == 'success' }}
+        if: ${{ (success() || failure()) && toJSON(inputs.run_sonar_server_reporting) != 'false' && steps.validate-sonarqube-server-credentials.outcome == 'success' }}
         env:
           SONAR_SCOPED: ${{ needs.prepare.outputs.sonar_scoped }}
         run: |
@@ -824,7 +828,7 @@ jobs:
           echo "extra=$EXTRA" >> "$GITHUB_OUTPUT"
 
       - name: SonarQube Server Scan
-        if: ${{ (success() || failure()) && steps.validate-sonarqube-server-credentials.outcome == 'success' }}
+        if: ${{ (success() || failure()) && toJSON(inputs.run_sonar_server_reporting) != 'false' && steps.validate-sonarqube-server-credentials.outcome == 'success' }}
         uses: SonarSource/sonarqube-scan-action@v8.3.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}

@@ -28,6 +28,8 @@ jobs:
     with:
       sdks: React
       run_reporting: true
+      # Per-SDK SonarQube Server projects are provisioned separately; SonarCloud proves scoped new_coverage here.
+      run_sonar_server_reporting: false
     secrets: inherit
 
   scoped-node-server:
@@ -36,4 +38,5 @@ jobs:
     with:
       sdks: node-server
       run_reporting: true
+      run_sonar_server_reporting: false
     secrets: inherit
