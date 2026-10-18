@@ -83,6 +83,23 @@ export function pickRelevantRun(runs, workflowName = WORKFLOW_NAME) {
   return relevant[0];
 }
 
+export async function findSuccessfulAnalysisViaCheckRuns(github, targetSha) {
+  const data = await github(
+    `/commits/${encodeURIComponent(targetSha)}/check-runs?per_page=100`,
+  );
+  for (const checkRun of data.check_runs || []) {
+    if (checkRun.name !== 'SonarQube Analysis') continue;
+    if (checkRun.status !== 'completed' || checkRun.conclusion !== 'success') continue;
+    const runId = checkRun.details_url?.match(/actions\/runs\/(\d+)/)?.[1];
+    if (!runId) continue;
+    const run = await github(`/actions/runs/${runId}`);
+    if (run.name !== WORKFLOW_NAME || run.head_sha !== targetSha) continue;
+    if (run.conclusion !== 'success') continue;
+    return run.html_url;
+  }
+  return null;
+}
+
 export async function listAggregateRuns(github, targetSha) {
   const byWorkflow = await github(
     `/actions/runs?head_sha=${encodeURIComponent(targetSha)}&per_page=30`,
@@ -129,6 +146,13 @@ export async function waitForAggregateAnalysis({
     const runs = await listAggregateRuns(github, sha);
     const run = pickRelevantRun(runs);
 
+    if (!run) {
+      const checkRunUrl = await findSuccessfulAnalysisViaCheckRuns(github, sha);
+      if (checkRunUrl) {
+        return { analysisRunUrl: checkRunUrl, targetSha: sha };
+      }
+    }
+
     if (run?.head_sha && run.head_sha !== sha) {
       throw new Error(`Matched workflow run ${run.id} has head_sha ${run.head_sha}, expected ${sha}`);
     }
@@ -141,6 +165,7 @@ export async function waitForAggregateAnalysis({
     }
 
     if (run?.status === 'in_progress' || run?.status === 'queued' || run?.status === 'waiting') {
+      console.log(`Waiting for aggregate analysis (${run.status}): ${run.html_url}`);
       await sleep(pollMs);
       continue;
     }

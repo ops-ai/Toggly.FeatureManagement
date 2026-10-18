@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   buildWorkflowDispatchPayload,
+  findSuccessfulAnalysisViaCheckRuns,
   pickRelevantRun,
   waitForAggregateAnalysis,
   WORKFLOW_NAME,
@@ -20,6 +21,50 @@ test('dispatch is disabled on pull-request refs', () => {
     () => buildWorkflowDispatchPayload('abc', { GITHUB_REF: 'refs/pull/808/merge' }),
     /Cannot dispatch/,
   );
+});
+
+test('findSuccessfulAnalysisViaCheckRuns resolves the JavaScript workflow run URL', async () => {
+  const sha = 'abc123';
+  const fetchImpl = async (url) => {
+    if (url.includes('/check-runs')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          check_runs: [{
+            name: 'SonarQube Analysis',
+            status: 'completed',
+            conclusion: 'success',
+            details_url: 'https://github.com/org/repo/actions/runs/99/job/1',
+          }],
+        }),
+      };
+    }
+    if (url.endsWith('/actions/runs/99')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          name: WORKFLOW_NAME,
+          head_sha: sha,
+          conclusion: 'success',
+          html_url: 'https://example.com/run/99',
+        }),
+      };
+    }
+    throw new Error(url);
+  };
+  const github = async (path, opts) => {
+    const url = `https://api.github.com/repos/ops-ai/Toggly.FeatureManagement${path}`;
+    const response = await fetchImpl(url, opts);
+    if (!response.ok) {
+      throw new Error(`GitHub API ${opts?.method || 'GET'} ${path} -> ${response.status}`);
+    }
+    if (response.status === 204) return null;
+    return response.json();
+  };
+  const url = await findSuccessfulAnalysisViaCheckRuns(github, sha);
+  assert.equal(url, 'https://example.com/run/99');
 });
 
 test('pickRelevantRun prefers the aggregate analysis workflow name', () => {
@@ -100,6 +145,13 @@ test('waitForAggregateAnalysis dispatches with the commit SHA when no run exists
     if (url.includes('/dispatches')) {
       dispatchBody = JSON.parse(options.body);
       return { ok: true, status: 204, json: async () => null };
+    }
+    if (url.includes('/check-runs')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ check_runs: [] }),
+      };
     }
     if (url.includes('/runs?head_sha=')) {
       return {

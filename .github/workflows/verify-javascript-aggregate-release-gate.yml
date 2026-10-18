@@ -26,6 +26,8 @@ jobs:
       actions: write
       contents: read
       checks: read
+      statuses: read
     uses: ./.github/workflows/javascript-aggregate-release-gate.yml
     with:
-      commit_sha: ${{ github.sha }}
+      # pull_request GITHUB_SHA is the synthetic merge commit; analysis runs use the PR head.
+      commit_sha: ${{ github.event.pull_request.head.sha || github.sha }}

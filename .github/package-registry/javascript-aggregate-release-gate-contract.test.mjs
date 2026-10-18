@@ -23,6 +23,7 @@ test('every JS release workflow grants actions:write on the aggregate gate job',
     assert.match(gateBlock, /permissions:\s*\n\s+actions: write/);
     assert.match(gateBlock, /contents: read/);
     assert.match(gateBlock, /checks: read/);
+    assert.match(gateBlock, /statuses: read/);
     assert.doesNotMatch(gateBlock, /uses: \.\/\.github\/workflows\/analysis-javascript\.yml/);
   }
 });
@@ -35,4 +36,13 @@ test('aggregate release gate workflow passes github.token to the wait script', (
   assert.doesNotMatch(gate, /concurrency:/);
   assert.match(gate, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
   assert.match(gate, /uses: actions\/checkout@v7/);
+  assert.match(gate, /statuses: read/);
+});
+
+test('verify workflow passes PR head SHA into the aggregate gate', () => {
+  const verify = fs.readFileSync(
+    path.join(repository, '.github/workflows/verify-javascript-aggregate-release-gate.yml'),
+    'utf8',
+  );
+  assert.match(verify, /commit_sha: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
 });
