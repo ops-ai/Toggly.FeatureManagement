@@ -14,6 +14,9 @@ jobs:
     name: Wait for full JavaScript analysis
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
       - name: Wait for successful aggregate analysis on this commit
         env:
           GITHUB_TOKEN: ${{ github.token }}
