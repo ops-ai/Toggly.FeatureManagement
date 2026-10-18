@@ -807,6 +807,22 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: test -n "${SONAR_SERVER_TOKEN}" && test -n "${SONAR_HOST_URL}" || { echo "SonarQube Server credentials are required"; exit 1; }
 
+      - name: Resolve SonarQube Server branch parameters
+        id: sonar_server_branch
+        if: ${{ (success() || failure()) && steps.validate-sonarqube-server-credentials.outcome == 'success' }}
+        env:
+          SONAR_SCOPED: ${{ needs.prepare.outputs.sonar_scoped }}
+        run: |
+          EXTRA=""
+          if [ "$SONAR_SCOPED" = "true" ]; then
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              EXTRA="-Dsonar.pullrequest.key=${{ github.event.pull_request.number }} -Dsonar.pullrequest.branch=${{ github.head_ref }} -Dsonar.pullrequest.base=${{ github.base_ref }}"
+            elif [ "${{ github.ref_name }}" = "develop" ]; then
+              EXTRA="-Dsonar.branch.name=develop"
+            fi
+          fi
+          echo "extra=$EXTRA" >> "$GITHUB_OUTPUT"
+
       - name: SonarQube Server Scan
         if: ${{ (success() || failure()) && steps.validate-sonarqube-server-credentials.outcome == 'success' }}
         uses: SonarSource/sonarqube-scan-action@v8.3.0
@@ -838,6 +854,7 @@ jobs:
             -Dsonar.issue.ignore.multicriteria.hookAwait.ruleKey=typescript:S9382
             -Dsonar.issue.ignore.multicriteria.hookAwait.resourceKey=**/hooks.ts
             -Dsonar.qualitygate.wait=true
+            ${{ steps.sonar_server_branch.outputs.extra }}
 
       - name: Report SonarQube Server quality gate
         if: ${{ failure() && steps.validate-sonarqube-server-credentials.outcome == 'success' }}
