@@ -4,115 +4,156 @@
  * aggregate analysis on the current commit (OPS-1900).
  */
 
-const WORKFLOW_PATH = '.github/workflows/analysis-javascript.yml';
-const WORKFLOW_NAME = 'JavaScript/TypeScript SDKs - Tests & Analysis';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const owner = process.env.GITHUB_REPOSITORY?.split('/')[0];
-const repo = process.env.GITHUB_REPOSITORY?.split('/')[1];
-const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
-const sha = process.env.GITHUB_SHA;
-const ref = process.env.GITHUB_REF_NAME || 'develop';
-const pollMs = Number(process.env.POLL_INTERVAL_MS || 30_000);
-const maxMs = Number(process.env.MAX_WAIT_MINUTES || 150) * 60_000;
+export const WORKFLOW_PATH = '.github/workflows/analysis-javascript.yml';
+export const WORKFLOW_NAME = 'JavaScript/TypeScript SDKs - Tests & Analysis';
 
-if (!owner || !repo || !token || !sha) {
-  console.error('GITHUB_REPOSITORY, GITHUB_TOKEN, and GITHUB_SHA are required');
-  process.exit(1);
-}
-
-async function github(path, { method = 'GET', body } = {}) {
-  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}${path}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`GitHub API ${method} ${path} -> ${response.status}: ${text}`);
+export function resolveTargetSha(env = process.env) {
+  const sha = String(env.GITHUB_SHA || '').trim();
+  if (!sha) {
+    throw new Error('GITHUB_SHA is required');
   }
-  if (response.status === 204) return null;
-  return response.json();
+  return sha;
 }
 
-async function resolveWorkflowId() {
-  const data = await github('/actions/workflows?per_page=100');
-  const match = data.workflows.find((workflow) => workflow.path === WORKFLOW_PATH);
-  if (!match) {
+/** GitHub dispatch ref must be the exact commit, not a branch name that can advance. */
+export function buildWorkflowDispatchPayload(targetSha) {
+  return {
+    ref: targetSha,
+    inputs: {
+      target_sha: targetSha,
+    },
+  };
+}
+
+export function createGithubClient({ owner, repo, token, fetchImpl = fetch }) {
+  if (!owner || !repo || !token) {
+    throw new Error('owner, repo, and token are required');
+  }
+
+  return async function github(path, { method = 'GET', body } = {}) {
+    const response = await fetchImpl(`https://api.github.com/repos/${owner}/${repo}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`GitHub API ${method} ${path} -> ${response.status}: ${text}`);
+    }
+    if (response.status === 204) return null;
+    return response.json();
+  };
+}
+
+export function pickRelevantRun(runs, workflowName = WORKFLOW_NAME) {
+  return runs.find((run) => run.name === workflowName) ?? runs[0];
+}
+
+export async function waitForAggregateAnalysis({
+  owner,
+  repo,
+  token,
+  targetSha,
+  pollMs = 30_000,
+  maxMs = 150 * 60_000,
+  fetchImpl = fetch,
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+} = {}) {
+  const sha = targetSha || resolveTargetSha();
+  const github = createGithubClient({ owner, repo, token, fetchImpl });
+
+  const workflows = await github('/actions/workflows?per_page=100');
+  const workflow = workflows.workflows.find((entry) => entry.path === WORKFLOW_PATH);
+  if (!workflow) {
     throw new Error(`Workflow not found at ${WORKFLOW_PATH}`);
   }
-  return match.id;
-}
 
-async function listRunsForSha(workflowId) {
-  const data = await github(
-    `/actions/workflows/${workflowId}/runs?head_sha=${encodeURIComponent(sha)}&per_page=20`,
-  );
-  return data.workflow_runs || [];
-}
-
-function pickRelevantRun(runs) {
-  return runs.find((run) => run.name === WORKFLOW_NAME) ?? runs[0];
-}
-
-async function dispatchWorkflow(workflowId) {
-  console.log(`Dispatching ${WORKFLOW_NAME} on ref ${ref} for ${sha}`);
-  await github(`/actions/workflows/${workflowId}/dispatches`, {
-    method: 'POST',
-    body: { ref },
-  });
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function main() {
-  const workflowId = await resolveWorkflowId();
   const started = Date.now();
   let dispatched = false;
 
   while (Date.now() - started < maxMs) {
-    const runs = await listRunsForSha(workflowId);
+    const data = await github(
+      `/actions/workflows/${workflow.id}/runs?head_sha=${encodeURIComponent(sha)}&per_page=20`,
+    );
+    const runs = data.workflow_runs || [];
     const run = pickRelevantRun(runs);
+
+    if (run?.head_sha && run.head_sha !== sha) {
+      throw new Error(`Matched workflow run ${run.id} has head_sha ${run.head_sha}, expected ${sha}`);
+    }
 
     if (run?.status === 'completed') {
       if (run.conclusion === 'success') {
-        console.log(`Aggregate analysis succeeded: ${run.html_url}`);
-        if (process.env.GITHUB_OUTPUT) {
-          const { appendFileSync } = await import('node:fs');
-          appendFileSync(process.env.GITHUB_OUTPUT, `analysis_run_url=${run.html_url}\n`);
-        }
-        return;
+        return { analysisRunUrl: run.html_url, targetSha: sha };
       }
       throw new Error(`Aggregate analysis failed (${run.conclusion}): ${run.html_url}`);
     }
 
     if (run?.status === 'in_progress' || run?.status === 'queued' || run?.status === 'waiting') {
-      console.log(`Waiting for aggregate analysis (${run.status}): ${run.html_url}`);
       await sleep(pollMs);
       continue;
     }
 
     if (!dispatched) {
-      await dispatchWorkflow(workflowId);
+      const payload = buildWorkflowDispatchPayload(sha);
+      await github(`/actions/workflows/${workflow.id}/dispatches`, {
+        method: 'POST',
+        body: payload,
+      });
       dispatched = true;
       await sleep(pollMs);
       continue;
     }
 
-    console.log('No aggregate analysis run visible yet; polling…');
     await sleep(pollMs);
   }
 
   throw new Error(`Timed out after ${maxMs / 60_000} minutes waiting for ${WORKFLOW_NAME} on ${sha}`);
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exit(1);
-});
+async function main() {
+  const owner = process.env.GITHUB_REPOSITORY?.split('/')[0];
+  const repo = process.env.GITHUB_REPOSITORY?.split('/')[1];
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  const targetSha = resolveTargetSha();
+  const pollMs = Number(process.env.POLL_INTERVAL_MS || 30_000);
+  const maxMs = Number(process.env.MAX_WAIT_MINUTES || 150) * 60_000;
+
+  if (!owner || !repo || !token) {
+    console.error('GITHUB_REPOSITORY and GITHUB_TOKEN are required');
+    process.exit(1);
+  }
+
+  const result = await waitForAggregateAnalysis({
+    owner,
+    repo,
+    token,
+    targetSha,
+    pollMs,
+    maxMs,
+  });
+
+  console.log(`Aggregate analysis succeeded: ${result.analysisRunUrl}`);
+  if (process.env.GITHUB_OUTPUT) {
+    const { appendFileSync } = await import('node:fs');
+    appendFileSync(process.env.GITHUB_OUTPUT, `analysis_run_url=${result.analysisRunUrl}\n`);
+  }
+}
+
+const isMain =
+  process.argv[1] &&
+  path.resolve(fileURLToPath(import.meta.url)) === path.resolve(process.argv[1]);
+if (isMain) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exit(1);
+  });
+}

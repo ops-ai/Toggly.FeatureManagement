@@ -13,12 +13,10 @@ jobs:
   wait-for-aggregate-analysis:
     name: Wait for full JavaScript analysis
     runs-on: ubuntu-latest
-    concurrency:
-      group: javascript-aggregate-release-gate-${{ github.sha }}
-      cancel-in-progress: false
     steps:
       - name: Wait for successful aggregate analysis on this commit
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           MAX_WAIT_MINUTES: '150'
           POLL_INTERVAL_MS: '30000'
         run: node .github/scripts/wait-javascript-aggregate-analysis.mjs

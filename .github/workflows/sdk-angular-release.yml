@@ -88,6 +88,9 @@ jobs:
   gates:
     needs: resolve
     if: needs.resolve.outputs.action == 'publish'
+    permissions:
+      actions: write
+      contents: read
     uses: ./.github/workflows/javascript-aggregate-release-gate.yml
     secrets: inherit
 

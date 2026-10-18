@@ -104,7 +104,7 @@ jobs:
         run: node --test .github/workflows/analysis-rust.test.mjs
 
       - name: Verify fail-closed JavaScript analysis quality gates
-        run: node --test .github/workflows/analysis-javascript.test.mjs .github/scripts/organize-js-coverage.test.mjs
+        run: node --test .github/workflows/analysis-javascript.test.mjs .github/scripts/organize-js-coverage.test.mjs .github/scripts/wait-javascript-aggregate-analysis.test.mjs .github/package-registry/javascript-aggregate-release-gate-contract.test.mjs
 
       - name: Verify Python Sonar test inclusions stay path-scoped
         run: node --test .github/workflows/analysis-python.test.mjs

@@ -431,8 +431,13 @@ test('uses one aggregate Sonar project and requires the full coverage bundle', (
   const releaseGate = readFileSync(new URL('./javascript-aggregate-release-gate.yml', import.meta.url), 'utf8');
   const reactRelease = readFileSync(new URL('./sdk-react-release.yml', import.meta.url), 'utf8');
   assert.match(releaseGate, /wait-javascript-aggregate-analysis\.mjs/);
+  assert.match(releaseGate, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.doesNotMatch(releaseGate, /concurrency:/);
   assert.match(reactRelease, /uses: \.\/\.github\/workflows\/javascript-aggregate-release-gate\.yml/);
+  assert.match(reactRelease, /permissions:\s*\n\s+actions: write/);
   assert.doesNotMatch(reactRelease, /uses: \.\/\.github\/workflows\/analysis-javascript\.yml/);
+  assert.match(workflow, /target_sha:/);
+  assert.match(workflow, /inputs\.target_sha/);
 });
 
 test('installs the packed Solid host browser with its own resolved Playwright CLI before verification', () => {

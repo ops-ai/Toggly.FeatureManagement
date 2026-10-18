@@ -6,7 +6,7 @@ concurrency:
   group: >-
     javascript-aggregate-${{
       github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) ||
-      github.event_name == 'push' && format('develop-{0}', github.sha) ||
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && format('develop-{0}', github.event_name == 'workflow_dispatch' && inputs.target_sha || github.sha) ||
       format('run-{0}', github.run_id)
     }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -86,6 +86,11 @@ on:
       - '.github/actions/download-shared-js-deps/**'
       - '.github/actions/overlay-shared-js-deps/**'
   workflow_dispatch:
+    inputs:
+      target_sha:
+        description: 'Exact commit SHA to analyze (release gate dispatch)'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -119,6 +124,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.target_sha != '' && inputs.target_sha || github.sha }}
+          fetch-depth: 0
       - name: Resolve full SDK analysis matrix
         id: filter
         run: node .github/package-registry/analysis-js-filter.mjs all

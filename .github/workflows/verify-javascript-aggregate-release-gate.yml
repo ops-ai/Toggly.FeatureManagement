@@ -1,0 +1,28 @@
+name: Verify JavaScript aggregate release gate
+
+# Proves caller permissions and the wait/dispatch contract on PRs touching the gate.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/javascript-aggregate-release-gate.yml'
+      - '.github/workflows/verify-javascript-aggregate-release-gate.yml'
+      - '.github/scripts/wait-javascript-aggregate-analysis.mjs'
+      - '.github/package-registry/javascript-aggregate-release-gate-contract.test.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify release gate caller contracts
+        run: node --test .github/package-registry/javascript-aggregate-release-gate-contract.test.mjs .github/scripts/wait-javascript-aggregate-analysis.test.mjs
+
+  prove-gate-caller:
+    needs: contracts
+    permissions:
+      actions: write
+      contents: read
+    uses: ./.github/workflows/javascript-aggregate-release-gate.yml
