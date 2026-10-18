@@ -7,13 +7,6 @@ private func togglyTestDummyException() -> NSException {
 
 private var togglyTestPreviousForwardCalls = 0
 private var togglyTestStubPreviousCalls = 0
-private var togglyTestWrapperCalls = 0
-private var togglyTestWrappedHandler: (@convention(c) (NSException) -> Void)?
-
-private func togglyTestWrappingHandler(_ exception: NSException) {
-    togglyTestWrapperCalls += 1
-    togglyTestWrappedHandler?(exception)
-}
 
 private func togglyTestReentrantPreviousHandler(_ exception: NSException) {
     togglyTestPreviousForwardCalls += 1
@@ -24,129 +17,7 @@ private func togglyTestCountingPreviousHandler(_: NSException) {
     togglyTestStubPreviousCalls += 1
 }
 
-final class SystemMetricsCollectorTests: XCTestCase {
-    private var savedHandler: (@convention(c) (NSException) -> Void)?
-
-    override func setUp() {
-        super.setUp()
-        savedHandler = NSGetUncaughtExceptionHandler()
-        NSSetUncaughtExceptionHandler(nil)
-        SystemMetricsCollector.Testing.resetUncaughtBridgeState()
-        togglyTestStubPreviousCalls = 0
-        togglyTestWrapperCalls = 0
-        togglyTestWrappedHandler = nil
-    }
-
-    override func tearDown() {
-        NSSetUncaughtExceptionHandler(savedHandler)
-        SystemMetricsCollector.Testing.resetUncaughtBridgeState()
-        togglyTestWrappedHandler = nil
-        super.tearDown()
-    }
-
-    private func assertWrapperOwnsSlot(file: StaticString = #filePath, line: UInt = #line) {
-        let wrapper: @convention(c) (NSException) -> Void = togglyTestWrappingHandler
-        XCTAssertEqual(
-            unsafeBitCast(NSGetUncaughtExceptionHandler(), to: Optional<UnsafeRawPointer>.self),
-            unsafeBitCast(wrapper, to: UnsafeRawPointer.self), file: file, line: line
-        )
-    }
-
-    func testExternalWrapperForwardsBeforeAndAfterStopRestart() {
-        NSSetUncaughtExceptionHandler(togglyTestCountingPreviousHandler)
-        let collector = SystemMetricsCollector(observe: { _, _ in }, sampler: { [] })
-        collector.start()
-        defer { collector.stop() }
-        togglyTestWrappedHandler = NSGetUncaughtExceptionHandler()
-        NSSetUncaughtExceptionHandler(togglyTestWrappingHandler)
-
-        NSGetUncaughtExceptionHandler()?(togglyTestDummyException())
-        XCTAssertEqual(togglyTestStubPreviousCalls, 1)
-        XCTAssertEqual(togglyTestWrapperCalls, 1)
-
-        collector.stop()
-        assertWrapperOwnsSlot()
-        // The wrapper can still call Toggly while no collector is installed.
-        NSGetUncaughtExceptionHandler()?(togglyTestDummyException())
-        XCTAssertEqual(togglyTestStubPreviousCalls, 2)
-        collector.start()
-        assertWrapperOwnsSlot()
-        NSGetUncaughtExceptionHandler()?(togglyTestDummyException())
-        XCTAssertEqual(togglyTestStubPreviousCalls, 3)
-        XCTAssertEqual(togglyTestWrapperCalls, 3)
-        XCTAssertEqual(SystemMetricsCollector.Testing.uncaughtBridgeCount(), 3)
-    }
-
-    func testExternalWrapperWithNilOriginalSurvivesRepeatedRestarts() {
-        let collector = SystemMetricsCollector(observe: { _, _ in }, sampler: { [] })
-        collector.start()
-        defer { collector.stop() }
-        togglyTestWrappedHandler = NSGetUncaughtExceptionHandler()
-        NSSetUncaughtExceptionHandler(togglyTestWrappingHandler)
-
-        for cycle in 1...3 {
-            collector.stop()
-            collector.start()
-            assertWrapperOwnsSlot()
-            NSGetUncaughtExceptionHandler()?(togglyTestDummyException())
-            XCTAssertEqual(togglyTestWrapperCalls, cycle)
-            XCTAssertEqual(SystemMetricsCollector.Testing.uncaughtBridgeCount(), cycle)
-        }
-        collector.stop()
-        assertWrapperOwnsSlot()
-    }
-
-    func testMultipleCollectorsPreserveWrappedChainAcrossRepeatedCycles() {
-        NSSetUncaughtExceptionHandler(togglyTestCountingPreviousHandler)
-        let first = SystemMetricsCollector(observe: { _, _ in }, sampler: { [] })
-        let second = SystemMetricsCollector(observe: { _, _ in }, sampler: { [] })
-        first.start()
-        togglyTestWrappedHandler = NSGetUncaughtExceptionHandler()
-        NSSetUncaughtExceptionHandler(togglyTestWrappingHandler)
-        defer {
-            first.stop()
-            second.stop()
-        }
-
-        for cycle in 1...3 {
-            second.start()
-            first.stop()
-            NSGetUncaughtExceptionHandler()?(togglyTestDummyException())
-            XCTAssertEqual(togglyTestStubPreviousCalls, cycle * 2 - 1)
-            second.stop()
-            first.start()
-            assertWrapperOwnsSlot()
-            NSGetUncaughtExceptionHandler()?(togglyTestDummyException())
-            XCTAssertEqual(togglyTestStubPreviousCalls, cycle * 2)
-            XCTAssertEqual(togglyTestWrapperCalls, cycle * 2)
-        }
-    }
-
-    func testRetainedHandlerRestoresOriginalWhenWrapperReturnsSlot() {
-        NSSetUncaughtExceptionHandler(togglyTestCountingPreviousHandler)
-        let original = NSGetUncaughtExceptionHandler()
-        let collector = SystemMetricsCollector(observe: { _, _ in }, sampler: { [] })
-        collector.start()
-        defer { collector.stop() }
-        togglyTestWrappedHandler = NSGetUncaughtExceptionHandler()
-        NSSetUncaughtExceptionHandler(togglyTestWrappingHandler)
-        collector.stop()
-        collector.start()
-        NSSetUncaughtExceptionHandler(togglyTestWrappedHandler)
-        collector.stop()
-        XCTAssertEqual(
-            unsafeBitCast(NSGetUncaughtExceptionHandler(), to: Optional<UnsafeRawPointer>.self),
-            unsafeBitCast(original, to: Optional<UnsafeRawPointer>.self)
-        )
-        // A subsequent owned installation can capture and restore a fresh target.
-        NSSetUncaughtExceptionHandler(nil)
-        collector.start()
-        NSGetUncaughtExceptionHandler()?(togglyTestDummyException())
-        collector.stop()
-        XCTAssertNil(NSGetUncaughtExceptionHandler())
-        XCTAssertEqual(togglyTestStubPreviousCalls, 0)
-    }
-
+final class SystemMetricsCollectorTests: SystemMetricsTestCase {
     func testDoesNotStartSamplingWhenDisabledBySampler() {
         let collector = SystemMetricsCollector(observe: { _, _ in }, sampler: { [] })
         collector.start()
