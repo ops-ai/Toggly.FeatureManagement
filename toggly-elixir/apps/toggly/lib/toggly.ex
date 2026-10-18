@@ -267,14 +267,26 @@ defmodule Toggly do
   def record_view(client, key, enabled \\ true, variant \\ nil),
     do: GenServer.cast(client, {:usage, key, enabled, :viewed, variant})
 
-  @doc "Emits a custom metric; attach an exporter to [:toggly, :metric, kind]. No implicit gRPC upload."
+  @doc """
+  Records a business metric and emits `[:toggly, :metric, kind]`.
+
+  Batches are uploaded on `flush/1` (and the periodic flush timer) via
+  `POST api/metrics` when `metrics: true` (default). Set `metrics: false` to
+  keep only the Telemetry event.
+  """
   def metric(client, kind, key, value, metadata \\ %{})
       when kind in [:counter, :measurement, :observation] and is_number(value) do
+    metric = if is_binary(key), do: key, else: to_string(key)
+    meta = Map.merge(metadata, %{client: client, metric: metric})
+
     :telemetry.execute(
       [:toggly, :metric, kind],
       %{value: value},
-      Map.merge(metadata, %{client: client, metric: key})
+      meta
     )
+
+    GenServer.cast(client, {:metric, kind, metric, value, metadata})
+    :ok
   end
 
   @doc "Returns evaluated booleans and snapshot metadata without exposing definitions or keys."

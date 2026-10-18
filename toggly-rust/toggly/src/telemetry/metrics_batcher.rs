@@ -77,6 +77,9 @@ struct PendingObservation {
     value: f64,
 }
 
+/// Max observation rows retained before flush (drop oldest when exceeded).
+pub const MAX_OBSERVATIONS_PER_BATCH: usize = 1_000;
+
 /// Accumulate business metrics and build MetricStat payloads.
 pub struct MetricsBatcher {
     app_key: String,
@@ -129,6 +132,10 @@ impl MetricsBatcher {
     pub fn observe(&self, metric: &str, value: f64, options: Option<&MetricsFeatureOptions>) {
         let (feature, variant) = normalize_options(options);
         let mut guard = self.inner.lock();
+        if guard.observations.len() >= MAX_OBSERVATIONS_PER_BATCH {
+            // Drop oldest so sustained upload failures cannot grow without bound.
+            guard.observations.remove(0);
+        }
         guard.observations.push(PendingObservation {
             time: Utc::now(),
             metric: metric.to_string(),
@@ -407,5 +414,48 @@ mod tests {
         let batcher = MetricsBatcher::new("app", "Production", None);
         assert!(batcher.is_empty());
         assert!(batcher.build_and_reset().is_none());
+    }
+
+    #[test]
+    fn observe_drops_oldest_when_max_pending_exceeded() {
+        let batcher = MetricsBatcher::new("app", "Production", None);
+        for i in 0..MAX_OBSERVATIONS_PER_BATCH + 3 {
+            batcher.observe("gauge", i as f64, None);
+        }
+        let (payload, _) = batcher.build_and_reset().expect("payload");
+        assert_eq!(payload.observations.len(), MAX_OBSERVATIONS_PER_BATCH);
+        assert_eq!(
+            payload.observations[0].variant_values.get("enabled"),
+            Some(&3.0)
+        );
+        assert_eq!(
+            payload.observations[MAX_OBSERVATIONS_PER_BATCH - 1]
+                .variant_values
+                .get("enabled"),
+            Some(&(MAX_OBSERVATIONS_PER_BATCH as f64 + 2.0))
+        );
+    }
+
+    #[test]
+    fn observe_without_feature_uses_enabled_variant() {
+        let batcher = MetricsBatcher::new("app", "Production", None);
+        batcher.observe("CpuUsage", 12.0, None);
+        let (payload, _) = batcher.build_and_reset().unwrap();
+        assert_eq!(payload.observations[0].feature, None);
+        assert_eq!(
+            payload.observations[0].variant_values.get("enabled"),
+            Some(&12.0)
+        );
+    }
+
+    #[test]
+    fn restore_snapshot_merges_observations() {
+        let batcher = MetricsBatcher::new("app", "Production", None);
+        batcher.observe("gauge", 1.0, None);
+        let (_, snapshot) = batcher.build_and_reset().unwrap();
+        batcher.restore_snapshot(snapshot);
+        batcher.observe("gauge", 2.0, None);
+        let (payload, _) = batcher.build_and_reset().unwrap();
+        assert_eq!(payload.observations.len(), 2);
     }
 }

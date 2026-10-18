@@ -69,6 +69,9 @@ class TogglyConfig:
     enable_metrics: bool = True
     """Whether to collect business metrics via Metrics.SendMetrics."""
 
+    system_metrics: bool = False
+    """Opt-in process metrics (CpuUsage, MemoryWorkingSet, …) when metrics are enabled."""
+
     metrics_base_url: str = "https://metrics.toggly.io"
     """Base URL for usage/metrics gRPC (separate from definitions ``base_url``)."""
 

@@ -47,6 +47,7 @@ try {
       ||!provenance.resolved.startsWith('https://registry.npmjs.org/')) {
       throw new Error(`Expected genuine public reporter satisfying ${reporterRange}, got ${reporter.version}`);
     }
+
     console.log(`Public reporter ${reporter.version}, ${provenance.resolved}, ${provenance.integrity}`);
     await execute(join(temp,'node_modules/.bin/tsc'),['--noEmit','--strict','--target','ES2020','--module','Node16','--moduleResolution','Node16','--lib','ES2020','--esModuleInterop','consumer.ts']);
     await execute(process.execPath,['verify.cjs']);

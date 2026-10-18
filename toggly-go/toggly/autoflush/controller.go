@@ -17,10 +17,16 @@ func New() *Controller {
 	return &Controller{stop: make(chan struct{})}
 }
 
-// Start runs flush on interval until StopAndWait. Safe to call once per controller.
+// Start runs flush on interval until StopAndWait. May be called again after StopAndWait.
 func (c *Controller) Start(interval time.Duration, flush func(context.Context) error) {
 	if interval <= 0 {
 		interval = time.Minute
+	}
+	// Recreate the stop channel when Start follows StopAndWait (closed channel).
+	select {
+	case <-c.stop:
+		c.stop = make(chan struct{})
+	default:
 	}
 	c.wg.Add(1)
 	go func() {

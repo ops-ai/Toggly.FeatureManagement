@@ -55,6 +55,47 @@ class TogglyServiceTest {
     }
 
     @Test
+    fun `systemMetrics starts collector when telemetry is enabled`() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        service = TogglyService(
+            TogglyConfig(
+                enableTelemetry = true,
+                appKey = "metrics-key",
+                systemMetrics = true,
+                storage = storage,
+                refreshInterval = 0,
+            )
+        )
+        assertTrue(Thread.getDefaultUncaughtExceptionHandler() !== previous)
+        val collectorField = TogglyService::class.java.getDeclaredField("systemMetricsCollector")
+        collectorField.isAccessible = true
+        val collector = collectorField.get(service) as SystemMetricsCollector
+        Thread.getDefaultUncaughtExceptionHandler()
+            ?.uncaughtException(Thread.currentThread(), RuntimeException("metrics"))
+        collector.tick()
+        Thread.sleep(20)
+        collector.tick()
+        service.dispose()
+        assertEquals(previous, Thread.getDefaultUncaughtExceptionHandler())
+    }
+
+    @Test
+    fun `systemMetrics is skipped without telemetry`() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        service = TogglyService(
+            TogglyConfig(
+                enableTelemetry = false,
+                appKey = "metrics-key",
+                systemMetrics = true,
+                storage = storage,
+                refreshInterval = 0,
+            )
+        )
+        assertEquals(previous, Thread.getDefaultUncaughtExceptionHandler())
+        service.dispose()
+    }
+
+    @Test
     fun `isFeatureOn returns true for enabled feature`() = runTest {
         val defaults = mapOf("enabled-feature" to true)
         service = createService(featureDefaults = defaults)

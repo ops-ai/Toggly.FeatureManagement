@@ -10,6 +10,7 @@
 mod hash;
 mod metrics_batcher;
 mod runtime;
+mod system_metrics;
 mod transport;
 mod usage_batcher;
 mod usage_scope;
@@ -41,6 +42,7 @@ pub use metrics_batcher::{
     MetricsFeatureOptions, MetricsSnapshot,
 };
 pub use runtime::{TelemetryRuntime, TelemetryRuntimeConfig};
+pub use system_metrics::{SystemMetricsCollector, SYSTEM_METRICS_INTERVAL};
 pub use transport::{MetricsSender, TelemetrySenders, UsageSender};
 pub use usage_batcher::{
     FeatureStatPayload, StatMessagePayload, UsageBatcher, UsageSnapshot, VariantStatsAgg,

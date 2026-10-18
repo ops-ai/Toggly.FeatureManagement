@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/metrics"
+	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/metrics/systemmetrics"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/secure"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/session"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/snapshot"
@@ -75,6 +76,16 @@ type Config struct {
 	EnableMetrics        bool
 	MetricsFlushInterval time.Duration
 	MetricsClient        *metrics.Client
+
+	// SystemMetrics enables opt-in process observations (CpuUsage,
+	// MemoryWorkingSet, GCHeapSize, AllocationRate, GoroutineCount) every 10s.
+	// Requires EnableMetrics. Default false.
+	SystemMetrics bool
+
+	// SystemMetricsInterval overrides the 10s sampling interval (tests).
+	SystemMetricsInterval time.Duration
+	// SystemMetricsSampler replaces the default sampler (tests).
+	SystemMetricsSampler systemmetrics.Sampler
 
 	// DisableBackgroundRefresh prevents starting the background refresh loop.
 	// The caller can call Refresh manually (not yet exposed) if needed.

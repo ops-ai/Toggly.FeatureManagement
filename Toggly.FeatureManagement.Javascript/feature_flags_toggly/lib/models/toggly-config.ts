@@ -27,6 +27,8 @@ export interface TogglyConfig {
   metricsBaseUrl?: string;
   /** Base flush interval in milliseconds (30000-60000); defaults to 45000. */
   telemetryFlushIntervalMs?: number;
+  /** Opt-in ExceptionCount and LongTaskCount gauges every 10s when telemetry is enabled. */
+  systemMetrics?: boolean;
   /** Initial user identity. Omit to reuse storage or generate an ID; empty clears it. */
   identity?: TogglyEvaluationContext['identity'];
   /** Host-minted capability; takes precedence over identity/groups/claims. Never a Backend key. */

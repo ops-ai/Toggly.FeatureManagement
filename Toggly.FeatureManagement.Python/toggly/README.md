@@ -132,6 +132,7 @@ client.flush_telemetry()  # optional; also runs on close()
 |--------|---------|-------------|
 | `enable_usage_tracking` | `True` | Record checks / usage / views via `Usage.SendStats` |
 | `enable_metrics` | `True` | `measure` / `increment_counter` / `observe` via `Metrics.SendMetrics` |
+| `system_metrics` | `False` | Opt-in process metrics (`CpuUsage`, `MemoryWorkingSet`, …) every 10s when metrics are enabled |
 | `metrics_base_url` | `https://app.toggly.io` | gRPC endpoint (separate from definitions `base_url`) |
 | `usage_flush_interval` / `metrics_flush_interval` | `60` | Seconds; `0` disables the timer |
 
@@ -274,6 +275,7 @@ client.registry.register("CustomFilter", CustomEvaluator())
 | `snapshot_provider` | `SnapshotProvider` | `None` | Cache provider |
 | `enable_usage_tracking` | `bool` | `True` | Track feature usage via gRPC |
 | `enable_metrics` | `bool` | `True` | Send business metrics via gRPC |
+| `system_metrics` | `bool` | `False` | Opt-in process metrics when metrics are enabled |
 | `metrics_base_url` | `str` | `"https://app.toggly.io"` | Usage/metrics gRPC base URL |
 | `usage_flush_interval` | `float` | `60.0` | Usage flush interval (seconds) |
 | `metrics_flush_interval` | `float` | `60.0` | Metrics flush interval (seconds) |

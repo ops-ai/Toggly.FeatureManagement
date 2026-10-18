@@ -11,7 +11,7 @@ Native Android SDK for [Toggly.io](https://toggly.io) feature flags with Kotlin,
 
 ## Frontend telemetry (1.7.0)
 
-Telemetry is enabled when an application key is configured. Set `enableTelemetry = false` to opt out. Core, Flow, Compose snapshot/entity evaluations, and Views count the feature leaves actually evaluated before aggregate negation; skipped gate keys and internal snapshot projections do not count. Feature use and views remain explicit.
+Telemetry is enabled when an application key is configured. Set `enableTelemetry = false` to opt out. Set `systemMetrics = true` on `TogglyConfig` for opt-in `CpuUsage` and chained uncaught `ExceptionCount` gauges every 10 seconds. Core, Flow, Compose snapshot/entity evaluations, and Views count the feature leaves actually evaluated before aggregate negation; skipped gate keys and internal snapshot projections do not count. Feature use and views remain explicit.
 
 ```kotlin
 val service = TogglyService(TogglyConfig(

@@ -108,6 +108,14 @@ class TogglyService(
         telemetryFlushIntervalMs = config.telemetryFlushIntervalMs, onDiagnostic = config.onTelemetryDiagnostic,
         instanceId = config.instanceId, identity = config.identity
     ) else null
+    private val systemMetricsCollector = if (config.systemMetrics && telemetry != null) {
+        SystemMetricsCollector(observe = { metric, value ->
+            observeSystemMetric(telemetry, metric, value)
+        }).also { collector ->
+            telemetry.onBatchAccepted = { collector.onFlushed() }
+            collector.start()
+        }
+    } else null
     // Snapshot caller-owned collections before storage reads or background work.
     private val groups = config.groups.map { it.trim() }.filter { it.isNotEmpty() }
     private val claims = config.claims.toMap().filter { (key, value) ->
@@ -638,6 +646,7 @@ class TogglyService(
      * Dispose the service and clean up resources.
      */
     fun dispose() {
+        systemMetricsCollector?.stop()
         telemetry?.dispose()
         synchronized(lifecycleLock) {
             if (retired) return

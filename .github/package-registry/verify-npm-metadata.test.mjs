@@ -116,13 +116,19 @@ test('cross-workspace and peer deps accept caret ranges but reject exact pins', 
   }
 });
 
-test('cross-workspace deps accept a union of two caret ranges', () => {
+test('cross-workspace deps accept a union of caret ranges', () => {
   assert.deepEqual(
     check({ dependencies: { '@ops-ai/toggly-hooks-types': '^0.11.0 || ^0.12.0' } }),
     [],
   );
+  assert.deepEqual(
+    check({
+      dependencies: { '@ops-ai/toggly-hooks-types': '^0.11.0 || ^0.12.0 || ^0.13.0' },
+    }),
+    [],
+  );
 
-  for (const specifier of ['^0.11.0 || 0.12.0', '^0.11.0||^0.12.0', '^0.11.0 || ^0.12.0 || ^0.13.0']) {
+  for (const specifier of ['^0.11.0 || 0.12.0', '^0.11.0||^0.12.0']) {
     const errors = check({ dependencies: { '@ops-ai/toggly-hooks-types': specifier } });
     assert.equal(errors.length, 1, `expected ${specifier} to be rejected`);
   }

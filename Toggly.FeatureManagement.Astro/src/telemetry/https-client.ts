@@ -1,6 +1,7 @@
 import { sdkUserAgent } from '../sdk-identity.js'
 import { protobufTimestampToIso } from './hash.js'
 import type { FeatureStatPayload } from './usage-batcher.js'
+import type { MetricStatPayload } from './metrics-batcher.js'
 
 export const DEFAULT_METRICS_BASE_URL = 'https://metrics.toggly.io/'
 export const DEFAULT_TELEMETRY_FLUSH_MS = 60_000
@@ -30,10 +31,21 @@ export function usagePayloadToHttpJson(payload: FeatureStatPayload): Record<stri
   }
 }
 
+/** Convert protobuf-timestamp metrics payload to gateway HTTPS JSON. */
+export function metricsPayloadToHttpJson(payload: MetricStatPayload): Record<string, unknown> {
+  return {
+    ...payload,
+    time: protobufTimestampToIso(payload.time),
+    observations: (payload.observations ?? []).map((obs) => ({
+      ...obs,
+      time: protobufTimestampToIso(obs.time),
+    })),
+  }
+}
+
 /**
- * Soft-fail HTTPS JSON client for gateway usage stats.
+ * Soft-fail HTTPS JSON client for gateway usage and metrics posts.
  * Network and non-2xx errors never throw to callers.
- * Metrics.SendMetrics is out of scope for this package slice.
  */
 export class HttpsTelemetryClient {
   private readonly baseUrl: string
@@ -85,6 +97,10 @@ export class HttpsTelemetryClient {
 
   sendUsageStats(payload: FeatureStatPayload): Promise<boolean> {
     return this.post('api/usage/stats', usagePayloadToHttpJson(payload))
+  }
+
+  sendMetrics(payload: MetricStatPayload): Promise<boolean> {
+    return this.post('api/metrics', metricsPayloadToHttpJson(payload))
   }
 }
 

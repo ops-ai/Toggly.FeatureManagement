@@ -277,5 +277,6 @@ class TelemetryClientMixin:
             metrics_client=self._config.metrics_client,
             usage_client_provided=usage_provided,
             metrics_client_provided=metrics_provided,
+            system_metrics=self._config.system_metrics,
         )
         self._telemetry.start()

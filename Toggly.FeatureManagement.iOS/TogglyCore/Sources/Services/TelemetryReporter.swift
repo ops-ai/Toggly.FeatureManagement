@@ -91,6 +91,7 @@ public actor TelemetryReporter {
     private(set) var packetizationPeakBytes = 0
     private(set) var packetizationCount = 0
     private var disposed = false
+    private var onBatchAccepted: (@Sendable () -> Void)?
     private var isEnabled: Bool {
         enabled && !appKey.isEmpty && endpoint != nil && (30_000...60_000).contains(interval)
     }
@@ -819,6 +820,10 @@ public actor TelemetryReporter {
         )
     }
 
+    func setOnBatchAccepted(_ handler: (@Sendable () -> Void)?) {
+        onBatchAccepted = handler
+    }
+
     /// Sends queued deltas in request order; failures never affect flag evaluation.
     public func flushTelemetry() async {
         guard isEnabled else { return }
@@ -871,7 +876,10 @@ public actor TelemetryReporter {
                         defer { group.cancelAll() }
                         return try await group.next()!
                     }
-                    if response.statusCode == 202 { break }
+                    if response.statusCode == 202 {
+                        onBatchAccepted?()
+                        break
+                    }
                     if !disposed && retry < 2 && (response.statusCode == 429 || response.statusCode == 503) {
                         let base = retry == 0 ? 30.0 : 60.0
                         let delay = max(base, Self.retryAfter(response) ?? 0)

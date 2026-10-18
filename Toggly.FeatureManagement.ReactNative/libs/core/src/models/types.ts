@@ -102,6 +102,8 @@ export interface TogglyConfig {
   telemetryFlushIntervalMs?: number;
   /** Bounded payload-free diagnostics; observer errors are contained. */
   onTelemetryDiagnostic?: (code: TelemetryDiagnostic) => void;
+  /** Opt-in ExceptionCount gauges every 10s when telemetry is enabled. */
+  systemMetrics?: boolean;
 
   /**
    * Base URI for Toggly API

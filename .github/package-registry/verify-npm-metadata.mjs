@@ -103,12 +103,15 @@ function forbiddenUrl(value) {
 const CARET_RANGE =
   /^\^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*)?(?:\+[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*)?$/;
 
-/** Single caret range, or `^a.b.c || ^d.e.f` when 0.x minors must both be accepted. */
+/**
+ * Single caret range, or `^a.b.c || ^d.e.f || …` when successive 0.x minors
+ * must all be accepted without npm overrides.
+ */
 function isAllowedCaretDependencyRange(value) {
   if (CARET_RANGE.test(value)) return true;
-  const parts = value.split(' || ');
-  if (parts.length !== 2) return false;
-  return parts.every((part) => CARET_RANGE.test(part.trim()));
+  const parts = value.split(' || ').map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 2) return false;
+  return parts.every((part) => CARET_RANGE.test(part));
 }
 
 /**
