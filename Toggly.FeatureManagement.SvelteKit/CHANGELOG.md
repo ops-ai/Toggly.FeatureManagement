@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.3 — 2026-10-19
+
+### Fixed
+
+- Restore browser `pagehide` / hidden keepalive telemetry when `storage` is configured by replaying the last verified envelope write synchronously, then flushing keepalive telemetry in the same handler (no `pagehide` timers) [OPS-1932].
+
+### Changed
+
+- Widen `@sveltejs/kit` peer dependency to `^2.0.0 || ^3.0.0` for SvelteKit 3 consumers [OPS-1932].
+- Prove SvelteKit 3.1.0 compatibility via an additional packed host fixture in CI [OPS-1932].
+
 ## 0.5.2 — 2026-10-16
 
 ### Changed
@@ -11,7 +22,7 @@
 ### Fixed
 
 - After restoring verified signed envelopes from persistence, always attempt the network refresh so cold offline browsers still observe denied transport while serving cached flags [OPS-1756].
-- Skip browser lifecycle telemetry flushes when `storage` is configured so signed envelopes commit to origin `localStorage` across headless profile restarts (fixes live-acceptance cold signed persistence) [OPS-1756].
+- ~~Skip browser lifecycle telemetry flushes when `storage` is configured~~ superseded in 0.5.3 by deferred exit flushes [OPS-1932]; originally addressed live-acceptance cold signed persistence [OPS-1756].
 
 ### Changed
 

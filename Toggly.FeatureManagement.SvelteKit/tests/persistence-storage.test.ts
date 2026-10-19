@@ -15,6 +15,50 @@ function memoryStorage() {
   };
 }
 describe('persistent storage integrity', () => {
+  it('treats restricted storage reads as unusable for trust generation', () => {
+    const storage = {
+      getItem: () => {
+        throw new DOMException('denied', 'SecurityError');
+      },
+      setItem: () => {},
+    };
+    const cache = createPersistence(storage, 'https://fixture.test');
+    expect(cache.trustGeneration()).toBeNull();
+    expect(cache.trustGeneration()).toBeNull();
+  });
+
+  it('skips exit replay when storage already has a fresher envelope', () => {
+    const storage = memoryStorage();
+    const cache = createPersistence(storage, 'https://fixture.test');
+    const scope = 'https://fixture.test/evaluated-signed/app/Production?u=alice';
+    const newer = signEnvelope({ on: true });
+    cache.write(scope, newer, { keys: [jwk] });
+    const epoch = cache.trustGeneration()!;
+    const newerTs = JSON.parse(newer).timestamp;
+    expect(cache.exitReplayWouldRegress(scope, epoch, newerTs - 1)).toBe(true);
+    expect(cache.exitReplayWouldRegress(scope, epoch, newerTs)).toBe(false);
+    expect(cache.exitReplayWouldRegress(scope, epoch, newerTs + 1)).toBe(false);
+  });
+
+  it('skips exit replay when trust generation has rotated', () => {
+    const storage = memoryStorage();
+    const cache = createPersistence(storage, 'https://fixture.test');
+    const scope = 'https://fixture.test/evaluated-signed/app/Production?u=alice';
+    const body = signEnvelope({ on: true });
+    cache.write(scope, body, { keys: [jwk] });
+    const epoch = cache.trustGeneration();
+    expect(epoch).toBeTruthy();
+    const envelopeKey = `toggly:sveltekit:envelope:${scope}`;
+    const before = storage.getItem(envelopeKey)!;
+    cache.invalidate();
+    const commit = () => {
+      if (cache.trustGeneration() !== epoch) return;
+      cache.write(scope, body, { keys: [jwk] });
+    };
+    commit();
+    expect(storage.getItem(envelopeKey)).toBe(before);
+  });
+
   it('checks current key pins and rejects changed envelope bytes on restart', async () => {
     const storage = memoryStorage();
     const cache = createPersistence(storage, 'https://fixture.test');
