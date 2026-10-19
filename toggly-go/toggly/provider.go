@@ -50,11 +50,11 @@ type definitionsProvider struct {
 	jwks       *definitions.JWKSet
 	jwksExpiry time.Time
 
-	liveMu           sync.Mutex
-	liveCloser       io.Closer
-	liveConnected              bool
+	liveMu                      sync.Mutex
+	liveCloser                  io.Closer
+	liveConnected               bool
 	lastLiveInvalidationRefresh time.Time
-	fallbackInterval           time.Duration
+	fallbackInterval            time.Duration
 
 	refreshInFlight  atomic.Bool
 	pendingWSRefresh atomic.Bool

@@ -46,12 +46,12 @@ func TestProvider_LiveConnectedIdleStillPollsAtRefreshInterval(t *testing.T) {
 	defer srv.Close()
 
 	p := newDefinitionsProvider(Config{
-		AppKey:              "app",
-		Environment:         "env",
-		DefinitionsURL:      srv.URL + "/",
-		HTTPTimeout:         2 * time.Second,
-		RefreshInterval:     40 * time.Millisecond,
-		EnableLiveUpdates:   true,
+		AppKey:            "app",
+		Environment:       "env",
+		DefinitionsURL:    srv.URL + "/",
+		HTTPTimeout:       2 * time.Second,
+		RefreshInterval:   40 * time.Millisecond,
+		EnableLiveUpdates: true,
 	}, nil)
 	p.hc = srv.Client()
 	p.start()
