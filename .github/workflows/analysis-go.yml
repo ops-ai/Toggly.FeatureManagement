@@ -560,7 +560,7 @@ jobs:
             -Dsonar.test.inclusions=**/*_test.go
             -Dsonar.go.coverage.reportPaths=coverage.out
             -Dsonar.qualitygate.wait=true
-            ${{ github.event_name != 'pull_request' && format('-Dsonar.branch.name=master -Dsonar.scm.revision={0}', github.sha) || '' }}
+            ${{ github.event_name != 'pull_request' && (github.event_name == 'workflow_call' || github.ref == 'refs/heads/develop') && format('-Dsonar.branch.name=master -Dsonar.scm.revision={0}', github.sha) || '' }}
 
       - name: SonarQube Server Scan - MongoDB Driver v2
         uses: SonarSource/sonarqube-scan-action@v8.3.0
@@ -579,7 +579,7 @@ jobs:
             -Dsonar.test.inclusions=**/*_test.go
             -Dsonar.go.coverage.reportPaths=coverage.out
             -Dsonar.qualitygate.wait=true
-            ${{ github.event_name != 'pull_request' && format('-Dsonar.branch.name=master -Dsonar.scm.revision={0}', github.sha) || '' }}
+            ${{ github.event_name != 'pull_request' && (github.event_name == 'workflow_call' || github.ref == 'refs/heads/develop') && format('-Dsonar.branch.name=master -Dsonar.scm.revision={0}', github.sha) || '' }}
 
   build:
     name: Build Examples

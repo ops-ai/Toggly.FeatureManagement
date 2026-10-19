@@ -111,10 +111,12 @@ test('preservation signatures reject gate credential project coverage and baseli
     [server, 'SonarSource/sonarqube-scan-action', 'SonarSource/other-action'],
     [cloud, 'sonar.branch.name=master', 'sonar.branch.name=develop'],
     [cloud, 'sonar.scm.revision={0}', 'sonar.scm.revision=deadbeef'],
-    [cloud, "github.event_name != 'pull_request'", "github.event_name == 'pull_request'"],
+    [cloud, "github.event_name == 'workflow_call'", "github.event_name == 'workflow_dispatch'"],
+    [cloud, "github.ref == 'refs/heads/develop'", "github.ref == 'refs/heads/main'"],
     [server, 'sonar.branch.name=master', 'sonar.branch.name=main'],
     [server, 'sonar.scm.revision={0}', 'sonar.scm.revision=deadbeef'],
-    [server, "github.event_name != 'pull_request'", "github.event_name == 'pull_request'"],
+    [server, "github.event_name == 'workflow_call'", "github.event_name == 'workflow_dispatch'"],
+    [server, "github.ref == 'refs/heads/develop'", "github.ref == 'refs/heads/main'"],
   ];
   for (const [source, before, after] of mutations) {
     const updated = source.replace(before, after);
@@ -336,14 +338,15 @@ test('gate regressions execute in the existing normal test job and trigger their
 
 test('MongoDB v2 fatal scanners wait on main-branch analysis outside pull requests', () => {
   const hash = preservationSignature;
-  assert.equal(hash(step(job('sonar-mongodb-v2'), 'SonarCloud Scan - MongoDB Driver v2')), '7e71bf4edc07ecdbb00601e13933a7220cd1f0bedaf3489ae5f7ec580f4c1f9d');
-  assert.equal(hash(step(job('sonar-mongodb-v2'), 'SonarQube Server Scan - MongoDB Driver v2')), 'bc857e407e7aabb113fc2a21d197c0ab8869ef77d7e866fe712ed605ad5bfb8d');
+  assert.equal(hash(step(job('sonar-mongodb-v2'), 'SonarCloud Scan - MongoDB Driver v2')), '88a22170cb840a22f1ff3ea6640bb696cb73a7ffe830e0d5d8b2926eb8c2b3f0');
+  assert.equal(hash(step(job('sonar-mongodb-v2'), 'SonarQube Server Scan - MongoDB Driver v2')), 'e319b59d310edf9fbf41391c7dedc2b7e105615ed0ca72f2e3cf376b9fd07265');
   for (const name of ['SonarCloud Scan - MongoDB Driver v2', 'SonarQube Server Scan - MongoDB Driver v2']) {
     const scan = step(job('sonar-mongodb-v2'), name);
     assert.match(scan, /-Dsonar\.qualitygate\.wait=true/);
     assert.match(scan, /sonar\.branch\.name=master/);
     assert.match(scan, /sonar\.scm\.revision=\{0\}/);
     assert.match(scan, /github\.event_name != 'pull_request'/);
+    assert.match(scan, /github\.event_name == 'workflow_call' \|\| github\.ref == 'refs\/heads\/develop'/);
     assert.doesNotMatch(scan, /continue-on-error|\|\| true/);
   }
   assert.doesNotMatch(workflow, /mongodb-v2-sonar-main|bootstrap_mongodb_v2_main/);
