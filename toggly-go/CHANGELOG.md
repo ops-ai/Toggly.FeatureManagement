@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.13.2
+
+2026-10-19
+
+### Fixed
+- Scheduled `RefreshInterval` polling continues while the live WebSocket is
+  connected but idle (for example only `ping` messages). Poll suppression now
+  applies only after a successful WebSocket-triggered definitions refresh, not
+  on socket connect [OPS-1941].
+- Live WebSocket `sdkVersion` query parameter uses the shared SDK identity
+  version (no drift from HTTP User-Agent) [OPS-1941].
+
 ## 0.13.0
 
 2026-10-12

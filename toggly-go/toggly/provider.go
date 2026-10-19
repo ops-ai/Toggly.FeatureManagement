@@ -52,9 +52,9 @@ type definitionsProvider struct {
 
 	liveMu           sync.Mutex
 	liveCloser       io.Closer
-	liveConnected    bool
-	lastFallback     time.Time
-	fallbackInterval time.Duration
+	liveConnected              bool
+	lastLiveInvalidationRefresh time.Time
+	fallbackInterval           time.Duration
 
 	refreshInFlight  atomic.Bool
 	pendingWSRefresh atomic.Bool
@@ -127,20 +127,23 @@ func (p *definitionsProvider) start() {
 func (p *definitionsProvider) shouldSkipRefresh() bool {
 	p.liveMu.Lock()
 	connected := p.liveConnected
-	lastFallback := p.lastFallback
+	lastInvalidation := p.lastLiveInvalidationRefresh
 	fallbackInterval := p.fallbackInterval
 	p.liveMu.Unlock()
 
-	if !connected {
+	// Throttle scheduled polls only after a WebSocket invalidation successfully
+	// refreshed definitions. A connected-but-idle socket must not suppress
+	// RefreshInterval polling (safety net when invalidations are missed).
+	if !connected || lastInvalidation.IsZero() {
 		return false
 	}
-	if time.Since(lastFallback) < fallbackInterval {
-		return true
-	}
+	return time.Since(lastInvalidation) < fallbackInterval
+}
+
+func (p *definitionsProvider) noteLiveInvalidationRefresh() {
 	p.liveMu.Lock()
-	p.lastFallback = time.Now()
+	p.lastLiveInvalidationRefresh = time.Now()
 	p.liveMu.Unlock()
-	return false
 }
 
 func (p *definitionsProvider) close() {
@@ -178,7 +181,6 @@ func (p *definitionsProvider) startLiveUpdates() {
 	p.liveMu.Lock()
 	p.liveCloser = closer
 	p.liveConnected = true
-	p.lastFallback = time.Now()
 	p.liveMu.Unlock()
 }
 
@@ -274,6 +276,9 @@ func (p *definitionsProvider) refresh(ctx context.Context, timeout time.Duration
 	p.mu.Lock()
 	p.lastRefresh = &now
 	p.mu.Unlock()
+	if fromWebSocket {
+		p.noteLiveInvalidationRefresh()
+	}
 	return nil
 }
 
