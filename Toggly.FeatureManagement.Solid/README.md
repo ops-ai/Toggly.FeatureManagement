@@ -170,7 +170,7 @@ npm run test:coverage
 npm pack --dry-run
 ```
 
-Tests cover real WebCrypto envelopes and tampering, cache failures, identity races, fine-grained rendering, lazy children, Suspense, live notifications and disposal. See the [complete SolidJS sample](https://github.com/ops-ai/Toggly.Samples/tree/main/solidjs-sdk) for the interactive workshop and app setup.
+Tests cover real WebCrypto envelopes and tampering, cache failures, identity races, fine-grained rendering, lazy children, Suspense, live notifications and disposal. See the [complete SolidJS sample](https://github.com/ops-ai/Toggly.Samples/tree/develop/solidjs-sdk) for the interactive workshop and app setup.
 
 ## SolidStart
 
@@ -278,7 +278,7 @@ export default function Home() {
 }
 ```
 
-The snapshot initializes signals synchronously for matching server HTML and browser hydration. Browser transport starts on mount. A changed `snapshot` prop replaces definitions, allowlist and public context, aborts older fetches and refreshes the new targeting. For session changes, invalidate or revalidate the server query using your router's data lifecycle; do not reuse a cached principal's query result after logout. The [full sample](https://github.com/ops-ai/Toggly.Samples/tree/main/solidstart-sdk) uses a query argument to demonstrate route-dependent targeting.
+The snapshot initializes signals synchronously for matching server HTML and browser hydration. Browser transport starts on mount. A changed `snapshot` prop replaces definitions, allowlist and public context, aborts older fetches and refreshes the new targeting. For session changes, invalidate or revalidate the server query using your router's data lifecycle; do not reuse a cached principal's query result after logout. The [full sample](https://github.com/ops-ai/Toggly.Samples/tree/develop/solidstart-sdk) uses a query argument to demonstrate route-dependent targeting.
 
 `createToggly(config, snapshot)` and `createClient(config, snapshot)` accept the same initial snapshot. `useToggly().hydrate(snapshot)` applies an updated server result directly. The low-level client's `hydrate` replaces state but does not trigger fetching; call `refresh` yourself when using it outside the provider. Configuration other than targeting/allowlist is fixed for a provider's lifetime. Remount the provider when switching application, environment or endpoint.
 
