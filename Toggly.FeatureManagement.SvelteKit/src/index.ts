@@ -37,11 +37,14 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
           onDiagnostic: options.onTelemetryDiagnostic,
         })
       : undefined;
-  const detachTelemetry = telemetry
-    ? options.storage
-      ? attachPersistenceSafeBrowserLifecycle(telemetry)
-      : attachBrowserLifecycle(telemetry)
-    : undefined;
+  let detachTelemetry: (() => void) | undefined;
+  if (telemetry) {
+    if (options.storage) {
+      detachTelemetry = attachPersistenceSafeBrowserLifecycle(telemetry);
+    } else {
+      detachTelemetry = attachBrowserLifecycle(telemetry);
+    }
+  }
   const acceptSnapshot = (value: TogglySnapshot): TogglySnapshot => {
     const copy = structuredClone(value);
     copy.context.instanceId = copy.context.instanceId?.trim() || undefined;
