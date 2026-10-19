@@ -19,6 +19,8 @@ export interface BrowserSession {
   timestamps: Map<string, number>;
   keys: Map<string, JwkSet>;
   persistence: Map<string, ReturnType<typeof createPersistence>>;
+  /** Replays the last verified envelope write synchronously before exit telemetry flush. */
+  commitExitPersistence?: () => void;
 }
 
 function createBrowserSession(): BrowserSession {
@@ -156,6 +158,9 @@ export function connectBrowser(
     timestamps.set(url, verified.timestamp);
     observedKeys.set(baseURI, structuredClone(keys));
     persistence.write(url, body, verified.keys);
+    browserSession.commitExitPersistence = () => {
+      persistence.write(url, body, verified.keys);
+    };
     // HTTP confirms revisions only after verification. WS metadata never becomes a cache validator.
     revision = result.revision;
     publish(

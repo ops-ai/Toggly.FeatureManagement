@@ -21,6 +21,11 @@ export { decodeVariantValue } from './decode-variant-value.js';
 export function createToggly(initial: TogglySnapshot, options: BrowserOptions = {}) {
   // Configuration identity belongs to the layout owner, not mutable caller options.
   options = { ...options };
+  const session: BrowserSession = {
+    timestamps: new Map(),
+    keys: new Map(),
+    persistence: new Map(),
+  };
   const telemetry =
     globalThis.window !== undefined &&
     globalThis.document !== undefined &&
@@ -40,7 +45,9 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
   let detachTelemetry: (() => void) | undefined;
   if (telemetry) {
     if (options.storage) {
-      detachTelemetry = attachPersistenceSafeBrowserLifecycle(telemetry);
+      detachTelemetry = attachPersistenceSafeBrowserLifecycle(telemetry, {
+        beforeExitFlush: () => session.commitExitPersistence?.(),
+      });
     } else {
       detachTelemetry = attachBrowserLifecycle(telemetry);
     }
@@ -76,12 +83,6 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
   let generation = 0;
   let disposed = false;
   let mounted = false;
-  // Keep trust and failed-retirement state across route-driven connections in this layout.
-  const session: BrowserSession = {
-    timestamps: new Map(),
-    keys: new Map(),
-    persistence: new Map(),
-  };
   const publish = (next: TogglySnapshot) => {
     snapshot = acceptSnapshot(next);
     telemetry?.setContext({

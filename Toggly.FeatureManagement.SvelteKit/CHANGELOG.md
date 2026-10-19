@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- Restore browser `pagehide` / hidden keepalive telemetry when `storage` is configured by deferring exit flushes so signed envelope persistence can still commit synchronously to origin storage [OPS-1932].
+- Restore browser `pagehide` / hidden keepalive telemetry when `storage` is configured by replaying the last verified envelope write synchronously, then flushing keepalive telemetry in the same handler (no `pagehide` timers) [OPS-1932].
 
 ### Changed
 

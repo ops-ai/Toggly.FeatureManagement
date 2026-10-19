@@ -2,31 +2,39 @@ import type { TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
 
 let attachments: WeakMap<TelemetryReporter, () => void> | undefined;
 
+export type PersistenceSafeLifecycleOptions = {
+  /** Runs synchronously before keepalive flush so origin storage can commit first. */
+  beforeExitFlush?: () => void;
+};
+
 /**
- * Persistence hosts defer exit flushes so synchronous `localStorage` writes are not
- * starved by an immediate keepalive fetch during `pagehide` (live-acceptance cold signed).
+ * Persistence hosts flush exit telemetry synchronously in the pagehide/hidden handler.
+ * Callers should persist signed envelopes in `beforeExitFlush` so keepalive fetch work
+ * cannot starve synchronous `localStorage` writes (live-acceptance cold signed).
  */
-export function attachPersistenceSafeBrowserLifecycle(reporter: TelemetryReporter): () => void {
+export function attachPersistenceSafeBrowserLifecycle(
+  reporter: TelemetryReporter,
+  options: PersistenceSafeLifecycleOptions = {},
+): () => void {
   const targetWindow = globalThis.window;
   const targetDocument = globalThis.document;
   if (!targetWindow || !targetDocument) return () => {};
   const existing = attachments?.get(reporter);
   if (existing) return existing;
-  const scheduleExitFlush = (): void => {
-    setTimeout(() => {
-      void reporter.flush({ keepalive: true });
-    }, 0);
+  const exitFlush = (): void => {
+    options.beforeExitFlush?.();
+    void reporter.flush({ keepalive: true });
   };
   const hidden = (): void => {
-    if (targetDocument.visibilityState === 'hidden') scheduleExitFlush();
+    if (targetDocument.visibilityState === 'hidden') exitFlush();
   };
-  targetWindow.addEventListener('pagehide', scheduleExitFlush);
+  targetWindow.addEventListener('pagehide', exitFlush);
   targetDocument.addEventListener('visibilitychange', hidden);
   let detached = false;
   const detach = (): void => {
     if (detached) return;
     detached = true;
-    targetWindow.removeEventListener('pagehide', scheduleExitFlush);
+    targetWindow.removeEventListener('pagehide', exitFlush);
     targetDocument.removeEventListener('visibilitychange', hidden);
     attachments?.delete(reporter);
   };
