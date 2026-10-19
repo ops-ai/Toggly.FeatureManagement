@@ -1,8 +1,7 @@
-import { describe, expect, it } from 'vitest'
 import {
   createSegmentMembershipClient,
   SegmentMembershipError,
-} from '../../src/server/index.js'
+} from '../../src/server/index';
 
 describe('segment membership re-exports', () => {
   it('exposes createSegmentMembershipClient from @ops-ai/toggly-segments', () => {
