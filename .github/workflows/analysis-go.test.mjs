@@ -72,7 +72,6 @@ test('preservation signatures tolerate version and SHA ref updates for the same 
   for (const source of [
     step(job('sonar-mongodb-v2'), 'SonarCloud Scan - MongoDB Driver v2'),
     step(job('sonar-mongodb-v2'), 'SonarQube Server Scan - MongoDB Driver v2'),
-    job('mongodb-v2-sonar-main'),
     '        uses: example-owner/example-action/nested/path@v1\n        with:\n          argument: stable\n',
   ]) {
     for (const ref of ['v99.1.0', '0123456789abcdef0123456789abcdef01234567']) {
@@ -95,7 +94,6 @@ test('preservation signatures retain action owner repository and path identities
 test('preservation signatures reject gate credential project coverage and baseline mutations', () => {
   const cloud = step(job('sonar-mongodb-v2'), 'SonarCloud Scan - MongoDB Driver v2');
   const server = step(job('sonar-mongodb-v2'), 'SonarQube Server Scan - MongoDB Driver v2');
-  const baseline = job('mongodb-v2-sonar-main');
   const mutations = [
     [cloud, 'sonar.qualitygate.wait=true', 'sonar.qualitygate.wait=false'],
     [server, 'sonar.qualitygate.wait=true', 'sonar.qualitygate.wait=false'],
@@ -111,18 +109,12 @@ test('preservation signatures reject gate credential project coverage and baseli
     [cloud, 'sonar.projectVersion=${{ steps.sonar_version.outputs.version }}', 'sonar.projectVersion=fixed-version'],
     [cloud, 'SonarSource/sonarqube-scan-action', 'other-owner/sonarqube-scan-action'],
     [server, 'SonarSource/sonarqube-scan-action', 'SonarSource/other-action'],
-    [baseline, 'uses: ./.github/actions/sonar-project-version', 'uses: ./.github/actions/other-version'],
-    [baseline, '- name: Verify baseline revision', '- name: Skip baseline revision'],
-    [baseline, 'fetch-depth: 0', 'fetch-depth: 1'],
-    [baseline, 'suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}', 'suffix: different-suffix'],
-    [baseline, 'inputs.bootstrap_mongodb_v2_main', 'inputs.other_bootstrap'],
-    [baseline, 'ref: develop', 'ref: main'],
-    [baseline, 'go-version: \'1.25.x\'', 'go-version: \'1.27.x\''],
-    [baseline, 'steps.coverage.outcome == \'success\'', 'steps.coverage.outcome == \'failure\''],
-    [baseline, 'sonar.branch.name=main', 'sonar.branch.name=develop'],
-    [baseline, 'sonar.scm.revision=${{ steps.baseline.outputs.sha }}', 'sonar.scm.revision=${{ github.sha }}'],
-    [baseline, 'git rev-parse origin/develop', 'git rev-parse origin/main'],
-    [baseline, '-race -count=1', '-count=1'],
+    [cloud, 'sonar.branch.name=master', 'sonar.branch.name=develop'],
+    [cloud, 'sonar.scm.revision={0}', 'sonar.scm.revision=deadbeef'],
+    [cloud, "github.event_name != 'pull_request'", "github.event_name == 'pull_request'"],
+    [server, 'sonar.branch.name=master', 'sonar.branch.name=main'],
+    [server, 'sonar.scm.revision={0}', 'sonar.scm.revision=deadbeef'],
+    [server, "github.event_name != 'pull_request'", "github.event_name == 'pull_request'"],
   ];
   for (const [source, before, after] of mutations) {
     const updated = source.replace(before, after);
@@ -141,7 +133,7 @@ function expression(source, key) {
 // status inputs. Absent reporting inputs differ from boolean false.
 function evaluate(source, context = {}) {
   return runInNewContext(source.replace(/\.([a-zA-Z_][\w]*-[\w-]+)/g, '["$1"]'), {
-    inputs: { run_reporting: '', bootstrap_mongodb_v2_main: false },
+    inputs: { run_reporting: '' },
     github: { event_name: 'pull_request', event: { pull_request: { head: { repo: { fork: false } } } } },
     toJSON: JSON.stringify, always: () => true, success: () => true,
     failure: () => false, cancelled: () => false,
@@ -260,7 +252,7 @@ test('trusted events default reporting on and share only explicit false or fork 
     ['workflow_dispatch', false, false, false, 'sonar,sonar-mongodb-v2,dependency-check'],
     ['workflow_dispatch', true, '', true, 'none'],
   ]) {
-    const context = { inputs: { run_reporting: input, bootstrap_mongodb_v2_main: false }, github: {
+    const context = { inputs: { run_reporting: input }, github: {
       event_name: eventName,
       event: eventName === 'pull_request' ? { pull_request: { head: { repo: { fork } } } } : {},
     } };
@@ -342,23 +334,19 @@ test('gate regressions execute in the existing normal test job and trigger their
   assert.match(step(job('test'), 'Setup Node for workflow tests'), /node-version: '24'/);
 });
 
-// Independently bounded bodies from OPS-1772 base a0535a5 match the candidate
-// byte-for-byte. These signatures normalize only mutable uses refs, preserving
-// action identities and the scanner/main-baseline semantic boundaries.
-test('MongoDB v2 fatal scanner bodies and the entire main baseline remain preserved', () => {
+test('MongoDB v2 fatal scanners wait on main-branch analysis outside pull requests', () => {
   const hash = preservationSignature;
-  assert.equal(hash(step(job('sonar-mongodb-v2'), 'SonarCloud Scan - MongoDB Driver v2')), '5f9c27c5f6c315374d31ade407299586aa0b86582fb4c7fbe3f287f0171efa9e');
-  assert.equal(hash(step(job('sonar-mongodb-v2'), 'SonarQube Server Scan - MongoDB Driver v2')), '20f036b6c640a598eebc7c212ccc94ab1f22585d53093bf74829d4fad1a0ccb1');
-  assert.equal(hash(job('mongodb-v2-sonar-main')), '7a8074483c9209c08f22f0da44561a7c934a514dac366a0c825f4300beddc087');
-  for (const name of requiredJobs) {
-    assert.equal(evaluate(expression(job(name), 'if'), { inputs: { bootstrap_mongodb_v2_main: true } }), false, name);
+  assert.equal(hash(step(job('sonar-mongodb-v2'), 'SonarCloud Scan - MongoDB Driver v2')), '7e71bf4edc07ecdbb00601e13933a7220cd1f0bedaf3489ae5f7ec580f4c1f9d');
+  assert.equal(hash(step(job('sonar-mongodb-v2'), 'SonarQube Server Scan - MongoDB Driver v2')), 'bc857e407e7aabb113fc2a21d197c0ab8869ef77d7e866fe712ed605ad5bfb8d');
+  for (const name of ['SonarCloud Scan - MongoDB Driver v2', 'SonarQube Server Scan - MongoDB Driver v2']) {
+    const scan = step(job('sonar-mongodb-v2'), name);
+    assert.match(scan, /-Dsonar\.qualitygate\.wait=true/);
+    assert.match(scan, /sonar\.branch\.name=master/);
+    assert.match(scan, /sonar\.scm\.revision=\{0\}/);
+    assert.match(scan, /github\.event_name != 'pull_request'/);
+    assert.doesNotMatch(scan, /continue-on-error|\|\| true/);
   }
-  assert.equal(evaluate(expression(job('summary'), 'if'), { inputs: { bootstrap_mongodb_v2_main: true } }), false);
-  for (const [eventName, bootstrap, expected] of [['workflow_dispatch', true, true], ['workflow_dispatch', false, false], ['pull_request', true, false], ['workflow_call', true, false]]) {
-    assert.equal(evaluate(expression(job('mongodb-v2-sonar-main'), 'if'), {
-      inputs: { bootstrap_mongodb_v2_main: bootstrap }, github: { event_name: eventName },
-    }), expected);
-  }
+  assert.doesNotMatch(workflow, /mongodb-v2-sonar-main|bootstrap_mongodb_v2_main/);
 });
 
 test('existing runtime consumer coverage database example and OWASP contracts are retained', () => {
