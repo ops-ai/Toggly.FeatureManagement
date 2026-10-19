@@ -63,15 +63,46 @@ export function scanPnpmLock(lockPath, { repoRoot = REPO_ROOT, sdkRootRel } = {}
   const violations = [];
   const text = fs.readFileSync(lockPath, 'utf8');
   const lockDir = path.dirname(lockPath);
-  const linkPattern = /^\s+(@?[^:\s]+):\s*\n\s+version:\s*link:(\.\.\/[^\s#]+)/gm;
-  for (const match of text.matchAll(linkPattern)) {
-    const [, pkg, target] = match;
-    if (!resolvedEscapesSdkRoot({ repoRoot, packageDir: lockDir, sdkRootRel, resolved: target })) {
+  const lines = text.split('\n');
+  let currentDependency = null;
+
+  for (const line of lines) {
+    const importerMatch = line.match(/^  (\.\.\/[^:]+):\s*$/);
+    if (importerMatch) {
+      const target = importerMatch[1];
+      if (resolvedEscapesSdkRoot({ repoRoot, packageDir: lockDir, sdkRootRel, resolved: target })) {
+        violations.push(`${lockPath}: pnpm importer links to ${target}`);
+      }
+      currentDependency = null;
       continue;
     }
-    violations.push(`${lockPath}: ${pkg} links to ${target}`);
+
+    const dependencyKeyMatch = line.match(/^      '([^']+)':\s*$/);
+    if (dependencyKeyMatch) {
+      currentDependency = dependencyKeyMatch[1];
+      continue;
+    }
+
+    const linkVersionMatch = line.match(/^        version: link:(\.\.\/[^\s#]+)/);
+    if (linkVersionMatch && currentDependency) {
+      const target = linkVersionMatch[1];
+      if (resolvedEscapesSdkRoot({ repoRoot, packageDir: lockDir, sdkRootRel, resolved: target })) {
+        violations.push(`${lockPath}: ${currentDependency} links to ${target}`);
+      }
+      currentDependency = null;
+    }
   }
+
   return violations;
+}
+
+/** Violations that block release (segments must come from the public registry). */
+export function isReleaseBlockingLockfileViolation(line) {
+  return line.includes('toggly-segments');
+}
+
+export function findReleaseBlockingLockfileViolations(repoRoot = REPO_ROOT) {
+  return findPublishableLockfileViolations(repoRoot).filter(isReleaseBlockingLockfileViolation);
 }
 
 export function findPublishableLockfileViolations(repoRoot = REPO_ROOT) {
@@ -114,11 +145,18 @@ export function findPublishableLockfileViolations(repoRoot = REPO_ROOT) {
 const isMain =
   process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
-  const violations = findPublishableLockfileViolations();
+  const segmentsOnly = process.argv.includes('--release-blocking');
+  const violations = segmentsOnly
+    ? findReleaseBlockingLockfileViolations()
+    : findPublishableLockfileViolations();
   if (violations.length > 0) {
     console.error('Refusing publishable lockfiles with local-path resolutions:');
     for (const line of violations) console.error(` - ${line}`);
     process.exit(1);
   }
-  console.log('Publishable lockfiles resolve registry dependencies only.');
+  console.log(
+    segmentsOnly
+      ? 'Publishable lockfiles resolve @ops-ai/toggly-segments from the registry.'
+      : 'Publishable lockfiles resolve registry dependencies only.',
+  );
 }
