@@ -268,10 +268,18 @@ test('preserves Node tests, both packed Router hosts, shared dependencies and co
   assert.match(step(sonar, 'Resolve Sonar project version'), /manifest: Toggly.FeatureManagement.ReactRouter\/react-router-toggly\/package.json/);
   for (const name of ['SonarCloud Scan', 'SonarQube Server Scan']) {
     const scan = step(sonar, name);
+    assert.match(scan, /projectBaseDir: \$\{\{ env\.SDK_ROOT \}\}\/\$\{\{ env\.PKG \}\}/);
     assert.match(scan, /-Dsonar.projectVersion=\$\{\{ steps.sonar_version.outputs.version \}\}/);
-    assert.match(scan, /-Dsonar.javascript.lcov.reportPaths=coverage\/all-lcov.info/);
-    assert.match(scan, /-Dsonar.sources=\$\{\{ env.SDK_ROOT \}\}\/\$\{\{ env.PKG \}\}\/src/);
-    assert.match(scan, /-Dsonar.tests=\$\{\{ env.SDK_ROOT \}\}\/\$\{\{ env.PKG \}\}\/tests/);
+    assert.match(scan, /-Dsonar.javascript.lcov.reportPaths=\.\.\/\.\.\/coverage\/all-lcov.info/);
+    assert.match(scan, /-Dsonar.typescript.tsconfigPaths=tsconfig.json/);
+    assert.match(scan, /-Dsonar.sources=src/);
+    assert.match(scan, /-Dsonar.tests=tests/);
+    if (name === 'SonarQube Server Scan') {
+      assert.match(
+        scan,
+        /-Dsonar.dependencyCheck.reportPath=\.\.\/\.\.\/dependency-check-reports\/dependency-check-report.xml/,
+      );
+    }
     for (const key of ['exclusions', 'coverage.exclusions', 'test.inclusions']) {
       const value = scan.match(new RegExp(`-Dsonar\\.${key.replaceAll('.', '\\.')}=([^\\n]+)`))[1];
       for (const glob of ['**/*.test.ts', '**/*.spec.ts', '**/*.test.tsx', '**/*.spec.tsx', '**/*.test.mjs']) {
