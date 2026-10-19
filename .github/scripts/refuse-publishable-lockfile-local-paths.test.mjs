@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import {
   findPublishableLockfileViolations,
+  findReleaseBlockingLockfileViolations,
   isRegistryLockResolution,
   resolvedEscapesSdkRoot,
   scanNpmPackageLock,
@@ -79,6 +80,7 @@ test('scanPnpmLock reports link:../ importer entries', () => {
   nextjs-toggly-server:
     dependencies:
       '@ops-ai/toggly-segments':
+        specifier: workspace:^
         version: link:../../toggly-segments
 `,
   );
@@ -96,4 +98,8 @@ test('toggly-segments consumer lockfiles resolve from the npm registry', () => {
     line.includes('toggly-segments'),
   );
   assert.deepEqual(violations, []);
+});
+
+test('release-blocking scan passes for toggly-segments consumers', () => {
+  assert.deepEqual(findReleaseBlockingLockfileViolations(), []);
 });
