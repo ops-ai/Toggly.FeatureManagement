@@ -323,7 +323,9 @@ try {
       ...process.env,
       PORT: String(port),
       HOST: '127.0.0.1',
-      ORIGIN: origin,
+      // adapter-node defaults request URLs to https:// without a reverse proxy; Kit 3 CSRF
+      // then rejects Playwright's http Origin. Honor x-forwarded-proto on each request.
+      PROTOCOL_HEADER: 'x-forwarded-proto',
       TOGGLY_APP_KEY: 'backend-private-fixture',
       TOGGLY_BASE_URI: definitions,
     },
@@ -345,7 +347,16 @@ try {
   console.log('Owned browser PID:', browser.process().pid);
   await writeFile(
     join(temporary, 'playwright.config.mjs'),
-    `export default ${JSON.stringify({ testDir: join(root, 'tests/host-browser'), workers: 1, use: { baseURL: origin, connectOptions: { wsEndpoint: browser.wsEndpoint() } }, reporter: 'line' })};`,
+    `export default ${JSON.stringify({
+      testDir: join(root, 'tests/host-browser'),
+      workers: 1,
+      use: {
+        baseURL: origin,
+        extraHTTPHeaders: { 'x-forwarded-proto': 'http' },
+        connectOptions: { wsEndpoint: browser.wsEndpoint() },
+      },
+      reporter: 'line',
+    })};`,
   );
   await run(
     process.execPath,
