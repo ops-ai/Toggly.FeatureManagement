@@ -169,7 +169,22 @@ export async function waitForAggregateAnalysis({
       if (run.conclusion === 'success') {
         return { analysisRunUrl: run.html_url, targetSha: sha };
       }
-      throw new Error(`Aggregate analysis failed (${run.conclusion}): ${run.html_url}`);
+      const rerunning = runs.some(
+        (entry) =>
+          entry.name === WORKFLOW_NAME &&
+          entry.id !== run.id &&
+          ACTIVE_RUN_STATUSES.has(entry.status),
+      );
+      if (rerunning) {
+        console.log(`Aggregate analysis failed (${run.conclusion}); waiting on a newer run`);
+        await sleep(pollMs);
+        continue;
+      }
+      console.log(
+        `Aggregate analysis failed (${run.conclusion}): ${run.html_url}; waiting for a later attempt`,
+      );
+      await sleep(pollMs);
+      continue;
     }
 
     if (run && ACTIVE_RUN_STATUSES.has(run.status)) {
