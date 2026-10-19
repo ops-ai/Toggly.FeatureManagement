@@ -114,7 +114,7 @@ jobs:
         run: |
           mkdir -p coverage
           find coverage-artifacts -name "lcov.info" -type f | while read -r file; do
-            sed "s|SF:|SF:Toggly.FeatureManagement.Electron/|g" "$file" > "coverage/Electron-lcov.info"
+            cp "$file" "coverage/Electron-lcov.info"
           done
           echo "Coverage files:"
           ls -la coverage/ || echo "No coverage files found"
@@ -139,18 +139,20 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
         with:
+          projectBaseDir: Toggly.FeatureManagement.Electron
           args: >
             -Dsonar.projectKey=toggly-sdks-electron
             -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.qualitygate.wait=true
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Electron"
-            -Dsonar.sources=Toggly.FeatureManagement.Electron/src
+            -Dsonar.sources=src
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts
             -Dsonar.coverage.exclusions=**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts
-            -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
-            -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
-            -Dsonar.tests=Toggly.FeatureManagement.Electron/tests
+            -Dsonar.javascript.lcov.reportPaths=../../coverage/Electron-lcov.info
+            -Dsonar.typescript.lcov.reportPaths=../../coverage/Electron-lcov.info
+            -Dsonar.typescript.tsconfigPaths=tsconfig.json
+            -Dsonar.tests=tests
             -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx
 
       - name: Download Dependency Check report
@@ -176,19 +178,21 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         with:
+          projectBaseDir: Toggly.FeatureManagement.Electron
           args: >
             -Dsonar.projectKey=toggly-sdks-electron
             -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.qualitygate.wait=true
             -Dsonar.projectName="Toggly SDKs - Electron"
-            -Dsonar.sources=Toggly.FeatureManagement.Electron/src
+            -Dsonar.sources=src
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts
             -Dsonar.coverage.exclusions=**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts
-            -Dsonar.javascript.lcov.reportPaths=coverage/*-lcov.info
-            -Dsonar.typescript.lcov.reportPaths=coverage/*-lcov.info
-            -Dsonar.tests=Toggly.FeatureManagement.Electron/tests
+            -Dsonar.javascript.lcov.reportPaths=../../coverage/Electron-lcov.info
+            -Dsonar.typescript.lcov.reportPaths=../../coverage/Electron-lcov.info
+            -Dsonar.typescript.tsconfigPaths=tsconfig.json
+            -Dsonar.tests=tests
             -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx
-            -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
+            -Dsonar.dependencyCheck.reportPath=../../dependency-check-reports/dependency-check-report.xml
 
   dependency-check:
     name: OWASP Dependency Check
