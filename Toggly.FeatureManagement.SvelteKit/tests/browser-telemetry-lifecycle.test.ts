@@ -81,9 +81,11 @@ it('commits persistence before keepalive fetch when storage is configured', asyn
   vi.stubGlobal('CompressionStream', undefined);
   vi.stubGlobal('WebSocket', undefined);
   const order: string[] = [];
+  const records = new Map<string, string>();
   const storage = {
-    getItem: () => null,
-    setItem: () => {
+    getItem: (key: string) => records.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      records.set(key, value);
       order.push('storage');
     },
   };

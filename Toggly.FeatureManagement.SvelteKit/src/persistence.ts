@@ -119,6 +119,10 @@ export function createPersistence(storage: DefinitionStorage | undefined, baseUR
   }
 
   return {
+    /** Current trust generation id, if any (does not create a new generation). */
+    trustGeneration() {
+      return generation(false);
+    },
     read(
       scope: string,
       policy: VerificationPolicy,
