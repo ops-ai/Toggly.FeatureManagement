@@ -241,3 +241,64 @@ test('waitForAggregateAnalysis dispatches with the commit SHA when no run exists
     buildWorkflowDispatchPayload(sha, { GITHUB_REF: 'refs/heads/develop' }),
   );
 });
+
+test('waitForAggregateAnalysis keeps polling after a failed run until success', async () => {
+  const sha = 'failthenok';
+  let polls = 0;
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/actions/workflows?per_page=100')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          workflows: [{ id: 99, path: '.github/workflows/analysis-javascript.yml' }],
+        }),
+      };
+    }
+    if (url.includes('/runs?head_sha=')) {
+      polls += 1;
+      const workflow_runs =
+        polls < 2
+          ? [
+              {
+                name: WORKFLOW_NAME,
+                status: 'completed',
+                conclusion: 'failure',
+                head_sha: sha,
+                html_url: 'https://example.com/run/failed',
+                created_at: '2026-01-02T00:00:00Z',
+              },
+            ]
+          : [
+              {
+                name: WORKFLOW_NAME,
+                status: 'completed',
+                conclusion: 'success',
+                head_sha: sha,
+                html_url: 'https://example.com/run/ok',
+                created_at: '2026-01-02T00:01:00Z',
+              },
+            ];
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ workflow_runs }),
+      };
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  };
+
+  const result = await waitForAggregateAnalysis({
+    owner: 'ops-ai',
+    repo: 'Toggly.FeatureManagement',
+    token: 'token',
+    targetSha: sha,
+    pollMs: 1,
+    maxMs: 1000,
+    fetchImpl,
+    sleep: async () => {},
+  });
+
+  assert.equal(result.analysisRunUrl, 'https://example.com/run/ok');
+  assert.ok(polls >= 2);
+});
