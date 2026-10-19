@@ -135,7 +135,7 @@ func TestProvider_ShouldSkipRefresh_CountsHit(t *testing.T) {
 	p.setDefinitionCacheRecorder(rec)
 	p.liveMu.Lock()
 	p.liveConnected = true
-	p.lastFallback = time.Now()
+	p.lastLiveInvalidationRefresh = time.Now()
 	p.liveMu.Unlock()
 
 	if !p.shouldSkipRefresh() {
@@ -210,11 +210,11 @@ func TestProvider_WSForcedRefresh_MissOnNewRev(t *testing.T) {
 	p.setDefinitionCacheRecorder(rec)
 	p.liveMu.Lock()
 	p.liveConnected = true
-	p.lastFallback = time.Now()
+	p.lastLiveInvalidationRefresh = time.Now()
 	p.liveMu.Unlock()
 
 	if !p.shouldSkipRefresh() {
-		t.Fatal("scheduled poll should skip while WS live")
+		t.Fatal("scheduled poll should skip after recent WS invalidation refresh")
 	}
 	if err := p.refresh(context.Background(), 2*time.Second, true); err != nil {
 		t.Fatal(err)
