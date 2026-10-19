@@ -1,5 +1,6 @@
 import { createTelemetryReporter } from '@ops-ai/toggly-client-telemetry';
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
+import { attachPersistenceSafeBrowserLifecycle } from './browser-telemetry-lifecycle.js';
 import type { BrowserSession } from './client.js';
 import { writable } from 'svelte/store';
 import { evaluateResolvedKeys, resolveEvaluatedDefinition } from '@ops-ai/toggly-hooks-types';
@@ -36,8 +37,11 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
           onDiagnostic: options.onTelemetryDiagnostic,
         })
       : undefined;
-  const detachTelemetry =
-    telemetry && !options.storage ? attachBrowserLifecycle(telemetry) : undefined;
+  const detachTelemetry = telemetry
+    ? options.storage
+      ? attachPersistenceSafeBrowserLifecycle(telemetry)
+      : attachBrowserLifecycle(telemetry)
+    : undefined;
   const acceptSnapshot = (value: TogglySnapshot): TogglySnapshot => {
     const copy = structuredClone(value);
     copy.context.instanceId = copy.context.instanceId?.trim() || undefined;

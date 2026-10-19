@@ -14,7 +14,8 @@ import { chromium } from '@playwright/test';
 import { run, cleanupAll, closeBrowser, stopChild } from './host-resources.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const temporary = await mkdtemp(join(tmpdir(), 'toggly-sveltekit-host-'));
+const hostFixture = process.argv[2] || 'host';
+const temporary = await mkdtemp(join(tmpdir(), `toggly-sveltekit-host-${hostFixture}-`));
 const host = join(temporary, 'host');
 let app;
 let server;
@@ -33,7 +34,7 @@ try {
   await run('pnpm', ['pack', '--pack-destination', temporary], coreRoot);
   await run('npm', ['run', 'build'], segmentsRoot);
   await run('npm', ['pack', '--pack-destination', temporary], segmentsRoot);
-  await cp(join(root, 'tests/host'), host, { recursive: true });
+  await cp(join(root, 'tests', hostFixture), host, { recursive: true });
   const archive = join(
     temporary,
     `ops-ai-toggly-sveltekit-${JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version}.tgz`,
@@ -358,7 +359,7 @@ try {
     { TOGGLY_HOST_DEFINITIONS: definitions },
   );
   console.log(
-    'Packed SvelteKit host: typecheck, build, server/browser export boundary and Chromium protocol checks passed.',
+    `Packed SvelteKit host (${hostFixture}): typecheck, build, server/browser export boundary and Chromium protocol checks passed.`,
   );
 } catch (error) {
   failure = error;

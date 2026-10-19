@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
-    exclude: ['tests/host/**', 'tests/host-browser/**', 'node_modules/**'],
+    exclude: ['tests/host/**', 'tests/host-kit3/**', 'tests/host-browser/**', 'node_modules/**'],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
