@@ -162,6 +162,7 @@ export function connectBrowser(
     browserSession.commitExitPersistence = trustEpoch
       ? () => {
           if (persistence.trustGeneration() !== trustEpoch) return;
+          if (persistence.exitReplayWouldRegress(url, trustEpoch, verified.timestamp)) return;
           persistence.write(url, body, verified.keys);
         }
       : undefined;

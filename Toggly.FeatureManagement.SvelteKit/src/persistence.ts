@@ -121,7 +121,33 @@ export function createPersistence(storage: DefinitionStorage | undefined, baseUR
   return {
     /** Current trust generation id, if any (does not create a new generation). */
     trustGeneration() {
-      return generation(false);
+      try {
+        return generation(false);
+      } catch {
+        unusable = true;
+        return null;
+      }
+    },
+    /** True when storage already holds an envelope at least as fresh as `minimumTimestamp`. */
+    exitReplayWouldRegress(scope: string, trustEpoch: string, minimumTimestamp: number) {
+      try {
+        if (!storage || unusable) return true;
+        const currentGeneration = generation(false);
+        if (!currentGeneration || currentGeneration !== trustEpoch) return true;
+        const raw = storage.getItem(`toggly:sveltekit:envelope:${scope}`);
+        if (!raw) return false;
+        const record = JSON.parse(raw);
+        if (
+          record?.generation !== trustEpoch ||
+          record.scope !== scope ||
+          typeof record.body !== 'string'
+        )
+          return false;
+        const { envelope } = parseSignedEnvelope(record.body);
+        return envelope.timestamp > minimumTimestamp;
+      } catch {
+        return true;
+      }
     },
     read(
       scope: string,
