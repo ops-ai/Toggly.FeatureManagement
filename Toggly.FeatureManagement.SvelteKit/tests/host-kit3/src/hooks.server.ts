@@ -1,8 +1,7 @@
-import { env } from '$env/dynamic/private';
 import { createTogglyClient, createTogglyHandle } from '@ops-ai/toggly-sveltekit/server';
 const client = createTogglyClient({
-  appKey: env.TOGGLY_APP_KEY,
-  baseUrl: env.TOGGLY_BASE_URI,
+  appKey: process.env.TOGGLY_APP_KEY,
+  baseUrl: process.env.TOGGLY_BASE_URI,
   verifySignatures: true,
   enableStreaming: false,
   refreshInterval: 0,
@@ -28,7 +27,7 @@ export const handle = createTogglyHandle({
   }),
   frontend: {
     appKey: 'frontend-fixture',
-    baseURI: env.TOGGLY_BASE_URI,
+    baseURI: process.env.TOGGLY_BASE_URI,
     expose: ['on', 'off', 'Order'],
     featureDefaults: { on: false },
     onError: () => {

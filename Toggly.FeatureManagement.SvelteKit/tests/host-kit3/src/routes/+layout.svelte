@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Panel from '$lib/Panel.svelte';
+  import Panel from '../lib/Panel.svelte';
   import type { LayoutData } from './$types';
   export let data: LayoutData;
   let mounted = true;

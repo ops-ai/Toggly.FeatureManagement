@@ -4,5 +4,6 @@
     "strict": true,
     "skipLibCheck": true,
     "moduleResolution": "bundler"
-  }
+  },
+  "include": ["src", "vite.config.ts"]
 }
