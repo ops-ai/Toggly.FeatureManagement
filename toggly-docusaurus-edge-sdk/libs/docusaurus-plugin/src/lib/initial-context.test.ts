@@ -2,6 +2,20 @@ import { describe, it, expect, vi } from 'vitest';
 import { createTogglyClient } from './toggly-client';
 
 describe('initial evaluation context', () => {
+  it.each([null, 42, 'invalid-definitions'])('treats a successful non-object response %j as no flags', async (payload) => {
+    const client = createTogglyClient({
+      appKey: 'malformed-response',
+      enableTelemetry: false,
+      fetch: async () => new Response(JSON.stringify(payload)),
+    });
+    try {
+      expect(await client.getFlags()).toEqual({});
+      expect(await client.getFlag('missing')).toBe(false);
+    } finally {
+      client.dispose();
+    }
+  });
+
   it('snapshots context before the first request and reuses only its own cache', async () => {
     const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ enabled: true }) });
     const groups = [' beta ', 'team a&b', ''];
