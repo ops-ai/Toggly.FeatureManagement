@@ -774,7 +774,7 @@ jobs:
           fetch-depth: 0  # Full history for better analysis
 
       - name: Cache Sonar scanner plugins
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.sonar/cache
           key: sonar-scanner-cache-${{ runner.os }}-${{ hashFiles('.github/workflows/analysis-javascript.yml') }}

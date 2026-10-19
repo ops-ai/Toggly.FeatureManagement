@@ -58,7 +58,7 @@ jobs:
             10.0.x
 
       - name: Setup Node.js for shared package governance
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '24'
 
@@ -486,7 +486,7 @@ jobs:
             dependency-check-db-${{ runner.os }}-
 
       - name: Setup Node.js for shared package governance
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '24'
 
@@ -521,7 +521,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
         if: always()
         with:
           sarif_file: reports/dependency-check-report.sarif
@@ -570,7 +570,7 @@ jobs:
             10.0.x
 
       - name: Setup Node.js for shared package governance
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '24'
 
@@ -611,7 +611,7 @@ jobs:
           dotnet-version: |
             8.0.x
             10.0.x
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '24'
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -669,7 +669,7 @@ jobs:
             8.0.x
             10.0.x
             ${{ matrix.sdk }}
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: '24'
       - run: dotnet test Toggly.FeatureManagement.Blazor/tests/Toggly.FeatureManagement.Blazor.Tests -c Release -p:TestFramework=${{ matrix.framework }} --collect:"XPlat Code Coverage" --settings Toggly.FeatureManagement.Blazor/coverage.runsettings --results-directory TestResults/blazor
