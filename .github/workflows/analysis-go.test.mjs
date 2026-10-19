@@ -349,6 +349,18 @@ test('MongoDB v2 fatal scanners wait on main-branch analysis outside pull reques
   assert.doesNotMatch(workflow, /mongodb-v2-sonar-main|bootstrap_mongodb_v2_main/);
 });
 
+test('mongo service containers set the SERVER-121912 glibc tunable on every Go workflow leg', () => {
+  const tunable = 'GLIBC_TUNABLES: glibc.pthread.rseq=1';
+  for (const name of ['test', 'mongodb-v2']) {
+    const source = job(name);
+    const mongodb = source.slice(source.indexOf('\n      mongodb:\n'));
+    const end = mongodb.search(/\n      [a-z]/);
+    const block = end === -1 ? mongodb : mongodb.slice(0, end);
+    assert.match(block, /image: mongo:8/);
+    assert.ok(block.includes(tunable), `${name}: ${tunable}`);
+  }
+});
+
 test('existing runtime consumer coverage database example and OWASP contracts are retained', () => {
   const tests = job('test');
   for (const value of ['postgres:17-alpine', 'mongo:8', 'redis:7-alpine', 'POSTGRES_TEST_URL:', 'MONGO_TEST_URI:', 'REDIS_TEST_ADDR:']) assert.ok(tests.includes(value));

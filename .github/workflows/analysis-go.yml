@@ -43,6 +43,9 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
       mongodb:
         image: mongo:8
+        env:
+          # SERVER-121912: mongo:8 refuses to start on Linux kernel 6.19–7.0.13 without this tunable.
+          GLIBC_TUNABLES: glibc.pthread.rseq=1
         ports:
           - 27017:27017
         options: >-
@@ -202,6 +205,9 @@ jobs:
     services:
       mongodb:
         image: mongo:8
+        env:
+          # SERVER-121912: mongo:8 refuses to start on Linux kernel 6.19–7.0.13 without this tunable.
+          GLIBC_TUNABLES: glibc.pthread.rseq=1
         ports:
           - 27017:27017
         options: >-
