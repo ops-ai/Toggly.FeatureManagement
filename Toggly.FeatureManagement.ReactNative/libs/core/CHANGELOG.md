@@ -1,3 +1,8 @@
+## 1.11.1 — 2026-10-18
+
+### Fixed
+- Require telemetry 1.3.0 or later so clean installs include the system metrics API used by React Native Core.
+
 ## 1.10.3 — 2026-10-12
 
 ### Added
