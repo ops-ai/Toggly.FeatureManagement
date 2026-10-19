@@ -353,11 +353,12 @@ test('mongo service containers set the SERVER-121912 glibc tunable on every Go w
   const tunable = 'GLIBC_TUNABLES: glibc.pthread.rseq=1';
   for (const name of ['test', 'mongodb-v2']) {
     const source = job(name);
-    const start = source.indexOf('\n      mongodb:\n');
+    const header = '\n      mongodb:\n';
+    const start = source.indexOf(header);
     assert.notEqual(start, -1, `${name}: mongodb service`);
-    const tail = source.slice(start);
-    const nextService = tail.slice(1).search(/\n      [a-z][a-z0-9_-]*:\n/);
-    const block = nextService === -1 ? tail : tail.slice(0, 1 + nextService);
+    const body = source.slice(start + header.length);
+    const nextService = body.search(/\n      [a-z][a-z0-9_-]*:\n/);
+    const block = nextService === -1 ? body : body.slice(0, nextService);
     assert.match(block, /image: mongo:8/);
     assert.ok(block.includes(tunable), `${name}: ${tunable}`);
   }
