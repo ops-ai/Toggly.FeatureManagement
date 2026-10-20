@@ -79,13 +79,13 @@ const packedHostHarnesses = [
   'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/tests/host/**'
 ];
 
-test('both Sonar scans measure the complete Client Core and Docusaurus executable source inventories', () => {
+test('all Sonar scans measure the complete Client Core and Docusaurus executable source inventories', () => {
   const aggregate = aggregateSonarConfig();
   const packages = [
     'toggly-docusaurus-edge-sdk/libs/core',
     'toggly-docusaurus-edge-sdk/libs/docusaurus-plugin',
   ];
-  for (const name of ['SonarCloud Scan', 'SonarQube Server Scan']) {
+  for (const name of ['SonarCloud Scan', 'SonarQube Server Scan', 'SonarQube Server Scan (retry)']) {
     const scan = stepBlock(workflow, name);
     const globs = property => scan.match(new RegExp(`-Dsonar\\.${property.replaceAll('.', '\\.')}=([^\\n]+)`))?.[1].split(',') ?? [];
     const excluded = [...globs('exclusions'), ...globs('coverage.exclusions')];
@@ -169,7 +169,7 @@ test('requires authenticated SonarCloud and Server quality gates', () => {
 
 test('JS Sonar ignores only justified protocol, RNG, hook, and Angular load findings', () => {
   const sonar = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
-  for (const name of ['SonarCloud Scan', 'SonarQube Server Scan']) {
+  for (const name of ['SonarCloud Scan', 'SonarQube Server Scan', 'SonarQube Server Scan (retry)']) {
     const step = stepBlock(sonar, name);
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria=angularLoadComplexity,kidSha1,anonRng,hookAwait\n/);
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.angularLoadComplexity\.ruleKey=typescript:S3776/);
