@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, matchesGlob } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import {
@@ -79,6 +79,39 @@ const packedHostHarnesses = [
   'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly/tests/host/**'
 ];
 
+test('all Sonar scans measure the complete Client Core and Docusaurus executable source inventories', () => {
+  const aggregate = aggregateSonarConfig();
+  const packages = [
+    'toggly-docusaurus-edge-sdk/libs/core',
+    'toggly-docusaurus-edge-sdk/libs/docusaurus-plugin',
+  ];
+  for (const name of ['SonarCloud Scan', 'SonarQube Server Scan', 'SonarQube Server Scan (retry)']) {
+    const scan = stepBlock(workflow, name);
+    const globs = property => scan.match(new RegExp(`-Dsonar\\.${property.replaceAll('.', '\\.')}=([^\\n]+)`))?.[1].split(',') ?? [];
+    const excluded = [...globs('exclusions'), ...globs('coverage.exclusions')];
+    const tests = globs('test.inclusions');
+    for (const pkg of packages) {
+      assert.ok(aggregate.sources.split(',').some(root => pkg === root || pkg.startsWith(`${root}/`) || `${pkg}/src` === root));
+      const files = readdirSync(new URL(`../../${pkg}/src/`, import.meta.url), { recursive: true })
+        .filter(file => /\.(ts|tsx)$/.test(file));
+      const executable = files.filter(file => !/\.(test|spec)\.tsx?$|\.d\.ts$|^test-setup\.ts$/.test(file));
+      assert.ok(executable.length > 0);
+      for (const file of executable) {
+        const source = `${pkg}/src/${file}`;
+        assert.ok(!excluded.some(glob => matchesGlob(source, glob)), `${name} excludes executable ${source}`);
+        assert.ok(!tests.some(glob => matchesGlob(source, glob)), `${name} classifies executable ${source} as test code`);
+      }
+      for (const file of files.filter(file => /\.test\.tsx?$/.test(file))) {
+        const source = `${pkg}/src/${file}`;
+        assert.ok(globs('exclusions').some(glob => matchesGlob(source, glob)), `${name} counts test ${source} as source`);
+        assert.ok(tests.some(glob => matchesGlob(source, glob)), `${name} fails to classify test ${source}`);
+      }
+    }
+    assert.ok(globs('exclusions').includes('toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/test-setup.ts'));
+    assert.ok(globs('coverage.exclusions').includes('toggly-docusaurus-edge-sdk/cloudflare/worker/**'));
+  }
+});
+
 test('requires current packed browser-host validation in the analysis summary', () => {
   const needs = summary.match(/needs: \[([^\]]+)\]/)?.[1];
   assert.ok(needs, 'analysis summary must declare its required jobs');
@@ -136,7 +169,7 @@ test('requires authenticated SonarCloud and Server quality gates', () => {
 
 test('JS Sonar ignores only justified protocol, RNG, hook, and Angular load findings', () => {
   const sonar = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
-  for (const name of ['SonarCloud Scan', 'SonarQube Server Scan']) {
+  for (const name of ['SonarCloud Scan', 'SonarQube Server Scan', 'SonarQube Server Scan (retry)']) {
     const step = stepBlock(sonar, name);
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria=angularLoadComplexity,kidSha1,anonRng,hookAwait\n/);
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.angularLoadComplexity\.ruleKey=typescript:S3776/);

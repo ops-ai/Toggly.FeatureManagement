@@ -127,6 +127,41 @@ test('fails when Local-Gates coverage is missing from a full bundle', async () =
   });
 });
 
+test('rejects a full bundle missing only the Docusaurus plugin before writing scan input', async () => {
+  const { REQUIRED_COVERAGE_SDKS } = await import(organizerUrl.href);
+  const files = Object.fromEntries(REQUIRED_COVERAGE_SDKS
+    .filter(sdk => sdk !== 'Docusaurus')
+    .map(sdk => [`coverage-${sdk}/lcov.info`, lcov('src/index.ts')]));
+  await withFixture(files, async ({ organizeCoverage, downloadDir, outputDir }) => {
+    await assert.rejects(
+      organizeCoverage({ downloadDir, outputDir, requireFull: true }),
+      /Incomplete coverage bundle.*missing 1\): Docusaurus$/,
+    );
+    assert.equal(existsSync(outputDir), false);
+  });
+});
+
+test('normalizes every Core and plugin source path without changing their independent line totals', async () => {
+  const core = 'TN:\nSF:src/client.ts\nDA:1,3\nDA:2,0\nLF:2\nLH:1\nend_of_record\n';
+  const plugin = 'TN:\nSF:src/client/index.tsx\nDA:1,2\nDA:2,1\nDA:3,0\nLF:3\nLH:2\nend_of_record\n'
+    + 'TN:\nSF:src/client/setup.tsx\nDA:14,0\nLF:1\nLH:0\nend_of_record\n';
+  await withFixture({
+    'coverage-Client-Core/lcov.info': core,
+    'coverage-Docusaurus/lcov.info': plugin,
+  }, async ({ organizeCoverage, downloadDir, outputDir }) => {
+    await organizeCoverage({ downloadDir, outputDir });
+    assert.equal(
+      readFileSync(join(outputDir, 'Client-Core-lcov.info'), 'utf8'),
+      'TN:\nSF:toggly-docusaurus-edge-sdk/libs/core/src/client.ts\nDA:1,3\nDA:2,0\nLF:2\nLH:1\nend_of_record\n',
+    );
+    assert.equal(
+      readFileSync(join(outputDir, 'Docusaurus-lcov.info'), 'utf8'),
+      'TN:\nSF:toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/client/index.tsx\nDA:1,2\nDA:2,1\nDA:3,0\nLF:3\nLH:2\nend_of_record\n'
+        + 'TN:\nSF:toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/client/setup.tsx\nDA:14,0\nLF:1\nLH:0\nend_of_record\n',
+    );
+  });
+});
+
 test('fails when required SDK coverage is missing from the aggregate bundle', async () => {
   await withFixture({
     'coverage-React/artifact-name.txt': 'coverage-React\n',

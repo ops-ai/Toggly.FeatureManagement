@@ -9,7 +9,7 @@ describe('Smoke test', () => {
     __resetClient();
   });
 
-  it('loads live evaluated flags', async () => {
+  it('loads live evaluated flags', { timeout: 15000 }, async () => {
     if (!appKey) throw new Error('TOGGLY_SMOKE_APP_KEY_FRONTEND is not configured — set this env var to run smoke tests');
     await initTogglyClient({
       appKey: appKey!,

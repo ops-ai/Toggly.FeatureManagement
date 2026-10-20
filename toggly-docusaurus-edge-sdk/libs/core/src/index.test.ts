@@ -2,6 +2,20 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createTogglyClient, type Flags } from './index';
 
 describe('createTogglyClient', () => {
+  it.each([null, 42, 'invalid-definitions'])('treats a successful non-object response %j as no flags', async (payload) => {
+    const client = createTogglyClient({
+      appKey: 'malformed-response',
+      enableTelemetry: false,
+      fetch: async () => new Response(JSON.stringify(payload)),
+    });
+    try {
+      expect(await client.getFlags()).toEqual({});
+      expect(await client.getFlag('missing')).toBe(false);
+    } finally {
+      client.dispose();
+    }
+  });
+
   const mockFetch = vi.fn();
   const defaultConfig = {
     baseURI: 'https://definitions.toggly.io',
