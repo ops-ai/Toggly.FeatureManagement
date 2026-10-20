@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/identity"
 	"nhooyr.io/websocket"
 )
 
@@ -79,7 +80,7 @@ func TestBuildWebSocketURLPreservesSecureTransportAndRevision(t *testing.T) {
 			t.Fatalf("base %q: %v", tc.base, err)
 		}
 		u, err := url.Parse(raw)
-		if err != nil || u.Scheme != tc.scheme || u.Path != "/app/ws" || u.Query().Get("rev") != "revision-1" || u.Query().Get("sdk") != sdkID || u.Query().Get("sdkVersion") != sdkVersion {
+		if err != nil || u.Scheme != tc.scheme || u.Path != "/app/ws" || u.Query().Get("rev") != "revision-1" || u.Query().Get("sdk") != identity.SDKID || u.Query().Get("sdkVersion") != identity.SDKVersion {
 			t.Fatalf("base %q: URL = %q, %v", tc.base, raw, err)
 		}
 	}

@@ -19,6 +19,8 @@ export interface BrowserSession {
   timestamps: Map<string, number>;
   keys: Map<string, JwkSet>;
   persistence: Map<string, ReturnType<typeof createPersistence>>;
+  /** Replays the last verified envelope write synchronously before exit telemetry flush. */
+  commitExitPersistence?: () => void;
 }
 
 function createBrowserSession(): BrowserSession {
@@ -156,6 +158,14 @@ export function connectBrowser(
     timestamps.set(url, verified.timestamp);
     observedKeys.set(baseURI, structuredClone(keys));
     persistence.write(url, body, verified.keys);
+    const trustEpoch = persistence.trustGeneration();
+    browserSession.commitExitPersistence = trustEpoch
+      ? () => {
+          if (persistence.trustGeneration() !== trustEpoch) return;
+          if (persistence.exitReplayWouldRegress(url, trustEpoch, verified.timestamp)) return;
+          persistence.write(url, body, verified.keys);
+        }
+      : undefined;
     // HTTP confirms revisions only after verification. WS metadata never becomes a cache validator.
     revision = result.revision;
     publish(
@@ -192,6 +202,7 @@ export function connectBrowser(
   };
   const invalidate = (pin?: string, rotate = false) => {
     if (disposed) return;
+    browserSession.commitExitPersistence = undefined;
     if (rotate) {
       // Retire the instance: pending old key fetches cannot refill this epoch.
       jwks = new InMemoryJwksCache();

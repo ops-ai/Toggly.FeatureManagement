@@ -101,3 +101,110 @@ test('context rotation and AppState flush keep batches separate; disposal is ter
   await service.flushTelemetry();
   expect(packets).toHaveLength(2);
 });
+
+test('public Core samples native exceptions, chains the previous handler, and stops on disposal', async () => {
+  jest.useFakeTimers();
+  const previousUtils = (globalThis as any).ErrorUtils;
+  const previousHandler = jest.fn();
+  let handler: (error: unknown, fatal?: boolean) => void = previousHandler;
+  (globalThis as any).ErrorUtils = {
+    getGlobalHandler: () => handler,
+    setGlobalHandler: (next: typeof handler) => {handler = next;},
+  };
+  const timerCount = jest.getTimerCount();
+  const service = client({systemMetrics: true, identity: 'sample-user-a', instanceId: 'sample-instance-a'});
+  try {
+    await service.init();
+    expect(handler).not.toBe(previousHandler);
+    const error = new Error('private sample message');
+    handler(error, true);
+    expect(previousHandler).toHaveBeenCalledWith(error, true);
+    jest.advanceTimersByTime(10_000);
+    handler(error, false);
+    handler(error, false);
+    jest.advanceTimersByTime(10_000);
+    await service.flushTelemetry();
+    expect(packets.map(packet => packet.body)).toEqual([
+      {k: 'sample-key-a', e: 'Acceptance', i: 'sample-instance-a', m: {ExceptionCount: 3}},
+    ]);
+
+    handler(error, false);
+    jest.advanceTimersByTime(10_000);
+    await service.flushTelemetry();
+    expect(packets[1].body.m).toEqual({ExceptionCount: 1});
+    expect(JSON.stringify(packets)).not.toContain('private sample message');
+    expect(JSON.stringify(packets)).not.toContain('stack');
+
+    service.dispose();
+    service.dispose();
+    expect(handler).toBe(previousHandler);
+    expect(jest.getTimerCount()).toBe(timerCount);
+    handler(error, false);
+    jest.advanceTimersByTime(60_000);
+    service.incrementCounter('after-disposal');
+    await service.flushTelemetry();
+    expect(packets).toHaveLength(2);
+    expect(previousHandler).toHaveBeenCalledTimes(5);
+  } finally {
+    service.dispose();
+    (globalThis as any).ErrorUtils = previousUtils;
+    jest.useRealTimers();
+  }
+});
+
+test.each(['default', 'optout', 'keyless'])('%s does not transmit automatic native metrics', async mode => {
+  jest.useFakeTimers();
+  const previousUtils = (globalThis as any).ErrorUtils;
+  const previousHandler = jest.fn();
+  let handler: (error: unknown, fatal?: boolean) => void = previousHandler;
+  (globalThis as any).ErrorUtils = {
+    getGlobalHandler: () => handler,
+    setGlobalHandler: (next: typeof handler) => {handler = next;},
+  };
+  const service = client(mode === 'default' ? {} : mode === 'optout'
+    ? {systemMetrics: true, enableTelemetry: false}
+    : {systemMetrics: true, appKey: undefined, featureDefaults: defs as any});
+  try {
+    await service.init();
+    if (mode !== 'keyless') {
+      expect(handler).toBe(previousHandler);
+    }
+    const error = new Error('private disabled sample');
+    handler(error, false);
+    expect(previousHandler).toHaveBeenCalledWith(error, false);
+    jest.advanceTimersByTime(10_000);
+    await service.flushTelemetry();
+    service.dispose();
+    expect(handler).toBe(previousHandler);
+    jest.advanceTimersByTime(60_000);
+    expect(packets).toHaveLength(0);
+  } finally {
+    service.dispose();
+    (globalThis as any).ErrorUtils = previousUtils;
+    jest.useRealTimers();
+  }
+});
+
+test('disposing automatic metrics preserves a later host ErrorUtils handler', async () => {
+  jest.useFakeTimers();
+  const previousUtils = (globalThis as any).ErrorUtils;
+  let handler: (error: unknown, fatal?: boolean) => void = jest.fn();
+  (globalThis as any).ErrorUtils = {
+    getGlobalHandler: () => handler,
+    setGlobalHandler: (next: typeof handler) => {handler = next;},
+  };
+  const service = client({systemMetrics: true});
+  try {
+    await service.init();
+    const laterHostHandler = jest.fn();
+    handler = laterHostHandler;
+    service.dispose();
+    expect(handler).toBe(laterHostHandler);
+    jest.advanceTimersByTime(60_000);
+    expect(packets).toHaveLength(0);
+  } finally {
+    service.dispose();
+    (globalThis as any).ErrorUtils = previousUtils;
+    jest.useRealTimers();
+  }
+});

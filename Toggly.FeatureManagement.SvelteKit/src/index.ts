@@ -1,5 +1,6 @@
 import { createTelemetryReporter } from '@ops-ai/toggly-client-telemetry';
 import { attachBrowserLifecycle } from '@ops-ai/toggly-client-telemetry/browser';
+import { attachPersistenceSafeBrowserLifecycle } from './browser-telemetry-lifecycle.js';
 import type { BrowserSession } from './client.js';
 import { writable } from 'svelte/store';
 import { evaluateResolvedKeys, resolveEvaluatedDefinition } from '@ops-ai/toggly-hooks-types';
@@ -20,6 +21,11 @@ export { decodeVariantValue } from './decode-variant-value.js';
 export function createToggly(initial: TogglySnapshot, options: BrowserOptions = {}) {
   // Configuration identity belongs to the layout owner, not mutable caller options.
   options = { ...options };
+  const session: BrowserSession = {
+    timestamps: new Map(),
+    keys: new Map(),
+    persistence: new Map(),
+  };
   const telemetry =
     globalThis.window !== undefined &&
     globalThis.document !== undefined &&
@@ -36,8 +42,16 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
           onDiagnostic: options.onTelemetryDiagnostic,
         })
       : undefined;
-  const detachTelemetry =
-    telemetry && !options.storage ? attachBrowserLifecycle(telemetry) : undefined;
+  let detachTelemetry: (() => void) | undefined;
+  if (telemetry) {
+    if (options.storage) {
+      detachTelemetry = attachPersistenceSafeBrowserLifecycle(telemetry, {
+        beforeExitFlush: () => session.commitExitPersistence?.(),
+      });
+    } else {
+      detachTelemetry = attachBrowserLifecycle(telemetry);
+    }
+  }
   const acceptSnapshot = (value: TogglySnapshot): TogglySnapshot => {
     const copy = structuredClone(value);
     copy.context.instanceId = copy.context.instanceId?.trim() || undefined;
@@ -69,12 +83,6 @@ export function createToggly(initial: TogglySnapshot, options: BrowserOptions = 
   let generation = 0;
   let disposed = false;
   let mounted = false;
-  // Keep trust and failed-retirement state across route-driven connections in this layout.
-  const session: BrowserSession = {
-    timestamps: new Map(),
-    keys: new Map(),
-    persistence: new Map(),
-  };
   const publish = (next: TogglySnapshot) => {
     snapshot = acceptSnapshot(next);
     telemetry?.setContext({

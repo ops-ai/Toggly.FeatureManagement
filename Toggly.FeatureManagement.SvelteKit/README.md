@@ -144,7 +144,7 @@ When authentication or a host token changes, rerun the owning server load (for e
 
 `BrowserOptions.instanceId` is an initial convenience when the first snapshot omits it. Every later `update(next)` owns the complete context: an omitted or blank token clears it, including any configured URL token, and restores identity targeting. Queued events retain their original attribution across updates.
 
-The store owns one bounded reporter across route-driven refresh reconnects. Regular sends use gzip when available; hidden/pagehide and the final `dispose()` send use plain JSON with browser keepalive. Keep `dispose()` in the owning layout's destruction handler. Set `enableTelemetry: false` to disable collection and transport. Keyless stores, SSR and build-time imports never create frontend telemetry; server evaluation remains owned by the supplied Node client.
+The store owns one bounded reporter across route-driven refresh reconnects. Regular sends use gzip when available; hidden/pagehide and the final `dispose()` send use plain JSON with browser keepalive. When `storage` is configured, exit handlers replay the last verified envelope write synchronously, then start keepalive flush in the same `pagehide` / hidden handler (no deferred timers). Keep `dispose()` in the owning layout's destruction handler. Set `enableTelemetry: false` to disable collection and transport. Keyless stores, SSR and build-time imports never create frontend telemetry; server evaluation remains owned by the supplied Node client.
 
 ## Refresh and failures
 
