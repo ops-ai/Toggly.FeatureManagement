@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/identity"
 	"nhooyr.io/websocket"
 )
 
@@ -19,8 +20,6 @@ const (
 	// WSReconnectMax caps exponential reconnect backoff.
 	WSReconnectMaxMs = 60000
 
-	sdkID               = "go"
-	sdkVersion          = "0.13.0"
 	flagsUpdatedMessage = "flags-updated"
 )
 
@@ -157,8 +156,8 @@ func buildWebSocketURL(baseURL, appKey, cachedRevision string) (string, error) {
 	if cachedRevision != "" {
 		q.Set("rev", cachedRevision)
 	}
-	q.Set("sdk", sdkID)
-	q.Set("sdkVersion", sdkVersion)
+	q.Set("sdk", identity.SDKID)
+	q.Set("sdkVersion", identity.SDKVersion)
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }

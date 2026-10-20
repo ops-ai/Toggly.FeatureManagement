@@ -1,9 +1,9 @@
-# Public React Native telemetry consumer (OPS-1381)
+# Public React Native telemetry consumer (OPS-1381 / OPS-1914)
 
 This bare React Native 0.87.1 app installs published npm packages:
 
-- `@ops-ai/react-native-toggly@1.5.0`
-- `@ops-ai/react-native-toggly-core@1.9.1` (pulls `@ops-ai/toggly-client-telemetry@^1.1.1`)
+- `@ops-ai/react-native-toggly@1.6.1`
+- `@ops-ai/react-native-toggly-core@1.11.1` (requires `@ops-ai/toggly-client-telemetry@^1.3.0`; locked to `1.3.0`)
 - `@ops-ai/react-native-toggly-storage-mmkv4@1.0.0`
 
 plus React Native `0.87.1`, React `19.2.3`, MMKV `4.3.2`, and Nitro `0.37.1`.
@@ -29,9 +29,19 @@ The npm lock must resolve `@ops-ai` packages from `https://registry.npmjs.org/`
 with SHA-512 integrities. No workspace aliases, local tarballs, source imports,
 forced peers, or `react-native-url-polyfill` appear in the acceptance lock.
 
+Jest also exercises the public Core's opt-in `systemMetrics: true`: native
+ErrorUtils forwarding, exception counts across sampling/flush windows,
+payload privacy, disposal and timer cleanup, and preservation of a later host
+handler. Default collection, explicit telemetry opt-out, and keyless clients
+produce no automatic metric packets. Keyless opt-in may install a local error
+handler; disposal restores its previous handler.
+
 Hosted workflow: `.github/workflows/react-native-public-consumer.yml` runs the
-checks above on pull requests that touch this fixture. Native Hermes simulator
-proof is local (see `EVIDENCE.md`).
+checks above on pull requests that touch this fixture. The dated OPS-1914
+refresh in `EVIDENCE.md` records fresh public-package JavaScript and Metro proof.
+Its earlier native Hermes simulator proof applies to the earlier package pins;
+the refreshed packages still require a new native rebuild/run for current
+Hermes execution and MMKV/Nitro JSI linkage proof.
 
 ## Native run (local Hermes proof)
 

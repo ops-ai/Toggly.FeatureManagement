@@ -134,7 +134,7 @@ test('requires current packed browser-host validation in the analysis summary', 
 test('does not count packed Vue and Svelte host harnesses as production source', () => {
   const scanExclusions = [...workflow.matchAll(/-Dsonar\.exclusions=([^\n]+)/g)].map((match) => match[1]);
 
-  assert.equal(scanExclusions.length, 2, 'both Sonar scans must define source exclusions');
+  assert.equal(scanExclusions.length, 3, 'SonarCloud and SonarQube Server scans must define source exclusions');
   for (const exclusions of scanExclusions) {
     for (const harness of packedHostHarnesses) assert.ok(exclusions.includes(harness));
   }
@@ -160,7 +160,9 @@ test('requires authenticated SonarCloud and Server quality gates', () => {
   assert.match(server, /SONAR_HOST_URL: \$\{\{ secrets\.SONAR_HOST_URL \}\}/);
   assert.doesNotMatch(server, /-Dsonar\.organization=ops-ai/);
   assert.match(server, /-Dsonar\.qualitygate\.wait=true/);
-  assert.doesNotMatch(server, /continue-on-error/);
+  assert.match(sonar, /Require SonarQube Server Scan success/);
+  assert.match(sonar, /SonarQube Server Scan \(retry\)/);
+  assert.match(sonar, /Cache Sonar scanner plugins/);
   assert.match(server, /if:.*success\(\) \|\| failure\(\)/);
   assert.match(server, /if:.*steps\.validate-sonarqube-server-credentials\.outcome == 'success'/);
 });
@@ -245,7 +247,7 @@ test('uploads signed definitions coverage and includes its source in both Sonar 
   }
   for (const property of ['javascript.lcov.reportPaths', 'typescript.lcov.reportPaths']) {
     const values = [...sonarJob.matchAll(new RegExp(`-Dsonar\\.${property.replaceAll('.', '\\.')}=([^\\n]+)`, 'g'))].map((match) => match[1]);
-    assert.deepEqual(values, ['coverage/*-lcov.info', 'coverage/*-lcov.info']);
+    assert.deepEqual(values, ['coverage/*-lcov.info', 'coverage/*-lcov.info', 'coverage/*-lcov.info']);
   }
   for (const [, exclusions] of sonarJob.matchAll(/-Dsonar\.(?:coverage\.)?exclusions=([^\n]+)/g)) {
     assert.ok(!exclusions.includes('toggly-signed-defs'), 'signed definitions production code must not be excluded');
@@ -260,7 +262,7 @@ test('maps evaluator source, tests, and LCOV into both Sonar scans', () => {
 
   assert.ok(aggregate.sources.split(',').includes('toggly-eval'));
   assert.ok(aggregate.tests.split(',').includes('toggly-eval'));
-  assert.equal(lcov.length, 4, 'both scanners must receive JavaScript and TypeScript LCOV paths');
+  assert.equal(lcov.length, 6, 'SonarCloud and SonarQube Server scans must receive JavaScript and TypeScript LCOV paths');
   for (const value of lcov) assert.equal(value, 'coverage/*-lcov.info');
   assert.match(sonarSetup, /run: node \.github\/scripts\/organize-js-coverage\.mjs/);
   assert.match(sonarSetup, /REQUIRE_FULL_JS_COVERAGE: 'true'/);
@@ -304,8 +306,8 @@ test('classifies CJS files under tests as test code in both Sonar scans', () => 
   const scanExclusions = [...workflow.matchAll(/-Dsonar\.exclusions=([^\n]+)/g)].map((match) => match[1]);
   const testInclusions = [...workflow.matchAll(/-Dsonar\.test\.inclusions=([^\n]+)/g)].map((match) => match[1]);
 
-  assert.equal(scanExclusions.length, 2, 'both Sonar scans must define source exclusions');
-  assert.equal(testInclusions.length, 2, 'both Sonar scans must define test inclusions');
+  assert.equal(scanExclusions.length, 3, 'SonarCloud and SonarQube Server scans must define source exclusions');
+  assert.equal(testInclusions.length, 3, 'SonarCloud and SonarQube Server scans must define test inclusions');
   for (const configuration of [...scanExclusions, ...testInclusions]) {
     assert.ok(configuration.includes('**/tests/**/*.cjs'));
   }
@@ -361,9 +363,9 @@ test('runs Pages Function coverage in the Docusaurus gate and maps it into both 
   const testInclusions = [...workflow.matchAll(/-Dsonar\.test\.inclusions=([^\n]+)/g)].map((match) => match[1]);
   const sourceExclusions = [...workflow.matchAll(/-Dsonar\.exclusions=([^\n]+)/g)].map((match) => match[1]);
   const coverageExclusions = [...workflow.matchAll(/-Dsonar\.coverage\.exclusions=([^\n]+)/g)].map((match) => match[1]);
-  assert.equal(testInclusions.length, 2, 'both Sonar scans must classify Pages tests');
-  assert.equal(sourceExclusions.length, 2, 'both Sonar scans must exclude Pages test tooling from source');
-  assert.equal(coverageExclusions.length, 2, 'both Sonar scans must retain matching coverage exclusions');
+  assert.equal(testInclusions.length, 3, 'SonarCloud and SonarQube Server scans must classify Pages tests');
+  assert.equal(sourceExclusions.length, 3, 'SonarCloud and SonarQube Server scans must exclude Pages test tooling from source');
+  assert.equal(coverageExclusions.length, 3, 'SonarCloud and SonarQube Server scans must retain matching coverage exclusions');
   for (const value of testInclusions) assert.ok(value.includes(`${pagesPath}/tests/**`));
   for (const value of sourceExclusions) {
     assert.ok(value.includes(`${pagesPath}/tests/**`));
@@ -448,7 +450,7 @@ test('classifies the JavaScript packed browser harness as test code in both scan
   const harness = 'Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs';
   for (const property of ['exclusions', 'test.inclusions']) {
     const values = [...workflow.matchAll(new RegExp('-Dsonar\\.' + property.replace('.', '\\.') + '=([^\\n]+)', 'g'))];
-    assert.equal(values.length, 2);
+    assert.equal(values.length, 3);
     for (const [, value] of values) assert.ok(value.split(',').includes(harness), property);
   }
   for (const [, value] of workflow.matchAll(/-Dsonar\.coverage\.exclusions=([^\n]+)/g)) {

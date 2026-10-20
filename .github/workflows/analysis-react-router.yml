@@ -184,8 +184,7 @@ jobs:
         run: |
           mkdir -p coverage
           if [ -f "coverage-artifacts/lcov.info" ]; then
-            sed "s|SF:|SF:${{ env.SDK_ROOT }}/${{ env.PKG }}/|g" \
-              coverage-artifacts/lcov.info > coverage/all-lcov.info
+            cp coverage-artifacts/lcov.info coverage/all-lcov.info
           fi
           ls -la coverage/ || true
         continue-on-error: true
@@ -209,17 +208,19 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
         with:
+          projectBaseDir: ${{ env.SDK_ROOT }}/${{ env.PKG }}
           args: >
             -Dsonar.projectKey=toggly-sdks-react-router
             -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.qualitygate.wait=true
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - React Router"
-            -Dsonar.sources=${{ env.SDK_ROOT }}/${{ env.PKG }}/src
+            -Dsonar.sources=src
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs,**/tests/**/*.cjs,**/*.config.js,**/*.config.ts,**/fixtures/**
             -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs,**/tests/**/*.cjs,**/*.config.js,**/*.config.ts,**/fixtures/**
-            -Dsonar.javascript.lcov.reportPaths=coverage/all-lcov.info
-            -Dsonar.tests=${{ env.SDK_ROOT }}/${{ env.PKG }}/tests
+            -Dsonar.javascript.lcov.reportPaths=../../coverage/all-lcov.info
+            -Dsonar.typescript.tsconfigPaths=tsconfig.json
+            -Dsonar.tests=tests
             -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs
 
       - name: Download Dependency Check report
@@ -245,18 +246,20 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         with:
+          projectBaseDir: ${{ env.SDK_ROOT }}/${{ env.PKG }}
           args: >
             -Dsonar.projectKey=toggly-sdks-react-router
             -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
             -Dsonar.qualitygate.wait=true
             -Dsonar.projectName="Toggly SDKs - React Router"
-            -Dsonar.sources=${{ env.SDK_ROOT }}/${{ env.PKG }}/src
+            -Dsonar.sources=src
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/coverage/**,**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs,**/tests/**/*.cjs,**/*.config.js,**/*.config.ts,**/fixtures/**
             -Dsonar.coverage.exclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs,**/tests/**/*.cjs,**/*.config.js,**/*.config.ts,**/fixtures/**
-            -Dsonar.javascript.lcov.reportPaths=coverage/all-lcov.info
-            -Dsonar.tests=${{ env.SDK_ROOT }}/${{ env.PKG }}/tests
+            -Dsonar.javascript.lcov.reportPaths=../../coverage/all-lcov.info
+            -Dsonar.typescript.tsconfigPaths=tsconfig.json
+            -Dsonar.tests=tests
             -Dsonar.test.inclusions=**/*.test.ts,**/*.spec.ts,**/*.test.tsx,**/*.spec.tsx,**/*.test.mjs
-            -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
+            -Dsonar.dependencyCheck.reportPath=../../dependency-check-reports/dependency-check-report.xml
 
   dependency-check:
     name: OWASP Dependency Check
