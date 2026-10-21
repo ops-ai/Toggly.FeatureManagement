@@ -204,7 +204,7 @@ app.use(toggly, {
   }],
 });
 
-// In component setup, resolve this app's service with inject<Toggly>('$toggly').
+// In component setup, resolve this app's service with inject('$toggly').
 // After changing apiRedesignEnabled, call service.notifyLocalGatesChanged().
 ```
 

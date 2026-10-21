@@ -52,7 +52,7 @@ Create a TogglyProvider with your App Key & Environment name from your [Toggly a
 
 Wrap your App component with the newly created TogglyProvider.
 
-```js
+```tsx
   const root = createRoot(
     document.getElementById('root') as HTMLElement,
   )
@@ -137,7 +137,7 @@ Create a TogglyProvider and provide your feature defaults.
 
 Wrap your App component with the newly created TogglyProvider.
 
-```js
+```tsx
   const root = createRoot(
     document.getElementById('root') as HTMLElement,
   )
