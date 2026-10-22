@@ -2,9 +2,12 @@
 
 ## All .NET SDK packages 3.14.2 - 2026-10-22
 
+### Changed
+- `AddTogglyFeatureManagement` now defaults `IgnoreMissingFeatureFilters` to
+  `true` (unknown filters skipped, evaluation fails closed without host crash).
+
 ### Fixed
-- Register builtin `AlwaysOn` / `AlwaysOff` feature filters and ignore unknown
-  filters without throwing (evaluation fails closed) [OPS-1987].
+- Register builtin `AlwaysOn` / `AlwaysOff` feature filters [OPS-1987].
 - Map definitions filter name `Country` to `CountryFamily` (and
   `OperatingSystem` to `OS`) so segment filters match Web registrations;
   resolve country from standard CDN edge headers [OPS-1988].
