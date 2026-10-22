@@ -48,6 +48,38 @@ describe('createTogglyClient live fetch', () => {
     }
   });
 
+  it('does not apply liveFetchError from a superseded refresh', async () => {
+    let resolveFirst!: (value: unknown) => void;
+    const firstFetch = new Promise((resolve) => {
+      resolveFirst = resolve;
+    });
+    const fetch = vi
+      .fn()
+      .mockImplementationOnce(() => firstFetch)
+      .mockResolvedValueOnce({ ok: false, status: 503, statusText: 'Unavailable' });
+
+    const client = createTogglyClient({
+      appKey: 'app',
+      enableTelemetry: false,
+      flagDefaults: { a: false },
+      featureFlagsRefreshInterval: 0,
+      fetch,
+    });
+    try {
+      const firstRefresh = client.refreshFlags();
+      const secondRefresh = client.refreshFlags();
+      resolveFirst({
+        ok: true,
+        text: async () => JSON.stringify({ a: true }),
+      });
+      await Promise.all([firstRefresh, secondRefresh]);
+      expect(client.getLastLiveFetchError()).toBeInstanceOf(Error);
+      expect(await client.getFlags()).toEqual({ a: false });
+    } finally {
+      client.dispose();
+    }
+  });
+
   it('warns and records error when fetch fails and no cache exists', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const fetch = vi.fn().mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' });
