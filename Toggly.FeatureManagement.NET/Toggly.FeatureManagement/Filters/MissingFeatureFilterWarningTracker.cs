@@ -32,7 +32,7 @@ namespace Toggly.FeatureManagement.Filters
                 return;
 
             _logger.LogWarning(
-                "Feature filter '{FilterName}' is not registered and will be ignored during evaluation (fail closed). " +
+                "Feature filter '{FilterName}' is not registered; evaluation will fail closed (throws when IgnoreMissingFeatureFilters is false). " +
                 "Register the filter implementation or correct the feature definition filter name.",
                 configurationName);
         }
