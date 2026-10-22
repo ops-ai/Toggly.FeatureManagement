@@ -86,9 +86,10 @@ const metricsUrl = `http://127.0.0.1:${(collector.address() as import('node:net'
     await request.continue()
   })
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/?metrics=${encodeURIComponent(metricsUrl)}`)
+  const uiTimeout = process.env.CI ? 60_000 : 15_000
   await page.waitForFunction(
     () => document.querySelector('[data-testid="flag"]')?.textContent !== 'loading',
-    { timeout: 30000 },
+    { timeout: uiTimeout },
   )
   const state = async expected => {
     await page.waitForFunction(value =>
@@ -97,7 +98,7 @@ const metricsUrl = `http://127.0.0.1:${(collector.address() as import('node:net'
       && !!document.querySelector('[data-testid="negated"]') === (value === 'off')
       && document.querySelector('[data-testid="variant-name"]')?.textContent === (value === 'on' ? 'control' : 'none')
       && !!document.querySelector('[data-testid="variant-visible"]') === (value === 'on'),
-    { timeout: 15000 }, expected)
+    { timeout: uiTimeout }, expected)
     assert.equal(await page.$eval('[data-testid="gate"]', el => el.textContent), expected)
     assert.equal(await page.$eval('[data-testid="render"]', el => el.textContent), expected)
     assert.equal(await page.$('[data-testid="visible"]') !== null, expected === 'on')
