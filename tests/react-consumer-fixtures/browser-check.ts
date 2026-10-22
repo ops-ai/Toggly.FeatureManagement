@@ -86,6 +86,10 @@ const metricsUrl = `http://127.0.0.1:${(collector.address() as import('node:net'
     await request.continue()
   })
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/?metrics=${encodeURIComponent(metricsUrl)}`)
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="flag"]')?.textContent !== 'loading',
+    { timeout: 30000 },
+  )
   const state = async expected => {
     await page.waitForFunction(value =>
       ['flag', 'gate', 'render'].every(id => document.querySelector(`[data-testid="${id}"]`)?.textContent === value)
