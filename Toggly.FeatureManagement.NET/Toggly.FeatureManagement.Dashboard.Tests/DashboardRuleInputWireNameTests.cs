@@ -8,8 +8,8 @@ namespace Toggly.FeatureManagement.Dashboard.Tests;
 public sealed class DashboardRuleInputWireNameTests
 {
     [Theory]
-    [InlineData("Country")]
-    [InlineData("CountryFamily")]
+    [InlineData(DashboardRuleInput.CountryWireName)]
+    [InlineData(DashboardRuleInput.CountryFamily)]
     public void FromRule_ToRule_PreservesIndexedCountryValues(string filterName)
     {
         var rule = new CatalogRule
@@ -31,8 +31,8 @@ public sealed class DashboardRuleInputWireNameTests
     }
 
     [Theory]
-    [InlineData("OS")]
-    [InlineData("OperatingSystem")]
+    [InlineData(DashboardRuleInput.OperatingSystem)]
+    [InlineData(DashboardRuleInput.OperatingSystemWireName)]
     public void FromRule_ToRule_PreservesIndexedOperatingSystemValues(string filterName)
     {
         var rule = new CatalogRule

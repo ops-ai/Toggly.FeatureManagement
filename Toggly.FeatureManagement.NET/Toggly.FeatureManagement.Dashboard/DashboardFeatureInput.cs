@@ -116,8 +116,8 @@ public sealed class DashboardRuleInput
     internal const string OperatingSystemWireName = "OperatingSystem";
     internal const string CountryFamily = "CountryFamily";
     internal const string CountryWireName = "Country";
-    internal const string CountryIndexedPrefix = "Country";
-    internal const string OperatingSystemIndexedPrefix = "OperatingSystem";
+    internal const string CountryIndexedPrefix = CountryWireName;
+    internal const string OperatingSystemIndexedPrefix = OperatingSystemWireName;
     internal const string ParamValue = "Value";
 
     internal static IReadOnlyDictionary<string, string> SupportedNames { get; } = new Dictionary<string, string>
