@@ -43,7 +43,9 @@ namespace Toggly.FeatureManagement.Web.Filters
             if (!await SegmentPercentageGate.PassesAsync(settings.Percentage, context.FeatureName, _targetingContextAccessor).ConfigureAwait(false))
                 return false;
 
-            var ipCountry = _httpContextAccessor.HttpContext.Request.Headers["CF-IPCountry"];
+            var ipCountry = HttpRequestCountryResolver.ResolveCountry(_httpContextAccessor.HttpContext);
+            if (string.IsNullOrWhiteSpace(ipCountry))
+                return false;
 
             return settings.Country != null &&
                    settings.Country.Any(t => !string.IsNullOrWhiteSpace(t) && string.Equals(t, ipCountry, StringComparison.OrdinalIgnoreCase));

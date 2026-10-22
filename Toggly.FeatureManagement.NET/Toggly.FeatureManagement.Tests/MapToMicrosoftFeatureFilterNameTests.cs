@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using FluentAssertions;
+using Toggly.FeatureManagement.Data;
 using Xunit;
 
 namespace Toggly.FeatureManagement.Tests;
@@ -32,15 +34,50 @@ public class MapToMicrosoftFeatureFilterNameTests
     }
 
     [Theory]
+    [InlineData("Country", "CountryFamily")]
+    [InlineData("country", "CountryFamily")]
+    [InlineData("OperatingSystem", "OS")]
+    [InlineData("operatingsystem", "OS")]
+    public void MapsSegmentFilterAliases(string input, string expected)
+    {
+        TogglyFeatureProvider.MapToMicrosoftFeatureFilterName(input).Should().Be(expected);
+    }
+
+    [Theory]
     [InlineData("AlwaysOn")]
+    [InlineData("AlwaysOff")]
     [InlineData("UserClaims")]
     [InlineData("BrowserFamily")]
     [InlineData("OS")]
-    [InlineData("Country")]
+    [InlineData("CountryFamily")]
     [InlineData("CustomFilter")]
     public void LeavesOtherFilterNamesUnchanged(string input)
     {
         TogglyFeatureProvider.MapToMicrosoftFeatureFilterName(input).Should().Be(input);
+    }
+
+    [Fact]
+    public void BuildFeatureDefinition_WithCountryFilterName_UsesCountryFamilyRegistration()
+    {
+        var model = new Data.FeatureDefinitionModel
+        {
+            FeatureKey = "filter-country",
+            Filters =
+            [
+                new Data.FeatureFilter
+                {
+                    Name = "Country",
+                    Parameters = new Dictionary<string, string>
+                    {
+                        ["Country:0"] = "US",
+                        ["Percentage"] = "100"
+                    }
+                }
+            ]
+        };
+
+        var definition = TogglyFeatureProvider.BuildFeatureDefinition(model);
+        definition.EnabledFor.Should().ContainSingle(f => f.Name == "CountryFamily");
     }
 
     [Fact]

@@ -400,6 +400,19 @@ public class CountryFilterTests
         // Assert
         result.Should().BeTrue();
     }
+
+    [Fact]
+    public async Task EvaluateAsync_WithVercelCountryHeader_ReturnsTrue()
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.Request.Headers["X-Vercel-IP-Country"] = "US";
+        _httpContextAccessorMock.Setup(x => x.HttpContext).Returns(httpContext);
+        var context = CreateContext(new[] { "US" }, 100);
+
+        var result = await _filter.EvaluateAsync(context);
+
+        result.Should().BeTrue();
+    }
 }
 
 public class DeviceTypeFilterTests

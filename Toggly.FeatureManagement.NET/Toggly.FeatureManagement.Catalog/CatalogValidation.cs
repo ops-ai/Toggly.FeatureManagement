@@ -70,6 +70,7 @@ namespace Toggly.FeatureManagement.Catalog
         private const string ParamProperty = "Property";
         private const string ParamOperator = "Operator";
         private const string FilterAlwaysOn = "AlwaysOn";
+        private const string FilterAlwaysOff = "AlwaysOff";
         private const string FilterTargeting = "Targeting";
         private const string FilterTimeWindow = "TimeWindow";
         private const string FilterContextProperty = "ContextProperty";
@@ -87,7 +88,7 @@ namespace Toggly.FeatureManagement.Catalog
 
         private static readonly HashSet<string> KnownFilters = new HashSet<string>(StringComparer.Ordinal)
         {
-            FilterAlwaysOn, FilterPercentage, FilterTargeting, FilterTimeWindow, FilterContextProperty, FilterBrowserFamily, FilterBrowserLanguage,
+            FilterAlwaysOn, FilterAlwaysOff, FilterPercentage, FilterTargeting, FilterTimeWindow, FilterContextProperty, FilterBrowserFamily, FilterBrowserLanguage,
             "OS", "DeviceType", "CountryFamily", FilterUserClaims
         };
 
@@ -463,7 +464,7 @@ namespace Toggly.FeatureManagement.Catalog
                 return;
             }
 
-            if (rule.Name == FilterAlwaysOn)
+            if (rule.Name == FilterAlwaysOn || rule.Name == FilterAlwaysOff)
             {
                 ValidateExactParameters(rule.Parameters, Array.Empty<string>(), Array.Empty<string>(), path, errors);
             }
