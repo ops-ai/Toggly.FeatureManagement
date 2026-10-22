@@ -661,6 +661,19 @@ describe('Middleware', () => {
       expect(getServerToggly()?.identity).toBe('bob')
     })
 
+    it('useEventToggly rejects async-only providers', async () => {
+      await initServerToggly({
+        appKey: 'test-key',
+        enableLiveUpdates: false,
+      })
+
+      configureEventEvalContext({
+        getIdentity: async () => 'alice',
+      })
+
+      expect(() => useEventToggly(createMockEvent())).toThrow(/getEventToggly/)
+    })
+
     it('getEventToggly resolves providers then binds', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse([targetingAlice]))
 

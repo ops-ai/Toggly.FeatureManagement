@@ -4,14 +4,20 @@ export const SDK_VERSION = '0.5.3';
 export const SDK_HEADER_ID = 'X-Toggly-Sdk';
 export const SDK_HEADER_VERSION = 'X-Toggly-Sdk-Version';
 
-export function sdkUserAgent(): string {
-  return `toggly-${SDK_ID}/${SDK_VERSION}`;
+export function sdkUserAgent(
+  sdkId: string = SDK_ID,
+  sdkVersion: string = SDK_VERSION,
+): string {
+  return `toggly-${sdkId}/${sdkVersion}`;
 }
 
-export function sdkCustomHeaders(): Record<string, string> {
+export function sdkCustomHeaders(
+  sdkId: string = SDK_ID,
+  sdkVersion: string = SDK_VERSION,
+): Record<string, string> {
   return {
-    [SDK_HEADER_ID]: SDK_ID,
-    [SDK_HEADER_VERSION]: SDK_VERSION,
+    [SDK_HEADER_ID]: sdkId,
+    [SDK_HEADER_VERSION]: sdkVersion,
   };
 }
 
@@ -35,12 +41,13 @@ export function usesSdkCustomHeaders(): boolean {
 
 export function buildDefinitionFetchHeaders(
   existing: Record<string, string> = {},
+  sdk: { id: string; version: string } = { id: SDK_ID, version: SDK_VERSION },
 ): Record<string, string> {
   const headers = { ...existing };
   if (usesSdkCustomHeaders()) {
-    Object.assign(headers, sdkCustomHeaders());
+    Object.assign(headers, sdkCustomHeaders(sdk.id, sdk.version));
   } else {
-    headers['User-Agent'] = sdkUserAgent();
+    headers['User-Agent'] = sdkUserAgent(sdk.id, sdk.version);
   }
   return headers;
 }

@@ -33,6 +33,19 @@ export function getEventEvalContextProviders(): EventEvalContextProviders {
   return { ...eventProviders }
 }
 
+/** True when module-level providers were registered via `configureEventEvalContext`. */
+export function hasConfiguredEventEvalProviders(
+  providers?: EventEvalContextProviders,
+): boolean {
+  const config = { ...eventProviders, ...providers }
+  return !!(
+    config.getContext ||
+    config.getIdentity ||
+    config.getGroups ||
+    config.getClaims
+  )
+}
+
 type EventWithTogglyContext = H3Event & {
   context: H3Event['context'] & {
     [EVENT_CONTEXT_KEY]?: FeatureCheckOptions
