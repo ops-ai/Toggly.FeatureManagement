@@ -348,7 +348,7 @@ public class ServiceCollectionExtensionsTests
         var featureOptions = serviceProvider.GetRequiredService<IOptions<FeatureManagementOptions>>();
 
         // Assert
-        featureOptions.Value.IgnoreMissingFeatureFilters.Should().BeTrue();
+        featureOptions.Value.IgnoreMissingFeatureFilters.Should().BeFalse();
     }
 
     [Fact]

@@ -12,7 +12,7 @@ namespace Toggly.FeatureManagement.Tests;
 public class BuiltinFeatureFilterRegistrationTests
 {
     [Fact]
-    public void AddTogglyFeatureManagement_RegistersAlwaysOnAndAlwaysOff()
+    public void AddTogglyFeatureManagement_RegistersAlwaysOn()
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -21,13 +21,10 @@ public class BuiltinFeatureFilterRegistrationTests
         services.Should().Contain(d =>
             d.ServiceType == typeof(IFeatureFilterMetadata)
             && d.ImplementationType == typeof(AlwaysOnFeatureFilter));
-        services.Should().Contain(d =>
-            d.ServiceType == typeof(IFeatureFilterMetadata)
-            && d.ImplementationType == typeof(AlwaysOffFeatureFilter));
     }
 
     [Fact]
-    public void AddTogglyFeatureManagement_IgnoresUnknownFiltersWithoutThrowing()
+    public void AddTogglyFeatureManagement_FailsClosedOnUnknownFilters()
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -36,6 +33,6 @@ public class BuiltinFeatureFilterRegistrationTests
         var provider = services.BuildServiceProvider();
         var options = provider.GetRequiredService<IOptions<FeatureManagementOptions>>();
 
-        options.Value.IgnoreMissingFeatureFilters.Should().BeTrue();
+        options.Value.IgnoreMissingFeatureFilters.Should().BeFalse();
     }
 }

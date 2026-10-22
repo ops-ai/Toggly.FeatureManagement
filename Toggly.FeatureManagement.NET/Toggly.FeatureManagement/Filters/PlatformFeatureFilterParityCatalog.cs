@@ -17,7 +17,6 @@ namespace Toggly.FeatureManagement.Filters
         public static IEnumerable<string> AllWireNames { get; } = new[]
         {
             "AlwaysOn",
-            "AlwaysOff",
             "Percentage",
             "Targeting",
             "TimeWindow",

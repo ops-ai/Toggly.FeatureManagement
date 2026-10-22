@@ -2,17 +2,16 @@
 
 ## All .NET SDK packages 3.14.2 - 2026-10-22
 
-### Changed
-- `AddTogglyFeatureManagement` now defaults `IgnoreMissingFeatureFilters` to
-  `true` (unknown filters skipped, evaluation fails closed without host crash).
-  The first evaluation that references each unregistered filter name emits a
-  warning log (once per name per process).
+### Added
+- Log a warning once per missing filter name before evaluation when a feature
+  references an unregistered filter (`MissingFeatureFilterWarningTracker`).
 
 ### Fixed
-- Register builtin `AlwaysOn` / `AlwaysOff` feature filters [OPS-1987].
+- Register builtin `AlwaysOn` feature filter [OPS-1987].
 - Map definitions filter name `Country` to `CountryFamily` (and
-  `OperatingSystem` to `OS`) so segment filters match Web registrations;
-  resolve country from standard CDN edge headers [OPS-1988].
+  `OperatingSystem` to `OS`) so segment filters match Web registrations and
+  filter-parity wire names; resolve country from standard CDN edge headers
+  [OPS-1988].
 
 ## All .NET SDK packages 3.13.4 - 2026-10-12
 

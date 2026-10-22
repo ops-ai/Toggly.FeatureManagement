@@ -222,8 +222,7 @@ namespace Toggly.FeatureManagement.Configuration
             var featureManagement = services.AddFeatureManagement()
                 .AddFeatureFilter<TimeWindowFilter>()
                 .AddFeatureFilter<ContextPropertyFilter>()
-                .AddFeatureFilter<Filters.AlwaysOnFeatureFilter>()
-                .AddFeatureFilter<Filters.AlwaysOffFeatureFilter>();
+                .AddFeatureFilter<Filters.AlwaysOnFeatureFilter>();
 
             // AddFeatureManagement auto-registers stock PercentageFilter; remove it so
             // Definitions-aligned sticky Percentage is the only Microsoft.Percentage match.
@@ -239,10 +238,11 @@ namespace Toggly.FeatureManagement.Configuration
             services.AddSingleton<FeatureFilterDiagnostics>();
 
             services.Decorate<IFeatureManager, TogglyFeatureManager>();
-            // Fail closed without crashing: unknown filters are skipped (treated as non-matching).
+            // Fail closed: unknown filters throw instead of being ignored (which can enable flags).
+            // Opt into IgnoreMissingFeatureFilters = true only if you intentionally accept that risk.
             services.Configure<FeatureManagementOptions>(options =>
             {
-                options.IgnoreMissingFeatureFilters = true;
+                options.IgnoreMissingFeatureFilters = false;
             });
 
             return featureManagement;

@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.IO;
+using System.Text.Json;
 using FluentAssertions;
 using Toggly.FeatureManagement.Data;
 using Xunit;
@@ -45,7 +47,6 @@ public class MapToMicrosoftFeatureFilterNameTests
 
     [Theory]
     [InlineData("AlwaysOn")]
-    [InlineData("AlwaysOff")]
     [InlineData("UserClaims")]
     [InlineData("BrowserFamily")]
     [InlineData("OS")]
@@ -54,6 +55,21 @@ public class MapToMicrosoftFeatureFilterNameTests
     public void LeavesOtherFilterNamesUnchanged(string input)
     {
         TogglyFeatureProvider.MapToMicrosoftFeatureFilterName(input).Should().Be(input);
+    }
+
+    [Fact]
+    public void CountryWireName_FromFilterParityFixture_MapsToCountryFamily()
+    {
+        var fixturePath = Path.GetFullPath(Path.Combine(
+            AppContext.BaseDirectory,
+            "..", "..", "..", "..", "..",
+            "docs", "filter-parity", "fixtures", "country-from-request.json"));
+        File.Exists(fixturePath).Should().BeTrue("filter-parity fixture must be present");
+
+        using var document = JsonDocument.Parse(File.ReadAllText(fixturePath));
+        var filterName = document.RootElement.GetProperty("filters")[0].GetProperty("name").GetString();
+        filterName.Should().Be("Country");
+        TogglyFeatureProvider.MapToMicrosoftFeatureFilterName(filterName).Should().Be("CountryFamily");
     }
 
     [Fact]

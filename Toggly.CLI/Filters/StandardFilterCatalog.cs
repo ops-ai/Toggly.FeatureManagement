@@ -11,9 +11,6 @@ public static class StandardFilterCatalog
     /// <summary>Always-enabled filter; no parameters.</summary>
     public const string AlwaysOn = "AlwaysOn";
 
-    /// <summary>Always-disabled filter; no parameters.</summary>
-    public const string AlwaysOff = "AlwaysOff";
-
     /// <summary>Sticky percentage rollout filter.</summary>
     public const string Percentage = "Percentage";
 
@@ -58,7 +55,6 @@ public static class StandardFilterCatalog
         new Dictionary<string, string[]>(StringComparer.Ordinal)
         {
             [AlwaysOn] = [],
-            [AlwaysOff] = [],
             [Percentage] = ["Value"],
             [Targeting] = [],
             [TimeWindow] = [],

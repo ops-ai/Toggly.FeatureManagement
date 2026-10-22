@@ -253,18 +253,17 @@ app.UseForFeature(featureName, appBuilder =>
 ### Missing Feature Filters
 
 If a feature references a filter that is not registered, Toggly defaults to
-`IgnoreMissingFeatureFilters = true`: the unknown filter is skipped (treated as
-non-matching) so evaluation fails closed without crashing the host. The SDK logs
-a **warning once per missing filter name** the first time that name is encountered
-during evaluation (see `MissingFeatureFilterWarningTracker`). Builtin `AlwaysOn`,
-`AlwaysOff`, and other standard filters are registered by
-`AddTogglyFeatureManagement` / `AddTogglyWeb`. To restore Microsoft
-Feature Management's throw-on-missing behavior:
+`IgnoreMissingFeatureFilters = false` (fail closed): evaluation throws rather
+than treating a missing filter as satisfied. Before evaluation, the SDK logs a
+**warning once per missing filter name** the first time that name is encountered
+(see `MissingFeatureFilterWarningTracker`). Builtin `AlwaysOn` and segment
+filters are registered by `AddTogglyWeb`; core hosts register `AlwaysOn` via
+`AddTogglyFeatureManagement`. To ignore missing filters (not recommended):
 
 ``` C#
 services.Configure<FeatureManagementOptions>(options =>
 {
-    options.IgnoreMissingFeatureFilters = false;
+    options.IgnoreMissingFeatureFilters = true;
 });
 ```
 
