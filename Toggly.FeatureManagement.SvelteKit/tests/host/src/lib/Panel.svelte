@@ -7,6 +7,7 @@
   export let frontendKey: string;
   export let telemetryEnabled: boolean;
   let telemetryStatus = 'idle';
+  let panelReady = false;
   let local = true;
   let failures = 0;
   const toggly = createToggly(snapshot, {
@@ -30,6 +31,7 @@
     toggly.isEnabled('Order', { entity: { kind: 'Order', key: '1', attributes: { Vip: true } } });
   $: noEntity = $toggly && toggly.isEnabled('Order');
   onMount(() => {
+    panelReady = true;
     void toggly.start();
   });
   onDestroy(() => toggly.dispose());
@@ -74,4 +76,5 @@
     telemetryStatus = 'flushed';
   }}>Flush telemetry</button
 >
+<output data-testid="panel-ready" hidden>{panelReady}</output>
 <output data-testid="telemetry-status">{telemetryStatus}</output>
