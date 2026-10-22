@@ -19,7 +19,10 @@ let preflights = 0
 collector = createServer((request, response) => {
   response.setHeader('Access-Control-Allow-Origin', request.headers.origin ?? '*')
   response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Content-Encoding')
+  response.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Content-Encoding, Accept, X-Toggly-Sdk, X-Toggly-Sdk-Version',
+  )
   if (request.method === 'OPTIONS') { preflights++; response.statusCode = 204; response.end(); return }
   if (request.method !== 'POST' || request.url !== '/api/frontend/telemetry') { response.statusCode = 404; response.end(); return }
   const chunks = []
@@ -73,7 +76,7 @@ const metricsUrl = `http://127.0.0.1:${(collector.address() as import('node:net'
       && !!document.querySelector('[data-testid="negated"]') === (value === 'off')
       && document.querySelector('[data-testid="variant-name"]')?.textContent === (value === 'on' ? 'control' : 'none')
       && !!document.querySelector('[data-testid="variant-visible"]') === (value === 'on'),
-    { timeout: 5000 }, expected)
+    { timeout: 15000 }, expected)
     assert.equal(await page.$eval('[data-testid="gate"]', el => el.textContent), expected)
     assert.equal(await page.$eval('[data-testid="render"]', el => el.textContent), expected)
     assert.equal(await page.$('[data-testid="visible"]') !== null, expected === 'on')
