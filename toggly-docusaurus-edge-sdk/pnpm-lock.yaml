@@ -108,9 +108,6 @@ importers:
 
   libs/docusaurus-plugin:
     dependencies:
-      '@ops-ai/toggly-client-core':
-        specifier: workspace:^
-        version: link:../core
       '@ops-ai/toggly-client-telemetry':
         specifier: ^1.3.0
         version: 1.3.0
