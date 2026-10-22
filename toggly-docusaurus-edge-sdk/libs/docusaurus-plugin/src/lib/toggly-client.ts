@@ -1,8 +1,5 @@
 import { captureRequestUrl } from './capture-request-url.js';
-import {
-  buildEvaluatedSignedUrl,
-  resolveEvaluatedDefinition,
-} from '@ops-ai/toggly-hooks-types';
+import { buildEvaluatedSignedUrl } from '@ops-ai/toggly-hooks-types';
 import { type TelemetryOptions, type TelemetryReporter } from '@ops-ai/toggly-client-telemetry';
 import { createBrowserTelemetry, type BrowserTelemetry } from './browser-telemetry.js';
 
@@ -236,13 +233,7 @@ function createClient(
     });
   };
   const evaluateFlag = (key: string, flags: Flags, defaultValue?: boolean): boolean => {
-    const raw = flags[key];
-    let enabled: boolean;
-    if (raw !== undefined && typeof raw !== 'boolean') {
-      enabled = resolveEvaluatedDefinition(raw as never);
-    } else {
-      enabled = raw ?? defaultValue ?? flagDefaults[key] ?? false;
-    }
+    const enabled = flags[key] ?? defaultValue ?? flagDefaults[key] ?? false;
     startTelemetry();
     const record = disposed ? undefined : captureCheck;
     record?.(key, enabled ? 'enabled' : 'disabled');
