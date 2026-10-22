@@ -44,20 +44,37 @@ describe('createTogglyClient live fetch', () => {
     }
   });
 
-  it('passes the configured fetch as fetchImpl (no definitions abort signal wrapper)', async () => {
-    const fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      text: async () => JSON.stringify({ On: true }),
+  it('passes a connectTimeout-bounded fetchImpl for JWKS (not the definitions abort signal)', async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('evaluated-signed')) {
+        return Promise.resolve({
+          ok: true,
+          text: async () => JSON.stringify({ On: true }),
+        });
+      }
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), {
+          once: true,
+        });
+      });
     });
     const parseSpy = vi
       .spyOn(signedResponse, 'parseEvaluatedResponseBody')
-      .mockImplementation(async (body, options) => {
-        expect(options.fetchImpl).toBe(fetch);
-        return signedResponse.unwrapDefsPayload(JSON.parse(body));
+      .mockImplementation(async (_body, options) => {
+        expect(options.fetchImpl).not.toBe(fetch);
+        const pending = options.fetchImpl!('https://definitions.test/.well-known/jwks', {
+          method: 'GET',
+        });
+        vi.advanceTimersByTime(5000);
+        await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+        return { On: true };
       });
     const client = createTogglyClient({
       appKey: 'app',
       enableTelemetry: false,
+      connectTimeout: 5000,
+      verifySignatures: true,
       fetch,
     });
     try {
@@ -65,6 +82,40 @@ describe('createTogglyClient live fetch', () => {
     } finally {
       parseSpy.mockRestore();
       client.dispose();
+      vi.useRealTimers();
     }
+  });
+
+  it('aborts in-flight JWKS fetch on dispose', async () => {
+    vi.useFakeTimers();
+    const fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('evaluated-signed')) {
+        return Promise.resolve({
+          ok: true,
+          text: async () => JSON.stringify({ On: true }),
+        });
+      }
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), {
+          once: true,
+        });
+      });
+    });
+    vi.spyOn(signedResponse, 'parseEvaluatedResponseBody').mockImplementation(async (_body, options) => {
+      const pending = options.fetchImpl!('https://definitions.test/.well-known/jwks', { method: 'GET' });
+      return pending.then(() => ({ On: true }));
+    });
+    const client = createTogglyClient({
+      appKey: 'app',
+      enableTelemetry: false,
+      connectTimeout: 60_000,
+      verifySignatures: true,
+      fetch,
+    });
+    const flagsPromise = client.getFlags();
+    await Promise.resolve();
+    client.dispose();
+    await expect(flagsPromise).resolves.toEqual({});
+    vi.useRealTimers();
   });
 });

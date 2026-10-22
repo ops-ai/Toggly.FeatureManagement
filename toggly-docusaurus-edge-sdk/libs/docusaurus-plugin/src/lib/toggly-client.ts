@@ -222,6 +222,16 @@ function createClient(
   let disposed = false;
   let generation = 0;
   const requests = new Map<AbortController, ReturnType<typeof setTimeout>>();
+  /** JWKS verification must not reuse the definitions abort signal, but still honor connectTimeout. */
+  const fetchWithConnectTimeout: typeof fetch = (input, init) => {
+    const bounded = new AbortController();
+    const boundedTimer = setTimeout(() => bounded.abort(), connectTimeout);
+    requests.set(bounded, boundedTimer);
+    return resolvedFetch(input, { ...init, signal: bounded.signal }).finally(() => {
+      clearTimeout(boundedTimer);
+      requests.delete(bounded);
+    });
+  };
   let reporter: TelemetryReporter | undefined;
   let captureCheck: ReturnType<TelemetryReporter['captureCheck']> | undefined;
   // Each target client activates once. A retired client cannot reactivate old context.
@@ -312,8 +322,7 @@ function createClient(
         allowedKeyIds,
         maxSignatureAgeSeconds,
         headers: { Accept: 'application/json' },
-        // JWKS fetch must not inherit the definitions request abort signal.
-        fetchImpl: resolvedFetch,
+        fetchImpl: fetchWithConnectTimeout,
       });
       const raw = verifySignatures ? parsed : unwrapDefsPayload(parsed);
       const flags = normalizeEvaluatedFlags(raw);
