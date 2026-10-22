@@ -112,8 +112,6 @@ export class Toggly {
   private static readonly _localGatesChangedListeners = new Set<() => void>();
   private static _inMemoryFlags: EvaluatedDefinitions | null = null;
   private static _inMemoryVariants: { [key: string]: EvaluatedVariantDef } | null = null;
-  /** Full evaluated-signed defs when enableVariants is on (entity gates). */
-  private static _entityEvaluatedFeatures: EvaluatedDefinitions | null = null;
   private static _hasLoadedFlags = false;
   private static _lastError: string | undefined;
   private static _telemetry: TelemetryReporter | undefined;
@@ -597,7 +595,6 @@ export class Toggly {
     Toggly._requests.clear();
     Toggly._inMemoryFlags = null;
     Toggly._inMemoryVariants = null;
-    Toggly._entityEvaluatedFeatures = null;
     Toggly._hasLoadedFlags = false;
     Toggly._cachedDefinitionsRevision = null;
     Toggly._cachedRevisionContext = null;
@@ -642,46 +639,6 @@ export class Toggly {
 
   static clearContext(): Promise<{ [key: string]: boolean }> {
     return Toggly.setContext({ identity: '', groups: [], claims: {} });
-  }
-
-  private static async loadEntityEvaluatedFeatures(
-    generation: number,
-    signal?: AbortSignal,
-  ): Promise<void> {
-    if (!Toggly._config?.enableVariants || !Toggly._config.appKey) {
-      Toggly._entityEvaluatedFeatures = null;
-      return;
-    }
-    const controller = new AbortController();
-    Toggly._requests.add(controller);
-    if (signal) {
-      signal.addEventListener('abort', () => controller.abort(), { once: true });
-    }
-    try {
-      const url = appendDefinitionsRevisionParam(Toggly.buildEvaluatedUrl('evaluated'), null);
-      const response = await fetch(url, {
-        headers: Toggly.buildFetchHeaders(),
-        signal: controller.signal,
-        cache: 'no-store',
-      });
-      if (generation !== Toggly._generation) return;
-      if (response.status === 304) {
-        return;
-      }
-      if (!response.ok) {
-        throw new Error(`Failed to fetch entity evaluated flags: ${response.status} ${response.statusText}`);
-      }
-      const bodyText = await Toggly.readResponseBody(response);
-      const { defs } = await Toggly.parseEvaluatedSignedBody(bodyText, generation, controller.signal);
-      if (generation !== Toggly._generation) return;
-      Toggly._entityEvaluatedFeatures = (defs && typeof defs === 'object' ? defs : {}) as EvaluatedDefinitions;
-    } catch {
-      if (generation === Toggly._generation) {
-        Toggly._entityEvaluatedFeatures = null;
-      }
-    } finally {
-      Toggly._requests.delete(controller);
-    }
   }
 
   private static buildEvaluatedUrl(mode: 'evaluated' | 'variants'): string {
@@ -1017,14 +974,13 @@ export class Toggly {
 
       Promise.resolve()
         .then(() => generation === Toggly._generation ? fetch(url, { headers, signal: controller.signal, cache: 'no-store' }) : null)
-        .then(async (response) => {
+        .then((response) => {
           if (generation !== Toggly._generation) { resolve(fallback); return null; }
           if (response.status === 304) {
             Toggly.applyFetchRevision(response);
             const flags = Toggly._getFallbackFlags();
             Toggly._inMemoryFlags = flags;
             Toggly._hasLoadedFlags = true;
-            await Toggly.loadEntityEvaluatedFeatures(generation, controller.signal);
             resolve(toBooleanDefinitions(flags));
             return null;
           }
@@ -1055,7 +1011,6 @@ export class Toggly {
           }
           Toggly.cacheFeatureFlags(boolFlags);
           Toggly.applyFetchRevision(acceptedResponse);
-          await Toggly.loadEntityEvaluatedFeatures(generation, controller.signal);
           resolve(boolFlags);
 
           if (Toggly._config.isDebug) { console.log(`Toggly.fetchFeatureFlagsWithVariants - ${JSON.stringify(defs)}`); }
@@ -1101,11 +1056,7 @@ export class Toggly {
     evaluation = Toggly.captureEvaluation(flags),
   ): boolean {
     const assigned = evaluation.variants?.[flagKey];
-    const definition =
-      Toggly._entityEvaluatedFeatures && flagKey in Toggly._entityEvaluatedFeatures
-        ? Toggly._entityEvaluatedFeatures[flagKey]
-        : flags[flagKey];
-    const remote = resolveEvaluatedDefinition(definition, entityContext);
+    const remote = resolveEvaluatedDefinition(flags[flagKey], entityContext);
     const enabled = applyLocalGate(remote, flagKey, evaluation.localGates, evaluation.localGateIndex);
     try {
       evaluation.recordCheck?.(flagKey, (enabled && assigned?.enabled === true && assigned.variant) || (enabled ? 'enabled' : 'disabled'));

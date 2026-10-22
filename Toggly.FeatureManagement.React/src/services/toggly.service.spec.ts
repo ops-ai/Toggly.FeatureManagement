@@ -1117,13 +1117,13 @@ describe('Toggly Service', () => {
       const service = new Toggly({ enableTelemetry: false, appKey: 'my-key', environment: 'Production', featureDefaults: {} });
       service.startWebSocket();
       expect(MockWebSocket.instances).toHaveLength(1);
-      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/my-key/ws?sdk=react&sdkVersion=1.14.0');
+      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/my-key/ws?sdk=react&sdkVersion=1.14.1');
     });
 
     it('should create ws:// URL for http:// baseURI', () => {
       const service = new Toggly({ enableTelemetry: false, appKey: 'k', baseURI: 'http://local', featureDefaults: {} });
       service.startWebSocket();
-      expect(MockWebSocket.instances[0].url).toBe('ws://local/k/ws?sdk=react&sdkVersion=1.14.0');
+      expect(MockWebSocket.instances[0].url).toBe('ws://local/k/ws?sdk=react&sdkVersion=1.14.1');
     });
 
     it('should set _wsConnected=true on open', () => {
@@ -1206,7 +1206,7 @@ describe('Toggly Service', () => {
       localStorage.setItem('toggly:revision:k:Production:v2:evaluated:', 'rev123');
       const service = new Toggly({ enableTelemetry: false, appKey: 'k', environment: 'Production', featureDefaults: {} });
       service.startWebSocket();
-      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/k/ws?rev=rev123&sdk=react&sdkVersion=1.14.0');
+      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/k/ws?rev=rev123&sdk=react&sdkVersion=1.14.1');
     });
 
     it('should prefer in-memory revision cache over localStorage', () => {
@@ -1215,7 +1215,7 @@ describe('Toggly Service', () => {
       (service as any)._cachedDefinitionsRevision = 'memory-rev';
       service.startWebSocket();
       expect(MockWebSocket.instances[0].url).toBe(
-        'wss://definitions.toggly.io/k/ws?rev=memory-rev&sdk=react&sdkVersion=1.14.0',
+        'wss://definitions.toggly.io/k/ws?rev=memory-rev&sdk=react&sdkVersion=1.14.1',
       );
     });
 
@@ -1226,7 +1226,7 @@ describe('Toggly Service', () => {
       const service = new Toggly({ enableTelemetry: false, appKey: 'k', environment: 'Production', featureDefaults: {} });
       service.startWebSocket();
       expect(MockWebSocket.instances).toHaveLength(1);
-      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/k/ws?sdk=react&sdkVersion=1.14.0');
+      expect(MockWebSocket.instances[0].url).toBe('wss://definitions.toggly.io/k/ws?sdk=react&sdkVersion=1.14.1');
       getItem.mockRestore();
     });
 

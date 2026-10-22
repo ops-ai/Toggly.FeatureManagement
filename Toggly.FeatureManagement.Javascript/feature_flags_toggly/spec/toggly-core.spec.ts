@@ -2184,48 +2184,6 @@ describe('Toggly Core', () => {
       });
     });
 
-    it('loads evaluated-signed entity gates alongside enableVariants', async () => {
-      const orderGate = {
-        requirement: 'all',
-        rules: [{ property: 'Vip', op: 'eq', value: 'true', type: 'boolean' }],
-      };
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          json: () =>
-            Promise.resolve({
-              defs: {
-                'filter-context-property': { enabled: false, variant: 'control' },
-              },
-            }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          statusText: 'OK',
-          json: () =>
-            Promise.resolve({
-              defs: { 'filter-context-property': orderGate },
-            }),
-        });
-
-      await Toggly.init({
-        appKey: 'test-app-key',
-        environment: 'Production',
-        enableVariants: true,
-        featureFlagsRefreshInterval: 0,
-      });
-
-      expect(mockFetch).toHaveBeenCalledTimes(2);
-      expect(String(mockFetch.mock.calls[0][0])).toContain('evaluated-variants-signed');
-      expect(String(mockFetch.mock.calls[1][0])).toContain('evaluated-signed');
-
-      const order = { kind: 'Order', key: 'ord-vip', attributes: { Vip: true } };
-      expect(Toggly.isFeatureOn('filter-context-property', order)).toBe(true);
-    });
-
     it('should include identity in variants fetch URL', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
