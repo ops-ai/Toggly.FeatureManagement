@@ -13,6 +13,8 @@ namespace Toggly.FeatureManagement.Tests;
 
 public class FeatureFilterDiagnosticsIntegrationTests
 {
+    private static readonly string[] AlwaysOnOnly = { "AlwaysOn" };
+
     [Fact]
     public async Task WarnForMissingFiltersOnFeatureAsync_LogsOncePerMissingName()
     {

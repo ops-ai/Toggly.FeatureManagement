@@ -8,12 +8,15 @@ namespace Toggly.FeatureManagement.Tests;
 
 public class MissingFeatureFilterWarningTrackerTests
 {
+    private static readonly string[] AlwaysOnOnly = { "AlwaysOn" };
+    private static readonly string[] CountryFamilyOnly = { "CountryFamily" };
+
     [Fact]
     public void WarnIfMissing_LogsOncePerFilterName()
     {
         var logger = new Mock<ILogger<MissingFeatureFilterWarningTracker>>();
         var tracker = new MissingFeatureFilterWarningTracker(logger.Object);
-        var index = new FeatureFilterRegistrationIndex(new[] { "AlwaysOn" });
+        var index = new FeatureFilterRegistrationIndex(AlwaysOnOnly);
 
         tracker.WarnIfMissing("DoesNotExist", index);
         tracker.WarnIfMissing("DoesNotExist", index);
