@@ -12,7 +12,7 @@ namespace Toggly.FeatureManagement.Filters
     public sealed class MissingFeatureFilterWarningTracker
     {
         private readonly ConcurrentDictionary<string, byte> _warned =
-            new(StringComparer.OrdinalIgnoreCase);
+            new ConcurrentDictionary<string, byte>(StringComparer.OrdinalIgnoreCase);
         private readonly ILogger<MissingFeatureFilterWarningTracker> _logger;
 
         public MissingFeatureFilterWarningTracker(ILogger<MissingFeatureFilterWarningTracker> logger)

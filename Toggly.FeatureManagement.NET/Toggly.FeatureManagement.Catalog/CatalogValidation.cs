@@ -89,7 +89,7 @@ namespace Toggly.FeatureManagement.Catalog
         private static readonly HashSet<string> KnownFilters = new HashSet<string>(StringComparer.Ordinal)
         {
             FilterAlwaysOn, FilterAlwaysOff, FilterPercentage, FilterTargeting, FilterTimeWindow, FilterContextProperty, FilterBrowserFamily, FilterBrowserLanguage,
-            "OS", "DeviceType", "CountryFamily", FilterUserClaims
+            "OS", "OperatingSystem", "DeviceType", "Country", "CountryFamily", FilterUserClaims
         };
 
         /// <summary>
