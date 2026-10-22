@@ -260,6 +260,43 @@ function createClient(
 
   const copyFlags = (flags: Flags): Flags => ({ ...flags });
 
+  const LIVE_FETCH_FAILED_MESSAGE = 'Toggly live flag fetch failed';
+
+  const liveFetchErrorFromUnknown = (error?: unknown): Error =>
+    error instanceof Error ? error : new Error(LIVE_FETCH_FAILED_MESSAGE);
+
+  const updateLastLiveFetchErrorForCacheHit = (
+    reason: 'request-failed' | 'disposed',
+    error?: unknown
+  ): void => {
+    lastLiveFetchError = reason === 'request-failed' ? liveFetchErrorFromUnknown(error) : null;
+  };
+
+  const fallbackFromCachedFlags = (
+    cachedFlags: Flags,
+    reason: 'request-failed' | 'disposed',
+    error?: unknown
+  ): Flags => {
+    updateLastLiveFetchErrorForCacheHit(reason, error);
+    if (isDebug && reason === 'request-failed') {
+      console.log(`Toggly.loadedFromCache - ${JSON.stringify(cachedFlags)}`);
+    }
+    return copyFlags(cachedFlags);
+  };
+
+  const fallbackFromDefaultsAfterFailedFetch = (error?: unknown): Flags => {
+    const fetchError = liveFetchErrorFromUnknown(error);
+    lastLiveFetchError = fetchError;
+    console.warn(
+      '[Toggly] Live feature flag fetch failed; showing flagDefaults until a refresh succeeds.',
+      fetchError
+    );
+    if (isDebug) {
+      console.log(`Toggly.loadedFromDefaults - ${JSON.stringify(flagDefaults)}`);
+    }
+    return copyFlags(flagDefaults);
+  };
+
   const fallbackFlags = (
     reason: 'missing-config' | 'request-failed' | 'disposed',
     error?: unknown
@@ -272,29 +309,11 @@ function createClient(
 
     const cachedFlags = cache?.flags;
     if (cachedFlags) {
-      if (reason === 'request-failed') {
-        lastLiveFetchError =
-          error instanceof Error ? error : new Error('Toggly live flag fetch failed');
-      } else {
-        lastLiveFetchError = null;
-      }
-      if (isDebug && reason === 'request-failed') {
-        console.log(`Toggly.loadedFromCache - ${JSON.stringify(cachedFlags)}`);
-      }
-      return copyFlags(cachedFlags);
+      return fallbackFromCachedFlags(cachedFlags, reason, error);
     }
 
     if (reason === 'request-failed') {
-      const fetchError =
-        error instanceof Error ? error : new Error('Toggly live flag fetch failed');
-      lastLiveFetchError = fetchError;
-      console.warn(
-        '[Toggly] Live feature flag fetch failed; showing flagDefaults until a refresh succeeds.',
-        fetchError
-      );
-      if (isDebug) {
-        console.log(`Toggly.loadedFromDefaults - ${JSON.stringify(flagDefaults)}`);
-      }
+      return fallbackFromDefaultsAfterFailedFetch(error);
     }
     return copyFlags(flagDefaults);
   };
