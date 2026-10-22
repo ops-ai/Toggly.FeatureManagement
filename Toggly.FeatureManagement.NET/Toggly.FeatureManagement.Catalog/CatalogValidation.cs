@@ -93,6 +93,11 @@ namespace Toggly.FeatureManagement.Catalog
         };
 
         /// <summary>
+        /// Filter names accepted by embedded/dashboard catalog validation.
+        /// </summary>
+        public static IReadOnlyCollection<string> KnownFilterNames => KnownFilters;
+
+        /// <summary>
         /// Validates a catalog without changing the supplied instance.
         /// </summary>
         public static CatalogValidationResult Validate(CatalogDocument document)

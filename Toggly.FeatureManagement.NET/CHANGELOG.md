@@ -5,6 +5,8 @@
 ### Changed
 - `AddTogglyFeatureManagement` now defaults `IgnoreMissingFeatureFilters` to
   `true` (unknown filters skipped, evaluation fails closed without host crash).
+  The first evaluation that references each unregistered filter name emits a
+  warning log (once per name per process).
 
 ### Fixed
 - Register builtin `AlwaysOn` / `AlwaysOff` feature filters [OPS-1987].
