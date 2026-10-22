@@ -6,6 +6,8 @@ import type { EventEvalContextProviders } from './types'
 
 const EVENT_CONTEXT_KEY = 'togglyEvalContext'
 
+type H3RequestHeaders = Record<string, string | string[] | undefined>
+
 /** Module-level providers for event helpers (request-scoped values only). */
 let eventProviders: EventEvalContextProviders = {}
 
@@ -84,10 +86,7 @@ export function setCachedEventEvalContext(
  * Used by `useEventToggly` when context has not been attached yet.
  */
 export function syncDefaultEventAmbient(event: H3Event): FeatureCheckOptions {
-  const headers = getRequestHeaders(event) as Record<
-    string,
-    string | string[] | undefined
-  >
+  const headers = getRequestHeaders(event) as H3RequestHeaders
   const identity = getHeader(event, 'x-toggly-identity') || undefined
   const fromReq = fromHttpRequest(headers, { identity })
   return {
@@ -110,10 +109,7 @@ function resolveProvidersSync(
   providers?: EventEvalContextProviders,
 ): FeatureCheckOptions | undefined {
   const config = { ...eventProviders, ...providers }
-  const headers = getRequestHeaders(event) as Record<
-    string,
-    string | string[] | undefined
-  >
+  const headers = getRequestHeaders(event) as H3RequestHeaders
   const headerRequest = fromHttpRequest(headers).request
 
   if (config.getContext) {
@@ -204,10 +200,7 @@ export async function resolveEventEvalContext(
   }
 
   const config = { ...eventProviders, ...providers }
-  const headers = getRequestHeaders(event) as Record<
-    string,
-    string | string[] | undefined
-  >
+  const headers = getRequestHeaders(event) as H3RequestHeaders
   const headerRequest = fromHttpRequest(headers).request
 
   let options: FeatureCheckOptions
