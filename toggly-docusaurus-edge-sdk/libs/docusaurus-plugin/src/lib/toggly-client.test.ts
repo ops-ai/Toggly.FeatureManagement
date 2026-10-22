@@ -25,6 +25,29 @@ describe('createTogglyClient live fetch', () => {
     }
   });
 
+  it('keeps lastLiveFetchError when a later fetch fails with cached fallback defaults', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 503, statusText: 'Unavailable' })
+      .mockResolvedValueOnce({ ok: false, status: 503, statusText: 'Unavailable' });
+    const client = createTogglyClient({
+      appKey: 'app',
+      enableTelemetry: false,
+      flagDefaults: { a: false },
+      featureFlagsRefreshInterval: 0,
+      fetch,
+    });
+    try {
+      expect(await client.getFlags()).toEqual({ a: false });
+      expect(client.getLastLiveFetchError()).toBeInstanceOf(Error);
+      expect(await client.getFlags()).toEqual({ a: false });
+      expect(client.getLastLiveFetchError()).toBeInstanceOf(Error);
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      client.dispose();
+    }
+  });
+
   it('warns and records error when fetch fails and no cache exists', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const fetch = vi.fn().mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' });

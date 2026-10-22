@@ -272,7 +272,12 @@ function createClient(
 
     const cachedFlags = cache?.flags;
     if (cachedFlags) {
-      lastLiveFetchError = null;
+      if (reason === 'request-failed') {
+        lastLiveFetchError =
+          error instanceof Error ? error : new Error('Toggly live flag fetch failed');
+      } else {
+        lastLiveFetchError = null;
+      }
       if (isDebug && reason === 'request-failed') {
         console.log(`Toggly.loadedFromCache - ${JSON.stringify(cachedFlags)}`);
       }
