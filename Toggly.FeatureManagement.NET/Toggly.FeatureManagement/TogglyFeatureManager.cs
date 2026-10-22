@@ -97,6 +97,7 @@ namespace Toggly.FeatureManagement
                 && definition != null
                 && ContextPropertyEvaluator.HasEntityFilters(definition))
             {
+                await WarnForMissingFiltersAsync(feature).ConfigureAwait(false);
                 return false;
             }
 

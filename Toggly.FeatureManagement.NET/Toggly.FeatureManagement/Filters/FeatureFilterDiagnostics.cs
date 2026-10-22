@@ -36,7 +36,10 @@ namespace Toggly.FeatureManagement.Filters
                 return;
 
             foreach (var filterName in definition.EnabledFor.Select(f => f.Name).Where(n => !string.IsNullOrEmpty(n)))
-                _warningTracker.WarnIfMissing(filterName!, _registrationIndex);
+            {
+                var mapped = TogglyFeatureProvider.MapToMicrosoftFeatureFilterName(filterName);
+                _warningTracker.WarnIfMissing(mapped, _registrationIndex);
+            }
         }
     }
 }
