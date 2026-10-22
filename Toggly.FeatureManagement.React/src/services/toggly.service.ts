@@ -700,6 +700,7 @@ export class Toggly implements TogglyService {
     this._cachedDefinitionsRevision = null
     this._pendingDefinitionsPin = null
     this._lastFallbackRefresh = 0
+    this._entityEvaluatedFeatures = null
     const appKey = this._config.appKey ?? ''
     const env = this._config.environment ?? 'Production'
     const scope = this._bodyCacheKey()
@@ -791,6 +792,9 @@ export class Toggly implements TogglyService {
       if (loaded.notModified) {
         this._cacheDefinitionsRevision(stripEtagQuotes(loaded.revision))
         if (isInitialLoad) this.startWebSocket()
+        if (this._config.enableVariants) {
+          await this._loadEntityEvaluatedFeatures(generation, appKey, env, pin)
+        }
         return this._booleanFeatures()
       }
       const parsedDefs = loaded.defs
