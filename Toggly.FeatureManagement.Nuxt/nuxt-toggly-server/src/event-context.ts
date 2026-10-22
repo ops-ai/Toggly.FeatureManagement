@@ -96,12 +96,11 @@ export function syncDefaultEventAmbient(event: H3Event): FeatureCheckOptions {
 }
 
 function isThenable<T>(value: T | Promise<T>): value is Promise<T> {
-  return (
-    value !== null &&
-    typeof value === 'object' &&
-    'then' in value &&
-    typeof (value as Promise<T>).then === 'function'
-  )
+  if (value === null || typeof value !== 'object' || !('then' in value)) {
+    return false
+  }
+  const then = (value as { then?: unknown }).then
+  return typeof then === 'function'
 }
 
 function resolveProvidersSync(
