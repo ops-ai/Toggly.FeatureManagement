@@ -6,8 +6,6 @@ import type { EventEvalContextProviders } from './types'
 
 const EVENT_CONTEXT_KEY = 'togglyEvalContext'
 
-type H3RequestHeaders = Record<string, string | string[] | undefined>
-
 /** Module-level providers for event helpers (request-scoped values only). */
 let eventProviders: EventEvalContextProviders = {}
 
@@ -33,19 +31,6 @@ export function resetEventEvalContextProviders(): void {
  */
 export function getEventEvalContextProviders(): EventEvalContextProviders {
   return { ...eventProviders }
-}
-
-/** True when module-level providers were registered via `configureEventEvalContext`. */
-export function hasConfiguredEventEvalProviders(
-  providers?: EventEvalContextProviders,
-): boolean {
-  const config = { ...eventProviders, ...providers }
-  return !!(
-    config.getContext ||
-    config.getIdentity ||
-    config.getGroups ||
-    config.getClaims
-  )
 }
 
 type EventWithTogglyContext = H3Event & {
@@ -86,101 +71,16 @@ export function setCachedEventEvalContext(
  * Used by `useEventToggly` when context has not been attached yet.
  */
 export function syncDefaultEventAmbient(event: H3Event): FeatureCheckOptions {
-  const headers = getRequestHeaders(event) as H3RequestHeaders
+  const headers = getRequestHeaders(event) as Record<
+    string,
+    string | string[] | undefined
+  >
   const identity = getHeader(event, 'x-toggly-identity') || undefined
   const fromReq = fromHttpRequest(headers, { identity })
   return {
     identity: fromReq.identity,
     request: fromReq.request,
   }
-}
-
-function isThenable<T>(value: T | Promise<T>): value is Promise<T> {
-  if (value === null || typeof value !== 'object' || !('then' in value)) {
-    return false
-  }
-  const then = (value as { then?: unknown }).then
-  return typeof then === 'function'
-}
-
-function resolveProvidersSync(
-  event: H3Event,
-  providers?: EventEvalContextProviders,
-): FeatureCheckOptions | undefined {
-  const config = { ...eventProviders, ...providers }
-  const headers = getRequestHeaders(event) as H3RequestHeaders
-  const headerRequest = fromHttpRequest(headers).request
-
-  if (config.getContext) {
-    const custom = config.getContext(event)
-    if (isThenable(custom)) {
-      return undefined
-    }
-    return {
-      identity: custom.identity,
-      groups: custom.groups,
-      claims: custom.claims,
-      request: {
-        ...headerRequest,
-        ...custom.request,
-      },
-      headers: custom.headers,
-    }
-  }
-
-  if (!config.getIdentity && !config.getGroups && !config.getClaims) {
-    return undefined
-  }
-
-  const identityResult = config.getIdentity
-    ? config.getIdentity(event)
-    : getHeader(event, 'x-toggly-identity') || undefined
-  if (isThenable(identityResult)) {
-    return undefined
-  }
-  const groupsResult = config.getGroups ? config.getGroups(event) : undefined
-  if (isThenable(groupsResult)) {
-    return undefined
-  }
-  const claimsResult = config.getClaims ? config.getClaims(event) : undefined
-  if (isThenable(claimsResult)) {
-    return undefined
-  }
-
-  const fromReq = fromHttpRequest(headers, {
-    identity: identityResult,
-    groups: groupsResult,
-    claims: claimsResult,
-  })
-  return {
-    identity: fromReq.identity,
-    groups: fromReq.groups,
-    claims: fromReq.claims,
-    request: fromReq.request,
-  }
-}
-
-/**
- * Resolve ambient EvalContext synchronously when providers return plain values.
- * Caches on the event when resolution succeeds. Async providers require
- * `resolveEventEvalContext` / `getEventToggly` instead.
- */
-export function resolveSyncEventEvalContext(
-  event: H3Event,
-  providers?: EventEvalContextProviders,
-): FeatureCheckOptions | undefined {
-  const cached = getCachedEventEvalContext(event)
-  if (cached) {
-    return cached
-  }
-
-  const options = resolveProvidersSync(event, providers)
-  if (!options) {
-    return undefined
-  }
-
-  setCachedEventEvalContext(event, options)
-  return options
 }
 
 /**
@@ -199,7 +99,10 @@ export async function resolveEventEvalContext(
   }
 
   const config = { ...eventProviders, ...providers }
-  const headers = getRequestHeaders(event) as H3RequestHeaders
+  const headers = getRequestHeaders(event) as Record<
+    string,
+    string | string[] | undefined
+  >
   const headerRequest = fromHttpRequest(headers).request
 
   let options: FeatureCheckOptions

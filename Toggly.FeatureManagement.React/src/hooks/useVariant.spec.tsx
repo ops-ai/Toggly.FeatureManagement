@@ -52,13 +52,6 @@ describe('useVariant', () => {
         ok: true,
         status: 200,
         statusText: 'OK',
-        json: () => Promise.resolve({ defs: {} }),
-        text: () => Promise.resolve(JSON.stringify({ defs: {} })),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
         json: () =>
           Promise.resolve({
             defs: {
@@ -70,13 +63,6 @@ describe('useVariant', () => {
               F: { enabled: true, variant: 'treatment' },
             },
           })),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: () => Promise.resolve({ defs: {} }),
-        text: () => Promise.resolve(JSON.stringify({ defs: {} })),
       })
 
     const toggly = new Toggly({

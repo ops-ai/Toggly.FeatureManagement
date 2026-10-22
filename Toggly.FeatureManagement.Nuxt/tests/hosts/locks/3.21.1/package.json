@@ -5,7 +5,7 @@
     "@ops-ai/nuxt-toggly": "file:artifacts/ops-ai-nuxt-toggly-1.4.0.tgz",
     "@ops-ai/nuxt-toggly-client": "file:artifacts/ops-ai-nuxt-toggly-client-1.6.0.tgz",
     "@ops-ai/nuxt-toggly-core": "file:artifacts/ops-ai-nuxt-toggly-core-1.16.1.tgz",
-    "@ops-ai/nuxt-toggly-server": "file:artifacts/ops-ai-nuxt-toggly-server-1.10.2.tgz",
+    "@ops-ai/nuxt-toggly-server": "file:artifacts/ops-ai-nuxt-toggly-server-1.10.0.tgz",
     "@ops-ai/toggly-segments": "file:artifacts/ops-ai-toggly-segments-0.1.0.tgz",
     "@ops-ai/toggly-signed-defs": "1.2.7",
     "nuxt": "3.21.1",

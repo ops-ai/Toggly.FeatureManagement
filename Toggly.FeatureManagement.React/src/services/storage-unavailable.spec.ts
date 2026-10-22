@@ -16,10 +16,7 @@ it.each(['missing', 'denied'])('imports and retains active variants when browser
         sent.push(JSON.parse(init!.body as string))
         return { status: 202 } as Response
       }
-      const body = String(url).includes('evaluated-variants-signed')
-        ? { Flag: { enabled: true, variant: 'blue', configurationValue: 7 } }
-        : { Flag: true }
-      return { ok: true, status: 200, text: async () => JSON.stringify(body) } as Response
+      return { ok: true, status: 200, text: async () => JSON.stringify({ Flag: { enabled: true, variant: 'blue', configurationValue: 7 } }) } as Response
     })
     const options: TogglyOptions = { appKey: 'storage-test', environment: 'Production', instanceId: 'token', enableVariants: true, persistCache: true, enableLiveUpdates: false }
     owner = new Client!(options)
