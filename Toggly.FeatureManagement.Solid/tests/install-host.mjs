@@ -20,8 +20,8 @@ await withResources(async (own) => {
   const work = await mkdtemp(join(tmpdir(), 'solidstart-registry-'));
   own(() => rm(work, { recursive: true, force: true }));
   console.log('Owned SolidStart host', work, 'Node', process.version);
-  const run = (args, cwd = work) =>
-    runOwned(process.execPath, args, { cwd, env: process.env, stdio: 'inherit' });
+  const run = (args, cwd = work, timeoutMs = 300000) =>
+    runOwned(process.execPath, args, { cwd, env: process.env, stdio: 'inherit' }, timeoutMs);
   await cp(join(root, 'tests/host'), join(work, 'host'), {
     recursive: true,
     filter: (path) =>
@@ -101,8 +101,14 @@ await withResources(async (own) => {
     ),
   );
   // Browser revisions must match this genuine installed host graph, not an npx cache.
-  if (!process.env.CHROMIUM_PATH)
-    await run([join(work, 'node_modules/playwright/cli.js'), 'install', '--with-deps', 'chromium']);
+  if (!process.env.CHROMIUM_PATH) {
+    // apt mirror slowness during --with-deps can exceed the default 5m runOwned cap on CI.
+    await run(
+      [join(work, 'node_modules/playwright/cli.js'), 'install', '--with-deps', 'chromium'],
+      work,
+      900000,
+    );
+  }
   const previous = process.cwd();
   own(() => process.chdir(previous));
   process.chdir(host);

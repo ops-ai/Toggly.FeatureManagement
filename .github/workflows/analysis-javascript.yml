@@ -1118,7 +1118,7 @@ jobs:
     name: SolidStart packed production host
     needs: [prepare]
     if: needs.prepare.outputs.run_solidstart_host == 'true'
-    timeout-minutes: 10
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     defaults:
       run:
