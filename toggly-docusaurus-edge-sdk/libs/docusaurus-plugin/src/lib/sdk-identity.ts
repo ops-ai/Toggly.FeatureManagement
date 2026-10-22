@@ -4,6 +4,8 @@ export const SDK_VERSION = '0.10.4';
 export const SDK_HEADER_ID = 'X-Toggly-Sdk';
 export const SDK_HEADER_VERSION = 'X-Toggly-Sdk-Version';
 
+const DEFAULT_SDK = { id: SDK_ID, version: SDK_VERSION };
+
 export function sdkUserAgent(
   sdkId: string = SDK_ID,
   sdkVersion: string = SDK_VERSION,
@@ -41,7 +43,7 @@ export function usesSdkCustomHeaders(): boolean {
 
 export function buildDefinitionFetchHeaders(
   existing: Record<string, string> = {},
-  sdk: { id: string; version: string } = { id: SDK_ID, version: SDK_VERSION },
+  sdk: { id: string; version: string } = DEFAULT_SDK,
 ): Record<string, string> {
   const headers = { ...existing };
   if (usesSdkCustomHeaders()) {

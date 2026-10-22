@@ -577,11 +577,7 @@ export function createTogglyClientCore(
 
   const flushTelemetry = (): Promise<void> => {
     if (!telemetryReporter || disposed) return Promise.resolve();
-    try {
-      return telemetryReporter.flush();
-    } catch {
-      return Promise.resolve();
-    }
+    return telemetryReporter.flush().catch(() => undefined);
   };
 
   const setContext = async (context: {
