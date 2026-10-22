@@ -28,6 +28,8 @@ namespace Toggly.FeatureManagement
 
         private readonly IEvaluationSnapshotScope? _evaluationSnapshotScope;
 
+        private readonly FeatureFilterDiagnostics? _featureFilterDiagnostics;
+
         /// <summary>
         /// Constructor
         /// </summary>
@@ -44,6 +46,7 @@ namespace Toggly.FeatureManagement
             _entityResolver = serviceProvider.GetService<ITogglyEntityContextResolver>();
             _featureAuthorizationService = serviceProvider.GetService<IFeatureAuthorizationService>();
             _evaluationSnapshotScope = serviceProvider.GetService<IEvaluationSnapshotScope>();
+            _featureFilterDiagnostics = serviceProvider.GetService<FeatureFilterDiagnostics>();
         }
 
         /// <summary>
@@ -94,9 +97,11 @@ namespace Toggly.FeatureManagement
                 && definition != null
                 && ContextPropertyEvaluator.HasEntityFilters(definition))
             {
+                await WarnForMissingFiltersAsync(feature).ConfigureAwait(false);
                 return false;
             }
 
+            await WarnForMissingFiltersAsync(feature).ConfigureAwait(false);
             return await _featureManager.IsEnabledAsync(feature).ConfigureAwait(false);
         }
 
@@ -105,13 +110,15 @@ namespace Toggly.FeatureManagement
             if (!TryGetDefinition(feature, out var definition) || definition == null
                 || !ContextPropertyEvaluator.HasEntityFilters(definition))
             {
+                await WarnForMissingFiltersAsync(feature).ConfigureAwait(false);
                 return await _featureManager.IsEnabledAsync(feature, context).ConfigureAwait(false);
             }
 
-            if (ContextPropertyEvaluator.HasUserFilters(definition)
-                && !await _featureManager.IsEnabledAsync(feature).ConfigureAwait(false))
+            if (ContextPropertyEvaluator.HasUserFilters(definition))
             {
-                return false;
+                await WarnForMissingFiltersAsync(feature).ConfigureAwait(false);
+                if (!await _featureManager.IsEnabledAsync(feature).ConfigureAwait(false))
+                    return false;
             }
 
             if (_entityResolver == null || !_entityResolver.TryResolve(context, out var entity) || entity == null)
@@ -133,5 +140,10 @@ namespace Toggly.FeatureManagement
 
             return allowed;
         }
+
+        private Task WarnForMissingFiltersAsync(string feature) =>
+            _featureFilterDiagnostics == null
+                ? Task.CompletedTask
+                : _featureFilterDiagnostics.WarnForMissingFiltersOnFeatureAsync(feature);
     }
 }

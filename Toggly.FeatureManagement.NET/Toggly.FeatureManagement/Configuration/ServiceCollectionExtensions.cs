@@ -10,6 +10,7 @@ using System;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using Toggly.FeatureManagement.Filters;
 using Toggly.FeatureManagement.Helpers;
 using Grpc.Net.Client.Web;
 using Toggly.Web;
@@ -220,7 +221,8 @@ namespace Toggly.FeatureManagement.Configuration
         {
             var featureManagement = services.AddFeatureManagement()
                 .AddFeatureFilter<TimeWindowFilter>()
-                .AddFeatureFilter<ContextPropertyFilter>();
+                .AddFeatureFilter<ContextPropertyFilter>()
+                .AddFeatureFilter<Filters.AlwaysOnFeatureFilter>();
 
             // AddFeatureManagement auto-registers stock PercentageFilter; remove it so
             // Definitions-aligned sticky Percentage is the only Microsoft.Percentage match.
@@ -230,6 +232,10 @@ namespace Toggly.FeatureManagement.Configuration
             featureManagement
                 .AddFeatureFilter<Filters.TogglyPercentageFilter>()
                 .AddFeatureFilter<Filters.TogglyTargetingFilter>();
+
+            services.AddSingleton(_ => FeatureFilterRegistrationIndex.FromServiceCollection(services));
+            services.AddSingleton<MissingFeatureFilterWarningTracker>();
+            services.AddSingleton<FeatureFilterDiagnostics>();
 
             services.Decorate<IFeatureManager, TogglyFeatureManager>();
             // Fail closed: unknown filters throw instead of being ignored (which can enable flags).

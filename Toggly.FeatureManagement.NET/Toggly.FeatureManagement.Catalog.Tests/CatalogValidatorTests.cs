@@ -178,6 +178,54 @@ public sealed class CatalogValidatorTests
         result.Document.Features[0].Rules[0].Parameters.Should().Contain(new KeyValuePair<string, string>("ValueType", "string"));
     }
 
+    [Theory]
+    [InlineData("OperatingSystem")]
+    [InlineData("OS")]
+    public void Validate_accepts_indexed_operating_system_filter_wire_names(string filterName)
+    {
+        var document = ValidDocument();
+        document.Features[0].Rules =
+        [
+            new CatalogRule
+            {
+                Name = filterName,
+                Parameters = new Dictionary<string, string>
+                {
+                    ["OperatingSystem:0"] = "Windows",
+                    ["Percentage"] = "100"
+                }
+            }
+        ];
+
+        var result = CatalogValidator.Validate(document);
+
+        result.IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("Country")]
+    [InlineData("CountryFamily")]
+    public void Validate_accepts_indexed_country_filter_wire_names(string filterName)
+    {
+        var document = ValidDocument();
+        document.Features[0].Rules =
+        [
+            new CatalogRule
+            {
+                Name = filterName,
+                Parameters = new Dictionary<string, string>
+                {
+                    ["Country:0"] = "US",
+                    ["Percentage"] = "100"
+                }
+            }
+        ];
+
+        var result = CatalogValidator.Validate(document);
+
+        result.IsValid.Should().BeTrue();
+    }
+
     private static CatalogDocument ValidDocument() => new()
     {
         SchemaVersion = 1,

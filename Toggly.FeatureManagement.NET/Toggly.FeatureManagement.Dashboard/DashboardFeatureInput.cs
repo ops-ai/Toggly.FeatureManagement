@@ -113,14 +113,18 @@ public sealed class DashboardRuleInput
     internal const string DeviceType = "DeviceType";
     internal const string UserClaims = "UserClaims";
     internal const string OperatingSystem = "OS";
+    internal const string OperatingSystemWireName = "OperatingSystem";
     internal const string CountryFamily = "CountryFamily";
+    internal const string CountryWireName = "Country";
+    internal const string CountryIndexedPrefix = CountryWireName;
+    internal const string OperatingSystemIndexedPrefix = OperatingSystemWireName;
     internal const string ParamValue = "Value";
 
     internal static IReadOnlyDictionary<string, string> SupportedNames { get; } = new Dictionary<string, string>
     {
         [AlwaysOn] = "Always On", [FilterPercentage] = "Percentage", [Targeting] = "Users/groups", [TimeWindow] = "Schedule",
         [ContextProperty] = "Entity property", [BrowserFamily] = "Browser", [BrowserLanguage] = "Language",
-        [OperatingSystem] = "Operating system", [DeviceType] = "Device", [CountryFamily] = "Country", [UserClaims] = "Claim"
+        [OperatingSystem] = "Operating system", [DeviceType] = "Device", [CountryFamily] = CountryWireName, [UserClaims] = "Claim"
     };
 
     internal static IReadOnlyDictionary<string, string> UserFilterNames { get; } = SupportedNames
@@ -216,9 +220,12 @@ public sealed class DashboardRuleInput
     {
         if (name == BrowserFamily) return BrowserFamily;
         if (name == BrowserLanguage) return BrowserLanguage;
-        if (name == OperatingSystem) return "OperatingSystem";
+        if (name == OperatingSystem || string.Equals(name, OperatingSystemWireName, StringComparison.Ordinal))
+            return OperatingSystemIndexedPrefix;
         if (name == DeviceType) return DeviceType;
-        return "Country";
+        if (name == CountryFamily || string.Equals(name, CountryWireName, StringComparison.Ordinal))
+            return CountryIndexedPrefix;
+        return CountryIndexedPrefix;
     }
 
     private static string Get(CatalogRule rule, string key, string fallback) => rule.Parameters.TryGetValue(key, out var value) ? value : fallback;

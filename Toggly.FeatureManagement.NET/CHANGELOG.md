@@ -1,5 +1,18 @@
 # Changelog
 
+## All .NET SDK packages 3.14.2 - 2026-10-22
+
+### Added
+- Log a warning once per missing filter name before evaluation when a feature
+  references an unregistered filter (`MissingFeatureFilterWarningTracker`).
+
+### Fixed
+- Register builtin `AlwaysOn` feature filter [OPS-1987].
+- Map definitions filter name `Country` to `CountryFamily` (and
+  `OperatingSystem` to `OS`) so segment filters match Web registrations and
+  filter-parity wire names; resolve country from standard CDN edge headers
+  [OPS-1988].
+
 ## All .NET SDK packages 3.13.4 - 2026-10-12
 
 ### Added

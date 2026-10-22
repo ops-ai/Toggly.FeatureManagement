@@ -1147,6 +1147,10 @@ namespace Toggly.FeatureManagement
                 return "Microsoft.Targeting";
             if (string.Equals(name, "TimeWindow", StringComparison.OrdinalIgnoreCase))
                 return "Microsoft.TimeWindow";
+            if (string.Equals(name, "Country", StringComparison.OrdinalIgnoreCase))
+                return "CountryFamily";
+            if (string.Equals(name, "OperatingSystem", StringComparison.OrdinalIgnoreCase))
+                return "OS";
 
             return name;
         }

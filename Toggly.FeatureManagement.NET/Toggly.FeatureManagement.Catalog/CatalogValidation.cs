@@ -88,8 +88,13 @@ namespace Toggly.FeatureManagement.Catalog
         private static readonly HashSet<string> KnownFilters = new HashSet<string>(StringComparer.Ordinal)
         {
             FilterAlwaysOn, FilterPercentage, FilterTargeting, FilterTimeWindow, FilterContextProperty, FilterBrowserFamily, FilterBrowserLanguage,
-            "OS", "DeviceType", "CountryFamily", FilterUserClaims
+            "OS", "OperatingSystem", "DeviceType", "Country", "CountryFamily", FilterUserClaims
         };
+
+        /// <summary>
+        /// Filter names accepted by embedded/dashboard catalog validation.
+        /// </summary>
+        public static IReadOnlyCollection<string> KnownFilterNames => KnownFilters;
 
         /// <summary>
         /// Validates a catalog without changing the supplied instance.
@@ -498,8 +503,9 @@ namespace Toggly.FeatureManagement.Catalog
         {
             if (name == FilterBrowserFamily) return "BrowserFamily:";
             if (name == FilterBrowserLanguage) return "BrowserLanguage:";
-            if (name == "OS") return "OperatingSystem:";
+            if (name == "OS" || name == "OperatingSystem") return "OperatingSystem:";
             if (name == "DeviceType") return "DeviceType:";
+            if (name == "Country" || name == "CountryFamily") return "Country:";
             return "Country:";
         }
 
