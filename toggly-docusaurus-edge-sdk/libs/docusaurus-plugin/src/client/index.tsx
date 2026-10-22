@@ -272,7 +272,13 @@ function TargetOwner({
     if (!staticGating) {
       client
         .getFlags()
-        .then(apply)
+        .then((latest) => {
+          apply(latest);
+          const fetchErr = client.getLastLiveFetchError();
+          if (active && fetchErr) {
+            setError(fetchErr);
+          }
+        })
         .catch((err: Error) => {
           if (active) {
             setError(err);

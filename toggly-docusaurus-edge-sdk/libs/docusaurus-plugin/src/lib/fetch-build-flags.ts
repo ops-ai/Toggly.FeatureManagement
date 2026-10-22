@@ -9,6 +9,7 @@ import {
   unwrapDefsPayload,
 } from './signed-response.js';
 import { buildDefinitionFetchHeaders } from './sdk-identity.js';
+import { normalizeEvaluatedFlags } from './normalize-evaluated-flags.js';
 
 export interface BuildFlagFetchOptions {
   baseURI?: string;
@@ -76,14 +77,11 @@ export async function fetchBuildTimeFlags(
       maxSignatureAgeSeconds,
       headers: { Accept: 'application/json' },
     });
-    const apiFlags = (
-      verifySignatures ? (parsed as Flags) : unwrapDefsPayload(parsed)
-    ) as Flags;
+    const raw = verifySignatures ? parsed : unwrapDefsPayload(parsed);
+    const apiFlags = normalizeEvaluatedFlags(raw);
 
     for (const [key, value] of Object.entries(apiFlags)) {
-      if (typeof value === 'boolean') {
-        merged[key] = value;
-      }
+      merged[key] = value;
     }
 
     if (isDebug) {
