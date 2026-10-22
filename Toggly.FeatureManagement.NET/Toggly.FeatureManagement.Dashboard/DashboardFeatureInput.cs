@@ -216,8 +216,11 @@ public sealed class DashboardRuleInput
     {
         if (name == BrowserFamily) return BrowserFamily;
         if (name == BrowserLanguage) return BrowserLanguage;
-        if (name == OperatingSystem) return "OperatingSystem";
+        if (name == OperatingSystem || string.Equals(name, "OperatingSystem", StringComparison.Ordinal))
+            return "OperatingSystem";
         if (name == DeviceType) return DeviceType;
+        if (name == CountryFamily || string.Equals(name, "Country", StringComparison.Ordinal))
+            return "Country";
         return "Country";
     }
 

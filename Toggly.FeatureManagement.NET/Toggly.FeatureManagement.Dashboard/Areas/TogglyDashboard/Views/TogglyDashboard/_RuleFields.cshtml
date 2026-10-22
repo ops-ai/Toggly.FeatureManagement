@@ -70,7 +70,7 @@
         <label for="rule-@index-Value">Value</label>
         <input id="rule-@index-Value" name="Rules[@index].Value" value="@rule.Value" />
     }
-    @if (rule.Name is "BrowserFamily" or "BrowserLanguage" or "OS" or "DeviceType" or "CountryFamily")
+    @if (rule.Name is "BrowserFamily" or "BrowserLanguage" or "OS" or "OperatingSystem" or "DeviceType" or "CountryFamily" or "Country")
     {
         <label for="rule-@index-Values">Values (one SDK value per line)</label>
         <textarea id="rule-@index-Values" name="Rules[@index].Values">@rule.Values</textarea>
