@@ -11,6 +11,7 @@ const { preview } = await import(join(dirname(require.resolve('vite/package.json
 const { default: puppeteer } = await import(require.resolve('puppeteer-core'))
 let server, collector, browser
 let failure: unknown
+const errors: string[] = []
 try {
 server = await preview({ preview: { host: '127.0.0.1', port: 0 } })
 const telemetry = []
@@ -42,7 +43,6 @@ const metricsUrl = `http://127.0.0.1:${(collector.address() as import('node:net'
     args: ['--no-sandbox'],
   })
   const page = await browser.newPage()
-  const errors = []
   page.on('pageerror', error => errors.push(error.message))
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
   let remoteEnabled = true
@@ -50,23 +50,40 @@ const metricsUrl = `http://127.0.0.1:${(collector.address() as import('node:net'
   const definitionsQueries: URLSearchParams[] = []
   const modeRequests: Array<{variants: boolean; revision?: string}> = []
   await page.setRequestInterception(true)
-  page.on('request', request => {
-    if (new URL(request.url()).pathname.startsWith('/definitions-fixture/')) {
+  page.on('request', async request => {
+    const pathname = new URL(request.url()).pathname
+    if (pathname === '/.well-known/jwks') {
+      await request.respond({
+        status: 200,
+        contentType: 'application/json',
+        headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' },
+        body: JSON.stringify({ keys: [] }),
+      })
+      return
+    }
+    if (pathname.startsWith('/definitions-fixture/')) {
       const query = new URL(request.url()).searchParams
-      if (new URL(request.url()).pathname.includes('/mode-cache-')) {
+      if (pathname.includes('/mode-cache-')) {
         const variants = request.url().includes('evaluated-variants-signed')
         const revision = request.headers()['if-none-match']
         modeRequests.push({variants, revision})
         const etag = variants ? 'variants-revision' : 'boolean-revision'
-        void request.respond({ status: revision === etag ? 304 : 200, contentType: 'application/json',
-          headers: { 'access-control-allow-origin': '*', etag },
+        await request.respond({ status: revision === etag ? 304 : 200, contentType: 'application/json',
+          headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', etag },
           body: revision === etag ? undefined : JSON.stringify(variants ? {Flag:{enabled:true,variant:'blue',configurationValue:7}} : {Flag:false}) })
         return
       }
       definitionsQueries.push(query)
-      identities.push(query.get('userId'))
-      void request.respond({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ defs: { release: {enabled: remoteEnabled, variant: 'control'}, second: {enabled: true, variant: 'control'} } }) })
-    } else void request.continue()
+      identities.push(query.get('u') ?? query.get('userId'))
+      await request.respond({
+        status: 200,
+        contentType: 'application/json',
+        headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' },
+        body: JSON.stringify({ defs: { release: {enabled: remoteEnabled, variant: 'control'}, second: {enabled: true, variant: 'control'} } }),
+      })
+      return
+    }
+    await request.continue()
   })
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/?metrics=${encodeURIComponent(metricsUrl)}`)
   const state = async expected => {
@@ -169,7 +186,10 @@ const metricsUrl = `http://127.0.0.1:${(collector.address() as import('node:net'
   console.log(`Browser: response-mode HTTP 304 roundtrips passed with ${telemetry.length - telemetryStart} exact telemetry envelopes; Chromium ${await browser.version()}`)
   assert.deepEqual(errors, [])
   console.log('Browser: provider, hooks, all/negated/render gates, local gates, context, refresh, StrictMode/unmount cleanup; real CORS/native gzip i/u/plain keepalive i/checks/metrics/pagehide/unmount telemetry passed')
-} catch (error) { failure = error }
+} catch (error) {
+  if (errors.length) console.error('Browser console/page errors:', errors)
+  failure = error
+}
 await cleanupOwned([
   () => browser && closeBrowser(browser),
   () => server && closeServer(server.httpServer),
