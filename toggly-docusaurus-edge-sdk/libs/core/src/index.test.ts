@@ -59,9 +59,9 @@ describe('createTogglyClient', () => {
       'https://definitions.toggly.io/evaluated-signed/test-app/Production',
       expect.objectContaining({
         method: 'GET',
-        headers: {
+        headers: expect.objectContaining({
           Accept: 'application/json',
-        },
+        }),
       })
     );
   });

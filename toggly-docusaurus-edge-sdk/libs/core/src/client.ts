@@ -20,6 +20,7 @@ import {
   readResponseBody,
   unwrapDefsPayload,
 } from './signed-response';
+import { buildDefinitionFetchHeaders } from './sdk-identity.js';
 import {
   createTelemetryReporter,
   type TelemetryDiagnostic,
@@ -315,9 +316,9 @@ export function createTogglyClientCore(
     try {
       const response = await resolvedFetch(url, {
         method: 'GET',
-        headers: {
+        headers: buildDefinitionFetchHeaders({
           Accept: 'application/json',
-        },
+        }),
         signal: controller.signal,
       });
 

@@ -1839,4 +1839,54 @@ describe('Toggly Service', () => {
       expect(ok).toHaveBeenCalledTimes(1);
     });
   });
+
+  it('loads evaluated-signed entity gates alongside enableVariants', async () => {
+    const orderGate = {
+      requirement: 'all',
+      rules: [{ property: 'Vip', op: 'eq', value: 'true', type: 'boolean' }],
+    };
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () =>
+          Promise.resolve({
+            defs: { 'filter-context-property': { enabled: false, variant: 'control' } },
+          }),
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              defs: { 'filter-context-property': { enabled: false, variant: 'control' } },
+            }),
+          ),
+        headers: { get: () => null },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        json: () => Promise.resolve({ defs: { 'filter-context-property': orderGate } }),
+        text: () =>
+          Promise.resolve(JSON.stringify({ defs: { 'filter-context-property': orderGate } })),
+        headers: { get: () => null },
+      });
+
+    const service = new Toggly({
+      enableTelemetry: false,
+      appKey: 'test-key',
+      environment: 'Production',
+      enableVariants: true,
+      enableLiveUpdates: false,
+      persistCache: false,
+    });
+
+    await service._loadFeatures();
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(String(mockFetch.mock.calls[0][0])).toContain('evaluated-variants-signed');
+    expect(String(mockFetch.mock.calls[1][0])).toContain('evaluated-signed');
+
+    const order = { kind: 'Order', key: 'ord-vip', attributes: { Vip: true } };
+    expect(await service.isFeatureOn('filter-context-property', order)).toBe(true);
+  });
 });

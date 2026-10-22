@@ -13,6 +13,7 @@ import {
 import {
   getCachedEventEvalContext,
   resolveEventEvalContext,
+  resolveSyncEventEvalContext,
   syncDefaultEventAmbient,
 } from './event-context'
 import type {
@@ -273,7 +274,9 @@ export function defineFeatureHandler(
 export function useEventToggly(event: H3Event) {
   const client = useServerToggly()
   const ambient =
-    getCachedEventEvalContext(event) ?? syncDefaultEventAmbient(event)
+    getCachedEventEvalContext(event) ??
+    resolveSyncEventEvalContext(event) ??
+    syncDefaultEventAmbient(event)
   return bindEventEvalContext(client, ambient)
 }
 

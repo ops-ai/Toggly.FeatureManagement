@@ -83,6 +83,98 @@ export function syncDefaultEventAmbient(event: H3Event): FeatureCheckOptions {
   }
 }
 
+function isThenable<T>(value: T | Promise<T>): value is Promise<T> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'then' in value &&
+    typeof (value as Promise<T>).then === 'function'
+  )
+}
+
+function resolveProvidersSync(
+  event: H3Event,
+  providers?: EventEvalContextProviders,
+): FeatureCheckOptions | undefined {
+  const config = { ...eventProviders, ...providers }
+  const headers = getRequestHeaders(event) as Record<
+    string,
+    string | string[] | undefined
+  >
+  const headerRequest = fromHttpRequest(headers).request
+
+  if (config.getContext) {
+    const custom = config.getContext(event)
+    if (isThenable(custom)) {
+      return undefined
+    }
+    return {
+      identity: custom.identity,
+      groups: custom.groups,
+      claims: custom.claims,
+      request: {
+        ...headerRequest,
+        ...custom.request,
+      },
+      headers: custom.headers,
+    }
+  }
+
+  if (!config.getIdentity && !config.getGroups && !config.getClaims) {
+    return undefined
+  }
+
+  const identityResult = config.getIdentity
+    ? config.getIdentity(event)
+    : getHeader(event, 'x-toggly-identity') || undefined
+  if (isThenable(identityResult)) {
+    return undefined
+  }
+  const groupsResult = config.getGroups ? config.getGroups(event) : undefined
+  if (isThenable(groupsResult)) {
+    return undefined
+  }
+  const claimsResult = config.getClaims ? config.getClaims(event) : undefined
+  if (isThenable(claimsResult)) {
+    return undefined
+  }
+
+  const fromReq = fromHttpRequest(headers, {
+    identity: identityResult,
+    groups: groupsResult,
+    claims: claimsResult,
+  })
+  return {
+    identity: fromReq.identity,
+    groups: fromReq.groups,
+    claims: fromReq.claims,
+    request: fromReq.request,
+  }
+}
+
+/**
+ * Resolve ambient EvalContext synchronously when providers return plain values.
+ * Caches on the event when resolution succeeds. Async providers require
+ * `resolveEventEvalContext` / `getEventToggly` instead.
+ */
+export function resolveSyncEventEvalContext(
+  event: H3Event,
+  providers?: EventEvalContextProviders,
+): FeatureCheckOptions | undefined {
+  const cached = getCachedEventEvalContext(event)
+  if (cached) {
+    return cached
+  }
+
+  const options = resolveProvidersSync(event, providers)
+  if (!options) {
+    return undefined
+  }
+
+  setCachedEventEvalContext(event, options)
+  return options
+}
+
 /**
  * Resolve full ambient EvalContext for an H3 event.
  * Uses `getContext` when provided; otherwise getIdentity / getGroups / getClaims

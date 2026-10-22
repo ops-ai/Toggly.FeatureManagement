@@ -363,6 +363,44 @@ describe('Middleware', () => {
   })
 
   describe('useEventToggly', () => {
+    it('applies configureEventEvalContext without context middleware', async () => {
+      resetEventEvalContextProviders()
+      mockFetch.mockResolvedValueOnce(
+        createMockResponse([
+          {
+            featureKey: 'targeted-flag',
+            filters: [
+              {
+                name: 'Targeting',
+                parameters: {
+                  'Audience.Users:0': 'alice',
+                  'Audience.DefaultRolloutPercentage': 0,
+                },
+              },
+            ],
+          },
+        ])
+      )
+
+      await initServerToggly({
+        appKey: 'test-key',
+        identity: 'bob',
+        enableLiveUpdates: false,
+      })
+
+      configureEventEvalContext({
+        getContext: () => ({
+          identity: 'alice',
+          groups: ['beta'],
+          claims: { role: 'admin' },
+        }),
+      })
+
+      const client = useEventToggly(createMockEvent())
+      expect(await client.isFeatureOn('targeted-flag')).toBe(true)
+      resetEventEvalContextProviders()
+    })
+
     it('should return client with identity from header without mutating shared', async () => {
       mockFetch.mockResolvedValueOnce(createMockResponse(featureDefs({})))
 

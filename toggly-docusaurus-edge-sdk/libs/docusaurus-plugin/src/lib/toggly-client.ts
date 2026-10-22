@@ -15,6 +15,7 @@ import {
   readResponseBody,
   unwrapDefsPayload,
 } from './signed-response.js';
+import { buildDefinitionFetchHeaders } from './sdk-identity.js';
 
 /**
  * Configuration options for creating a Toggly client
@@ -271,9 +272,9 @@ function createClient(
     try {
       const response = await resolvedFetch(url, {
         method: 'GET',
-        headers: {
+        headers: buildDefinitionFetchHeaders({
           Accept: 'application/json',
-        },
+        }),
         signal: controller.signal,
       });
 

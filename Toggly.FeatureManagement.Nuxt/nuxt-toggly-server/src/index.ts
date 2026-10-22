@@ -45,6 +45,7 @@ export {
   setCachedEventEvalContext,
   syncDefaultEventAmbient,
   resolveEventEvalContext,
+  resolveSyncEventEvalContext,
 } from './event-context'
 
 // Server client

@@ -8,6 +8,7 @@ import {
   readResponseBody,
   unwrapDefsPayload,
 } from './signed-response.js';
+import { buildDefinitionFetchHeaders } from './sdk-identity.js';
 
 export interface BuildFlagFetchOptions {
   baseURI?: string;
@@ -59,7 +60,7 @@ export async function fetchBuildTimeFlags(
   try {
     const response = await fetch(url, {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: buildDefinitionFetchHeaders({ Accept: 'application/json' }),
       signal: controller.signal,
     });
 
