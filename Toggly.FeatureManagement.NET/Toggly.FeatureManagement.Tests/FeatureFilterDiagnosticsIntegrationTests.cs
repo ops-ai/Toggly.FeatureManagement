@@ -25,7 +25,7 @@ public class FeatureFilterDiagnosticsIntegrationTests
             b.SetMinimumLevel(LogLevel.Warning);
         });
 
-        var registrationIndex = new FeatureFilterRegistrationIndex(new[] { "AlwaysOn" });
+        var registrationIndex = new FeatureFilterRegistrationIndex(AlwaysOnOnly);
         var tracker = new MissingFeatureFilterWarningTracker(
             loggerFactory.CreateLogger<MissingFeatureFilterWarningTracker>());
 
