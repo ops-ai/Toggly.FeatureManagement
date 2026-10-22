@@ -36,7 +36,7 @@ public class MissingFeatureFilterWarningTrackerTests
     {
         var logger = new Mock<ILogger<MissingFeatureFilterWarningTracker>>();
         var tracker = new MissingFeatureFilterWarningTracker(logger.Object);
-        var index = new FeatureFilterRegistrationIndex(new[] { "CountryFamily" });
+        var index = new FeatureFilterRegistrationIndex(CountryFamilyOnly);
 
         tracker.WarnIfMissing("CountryFamily", index);
 
