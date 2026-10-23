@@ -7,6 +7,10 @@ namespace Toggly.FeatureManagement.Web.Tests;
 
 public class UserAgentSegmentFieldsTests
 {
+    private static readonly string[] MacintoshAllowList = { "Macintosh" };
+    private static readonly string[] MacOsAllowList = { "Mac" };
+    private static readonly string[] ChromeAllowList = { "Chrome" };
+
     private const string MacChromeDesktopUa =
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
