@@ -25,6 +25,32 @@ describe('createTogglyClient live fetch', () => {
     }
   });
 
+  it('clears lastLiveFetchError after a successful refresh', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 500, statusText: 'Server Error' })
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ defs: { on: true } }),
+      });
+    const client = createTogglyClient({
+      appKey: 'app',
+      enableTelemetry: false,
+      featureFlagsRefreshInterval: 60_000,
+      fetch,
+    });
+    try {
+      expect(await client.getFlags()).toEqual({});
+      expect(client.getLastLiveFetchError()).toBeInstanceOf(Error);
+      await client.refreshFlags();
+      expect(client.getLastLiveFetchError()).toBeNull();
+      expect(await client.getFlags()).toEqual({ on: true });
+      expect(fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      client.dispose();
+    }
+  });
+
   it('keeps lastLiveFetchError when a later fetch fails with cached fallback defaults', async () => {
     const fetch = vi
       .fn()
