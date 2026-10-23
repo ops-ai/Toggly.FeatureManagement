@@ -768,23 +768,17 @@ impl DefinitionsProvider {
         let url = config.definitions_endpoint();
         debug!(url = %url, "Fetching definitions");
 
-        let existing_etag = if omit_conditional_headers {
-            None
-        } else {
-            etag.read().clone()
-        };
-        let existing_lm = if omit_conditional_headers {
-            None
-        } else {
-            last_modified.read().clone()
-        };
+        let existing_etag = etag.read().clone();
+        let existing_lm = last_modified.read().clone();
 
         let mut request = http_client.get(&url);
-        if let Some(ref e) = existing_etag {
-            request = request.header("If-None-Match", e.clone());
-        }
-        if let Some(ref lm) = existing_lm {
-            request = request.header("If-Modified-Since", lm.clone());
+        if !omit_conditional_headers {
+            if let Some(ref e) = existing_etag {
+                request = request.header("If-None-Match", e.clone());
+            }
+            if let Some(ref lm) = existing_lm {
+                request = request.header("If-Modified-Since", lm.clone());
+            }
         }
 
         let response = match request.send().await {
