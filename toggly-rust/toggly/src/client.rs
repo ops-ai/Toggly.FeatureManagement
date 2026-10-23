@@ -10,6 +10,7 @@ use crate::telemetry::{
 };
 use crate::Requirement;
 use parking_lot::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tracing::{debug, info, instrument};
 
@@ -44,6 +45,8 @@ pub struct TogglyClient {
     provider: Arc<tokio::sync::RwLock<DefinitionsProvider>>,
     engine: Engine,
     cache: Cache<bool>,
+    /// Bumped whenever definitions are applied; guards evaluation cache inserts.
+    definitions_generation: Arc<AtomicU64>,
     telemetry: Option<Arc<TelemetryRuntime>>,
     /// Mutable default targeting userId (from [`TogglyConfig::identity`],
     /// overridable via [`Self::set_identity`]).
@@ -72,6 +75,7 @@ impl TogglyClient {
 
         let cache = Cache::new(config.cache_ttl, config.cache_max_entries);
         let evaluation_cache = Arc::new(cache.clone());
+        let definitions_generation = Arc::new(AtomicU64::new(0));
         crate::entity_context::register_entity_contexts_at_startup(&config).await;
 
         let mut runtime_config = TelemetryRuntimeConfig::from_client_config(&config);
@@ -82,6 +86,7 @@ impl TogglyClient {
         let telemetry = Arc::new(TelemetryRuntime::start(runtime_config));
         provider.set_definition_cache_recorder(telemetry.clone());
         provider.set_evaluation_cache(evaluation_cache);
+        provider.set_definitions_generation(definitions_generation.clone());
         provider.initialize().await?;
 
         let identity = RwLock::new(config.identity.clone());
@@ -90,6 +95,7 @@ impl TogglyClient {
             provider: Arc::new(tokio::sync::RwLock::new(provider)),
             engine: Engine::with_defaults(),
             cache,
+            definitions_generation,
             telemetry: Some(telemetry),
             identity,
         })
@@ -134,7 +140,8 @@ impl TogglyClient {
             return Err(crate::Error::Config("feature_key is required".to_string()));
         }
 
-        let cache_key = self.cache_key(feature_key, &context);
+        let gen_at_read = self.definitions_generation.load(Ordering::SeqCst);
+        let cache_key = self.cache_key(feature_key, &context, gen_at_read);
         if let Some(cached) = self.cache.get(&cache_key) {
             debug!(feature = %feature_key, cached = %cached, "Cache hit");
             self.record_check(feature_key, cached, context.identity.as_deref());
@@ -159,7 +166,9 @@ impl TogglyClient {
         drop(provider);
 
         let result = self.engine.evaluate(&definition, &context)?;
-        self.cache.insert(cache_key, result);
+        if self.definitions_generation.load(Ordering::SeqCst) == gen_at_read {
+            self.cache.insert(cache_key, result);
+        }
 
         debug!(feature = %feature_key, enabled = %result, "Feature evaluated");
         self.record_check(feature_key, result, context.identity.as_deref());
@@ -459,10 +468,10 @@ impl TogglyClient {
         }
     }
 
-    fn cache_key(&self, feature_key: &str, context: &EvalContext) -> String {
+    fn cache_key(&self, feature_key: &str, context: &EvalContext, generation: u64) -> String {
         let identity = context.identity.as_deref().unwrap_or("");
         let groups = context.groups.join(",");
-        format!("{feature_key}:{identity}:{groups}")
+        format!("{feature_key}:{identity}:{groups}:{generation}")
     }
 
     /// Fill empty per-call identity from the client default (config /
