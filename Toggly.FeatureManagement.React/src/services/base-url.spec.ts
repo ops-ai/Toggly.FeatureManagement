@@ -9,7 +9,9 @@ beforeEach(() => {
     const url = new URL(String(input))
     if (url.pathname.includes('/api/frontend/telemetry')) { packets.push(JSON.parse(String(init?.body))); return { status: 202 } as Response }
     urls.push(url)
-    const defs = url.toString().includes('evaluated-variants') ? { On: { enabled: true, variant: 'blue', configurationValue: 42 } } : { On: true }
+    const defs = url.pathname.includes('evaluated-variants-signed')
+      ? { On: { enabled: true, variant: 'blue', configurationValue: 42 } }
+      : { On: true }
     return { ok: true, status: 200, text: async () => JSON.stringify(defs) } as Response
   })
 })
@@ -41,8 +43,18 @@ it.each([false, true])('preserves partial setters but never revives retired i af
   expect(urls[urls.length - 1].searchParams.get('i')).toBe('current')
   await owner.setContext({ identity: 'bob', instanceId: 'next' }); owner.recordUsage('Next')
   await owner.setContext({ instanceId: '' }); owner.recordUsage('Cleared')
-  expect(urls.map(url => url.searchParams.get('i'))).toEqual(['current', 'current', 'next', null])
-  expect(urls[urls.length - 1].searchParams.get(enableVariants ? 'userId' : 'u')).toBe('bob')
+  const trackedUrls = urls.filter((url) =>
+    url.pathname.includes(enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed'),
+  )
+  expect(trackedUrls.map((url) => url.searchParams.get('i'))).toEqual([
+    'current',
+    'current',
+    'next',
+    null,
+  ])
+  expect(
+    trackedUrls[trackedUrls.length - 1].searchParams.get(enableVariants ? 'userId' : 'u'),
+  ).toBe('bob')
   expect(await owner.isFeatureOn('On')).toBe(true)
   await owner.flushTelemetry()
   expect(packets.filter(packet => packet.f.Current || packet.f.Next || packet.f.Cleared).map(packet => [packet.i, packet.u])).toEqual([['current', undefined], ['next', undefined], [undefined, 'bob']])
