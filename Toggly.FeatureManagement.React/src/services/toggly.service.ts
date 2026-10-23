@@ -905,6 +905,13 @@ export class Toggly implements TogglyService {
 
   _featuresLoaded = async () => {
     if (this._features) {
+      const generation = this._generation
+      const appKey = this._config.appKey ?? ''
+      const env = this._config.environment ?? 'Production'
+      await this._syncEntityEvaluatedFeaturesIfNeeded(generation, appKey, env, null)
+      if (this._generation !== generation || this._disposed) {
+        return this._booleanFeatures()
+      }
       return toBooleanDefinitions(this._features)
     }
     return await this._loadFeatures()

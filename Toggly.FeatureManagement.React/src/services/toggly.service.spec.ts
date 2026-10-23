@@ -1922,11 +1922,9 @@ describe('Toggly Service', () => {
       persistCache: true,
     });
 
-    await service._loadFeatures();
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(String(mockFetch.mock.calls[0][0])).toContain('evaluated-signed');
-
     const order = { kind: 'Order', key: 'ord-vip', attributes: { Vip: true } };
     expect(await service.isFeatureOn('filter-context-property', order)).toBe(true);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(String(mockFetch.mock.calls[0][0])).toContain('evaluated-signed');
   });
 });
