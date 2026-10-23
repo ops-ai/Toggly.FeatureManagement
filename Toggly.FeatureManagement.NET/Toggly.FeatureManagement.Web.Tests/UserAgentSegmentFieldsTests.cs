@@ -7,10 +7,6 @@ namespace Toggly.FeatureManagement.Web.Tests;
 
 public class UserAgentSegmentFieldsTests
 {
-    private static readonly string[] MacintoshAllowList = { "Macintosh" };
-    private static readonly string[] MacOsAllowList = { "Mac" };
-    private static readonly string[] ChromeAllowList = { "Chrome" };
-
     private const string MacChromeDesktopUa =
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
@@ -36,7 +32,7 @@ public class UserAgentSegmentFieldsTests
     {
         var ua = Parser.GetDefault().Parse(MacChromeDesktopUa);
         var deviceFamily = UserAgentSegmentFields.GetDeviceFamily(ua);
-        UserAgentSegmentFields.MatchesIndexedAllowList(deviceFamily, new[] { "Macintosh" })
+        UserAgentSegmentFields.MatchesIndexedAllowList(deviceFamily, MacintoshAllowList)
             .Should().BeTrue();
     }
 
@@ -45,7 +41,7 @@ public class UserAgentSegmentFieldsTests
     {
         var ua = Parser.GetDefault().Parse(MacChromeDesktopUa);
         var osFamily = UserAgentSegmentFields.GetOperatingSystemFamily(ua);
-        UserAgentSegmentFields.MatchesIndexedAllowList(osFamily, new[] { "Mac" })
+        UserAgentSegmentFields.MatchesIndexedAllowList(osFamily, MacOsAllowList)
             .Should().BeTrue();
     }
 
@@ -54,7 +50,7 @@ public class UserAgentSegmentFieldsTests
     {
         var ua = Parser.GetDefault().Parse(MacChromeDesktopUa);
         var browser = UserAgentSegmentFields.GetBrowserFamily(ua);
-        UserAgentSegmentFields.MatchesIndexedAllowList(browser, new[] { "Chrome" })
+        UserAgentSegmentFields.MatchesIndexedAllowList(browser, ChromeAllowList)
             .Should().BeTrue();
     }
 }
