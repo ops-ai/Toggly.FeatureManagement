@@ -180,11 +180,9 @@ export async function waitForAggregateAnalysis({
         await sleep(pollMs);
         continue;
       }
-      console.log(
-        `Aggregate analysis failed (${run.conclusion}): ${run.html_url}; waiting for a later attempt`,
+      throw new Error(
+        `Aggregate analysis failed (${run.conclusion}) for ${sha}: ${run.html_url}`,
       );
-      await sleep(pollMs);
-      continue;
     }
 
     if (run && ACTIVE_RUN_STATUSES.has(run.status)) {
