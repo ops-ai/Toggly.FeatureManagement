@@ -142,8 +142,13 @@ describe('React frontend telemetry', () => {
       fetchMock.mockResolvedValueOnce({ ok: false, status: 304 })
     }
     await owner.setContext({ instanceId: 'token-a' })
-    const definitionCalls = fetchMock.mock.calls.filter(([url]) => String(url).includes('evaluated-signed'))
-    const inmValues = definitionCalls.map(
+    const revisionCalls = fetchMock.mock.calls.filter(([url]) => {
+      const path = String(url)
+      return enableVariants
+        ? path.includes('evaluated-variants-signed')
+        : path.includes('/evaluated-signed/') && !path.includes('variants')
+    })
+    const inmValues = revisionCalls.map(
       (call) => new Headers(call[1]?.headers).get('If-None-Match'),
     )
     expect(inmValues).toContain('token-a-revision')

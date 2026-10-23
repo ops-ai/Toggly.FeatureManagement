@@ -103,6 +103,13 @@ function isThenable<T>(value: T | Promise<T>): value is Promise<T> {
   return typeof then === 'function'
 }
 
+/** Prevent abandoned async provider promises from becoming unhandled rejections. */
+function absorbRejectedThenable(value: unknown): void {
+  if (isThenable(value)) {
+    void value.catch(() => undefined)
+  }
+}
+
 function resolveProvidersSync(
   event: H3Event,
   providers?: EventEvalContextProviders,
@@ -114,6 +121,7 @@ function resolveProvidersSync(
   if (config.getContext) {
     const custom = config.getContext(event)
     if (isThenable(custom)) {
+      absorbRejectedThenable(custom)
       return undefined
     }
     return {
@@ -136,14 +144,17 @@ function resolveProvidersSync(
     ? config.getIdentity(event)
     : getHeader(event, 'x-toggly-identity') || undefined
   if (isThenable(identityResult)) {
+    absorbRejectedThenable(identityResult)
     return undefined
   }
   const groupsResult = config.getGroups ? config.getGroups(event) : undefined
   if (isThenable(groupsResult)) {
+    absorbRejectedThenable(groupsResult)
     return undefined
   }
   const claimsResult = config.getClaims ? config.getClaims(event) : undefined
   if (isThenable(claimsResult)) {
+    absorbRejectedThenable(claimsResult)
     return undefined
   }
 

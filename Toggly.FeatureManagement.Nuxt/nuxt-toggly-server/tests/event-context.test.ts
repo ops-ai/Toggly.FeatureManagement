@@ -54,4 +54,22 @@ describe('event-context sync resolution', () => {
     })
     expect(resolveSyncEventEvalContext(createMockEvent())).toBeUndefined()
   })
+
+  it('absorbs rejected async providers without unhandled rejections', async () => {
+    let unhandled = false
+    const onUnhandled = () => {
+      unhandled = true
+    }
+    process.on('unhandledRejection', onUnhandled)
+    try {
+      configureEventEvalContext({
+        getIdentity: () => Promise.reject(new Error('async-only')),
+      })
+      expect(resolveSyncEventEvalContext(createMockEvent())).toBeUndefined()
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      expect(unhandled).toBe(false)
+    } finally {
+      process.removeListener('unhandledRejection', onUnhandled)
+    }
+  })
 })

@@ -664,6 +664,7 @@ export class Toggly implements TogglyService {
       this._buildDefinitionsUrl('evaluated-signed', appKey, env).toString(),
       pin,
     )
+    const previousEntityDefs = this._entityEvaluatedFeatures
     try {
       const loaded = await fetchEvaluatedSignedDefinitions(
         fetchUrl,
@@ -673,7 +674,12 @@ export class Toggly implements TogglyService {
           baseURI: this._config.baseURI ?? 'https://definitions.toggly.io',
         },
         {
-          revision: pin ? null : this._definitionsRevision,
+          // Do not reuse the variants etag until entity defs were loaded once.
+          revision: pin
+            ? null
+            : this._entityEvaluatedFeatures
+              ? this._definitionsRevision
+              : null,
           headers: buildDefinitionFetchHeaders(),
         },
       )
@@ -683,7 +689,7 @@ export class Toggly implements TogglyService {
       }
     } catch {
       if (generation === this._generation && !this._disposed) {
-        this._entityEvaluatedFeatures = null
+        this._entityEvaluatedFeatures = previousEntityDefs
       }
     } finally {
       if (generation === this._generation && !this._disposed) {
