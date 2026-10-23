@@ -71,6 +71,7 @@ impl TogglyClient {
         let mut provider = DefinitionsProvider::new(config.clone())?;
 
         let cache = Cache::new(config.cache_ttl, config.cache_max_entries);
+        let evaluation_cache = Arc::new(cache.clone());
         crate::entity_context::register_entity_contexts_at_startup(&config).await;
 
         let mut runtime_config = TelemetryRuntimeConfig::from_client_config(&config);
@@ -80,6 +81,7 @@ impl TogglyClient {
         }
         let telemetry = Arc::new(TelemetryRuntime::start(runtime_config));
         provider.set_definition_cache_recorder(telemetry.clone());
+        provider.set_evaluation_cache(evaluation_cache);
         provider.initialize().await?;
 
         let identity = RwLock::new(config.identity.clone());

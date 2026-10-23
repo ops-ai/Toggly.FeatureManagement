@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.1
+
+2026-10-23
+
+### Fixed
+- Clear the per-identity evaluation cache whenever the definitions provider applies a new revision (WebSocket / background refresh), so flags that go from targeted filters to empty filters re-evaluate OFF instead of serving a stale ON [OPS-2012].
+
 ## 0.11.0
 
 2026-10-12

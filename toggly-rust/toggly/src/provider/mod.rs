@@ -1,5 +1,6 @@
 //! Feature definitions provider.
 
+use crate::cache::Cache;
 use crate::config::TogglyConfig;
 use crate::crypto::verify_signed_definitions;
 use crate::definition_cache::{
@@ -52,6 +53,7 @@ pub struct DefinitionsProvider {
     pending_ws_refresh: Arc<AtomicBool>,
     definitions_loaded: Arc<AtomicBool>,
     cache_recorder: Arc<RwLock<Option<Arc<dyn DefinitionCacheRecorder>>>>,
+    evaluation_cache: Arc<RwLock<Option<Arc<Cache<bool>>>>>,
 }
 
 impl DefinitionsProvider {
@@ -80,7 +82,13 @@ impl DefinitionsProvider {
             pending_ws_refresh: Arc::new(AtomicBool::new(false)),
             definitions_loaded: Arc::new(AtomicBool::new(false)),
             cache_recorder: Arc::new(RwLock::new(None)),
+            evaluation_cache: Arc::new(RwLock::new(None)),
         })
+    }
+
+    /// Share the client's per-context evaluation cache; cleared whenever definitions apply.
+    pub fn set_evaluation_cache(&self, cache: Arc<Cache<bool>>) {
+        *self.evaluation_cache.write() = Some(cache);
     }
 
     /// Attach a usage recorder for definition-refresh cache hit/miss counts.
@@ -137,6 +145,7 @@ impl DefinitionsProvider {
         let pending_ws_refresh = Arc::clone(&self.pending_ws_refresh);
         let definitions_loaded = Arc::clone(&self.definitions_loaded);
         let cache_recorder = Arc::clone(&self.cache_recorder);
+        let evaluation_cache = Arc::clone(&self.evaluation_cache);
 
         if config.enable_live_updates {
             let ws_definitions = Arc::clone(&definitions);
@@ -155,6 +164,7 @@ impl DefinitionsProvider {
             let ws_pending = Arc::clone(&pending_ws_refresh);
             let ws_loaded = Arc::clone(&definitions_loaded);
             let ws_recorder = Arc::clone(&cache_recorder);
+            let ws_evaluation_cache = Arc::clone(&evaluation_cache);
             let mut ws_shutdown_rx = shutdown_rx.clone();
 
             tokio::spawn(async move {
@@ -199,6 +209,7 @@ impl DefinitionsProvider {
                                                         &ws_pending,
                                                         &ws_loaded,
                                                         &ws_recorder,
+                                                        &ws_evaluation_cache,
                                                     ).await;
                                                 }
                                             }
@@ -280,6 +291,7 @@ impl DefinitionsProvider {
                             &pending_ws_refresh,
                             &definitions_loaded,
                             &cache_recorder,
+                            &evaluation_cache,
                             false,
                             false,
                         ).await {
@@ -355,6 +367,7 @@ impl DefinitionsProvider {
         pending_ws_refresh: &AtomicBool,
         definitions_loaded: &AtomicBool,
         cache_recorder: &RwLock<Option<Arc<dyn DefinitionCacheRecorder>>>,
+        evaluation_cache: &RwLock<Option<Arc<Cache<bool>>>>,
     ) {
         let cached_etag = etag.read().clone();
         if let Some((msg_type, force_jwks)) = Self::ws_refresh_action(text, cached_etag.as_deref())
@@ -379,6 +392,7 @@ impl DefinitionsProvider {
                 pending_ws_refresh,
                 definitions_loaded,
                 cache_recorder,
+                evaluation_cache,
                 true,
                 force_jwks,
             )
@@ -417,6 +431,7 @@ impl DefinitionsProvider {
             &self.pending_ws_refresh,
             &self.definitions_loaded,
             &self.cache_recorder,
+            &self.evaluation_cache,
             from_websocket,
             force_jwks_refresh,
         )
@@ -439,6 +454,7 @@ impl DefinitionsProvider {
         pending_ws_refresh: &AtomicBool,
         definitions_loaded: &AtomicBool,
         cache_recorder: &RwLock<Option<Arc<dyn DefinitionCacheRecorder>>>,
+        evaluation_cache: &RwLock<Option<Arc<Cache<bool>>>>,
         from_websocket: bool,
         force_jwks_refresh: bool,
     ) -> crate::Result<()> {
@@ -465,6 +481,7 @@ impl DefinitionsProvider {
             last_error_time,
             jwks,
             definitions_loaded,
+            evaluation_cache,
             force_jwks_refresh,
         )
         .await;
@@ -498,6 +515,7 @@ impl DefinitionsProvider {
                 pending_ws_refresh,
                 definitions_loaded,
                 cache_recorder,
+                evaluation_cache,
                 true,
                 false,
             ))
@@ -604,6 +622,7 @@ impl DefinitionsProvider {
             &self.pending_ws_refresh,
             &self.definitions_loaded,
             &self.cache_recorder,
+            &self.evaluation_cache,
         )
         .await;
     }
@@ -642,12 +661,16 @@ impl DefinitionsProvider {
         definitions: &DashMap<String, FeatureDefinition>,
         parsed: Vec<FeatureDefinition>,
         definitions_loaded: &AtomicBool,
+        evaluation_cache: Option<&Cache<bool>>,
     ) {
         definitions.clear();
         for definition in parsed {
             definitions.insert(definition.feature_key.clone(), definition);
         }
         definitions_loaded.store(true, Ordering::SeqCst);
+        if let Some(cache) = evaluation_cache {
+            cache.clear();
+        }
         info!(count = definitions.len(), "Loaded feature definitions");
     }
 
@@ -665,6 +688,7 @@ impl DefinitionsProvider {
         last_error_time: &RwLock<Option<DateTime<Utc>>>,
         jwks: &RwLock<Option<JwksCache>>,
         definitions_loaded: &AtomicBool,
+        evaluation_cache: &RwLock<Option<Arc<Cache<bool>>>>,
         force_jwks_refresh: bool,
     ) -> crate::Result<RefreshCacheOutcome> {
         if force_jwks_refresh {
@@ -769,7 +793,13 @@ impl DefinitionsProvider {
         }
 
         Self::store_revision_headers(etag, last_modified, response_etag, response_lm);
-        Self::apply_definitions(definitions, parsed_definitions, definitions_loaded);
+        let eval_cache = evaluation_cache.read().as_ref().map(|c| Arc::clone(c));
+        Self::apply_definitions(
+            definitions,
+            parsed_definitions,
+            definitions_loaded,
+            eval_cache.as_deref(),
+        );
 
         *last_fetch.write() = Some(Instant::now());
         *last_error.write() = None;
@@ -1514,6 +1544,30 @@ mod tests {
 
         provider.refresh(true, false).await.unwrap();
         assert_eq!(rec.snapshot(), (1, 1));
+    }
+
+    #[tokio::test]
+    async fn evaluation_cache_cleared_when_definitions_apply() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "\"rev-1\"")
+                    .set_body_json(feature_json("feat-a")),
+            )
+            .mount(&server)
+            .await;
+
+        let provider = provider_against(&server).await;
+        let eval_cache = Arc::new(crate::cache::Cache::new(
+            std::time::Duration::from_secs(3600),
+            100,
+        ));
+        provider.set_evaluation_cache(eval_cache.clone());
+        eval_cache.insert("filter-targeting:alice:".to_string(), true);
+        provider.refresh(false, false).await.unwrap();
+        assert_eq!(eval_cache.get("filter-targeting:alice:"), None);
     }
 
     #[tokio::test]

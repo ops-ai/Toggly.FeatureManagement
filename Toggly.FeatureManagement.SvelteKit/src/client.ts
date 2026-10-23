@@ -258,11 +258,12 @@ export function connectBrowser(
           return;
         }
         if (message.type === 'sync' && message.unchanged === true) return;
-        if (
-          message.type === 'update' ||
-          message.type === 'flags-updated' ||
-          message.type === 'sync'
-        ) {
+        if (message.type === 'update' || message.type === 'flags-updated') {
+          // Always refresh on notify: revision can match while the signed/evaluated body changed.
+          invalidate(pin);
+          return;
+        }
+        if (message.type === 'sync') {
           if (!pin || pin !== revision) invalidate(pin);
         }
       };

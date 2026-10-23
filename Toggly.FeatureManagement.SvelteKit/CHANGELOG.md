@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.4 — 2026-10-23
+
+### Fixed
+
+- Always debounce a signed refresh on `flags-updated` / `update` WebSocket messages, even when the announced revision matches the cached one, so evaluated-signed snapshots pick up body changes (e.g. targeting filters cleared) without waiting for a revision bump [OPS-2012].
+
 ## 0.5.3 — 2026-10-19
 
 ### Fixed
