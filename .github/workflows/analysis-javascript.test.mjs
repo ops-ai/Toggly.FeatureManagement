@@ -482,7 +482,9 @@ test('installs the packed Solid host browser with its own resolved Playwright CL
   assert.doesNotMatch(job, /npx|cd tests\/host/);
   assertRequiredHost('SolidJS', 'solidstart-host');
   const installer = readFileSync(new URL('../../Toggly.FeatureManagement.Solid/tests/install-host.mjs', import.meta.url), 'utf8');
-  const install = installer.indexOf("await run([join(work, 'node_modules/playwright/cli.js'), 'install', '--with-deps', 'chromium'])");
+  const install = installer.indexOf(
+    "[join(work, 'node_modules/playwright/cli.js'), 'install', '--with-deps', 'chromium']",
+  );
   const verify = installer.indexOf("await import(pathToFileURL(join(host, 'verify.mjs')).href)");
   const cleanInstall = installer.indexOf("await run([npm, 'ci'");
   assert.ok(cleanInstall >= 0, 'retain the genuine host npm ci');

@@ -12,6 +12,16 @@ import {
 } from './client.js';
 
 export type { Flags, TogglyClient, TogglyConfig } from './client.js';
+export {
+  SDK_HEADER_ID,
+  SDK_HEADER_VERSION,
+  SDK_ID,
+  SDK_VERSION,
+  buildDefinitionFetchHeaders,
+  sdkCustomHeaders,
+  sdkUserAgent,
+  usesSdkCustomHeaders,
+} from './sdk-identity.js';
 
 /** Create a portable server/edge client without browser lifecycle ownership. */
 export function createTogglyClient(config: TogglyConfig = {}): TogglyClient {

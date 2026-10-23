@@ -23,7 +23,10 @@ let preflights = 0
 const collector = createServer((request, response) => {
   response.setHeader('Access-Control-Allow-Origin', request.headers.origin ?? '*')
   response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Content-Encoding')
+  response.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Content-Encoding, Accept, X-Toggly-Sdk, X-Toggly-Sdk-Version',
+  )
   if (request.method === 'OPTIONS') {preflights++; response.writeHead(204); response.end(); return}
   if (request.method !== 'POST' || request.url !== '/api/frontend/telemetry') {response.writeHead(404); response.end(); return}
   const chunks = []

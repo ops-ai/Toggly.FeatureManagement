@@ -15,6 +15,8 @@ import {
   readResponseBody,
   unwrapDefsPayload,
 } from './signed-response.js';
+import { buildDefinitionFetchHeaders } from './sdk-identity.js';
+import { normalizeEvaluatedFlags } from './normalize-evaluated-flags.js';
 
 /**
  * Configuration options for creating a Toggly client
@@ -109,6 +111,9 @@ export interface TogglyClient {
    * Stop the WebSocket connection and clean up reconnect timers.
    */
   stopWebSocket(): void;
+
+  /** Set when the latest live fetch failed and flagDefaults were used (no cache). */
+  getLastLiveFetchError(): Error | null;
 }
 
 interface CachedFlags {
@@ -213,9 +218,20 @@ function createClient(
   let _lastFallbackRefresh = 0;
 
   let cache: CachedFlags | null = null;
+  let lastLiveFetchError: Error | null = null;
   let disposed = false;
   let generation = 0;
   const requests = new Map<AbortController, ReturnType<typeof setTimeout>>();
+  /** JWKS verification must not reuse the definitions abort signal, but still honor connectTimeout. */
+  const fetchWithConnectTimeout: typeof fetch = (input, init) => {
+    const bounded = new AbortController();
+    const boundedTimer = setTimeout(() => bounded.abort(), connectTimeout);
+    requests.set(bounded, boundedTimer);
+    return resolvedFetch(input, { ...init, signal: bounded.signal }).finally(() => {
+      clearTimeout(boundedTimer);
+      requests.delete(bounded);
+    });
+  };
   let reporter: TelemetryReporter | undefined;
   let captureCheck: ReturnType<TelemetryReporter['captureCheck']> | undefined;
   // Each target client activates once. A retired client cannot reactivate old context.
@@ -244,36 +260,79 @@ function createClient(
 
   const copyFlags = (flags: Flags): Flags => ({ ...flags });
 
-  const fallbackFlags = (reason: 'missing-config' | 'request-failed' | 'disposed'): Flags => {
+  const LIVE_FETCH_FAILED_MESSAGE = 'Toggly live flag fetch failed';
+
+  const liveFetchErrorFromUnknown = (error?: unknown): Error =>
+    error instanceof Error ? error : new Error(LIVE_FETCH_FAILED_MESSAGE);
+
+  type FetchFlagsResult = {
+    flags: Flags;
+    /** Applied in refreshFlags only after the refresh generation is still current. */
+    liveFetchError?: Error | null;
+  };
+
+  const liveFetchErrorForCacheHit = (
+    reason: 'request-failed' | 'disposed',
+    error?: unknown
+  ): Error | null =>
+    reason === 'request-failed' ? liveFetchErrorFromUnknown(error) : null;
+
+  const fallbackFromCachedFlags = (
+    cachedFlags: Flags,
+    reason: 'request-failed' | 'disposed',
+    error?: unknown
+  ): FetchFlagsResult => {
+    if (isDebug && reason === 'request-failed') {
+      console.log(`Toggly.loadedFromCache - ${JSON.stringify(cachedFlags)}`);
+    }
+    return {
+      flags: copyFlags(cachedFlags),
+      liveFetchError: liveFetchErrorForCacheHit(reason, error),
+    };
+  };
+
+  const fallbackFromDefaultsAfterFailedFetch = (error?: unknown): FetchFlagsResult => {
+    const fetchError = liveFetchErrorFromUnknown(error);
+    console.warn(
+      '[Toggly] Live feature flag fetch failed; showing flagDefaults until a refresh succeeds.',
+      fetchError
+    );
+    if (isDebug) {
+      console.log(`Toggly.loadedFromDefaults - ${JSON.stringify(flagDefaults)}`);
+    }
+    return { flags: copyFlags(flagDefaults), liveFetchError: fetchError };
+  };
+
+  const fallbackFlags = (
+    reason: 'missing-config' | 'request-failed' | 'disposed',
+    error?: unknown
+  ): FetchFlagsResult => {
     if (reason === 'missing-config') {
       if (isDebug) console.log(`Toggly.usedFlagDefaults - ${JSON.stringify(flagDefaults)}`);
-      return copyFlags(flagDefaults);
+      return { flags: copyFlags(flagDefaults), liveFetchError: null };
     }
 
     const cachedFlags = cache?.flags;
     if (cachedFlags) {
-      if (isDebug && reason === 'request-failed') {
-        console.log(`Toggly.loadedFromCache - ${JSON.stringify(cachedFlags)}`);
-      }
-      return copyFlags(cachedFlags);
+      return fallbackFromCachedFlags(cachedFlags, reason, error);
     }
 
-    if (isDebug && reason === 'request-failed') {
-      console.log(`Toggly.loadedFromDefaults - ${JSON.stringify(flagDefaults)}`);
+    if (reason === 'request-failed') {
+      return fallbackFromDefaultsAfterFailedFetch(error);
     }
-    return copyFlags(flagDefaults);
+    return { flags: copyFlags(flagDefaults) };
   };
 
-  const fetchFlagsFromApi = async (url: string): Promise<Flags> => {
+  const fetchFlagsFromApi = async (url: string): Promise<FetchFlagsResult> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), connectTimeout);
     requests.set(controller, timeoutId);
     try {
       const response = await resolvedFetch(url, {
         method: 'GET',
-        headers: {
+        headers: buildDefinitionFetchHeaders({
           Accept: 'application/json',
-        },
+        }),
         signal: controller.signal,
       });
 
@@ -282,7 +341,7 @@ function createClient(
       }
 
       const bodyText = await readResponseBody(response);
-      if (disposed) return { ...flagDefaults };
+      if (disposed) return { flags: { ...flagDefaults } };
       const signingBase = new URL(baseURI);
       signingBase.search = '';
       signingBase.hash = '';
@@ -292,30 +351,31 @@ function createClient(
         allowedKeyIds,
         maxSignatureAgeSeconds,
         headers: { Accept: 'application/json' },
-        fetchImpl: (input, init) => resolvedFetch(input, { ...init, signal: controller.signal }),
+        fetchImpl: fetchWithConnectTimeout,
       });
-      const flags = (verifySignatures ? (parsed as Flags) : unwrapDefsPayload(parsed)) as Flags;
+      const raw = verifySignatures ? parsed : unwrapDefsPayload(parsed);
+      const flags = normalizeEvaluatedFlags(raw);
 
       if (isDebug) {
         console.log(`Toggly.fetchFeatureFlags - ${JSON.stringify(flags)}`);
       }
 
-      return flags;
+      return { flags, liveFetchError: null };
     } finally {
       clearTimeout(timeoutId);
       requests.delete(controller);
     }
   };
 
-  const fetchFlags = async (): Promise<Flags> => {
+  const fetchFlags = async (): Promise<FetchFlagsResult> => {
     if (disposed) return fallbackFlags('disposed');
     const url = getApiUrl();
     if (!url || !appKey) return fallbackFlags('missing-config');
 
     try {
       return await fetchFlagsFromApi(url);
-    } catch {
-      return fallbackFlags('request-failed');
+    } catch (error) {
+      return fallbackFlags('request-failed', error);
     }
   };
 
@@ -326,8 +386,11 @@ function createClient(
       console.log('Toggly.refresh');
     }
 
-    const flags = await fetchFlags();
+    const { flags, liveFetchError: fetchError } = await fetchFlags();
     if (disposed || generation !== expected) return;
+    if (fetchError !== undefined) {
+      lastLiveFetchError = fetchError;
+    }
     cache = {
       flags,
       timestamp: Date.now(),
@@ -508,5 +571,6 @@ function createClient(
     refreshFlags,
     startWebSocket,
     stopWebSocket,
+    getLastLiveFetchError: () => lastLiveFetchError,
   };
 }

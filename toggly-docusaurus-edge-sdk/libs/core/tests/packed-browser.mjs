@@ -194,7 +194,10 @@ client.setGauge('missing');
     const origin = request.headers.origin ?? '*';
     response.setHeader('access-control-allow-origin', origin);
     response.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
-    response.setHeader('access-control-allow-headers', 'content-type, content-encoding');
+    response.setHeader(
+      'access-control-allow-headers',
+      'content-type, content-encoding, accept, x-toggly-sdk, x-toggly-sdk-version',
+    );
     if (request.method === 'OPTIONS') {
       preflights.push(request.url);
       response.writeHead(204).end();

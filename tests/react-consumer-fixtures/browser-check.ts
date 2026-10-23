@@ -11,6 +11,7 @@ const { preview } = await import(join(dirname(require.resolve('vite/package.json
 const { default: puppeteer } = await import(require.resolve('puppeteer-core'))
 let server, collector, browser
 let failure: unknown
+const errors: string[] = []
 try {
 server = await preview({ preview: { host: '127.0.0.1', port: 0 } })
 const telemetry = []
@@ -19,7 +20,10 @@ let preflights = 0
 collector = createServer((request, response) => {
   response.setHeader('Access-Control-Allow-Origin', request.headers.origin ?? '*')
   response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Content-Encoding')
+  response.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Content-Encoding, Accept, X-Toggly-Sdk, X-Toggly-Sdk-Version',
+  )
   if (request.method === 'OPTIONS') { preflights++; response.statusCode = 204; response.end(); return }
   if (request.method !== 'POST' || request.url !== '/api/frontend/telemetry') { response.statusCode = 404; response.end(); return }
   const chunks = []
@@ -39,7 +43,6 @@ const metricsUrl = `http://127.0.0.1:${(collector.address() as import('node:net'
     args: ['--no-sandbox'],
   })
   const page = await browser.newPage()
-  const errors = []
   page.on('pageerror', error => errors.push(error.message))
   page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
   let remoteEnabled = true
@@ -61,7 +64,7 @@ const metricsUrl = `http://127.0.0.1:${(collector.address() as import('node:net'
         return
       }
       definitionsQueries.push(query)
-      identities.push(query.get('userId'))
+      identities.push(query.get('u') ?? query.get('userId'))
       void request.respond({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ defs: { release: {enabled: remoteEnabled, variant: 'control'}, second: {enabled: true, variant: 'control'} } }) })
     } else void request.continue()
   })
@@ -166,7 +169,10 @@ const metricsUrl = `http://127.0.0.1:${(collector.address() as import('node:net'
   console.log(`Browser: response-mode HTTP 304 roundtrips passed with ${telemetry.length - telemetryStart} exact telemetry envelopes; Chromium ${await browser.version()}`)
   assert.deepEqual(errors, [])
   console.log('Browser: provider, hooks, all/negated/render gates, local gates, context, refresh, StrictMode/unmount cleanup; real CORS/native gzip i/u/plain keepalive i/checks/metrics/pagehide/unmount telemetry passed')
-} catch (error) { failure = error }
+} catch (error) {
+  if (errors.length) console.error('Browser console/page errors:', errors)
+  failure = error
+}
 await cleanupOwned([
   () => browser && closeBrowser(browser),
   () => server && closeServer(server.httpServer),

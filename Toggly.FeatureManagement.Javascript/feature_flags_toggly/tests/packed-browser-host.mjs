@@ -14,9 +14,13 @@ const host = join(temporary, 'host');
 const reporterTarball = process.env.TOGGLY_CLIENT_TELEMETRY_TARBALL;
 const packets = [], definitions = [], definitionRequests = [], modeRequests = [], servers = [], delayed = [];
 let preflights = 0, browser;
-function run(command, args, cwd = sdk) {
-  return execFileSync(command, args, { cwd, encoding: 'utf8', timeout: 180000,
-    env: {...process.env, npm_config_audit:'false', npm_config_fund:'false'} });
+function run(command, args, cwd = sdk, timeoutMs = 180000) {
+  return execFileSync(command, args, {
+    cwd,
+    encoding: 'utf8',
+    timeout: timeoutMs,
+    env: { ...process.env, npm_config_audit: 'false', npm_config_fund: 'false' },
+  });
 }
 async function listen(handler) {
   const server = createServer(handler); servers.push(server);
@@ -96,7 +100,13 @@ require('@ops-ai/feature-flags-toggly');await import('@ops-ai/feature-flags-togg
     response.setHeader('Content-Type','text/html');response.end('<!doctype html><script src="/sdk.js"></script><p>JavaScript packed host</p>');
   });
   const {chromium}=await import(pathToFileURL(join(host,'node_modules/playwright/index.mjs')).href);
-  run(join(host,'node_modules/.bin/playwright'),['install',...(process.platform==='linux'?['--with-deps']:[]),'chromium'],host);
+  // `install --with-deps` can exceed 3m on CI when apt mirrors are slow (ETIMEDOUT).
+  run(
+    join(host, 'node_modules/.bin/playwright'),
+    ['install', ...(process.platform === 'linux' ? ['--with-deps'] : []), 'chromium'],
+    host,
+    600000,
+  );
   browser=await chromium.launch({headless:true,...(process.env.CHROME_BIN?{executablePath:process.env.CHROME_BIN}:{})});
   const page=await browser.newPage();page.setDefaultTimeout(10000);
   const errors=[];page.on('pageerror',error=>errors.push(error.message));

@@ -1,6 +1,11 @@
 import { evaluate } from './evaluate';
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 const definitions = process.env.TOGGLY_HOST_DEFINITIONS!;
+
+/** SSR renders telemetry controls before Svelte attaches click handlers on slow CI hosts. */
+async function waitForPanelReady(page: Page): Promise<void> {
+  await expect(page.getByTestId('panel-ready')).toHaveText('true', { timeout: 30_000 });
+}
 test('packed browser telemetry preserves hydration, route queues, lifecycle and terminal ownership', async ({
   page,
   request,
@@ -38,6 +43,7 @@ test('packed browser telemetry preserves hydration, route queues, lifecycle and 
   });
   await page.goto('/one?user=alice');
   await expect(page.getByTestId('on')).toBeVisible();
+  await waitForPanelReady(page);
   await page.getByRole('button', { name: 'Flush telemetry', exact: true }).click();
   await expect(page.getByTestId('telemetry-status')).toHaveText('flushed');
   let packets = (await state()).telemetry;
@@ -57,6 +63,7 @@ test('packed browser telemetry preserves hydration, route queues, lifecycle and 
   await page.getByRole('button', { name: 'Record telemetry', exact: true }).click();
   await page.getByRole('link', { name: 'Bob', exact: true }).click();
   await expect(page.getByTestId('off')).toBeVisible();
+  await waitForPanelReady(page);
   expect((await state()).telemetry).toHaveLength(1); // Route reconnection cannot dispose/flush the owner.
   await page.getByRole('button', { name: 'Flush telemetry', exact: true }).click();
   await expect(page.getByTestId('telemetry-status')).toHaveText('flushed');
@@ -133,6 +140,7 @@ test('packed browser telemetry preserves hydration, route queues, lifecycle and 
     const silent = await browser.newPage();
     await silent.goto(new URL('/one?user=alice&' + query, page.url()).toString());
     await expect(silent.getByTestId('on')).toBeVisible();
+    await waitForPanelReady(silent);
     await silent.getByRole('button', { name: 'Record telemetry', exact: true }).click();
     await silent.getByRole('button', { name: 'Flush telemetry', exact: true }).click();
     await expect(silent.getByTestId('telemetry-status')).toHaveText('flushed', { timeout: 15_000 });
@@ -171,6 +179,7 @@ test('projected tokens preserve signed SSR and browser results while navigation 
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/one?user=alice&instance=token-a');
   await expect(page.getByTestId('on')).toBeVisible();
+  await waitForPanelReady(page);
   await expect(page.getByTestId('vip')).toHaveText('true');
   await expect(page.getByTestId('no-entity')).toHaveText('false');
   await page.getByRole('button', { name: 'Record telemetry', exact: true }).click();

@@ -13,6 +13,7 @@ import {
   TogglyProvider,
   Feature,
   readEdgeFlagsSnapshot,
+  useToggly,
 } from './index';
 import type { Flags } from '../lib/toggly-client';
 
@@ -190,6 +191,42 @@ describe('initial browser targeting', () => {
       delete (window as any).__TOGGLY_CONFIG__;
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe('provider error recovery', () => {
+  it('clears useToggly().error after a later successful refresh', async () => {
+    let attempt = 0;
+    const fetch = vi.fn(async () => {
+      attempt++;
+      if (attempt === 1) {
+        return { ok: false, status: 500, statusText: 'Server Error' };
+      }
+      return { ok: true, text: async () => JSON.stringify({ defs: { on: true } }) };
+    });
+    vi.stubGlobal('WebSocket', undefined);
+
+    function Probe() {
+      const { error } = useToggly();
+      return <span data-testid="err">{error ? 'err' : 'ok'}</span>;
+    }
+
+    const { getByTestId } = render(
+      <TogglyProvider config={{ appKey: 'app', fetch, featureFlagsRefreshInterval: 30 }}>
+        <Probe />
+      </TogglyProvider>,
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(getByTestId('err').textContent).toBe('err');
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(getByTestId('err').textContent).toBe('ok');
+    vi.unstubAllGlobals();
   });
 });
 

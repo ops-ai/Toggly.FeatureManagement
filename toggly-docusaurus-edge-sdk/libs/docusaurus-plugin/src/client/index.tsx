@@ -272,7 +272,12 @@ function TargetOwner({
     if (!staticGating) {
       client
         .getFlags()
-        .then(apply)
+        .then((latest) => {
+          apply(latest);
+          if (active) {
+            setError(client.getLastLiveFetchError());
+          }
+        })
         .catch((err: Error) => {
           if (active) {
             setError(err);
@@ -284,7 +289,12 @@ function TargetOwner({
         () => {
           void client
             .getFlags()
-            .then(apply)
+            .then((latest) => {
+              apply(latest);
+              if (active) {
+                setError(client.getLastLiveFetchError());
+              }
+            })
             .catch(() => {});
         },
         config.featureFlagsRefreshInterval ?? 3 * 60 * 1000
