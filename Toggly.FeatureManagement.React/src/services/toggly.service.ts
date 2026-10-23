@@ -650,6 +650,12 @@ export class Toggly implements TogglyService {
     return parsed
   }
 
+  private _entityRailRevision(pin: string | null): string | null {
+    if (pin) return null
+    if (!this._entityEvaluatedFeatures) return null
+    return this._definitionsRevision
+  }
+
   private async _loadEntityEvaluatedFeatures(
     generation: number,
     appKey: string,
@@ -675,11 +681,7 @@ export class Toggly implements TogglyService {
         },
         {
           // Do not reuse the variants etag until entity defs were loaded once.
-          revision: pin
-            ? null
-            : this._entityEvaluatedFeatures
-              ? this._definitionsRevision
-              : null,
+          revision: this._entityRailRevision(pin),
           headers: buildDefinitionFetchHeaders(),
         },
       )
