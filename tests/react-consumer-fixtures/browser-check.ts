@@ -210,7 +210,8 @@ const metricsUrl = `http://127.0.0.1:${(collector.address() as import('node:net'
     { variants: false },
     { variants: false },
     { variants: true, revision: 'variants-revision' },
-    { variants: false, revision: 'variants-revision' },
+    // Entity rail skips If-None-Match until entity defs were loaded once (OPS-1993).
+    { variants: false },
   ])
   assert.deepEqual(telemetry.slice(telemetryStart), [false, true, false, true, false, true].map((enabled, index) => ({
     k: `mode-cache-${index >= 3}`, e: 'Test', i: 'mode-token', f: {Flag:enabled?{blue:[2]}:{disabled:[1]}},
