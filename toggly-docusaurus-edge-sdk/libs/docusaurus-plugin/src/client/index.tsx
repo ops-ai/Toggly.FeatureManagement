@@ -270,8 +270,10 @@ function TargetOwner({
     };
     let pollTimer: ReturnType<typeof setInterval> | undefined;
     const syncLiveFlags = (): void => {
-      void client
-        .refreshFlags()
+      const refresh = client.getLastLiveFetchError()
+        ? client.refreshFlags()
+        : client.getFlags().then(() => undefined);
+      void refresh
         .then(() => client.getFlags())
         .then((latest) => {
           apply(latest);
