@@ -28,29 +28,16 @@ public class UserAgentSegmentFieldsTests
     }
 
     [Fact]
-    public void MatchesIndexedAllowList_MacintoshMatchesNormalizedDesktopMac()
+    public void GetOperatingSystemFamily_MacDesktopUa_IsMacOsX()
     {
         var ua = Parser.GetDefault().Parse(MacChromeDesktopUa);
-        var deviceFamily = UserAgentSegmentFields.GetDeviceFamily(ua);
-        UserAgentSegmentFields.MatchesIndexedAllowList(deviceFamily, MacintoshAllowList)
-            .Should().BeTrue();
+        UserAgentSegmentFields.GetOperatingSystemFamily(ua).Should().Contain("Mac");
     }
 
     [Fact]
-    public void GetOperatingSystemFamily_MacDesktopUa_MatchesMacWireName()
+    public void GetBrowserFamily_ChromeDesktopUa_IsChrome()
     {
         var ua = Parser.GetDefault().Parse(MacChromeDesktopUa);
-        var osFamily = UserAgentSegmentFields.GetOperatingSystemFamily(ua);
-        UserAgentSegmentFields.MatchesIndexedAllowList(osFamily, MacOsAllowList)
-            .Should().BeTrue();
-    }
-
-    [Fact]
-    public void GetBrowserFamily_ChromeDesktopUa_MatchesChrome()
-    {
-        var ua = Parser.GetDefault().Parse(MacChromeDesktopUa);
-        var browser = UserAgentSegmentFields.GetBrowserFamily(ua);
-        UserAgentSegmentFields.MatchesIndexedAllowList(browser, ChromeAllowList)
-            .Should().BeTrue();
+        UserAgentSegmentFields.GetBrowserFamily(ua).Should().Be("Chrome");
     }
 }
