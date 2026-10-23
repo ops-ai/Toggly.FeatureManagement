@@ -1,0 +1,20 @@
+{
+  "id": "targeting-groups-miss",
+  "description": "Targeting fails when identity is not in Audience.Groups and default rollout is 0%",
+  "featureKey": "parity-targeting-groups-miss",
+  "requirementType": "Any",
+  "filters": [
+    {
+      "name": "Targeting",
+      "parameters": {
+        "Audience.DefaultRolloutPercentage": 0,
+        "Audience.Groups:0": "beta"
+      }
+    }
+  ],
+  "context": {
+    "identity": "u",
+    "groups": ["standard"]
+  },
+  "expected": false
+}

@@ -1,0 +1,19 @@
+{
+  "id": "targeting-users-match",
+  "description": "Targeting enables when identity is in Audience.Users (LiveE2E filter-targeting)",
+  "featureKey": "filter-targeting",
+  "requirementType": "Any",
+  "filters": [
+    {
+      "name": "Targeting",
+      "parameters": {
+        "Audience.DefaultRolloutPercentage": 0,
+        "Audience.Users:0": "alice"
+      }
+    }
+  ],
+  "context": {
+    "identity": "alice"
+  },
+  "expected": true
+}
