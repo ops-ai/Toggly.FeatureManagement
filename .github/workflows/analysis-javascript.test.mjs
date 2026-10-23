@@ -167,6 +167,14 @@ test('requires authenticated SonarCloud and Server quality gates', () => {
   assert.match(server, /if:.*steps\.validate-sonarqube-server-credentials\.outcome == 'success'/);
 });
 
+test('generates SvelteKit host tsconfig before Sonar analysis', () => {
+  const sonar = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  const sync = stepBlock(sonar, 'Generate SvelteKit host TypeScript config for Sonar');
+  assert.match(sync, /svelte-kit sync/);
+  assert.match(sync, /tests\/host-kit3/);
+  assert.match(sync, /cd "\$\{dir\}"/);
+});
+
 test('JS Sonar ignores only justified protocol, RNG, hook, and Angular load findings', () => {
   const sonar = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   for (const name of ['SonarCloud Scan', 'SonarQube Server Scan', 'SonarQube Server Scan (retry)']) {
