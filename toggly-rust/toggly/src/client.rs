@@ -344,6 +344,7 @@ impl TogglyClient {
 
     /// Clear the evaluation cache and in-memory definitions / JWKS.
     pub async fn clear_cache(&self) {
+        self.definitions_generation.fetch_add(1, Ordering::SeqCst);
         self.cache.clear();
         self.provider.write().await.clear();
     }
