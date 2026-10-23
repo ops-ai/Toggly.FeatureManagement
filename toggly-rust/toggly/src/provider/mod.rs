@@ -738,10 +738,7 @@ impl DefinitionsProvider {
             definitions.insert(definition.feature_key.clone(), definition);
         }
         definitions_loaded.store(true, Ordering::SeqCst);
-        Self::invalidate_evaluation_cache(
-            evaluation_cache,
-            definitions_generation.as_deref(),
-        );
+        Self::invalidate_evaluation_cache(evaluation_cache, definitions_generation.as_deref());
         info!(count = definitions.len(), "Loaded feature definitions");
     }
 
@@ -1120,7 +1117,7 @@ mod tests {
     use async_trait::async_trait;
     use parking_lot::Mutex as PlMutex;
     use std::sync::Mutex as StdMutex;
-    use wiremock::matchers::{header, method, path_regex};
+    use wiremock::matchers::{method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     struct CountingRecorder {
