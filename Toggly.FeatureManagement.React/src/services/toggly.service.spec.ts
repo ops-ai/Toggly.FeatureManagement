@@ -1889,4 +1889,44 @@ describe('Toggly Service', () => {
     const order = { kind: 'Order', key: 'ord-vip', attributes: { Vip: true } };
     expect(await service.isFeatureOn('filter-context-property', order)).toBe(true);
   });
+
+  it('loads entity rail when variant flags were hydrated from cache', async () => {
+    const orderGate = {
+      requirement: 'all',
+      rules: [{ property: 'Vip', op: 'eq', value: 'true', type: 'boolean' }],
+    };
+    localStorage.setItem(
+      'toggly:variants:test-key:Production:v3:variants:',
+      JSON.stringify({ 'filter-context-property': { enabled: false, variant: 'control' } }),
+    );
+    localStorage.setItem(
+      'toggly:flags:test-key:Production:v3:evaluated:',
+      JSON.stringify({ 'filter-context-property': false }),
+    );
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: () => Promise.resolve({ defs: { 'filter-context-property': orderGate } }),
+      text: () =>
+        Promise.resolve(JSON.stringify({ defs: { 'filter-context-property': orderGate } })),
+      headers: { get: () => null },
+    });
+
+    const service = new Toggly({
+      enableTelemetry: false,
+      appKey: 'test-key',
+      environment: 'Production',
+      enableVariants: true,
+      enableLiveUpdates: false,
+      persistCache: true,
+    });
+
+    await service._loadFeatures();
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(String(mockFetch.mock.calls[0][0])).toContain('evaluated-signed');
+
+    const order = { kind: 'Order', key: 'ord-vip', attributes: { Vip: true } };
+    expect(await service.isFeatureOn('filter-context-property', order)).toBe(true);
+  });
 });

@@ -393,6 +393,8 @@ export class Toggly implements TogglyService {
   private _features: EvaluatedDefinitions | null = null
   /** Evaluated-signed defs when enableVariants (entity gates + per-call context). */
   private _entityEvaluatedFeatures: EvaluatedDefinitions | null = null
+  /** Avoid skipping entity-rail fetch when variant flags were hydrated from cache. */
+  private _entityEvaluatedFeaturesSynced = false
   private _variants: { [key: string]: EvaluatedVariantDef } | null = null
   private _loadingFeatures: boolean = false
   private readonly _hookExecutor = new HookExecutor()
@@ -676,13 +678,35 @@ export class Toggly implements TogglyService {
         },
       )
       if (generation !== this._generation || this._disposed) return
-      if (loaded.notModified) return
-      this._entityEvaluatedFeatures = (loaded.defs ?? {}) as EvaluatedDefinitions
+      if (!loaded.notModified) {
+        this._entityEvaluatedFeatures = (loaded.defs ?? {}) as EvaluatedDefinitions
+      }
     } catch {
       if (generation === this._generation && !this._disposed) {
         this._entityEvaluatedFeatures = null
       }
+    } finally {
+      if (generation === this._generation && !this._disposed) {
+        this._entityEvaluatedFeaturesSynced = true
+      }
     }
+  }
+
+  private async _syncEntityEvaluatedFeaturesIfNeeded(
+    generation: number,
+    appKey: string,
+    env: string,
+    pin: string | null,
+  ): Promise<void> {
+    if (
+      !this._config.enableVariants ||
+      this._entityEvaluatedFeaturesSynced ||
+      generation !== this._generation ||
+      this._disposed
+    ) {
+      return
+    }
+    await this._loadEntityEvaluatedFeatures(generation, appKey, env, pin)
   }
 
   setContext = async (context: TogglyContextUpdate): Promise<void> => {
@@ -701,6 +725,7 @@ export class Toggly implements TogglyService {
     this._pendingDefinitionsPin = null
     this._lastFallbackRefresh = 0
     this._entityEvaluatedFeatures = null
+    this._entityEvaluatedFeaturesSynced = false
     const appKey = this._config.appKey ?? ''
     const env = this._config.environment ?? 'Production'
     const scope = this._bodyCacheKey()
@@ -744,8 +769,14 @@ export class Toggly implements TogglyService {
     }
 
     if (generation !== this._generation || this._disposed) return this._booleanFeatures()
+
+    const appKey = this._config.appKey ?? ''
+    const env = this._config.environment ?? 'Production'
+
     // Features already loaded
     if (this._features !== null && !forceRefresh) {
+      await this._syncEntityEvaluatedFeaturesIfNeeded(generation, appKey, env, null)
+      if (generation !== this._generation || this._disposed) return this._booleanFeatures()
       // When WebSocket is connected, throttle HTTP refreshes to fallback interval
       if (this._wsConnected) {
         const now = Date.now()
@@ -762,8 +793,6 @@ export class Toggly implements TogglyService {
 
     const isInitialLoad = this._ws === null && !this._wsConnected
 
-    const appKey = this._config.appKey ?? ''
-    const env = this._config.environment ?? 'Production'
     const contextKey = this._bodyCacheKey()
 
     try {
