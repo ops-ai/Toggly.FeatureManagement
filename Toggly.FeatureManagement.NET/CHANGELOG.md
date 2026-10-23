@@ -13,23 +13,7 @@
   filter-parity wire names; resolve country from standard CDN edge headers
   [OPS-1988].
 
-## All .NET SDK packages 3.13.4 - 2026-10-12
-
-### Added
-- `AddDefaultSystemMetrics()` on `Toggly.Metrics.SystemMetrics` registers the six
-  default `System.Runtime` event counters (`TimeInGC`, `AllocationRate`,
-  `CpuUsage`, `ExceptionCount`, `GCHeapSize`, `MemoryWorkingSet`). Custom
-  counter maps remain available through `AddPerformanceMetrics`.
 ## All .NET SDK packages 3.14.1 - 2026-10-15
-
-### Fixed
-- `CaptureBatch` drains usage counters and duration maps with `TryRemove` so
-  concurrent scope completions cannot lose values between snapshot and clear
-  [OPS-1758].
-- `[FeatureUsage]` treats an MVC or Razor exception as a scope failure only
-  when `ExceptionHandled` is false [OPS-1758].
-
-## All .NET SDK packages 3.14.0 - 2026-10-12
 
 ### Added
 - Usage scope API on `IFeatureUsageStatsProvider`: `BeginUsageAsync`,
@@ -38,8 +22,17 @@
   duration (ms), and error counts; cancellation keeps the attempt without
   duration or error. `[FeatureUsage]` wraps the action in that scope. Wire
   fields: `VariantStats.errorCount`, `durationSumMs`, `errorDurationSumMs`.
+- `AddDefaultSystemMetrics()` on `Toggly.Metrics.SystemMetrics` registers the six
+  default `System.Runtime` event counters (`TimeInGC`, `AllocationRate`,
+  `CpuUsage`, `ExceptionCount`, `GCHeapSize`, `MemoryWorkingSet`). Custom
+  counter maps remain available through `AddPerformanceMetrics`.
 
 ### Fixed
+- `CaptureBatch` drains usage counters and duration maps with `TryRemove` so
+  concurrent scope completions cannot lose values between snapshot and clear
+  [OPS-1758].
+- `[FeatureUsage]` treats an MVC or Razor exception as a scope failure only
+  when `ExceptionHandled` is false [OPS-1758].
 - Renamed context overload to `BeginUsageWithContextAsync` so a string context
   is not bound by `BeginUsageAsync(params string[])` [OPS-1758].
 
