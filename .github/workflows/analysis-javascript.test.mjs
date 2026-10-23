@@ -172,6 +172,7 @@ test('generates SvelteKit host tsconfig before Sonar analysis', () => {
   const sync = stepBlock(sonar, 'Generate SvelteKit host TypeScript config for Sonar');
   assert.match(sync, /svelte-kit sync/);
   assert.match(sync, /tests\/host-kit3/);
+  assert.match(sync, /cd "\$\{dir\}"/);
 });
 
 test('JS Sonar ignores only justified protocol, RNG, hook, and Angular load findings', () => {

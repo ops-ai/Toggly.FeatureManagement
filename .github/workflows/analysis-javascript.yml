@@ -818,8 +818,11 @@ jobs:
               continue
             fi
             echo "Running svelte-kit sync in ${dir}"
-            npm install --ignore-scripts --no-audit --no-fund --prefix "${dir}" || true
-            npm exec --prefix "${dir}" svelte-kit sync
+            (
+              cd "${dir}" || exit 1
+              npm install --ignore-scripts --no-audit --no-fund || true
+              npm exec svelte-kit sync
+            )
           done
 
       - name: Download all coverage reports
