@@ -810,6 +810,21 @@ jobs:
           pnpm install --ignore-scripts --dir toggly-docusaurus-edge-sdk || true
         continue-on-error: true
 
+      - name: Generate SvelteKit host TypeScript config for Sonar
+        run: |
+          for host in tests/host tests/host-kit3; do
+            dir="Toggly.FeatureManagement.SvelteKit/${host}"
+            if [ ! -f "${dir}/package.json" ]; then
+              continue
+            fi
+            echo "Running svelte-kit sync in ${dir}"
+            (
+              cd "${dir}" || exit 1
+              npm install --ignore-scripts --no-audit --no-fund || true
+              npm exec svelte-kit sync
+            )
+          done
+
       - name: Download all coverage reports
         uses: actions/download-artifact@v8
         with:

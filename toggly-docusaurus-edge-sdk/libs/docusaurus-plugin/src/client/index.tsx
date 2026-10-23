@@ -269,6 +269,20 @@ function TargetOwner({
       setIsReady(true);
     };
     let pollTimer: ReturnType<typeof setInterval> | undefined;
+    const syncLiveFlags = (): void => {
+      const refresh = client.getLastLiveFetchError()
+        ? client.refreshFlags()
+        : client.getFlags().then(() => undefined);
+      void refresh
+        .then(() => client.getFlags())
+        .then((latest) => {
+          apply(latest);
+          if (active) {
+            setError(client.getLastLiveFetchError());
+          }
+        })
+        .catch(() => {});
+    };
     if (!staticGating) {
       client
         .getFlags()
@@ -286,17 +300,7 @@ function TargetOwner({
         });
       client.startWebSocket();
       pollTimer = setInterval(
-        () => {
-          void client
-            .getFlags()
-            .then((latest) => {
-              apply(latest);
-              if (active) {
-                setError(client.getLastLiveFetchError());
-              }
-            })
-            .catch(() => {});
-        },
+        syncLiveFlags,
         config.featureFlagsRefreshInterval ?? 3 * 60 * 1000
       );
     }

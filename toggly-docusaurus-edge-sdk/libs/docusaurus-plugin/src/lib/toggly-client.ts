@@ -215,8 +215,6 @@ function createClient(
   let _ws: WebSocket | null = null;
   let _wsConnected = false;
   let _wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let _lastFallbackRefresh = 0;
-
   let cache: CachedFlags | null = null;
   let lastLiveFetchError: Error | null = null;
   let disposed = false;
@@ -450,7 +448,6 @@ function createClient(
 
       _ws.onopen = () => {
         _wsConnected = true;
-        _lastFallbackRefresh = Date.now();
         if (isDebug) {
           console.log('Toggly.ws - connected');
         }
