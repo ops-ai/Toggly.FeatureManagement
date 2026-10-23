@@ -196,6 +196,7 @@ describe('initial browser targeting', () => {
 
 describe('provider error recovery', () => {
   it('clears useToggly().error after a later successful refresh', async () => {
+    vi.useFakeTimers();
     let attempt = 0;
     const fetch = vi.fn(async () => {
       attempt++;
@@ -223,9 +224,10 @@ describe('provider error recovery', () => {
     expect(getByTestId('err').textContent).toBe('err');
 
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await vi.advanceTimersByTimeAsync(30);
     });
     expect(getByTestId('err').textContent).toBe('ok');
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 });

@@ -242,7 +242,57 @@ test('waitForAggregateAnalysis dispatches with the commit SHA when no run exists
   );
 });
 
-test('waitForAggregateAnalysis keeps polling after a failed run until success', async () => {
+test('waitForAggregateAnalysis fails fast when the latest run failed with no retry', async () => {
+  const sha = 'failedonly';
+  const fetchImpl = async (url) => {
+    if (url.endsWith('/actions/workflows?per_page=100')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          workflows: [{ id: 99, path: '.github/workflows/analysis-javascript.yml' }],
+        }),
+      };
+    }
+    if (url.includes('/runs?head_sha=')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          workflow_runs: [
+            {
+              id: 1,
+              name: WORKFLOW_NAME,
+              status: 'completed',
+              conclusion: 'failure',
+              head_sha: sha,
+              html_url: 'https://example.com/run/failed',
+              created_at: '2026-01-02T00:00:00Z',
+            },
+          ],
+        }),
+      };
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  };
+
+  await assert.rejects(
+    () =>
+      waitForAggregateAnalysis({
+        owner: 'ops-ai',
+        repo: 'Toggly.FeatureManagement',
+        token: 'token',
+        targetSha: sha,
+        pollMs: 1,
+        maxMs: 1000,
+        fetchImpl,
+        sleep: async () => {},
+      }),
+    /Aggregate analysis failed \(failure\)/,
+  );
+});
+
+test('waitForAggregateAnalysis waits when a retry is in flight after failure', async () => {
   const sha = 'failthenok';
   let polls = 0;
   const fetchImpl = async (url) => {
@@ -261,6 +311,15 @@ test('waitForAggregateAnalysis keeps polling after a failed run until success', 
         polls < 2
           ? [
               {
+                id: 2,
+                name: WORKFLOW_NAME,
+                status: 'in_progress',
+                head_sha: sha,
+                html_url: 'https://example.com/run/retry',
+                created_at: '2026-01-02T00:01:00Z',
+              },
+              {
+                id: 1,
                 name: WORKFLOW_NAME,
                 status: 'completed',
                 conclusion: 'failure',
@@ -271,6 +330,7 @@ test('waitForAggregateAnalysis keeps polling after a failed run until success', 
             ]
           : [
               {
+                id: 2,
                 name: WORKFLOW_NAME,
                 status: 'completed',
                 conclusion: 'success',
