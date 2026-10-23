@@ -395,6 +395,7 @@ export class Toggly implements TogglyService {
   private _entityEvaluatedFeatures: EvaluatedDefinitions | null = null
   /** Avoid skipping entity-rail fetch when variant flags were hydrated from cache. */
   private _entityEvaluatedFeaturesSynced = false
+  private _entityEvaluatedFeaturesLoadPromise: Promise<boolean> | null = null
   private _variants: { [key: string]: EvaluatedVariantDef } | null = null
   private _loadingFeatures: boolean = false
   private readonly _hookExecutor = new HookExecutor()
@@ -661,10 +662,10 @@ export class Toggly implements TogglyService {
     appKey: string,
     env: string,
     pin: string | null,
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (!this._config.enableVariants || !this._config.appKey) {
       this._entityEvaluatedFeatures = null
-      return
+      return false
     }
     const fetchUrl = appendDefinitionsRevisionParam(
       this._buildDefinitionsUrl('evaluated-signed', appKey, env).toString(),
@@ -685,19 +686,32 @@ export class Toggly implements TogglyService {
           headers: buildDefinitionFetchHeaders(),
         },
       )
-      if (generation !== this._generation || this._disposed) return
-      if (!loaded.notModified) {
-        this._entityEvaluatedFeatures = (loaded.defs ?? {}) as EvaluatedDefinitions
+      if (generation !== this._generation || this._disposed) return false
+      if (loaded.notModified) {
+        return this._entityEvaluatedFeatures !== null
       }
-    } catch {
+      this._entityEvaluatedFeatures = (loaded.defs ?? {}) as EvaluatedDefinitions
+      return true
+    } catch (error) {
       if (generation === this._generation && !this._disposed) {
         this._entityEvaluatedFeatures = previousEntityDefs
+        this._reportError('Error fetching entity-evaluated features', error)
       }
-    } finally {
-      if (generation === this._generation && !this._disposed) {
-        this._entityEvaluatedFeaturesSynced = true
-      }
+      return false
     }
+  }
+
+  private async _runEntityEvaluatedFeaturesLoad(
+    generation: number,
+    appKey: string,
+    env: string,
+    pin: string | null,
+  ): Promise<boolean> {
+    const loaded = await this._loadEntityEvaluatedFeatures(generation, appKey, env, pin)
+    if (loaded && generation === this._generation && !this._disposed) {
+      this._entityEvaluatedFeaturesSynced = true
+    }
+    return loaded
   }
 
   private async _syncEntityEvaluatedFeaturesIfNeeded(
@@ -714,7 +728,21 @@ export class Toggly implements TogglyService {
     ) {
       return
     }
-    await this._loadEntityEvaluatedFeatures(generation, appKey, env, pin)
+    if (this._entityEvaluatedFeaturesLoadPromise) {
+      await this._entityEvaluatedFeaturesLoadPromise
+      return
+    }
+    this._entityEvaluatedFeaturesLoadPromise = this._runEntityEvaluatedFeaturesLoad(
+      generation,
+      appKey,
+      env,
+      pin,
+    )
+    try {
+      await this._entityEvaluatedFeaturesLoadPromise
+    } finally {
+      this._entityEvaluatedFeaturesLoadPromise = null
+    }
   }
 
   setContext = async (context: TogglyContextUpdate): Promise<void> => {
@@ -734,6 +762,7 @@ export class Toggly implements TogglyService {
     this._lastFallbackRefresh = 0
     this._entityEvaluatedFeatures = null
     this._entityEvaluatedFeaturesSynced = false
+    this._entityEvaluatedFeaturesLoadPromise = null
     const appKey = this._config.appKey ?? ''
     const env = this._config.environment ?? 'Production'
     const scope = this._bodyCacheKey()
@@ -830,7 +859,11 @@ export class Toggly implements TogglyService {
         this._cacheDefinitionsRevision(stripEtagQuotes(loaded.revision))
         if (isInitialLoad) this.startWebSocket()
         if (this._config.enableVariants) {
-          await this._loadEntityEvaluatedFeatures(generation, appKey, env, pin)
+          const entityLoaded = await this._runEntityEvaluatedFeaturesLoad(generation, appKey, env, pin)
+          if (entityLoaded && this._features) {
+            await this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
+            this.notifyFeaturesRefresh()
+          }
         }
         return this._booleanFeatures()
       }
@@ -844,7 +877,7 @@ export class Toggly implements TogglyService {
           writeCachedVariants(appKey, env, defs, contextKey, this._config.maxCacheKeys)
           writeCachedFlags(appKey, env, this._features, contextKey, this._config.maxCacheKeys)
         }
-        await this._loadEntityEvaluatedFeatures(generation, appKey, env, pin)
+        await this._runEntityEvaluatedFeaturesLoad(generation, appKey, env, pin)
       } else {
         this._variants = null
         this._entityEvaluatedFeatures = null

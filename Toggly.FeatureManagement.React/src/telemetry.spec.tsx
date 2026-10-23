@@ -152,6 +152,14 @@ describe('React frontend telemetry', () => {
       (call) => new Headers(call[1]?.headers).get('If-None-Match'),
     )
     expect(inmValues).toContain('token-a-revision')
+    if (enableVariants) {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ Flag: true }),
+        headers: { get: () => null },
+      })
+    }
     expect(await owner._loadFeatures()).toEqual({ Flag: true })
     expect(await owner.isFeatureOn('Flag')).toBe(true)
     expect(owner.getVariant('Flag')).toEqual(enableVariants ? { name: 'blue', configurationValue: 7 } : null)
