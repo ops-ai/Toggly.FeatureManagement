@@ -1,3 +1,11 @@
+## 1.14.1
+
+2026-10-23
+
+### Fixed
+- When `enableVariants` is true, also fetch `evaluated-signed` definitions for entity-gated features (ContextProperty gates) alongside the variants rail [OPS-1993].
+- Hydrate the entity rail when variant flags were restored from cache before the first network refresh.
+
 ## 1.14.0
 
 2026-10-11

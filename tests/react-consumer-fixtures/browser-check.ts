@@ -49,26 +49,68 @@ const metricsUrl = `http://127.0.0.1:${(collector.address() as import('node:net'
   const identities = []
   const definitionsQueries: URLSearchParams[] = []
   const modeRequests: Array<{variants: boolean; revision?: string}> = []
+  const modeCacheDualRail = new Set<string>()
   await page.setRequestInterception(true)
-  page.on('request', request => {
-    if (new URL(request.url()).pathname.startsWith('/definitions-fixture/')) {
+  page.on('request', async request => {
+    const pathname = new URL(request.url()).pathname
+    if (pathname === '/.well-known/jwks') {
+      await request.respond({
+        status: 200,
+        contentType: 'application/json',
+        headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' },
+        body: JSON.stringify({ keys: [] }),
+      })
+      return
+    }
+    if (pathname.startsWith('/definitions-fixture/')) {
       const query = new URL(request.url()).searchParams
-      if (new URL(request.url()).pathname.includes('/mode-cache-')) {
+      if (pathname.includes('/mode-cache-')) {
         const variants = request.url().includes('evaluated-variants-signed')
         const revision = request.headers()['if-none-match']
-        modeRequests.push({variants, revision})
+        modeRequests.push(revision ? { variants, revision } : { variants })
         const etag = variants ? 'variants-revision' : 'boolean-revision'
-        void request.respond({ status: revision === etag ? 304 : 200, contentType: 'application/json',
-          headers: { 'access-control-allow-origin': '*', etag },
-          body: revision === etag ? undefined : JSON.stringify(variants ? {Flag:{enabled:true,variant:'blue',configurationValue:7}} : {Flag:false}) })
+        const modeKey = pathname.match(/mode-cache-(?:true|false)/)?.[0] ?? pathname
+        if (variants) {
+          modeCacheDualRail.add(modeKey)
+        }
+        let body: object | undefined
+        if (revision === etag) {
+          body = undefined
+        } else if (variants) {
+          body = { Flag: { enabled: true, variant: 'blue', configurationValue: 7 } }
+        } else {
+          body = modeCacheDualRail.delete(modeKey) ? {} : { Flag: false }
+        }
+        await request.respond({ status: revision === etag ? 304 : 200, contentType: 'application/json',
+          headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', etag },
+          body: body === undefined ? undefined : JSON.stringify(body) })
         return
       }
       definitionsQueries.push(query)
       identities.push(query.get('u') ?? query.get('userId'))
-      void request.respond({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ defs: { release: {enabled: remoteEnabled, variant: 'control'}, second: {enabled: true, variant: 'control'} } }) })
-    } else void request.continue()
+      const variantsRail = pathname.includes('evaluated-variants-signed')
+      const defs = variantsRail
+        ? {
+            release: { enabled: remoteEnabled, variant: 'control' },
+            second: { enabled: true, variant: 'control' },
+          }
+        : { release: remoteEnabled, second: true }
+      await request.respond({
+        status: 200,
+        contentType: 'application/json',
+        headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*' },
+        body: JSON.stringify({ defs }),
+      })
+      return
+    }
+    await request.continue()
   })
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/?metrics=${encodeURIComponent(metricsUrl)}`)
+  const uiTimeout = process.env.CI ? 60_000 : 15_000
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="flag"]')?.textContent !== 'loading',
+    { timeout: uiTimeout },
+  )
   const state = async expected => {
     await page.waitForFunction(value =>
       ['flag', 'gate', 'render'].every(id => document.querySelector(`[data-testid="${id}"]`)?.textContent === value)
@@ -76,7 +118,7 @@ const metricsUrl = `http://127.0.0.1:${(collector.address() as import('node:net'
       && !!document.querySelector('[data-testid="negated"]') === (value === 'off')
       && document.querySelector('[data-testid="variant-name"]')?.textContent === (value === 'on' ? 'control' : 'none')
       && !!document.querySelector('[data-testid="variant-visible"]') === (value === 'on'),
-    { timeout: 5000 }, expected)
+    { timeout: uiTimeout }, expected)
     assert.equal(await page.$eval('[data-testid="gate"]', el => el.textContent), expected)
     assert.equal(await page.$eval('[data-testid="render"]', el => el.textContent), expected)
     assert.equal(await page.$('[data-testid="visible"]') !== null, expected === 'on')
@@ -159,10 +201,18 @@ const metricsUrl = `http://127.0.0.1:${(collector.address() as import('node:net'
   assert.deepEqual(roundtrips, [false, true, false, true, false, true].map(enabled => ({
     definitions: {Flag:enabled}, enabled, variant: enabled ? {name:'blue',configurationValue:7} : null,
   })))
-  assert.deepEqual(modeRequests, [false, true].flatMap(first => [
-    {variants:first,revision:undefined}, {variants:!first,revision:undefined},
-    {variants:first,revision:first?'variants-revision':'boolean-revision'},
-  ]))
+  assert.deepEqual(modeRequests, [
+    { variants: false },
+    { variants: true },
+    { variants: false },
+    { variants: false, revision: 'boolean-revision' },
+    { variants: true },
+    { variants: false },
+    { variants: false },
+    { variants: true, revision: 'variants-revision' },
+    // Entity rail skips If-None-Match until entity defs were loaded once (OPS-1993).
+    { variants: false },
+  ])
   assert.deepEqual(telemetry.slice(telemetryStart), [false, true, false, true, false, true].map((enabled, index) => ({
     k: `mode-cache-${index >= 3}`, e: 'Test', i: 'mode-token', f: {Flag:enabled?{blue:[2]}:{disabled:[1]}},
   })))

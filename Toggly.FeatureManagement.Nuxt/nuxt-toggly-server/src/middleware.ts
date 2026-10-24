@@ -13,6 +13,8 @@ import {
 import {
   getCachedEventEvalContext,
   resolveEventEvalContext,
+  hasConfiguredEventEvalProviders,
+  resolveSyncEventEvalContext,
   syncDefaultEventAmbient,
 } from './event-context'
 import type {
@@ -272,9 +274,24 @@ export function defineFeatureHandler(
  */
 export function useEventToggly(event: H3Event) {
   const client = useServerToggly()
-  const ambient =
-    getCachedEventEvalContext(event) ?? syncDefaultEventAmbient(event)
-  return bindEventEvalContext(client, ambient)
+  if (!client) {
+    throw new Error('[Toggly] Server client not initialized')
+  }
+  const cached = getCachedEventEvalContext(event)
+  if (cached) {
+    return bindEventEvalContext(client, cached)
+  }
+  const syncResolved = resolveSyncEventEvalContext(event)
+  if (syncResolved) {
+    return bindEventEvalContext(client, syncResolved)
+  }
+  if (hasConfiguredEventEvalProviders()) {
+    throw new Error(
+      '[Toggly] Async event EvalContext providers require getEventToggly(event), ' +
+        'defineTogglyContextMiddleware, or resolveEventEvalContext before useEventToggly',
+    )
+  }
+  return bindEventEvalContext(client, syncDefaultEventAmbient(event))
 }
 
 /**

@@ -189,6 +189,9 @@ describe('maxCacheKeys LRU', () => {
         const response = okResponse(enableVariants ? { A: { enabled: true, variant: 'blue' } } : { A: true })
         response.headers.get = (key: string) => key.toLowerCase() === 'etag' ? 'revision-' + identity : null
         mockFetch.mockResolvedValueOnce(response)
+        if (enableVariants) {
+          mockFetch.mockResolvedValueOnce(okResponse({}))
+        }
         await service.setContext({ identity })
         jest.setSystemTime(Date.now() + 1000)
       }
@@ -210,7 +213,18 @@ describe('maxCacheKeys LRU', () => {
     const options = { appKey, environment, enableVariants, maxCacheKeys: enableVariants ? 2 : 1, enableLiveUpdates: false, enableTelemetry: false }
     const owners = ['a', 'b'].map(instanceId => new Toggly({ ...options, instanceId }))
     mockFetch.mockImplementation(async (url: string, init: RequestInit) => {
-      const revision = `rev-${new URL(url).searchParams.get('i')}`
+      const parsed = new URL(url)
+      if (parsed.pathname.includes('evaluated-signed/') && !parsed.pathname.includes('variants')) {
+        const revision = `rev-${parsed.searchParams.get('i')}`
+        const notModified = new Headers(init.headers).get('If-None-Match') === revision
+        return {
+          ...okResponse({ A: true }),
+          status: notModified ? 304 : 200,
+          ok: !notModified,
+          headers: { get: (key: string) => (key.toLowerCase() === 'etag' ? revision : null) },
+        }
+      }
+      const revision = `rev-${parsed.searchParams.get('i')}`
       const notModified = new Headers(init.headers).get('If-None-Match') === revision
       return { ...okResponse(enableVariants ? { A: { enabled: true, variant: 'blue', configurationValue: 7 } } : { A: true }),
         status: notModified ? 304 : 200, ok: !notModified, headers: { get: (key: string) => key.toLowerCase() === 'etag' ? revision : null } }

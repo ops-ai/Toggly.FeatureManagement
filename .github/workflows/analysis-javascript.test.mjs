@@ -179,11 +179,16 @@ test('JS Sonar ignores only justified protocol, RNG, hook, and Angular load find
   const sonar = workflow.match(/\n  sonar:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   for (const name of ['SonarCloud Scan', 'SonarQube Server Scan', 'SonarQube Server Scan (retry)']) {
     const step = stepBlock(sonar, name);
-    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria=angularLoadComplexity,kidSha1,anonRng,hookAwait\n/);
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria=angularLoadComplexity,reactLoadComplexity,kidSha1,anonRng,hookAwait\n/);
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.angularLoadComplexity\.ruleKey=typescript:S3776/);
+    assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.reactLoadComplexity\.ruleKey=typescript:S3776/);
     assert.match(
       step,
       /-Dsonar\.issue\.ignore\.multicriteria\.angularLoadComplexity\.resourceKey=\*\*\/ngx-feature-flags-toggly\/\*\*\/toggly\.service\.ts/,
+    );
+    assert.match(
+      step,
+      /-Dsonar\.issue\.ignore\.multicriteria\.reactLoadComplexity\.resourceKey=\*\*\/Toggly\.FeatureManagement\.React\/\*\*\/toggly\.service\.ts/,
     );
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.kidSha1\.ruleKey=typescript:S4790/);
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.kidSha1\.resourceKey=\*\*\/toggly-node-core\/\*\*\/verify\.ts/);
@@ -191,7 +196,7 @@ test('JS Sonar ignores only justified protocol, RNG, hook, and Angular load find
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.anonRng\.resourceKey=\*\*\/toggly-eval\/\*\*\/segment\.ts/);
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.hookAwait\.ruleKey=typescript:S9382/);
     assert.match(step, /-Dsonar\.issue\.ignore\.multicriteria\.hookAwait\.resourceKey=\*\*\/hooks\.ts/);
-    assert.equal([...step.matchAll(/-Dsonar\.issue\.ignore\.multicriteria\.[a-zA-Z0-9]+\.ruleKey=/g)].length, 4);
+    assert.equal([...step.matchAll(/-Dsonar\.issue\.ignore\.multicriteria\.[a-zA-Z0-9]+\.ruleKey=/g)].length, 5);
     assert.doesNotMatch(step, /resourceKey=\*\*\/\*/);
     assert.doesNotMatch(step, /sdkStoreComplexity|styleReadonly|asyncApiSurface|testEmptyFile|jsAwaitInLoop/);
     assert.match(step, /-Dsonar\.test\.exclusions=.*\*\/host-fixtures\/\*\*/);

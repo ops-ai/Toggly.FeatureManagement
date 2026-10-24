@@ -391,6 +391,11 @@ export class Toggly implements TogglyService {
     hooks: []
   }
   private _features: EvaluatedDefinitions | null = null
+  /** Evaluated-signed defs when enableVariants (entity gates + per-call context). */
+  private _entityEvaluatedFeatures: EvaluatedDefinitions | null = null
+  /** Avoid skipping entity-rail fetch when variant flags were hydrated from cache. */
+  private _entityEvaluatedFeaturesSynced = false
+  private _entityEvaluatedFeaturesLoadPromise: Promise<boolean> | null = null
   private _variants: { [key: string]: EvaluatedVariantDef } | null = null
   private _loadingFeatures: boolean = false
   private readonly _hookExecutor = new HookExecutor()
@@ -622,6 +627,124 @@ export class Toggly implements TogglyService {
     return `v2:${this._config.enableVariants ? 'variants' : 'evaluated'}:${this._contextCacheKey()}`
   }
 
+  private _buildDefinitionsUrl(
+    endpoint: 'evaluated-signed' | 'evaluated-variants-signed',
+    appKey: string,
+    env: string,
+  ): URL {
+    const parsed = new URL(this._config.baseURI ?? 'https://definitions.toggly.io')
+    parsed.pathname = `${parsed.pathname.replace(/\/$/, '')}/${endpoint}/${appKey}/${env}`
+    parsed.searchParams.delete('i')
+    const mode = endpoint === 'evaluated-variants-signed' ? 'variants' : 'evaluated'
+    if (this._config.instanceId) {
+      const keys: string[] = []
+      parsed.searchParams.forEach((_value, key) => keys.push(key))
+      for (const key of keys) {
+        if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) {
+          parsed.searchParams.delete(key)
+        }
+      }
+      parsed.searchParams.set('i', this._config.instanceId)
+    } else {
+      appendEvaluationContext(parsed, this._getEvaluationContext(), mode)
+    }
+    return parsed
+  }
+
+  private _entityRailRevision(pin: string | null): string | null {
+    if (pin) return null
+    if (!this._entityEvaluatedFeatures) return null
+    return this._definitionsRevision
+  }
+
+  private async _loadEntityEvaluatedFeatures(
+    generation: number,
+    appKey: string,
+    env: string,
+    pin: string | null,
+  ): Promise<boolean> {
+    if (!this._config.enableVariants || !this._config.appKey) {
+      this._entityEvaluatedFeatures = null
+      return false
+    }
+    const fetchUrl = appendDefinitionsRevisionParam(
+      this._buildDefinitionsUrl('evaluated-signed', appKey, env).toString(),
+      pin,
+    )
+    const previousEntityDefs = this._entityEvaluatedFeatures
+    try {
+      const loaded = await fetchEvaluatedSignedDefinitions(
+        fetchUrl,
+        this._jwks,
+        {
+          ...this._config,
+          baseURI: this._config.baseURI ?? 'https://definitions.toggly.io',
+        },
+        {
+          // Do not reuse the variants etag until entity defs were loaded once.
+          revision: this._entityRailRevision(pin),
+          headers: buildDefinitionFetchHeaders(),
+        },
+      )
+      if (generation !== this._generation || this._disposed) return false
+      if (loaded.notModified) {
+        return this._entityEvaluatedFeatures !== null
+      }
+      this._entityEvaluatedFeatures = (loaded.defs ?? {}) as EvaluatedDefinitions
+      return true
+    } catch (error) {
+      if (generation === this._generation && !this._disposed) {
+        this._entityEvaluatedFeatures = previousEntityDefs
+        this._reportError('Error fetching entity-evaluated features', error)
+      }
+      return false
+    }
+  }
+
+  private async _runEntityEvaluatedFeaturesLoad(
+    generation: number,
+    appKey: string,
+    env: string,
+    pin: string | null,
+  ): Promise<boolean> {
+    const loaded = await this._loadEntityEvaluatedFeatures(generation, appKey, env, pin)
+    if (loaded && generation === this._generation && !this._disposed) {
+      this._entityEvaluatedFeaturesSynced = true
+    }
+    return loaded
+  }
+
+  private async _syncEntityEvaluatedFeaturesIfNeeded(
+    generation: number,
+    appKey: string,
+    env: string,
+    pin: string | null,
+  ): Promise<void> {
+    if (
+      !this._config.enableVariants ||
+      this._entityEvaluatedFeaturesSynced ||
+      generation !== this._generation ||
+      this._disposed
+    ) {
+      return
+    }
+    if (this._entityEvaluatedFeaturesLoadPromise) {
+      await this._entityEvaluatedFeaturesLoadPromise
+      return
+    }
+    this._entityEvaluatedFeaturesLoadPromise = this._runEntityEvaluatedFeaturesLoad(
+      generation,
+      appKey,
+      env,
+      pin,
+    )
+    try {
+      await this._entityEvaluatedFeaturesLoadPromise
+    } finally {
+      this._entityEvaluatedFeaturesLoadPromise = null
+    }
+  }
+
   setContext = async (context: TogglyContextUpdate): Promise<void> => {
     if (this._disposed) return
     this._generation++
@@ -637,6 +760,9 @@ export class Toggly implements TogglyService {
     this._cachedDefinitionsRevision = null
     this._pendingDefinitionsPin = null
     this._lastFallbackRefresh = 0
+    this._entityEvaluatedFeatures = null
+    this._entityEvaluatedFeaturesSynced = false
+    this._entityEvaluatedFeaturesLoadPromise = null
     const appKey = this._config.appKey ?? ''
     const env = this._config.environment ?? 'Production'
     const scope = this._bodyCacheKey()
@@ -680,8 +806,14 @@ export class Toggly implements TogglyService {
     }
 
     if (generation !== this._generation || this._disposed) return this._booleanFeatures()
+
+    const appKey = this._config.appKey ?? ''
+    const env = this._config.environment ?? 'Production'
+
     // Features already loaded
     if (this._features !== null && !forceRefresh) {
+      await this._syncEntityEvaluatedFeaturesIfNeeded(generation, appKey, env, null)
+      if (generation !== this._generation || this._disposed) return this._booleanFeatures()
       // When WebSocket is connected, throttle HTTP refreshes to fallback interval
       if (this._wsConnected) {
         const now = Date.now()
@@ -698,25 +830,14 @@ export class Toggly implements TogglyService {
 
     const isInitialLoad = this._ws === null && !this._wsConnected
 
-    const appKey = this._config.appKey ?? ''
-    const env = this._config.environment ?? 'Production'
     const contextKey = this._bodyCacheKey()
 
     try {
-      const parsed = new URL(this._config.baseURI ?? 'https://definitions.toggly.io')
-      const mode = this._config.enableVariants ? 'variants' : 'evaluated'
-      const path = this._config.enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed'
-      parsed.pathname = `${parsed.pathname.replace(/\/$/, '')}/${path}/${appKey}/${env}`
-      parsed.searchParams.delete('i')
-      if (this._config.instanceId) {
-        const keys: string[] = []
-        parsed.searchParams.forEach((_value, key) => keys.push(key))
-        for (const key of keys) {
-          if (key === 'u' || key === 'userId' || key === 'g' || key.startsWith('claim.')) parsed.searchParams.delete(key)
-        }
-        parsed.searchParams.set('i', this._config.instanceId)
-      } else appendEvaluationContext(parsed, this._getEvaluationContext(), mode)
-      const url = parsed.toString()
+      const url = this._buildDefinitionsUrl(
+        this._config.enableVariants ? 'evaluated-variants-signed' : 'evaluated-signed',
+        appKey,
+        env,
+      ).toString()
       const pin = this._pendingDefinitionsPin
       this._pendingDefinitionsPin = null
       const fetchUrl = appendDefinitionsRevisionParam(url, pin)
@@ -737,6 +858,13 @@ export class Toggly implements TogglyService {
       if (loaded.notModified) {
         this._cacheDefinitionsRevision(stripEtagQuotes(loaded.revision))
         if (isInitialLoad) this.startWebSocket()
+        if (this._config.enableVariants) {
+          const entityLoaded = await this._runEntityEvaluatedFeaturesLoad(generation, appKey, env, pin)
+          if (entityLoaded && this._features) {
+            await this._hookExecutor.executeAfterRefresh(toBooleanDefinitions(this._features))
+            this.notifyFeaturesRefresh()
+          }
+        }
         return this._booleanFeatures()
       }
       const parsedDefs = loaded.defs
@@ -749,8 +877,10 @@ export class Toggly implements TogglyService {
           writeCachedVariants(appKey, env, defs, contextKey, this._config.maxCacheKeys)
           writeCachedFlags(appKey, env, this._features, contextKey, this._config.maxCacheKeys)
         }
+        await this._runEntityEvaluatedFeaturesLoad(generation, appKey, env, pin)
       } else {
         this._variants = null
+        this._entityEvaluatedFeatures = null
         this._features = (parsedDefs ?? {}) as EvaluatedDefinitions
         if (this._features && this._canPersist) {
           writeCachedFlags(appKey, env, this._features, contextKey, this._config.maxCacheKeys)
@@ -816,6 +946,13 @@ export class Toggly implements TogglyService {
 
   _featuresLoaded = async () => {
     if (this._features) {
+      const generation = this._generation
+      const appKey = this._config.appKey ?? ''
+      const env = this._config.environment ?? 'Production'
+      await this._syncEntityEvaluatedFeaturesIfNeeded(generation, appKey, env, null)
+      if (this._generation !== generation || this._disposed) {
+        return this._booleanFeatures()
+      }
       return toBooleanDefinitions(this._features)
     }
     return await this._loadFeatures()
@@ -832,7 +969,11 @@ export class Toggly implements TogglyService {
   ): boolean {
     if (snapshot.owner !== this) return false
     const variant = snapshot.variants?.[flagKey]?.variant || 'enabled'
-    const remote = resolveEvaluatedDefinition(snapshot.features?.[flagKey], entityContext)
+    const definition =
+      this._entityEvaluatedFeatures && flagKey in this._entityEvaluatedFeatures
+        ? this._entityEvaluatedFeatures[flagKey]
+        : snapshot.features?.[flagKey]
+    const remote = resolveEvaluatedDefinition(definition, entityContext)
     const enabled = applyLocalGate(remote, flagKey, this._localGates, this._localGateIndex)
     snapshot.recordCheck?.(flagKey, enabled ? variant : 'disabled')
     return enabled

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.10.2
+
+2026-10-23
+
+### Fixed
+- `useEventToggly` applies synchronous `configureEventEvalContext` providers via `resolveSyncEventEvalContext`, so preset identity reaches local server evaluation without async middleware [OPS-1992].
+
 ## 1.10.0
 
 2026-10-04

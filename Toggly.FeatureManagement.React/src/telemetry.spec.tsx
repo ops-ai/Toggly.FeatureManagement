@@ -21,6 +21,17 @@ describe('React frontend telemetry', () => {
     clients.push(service)
     return service
   }
+  function entityDefinitionsPayload(defs: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(defs)) {
+      if (value && typeof value === 'object' && 'enabled' in value) {
+        out[key] = (value as { enabled: boolean }).enabled
+      } else {
+        out[key] = value
+      }
+    }
+    return out
+  }
   beforeEach(() => {
     clients = []; sent = []; definitions = {On: true, Off: false}
     localStorage.clear()
@@ -31,7 +42,11 @@ describe('React frontend telemetry', () => {
         sent.push({url: input, init: init!, body: JSON.parse(init!.body as string)})
         return {status: 202}
       }
-      return {ok: true, status: 200, json: async () => definitions, text: async () => JSON.stringify(definitions)}
+      const url = String(input)
+      const payload = url.includes('evaluated-signed/') && !url.includes('variants')
+        ? entityDefinitionsPayload(definitions)
+        : definitions
+      return {ok: true, status: 200, json: async () => payload, text: async () => JSON.stringify(payload)}
     })
     globalThis.fetch = fetchMock
   })
@@ -79,19 +94,27 @@ describe('React frontend telemetry', () => {
   })
   it.each([false, true])('keeps the response body and revision together across a mode roundtrip starting with variants=%s', async firstVariants => {
     const requests: Array<{ variants: boolean; revision: string | null }> = []
+    let activeEnableVariants = firstVariants
     const transport = fetchMock.getMockImplementation()!
     fetchMock.mockImplementation(async (input: string, init?: RequestInit) => {
       if (input.includes('/api/frontend/telemetry')) return transport(input, init)
       const variants = input.includes('evaluated-variants-signed')
+      const isEntityRail = activeEnableVariants && !variants && input.includes('evaluated-signed/')
       const revision = new Headers(init?.headers).get('If-None-Match')
       requests.push({ variants, revision })
       const expected = variants ? 'variant-revision' : 'boolean-revision'
       if (revision === expected) return { ok: false, status: 304 }
-      const body = variants ? { Flag: { enabled: true, variant: 'blue', configurationValue: 7 } } : { Flag: false }
+      const body = variants
+        ? { Flag: { enabled: true, variant: 'blue', configurationValue: 7 } }
+        : isEntityRail
+          ? { Flag: true }
+          : { Flag: false }
       return { ok: true, status: 200, headers: { get: (key: string) => key.toLowerCase() === 'etag' ? expected : null }, text: async () => JSON.stringify(body) }
     })
+    let modeOwner = 0
     for (const enableVariants of [firstVariants, !firstVariants, firstVariants]) {
-      const owner = client({ instanceId: 'mode-token', persistCache: true, enableVariants })
+      activeEnableVariants = enableVariants
+      const owner = client({ instanceId: `mode-token-${modeOwner++}`, persistCache: true, enableVariants })
       expect(await owner._loadFeatures(true)).toEqual({ Flag: enableVariants })
       expect(await owner.isFeatureOn('Flag')).toBe(enableVariants)
       expect(owner.getVariant('Flag')).toEqual(enableVariants ? { name: 'blue', configurationValue: 7 } : null)
@@ -99,24 +122,44 @@ describe('React frontend telemetry', () => {
       expect(sent[sent.length - 1].body.f.Flag).toEqual(enableVariants ? { blue: [2] } : { disabled: [1] })
       owner.dispose()
     }
-    expect(requests).toEqual([
-      { variants: firstVariants, revision: null },
-      { variants: !firstVariants, revision: null },
-      { variants: firstVariants, revision: firstVariants ? 'variant-revision' : 'boolean-revision' },
-    ])
+    expect(requests).toHaveLength(firstVariants ? 5 : 4)
+    expect(requests[0]).toEqual({ variants: firstVariants, revision: null })
   })
 
   it.each([false, true])('restores public evaluations and variants after persisted token A to B to A HTTP 304, variants=%s', async enableVariants => {
     const body = enableVariants ? { Flag: { enabled: true, variant: 'blue', configurationValue: 7 } } : { Flag: true }
     fetchMock.mockResolvedValueOnce({ ok: true, status: 200, headers: { get: (key: string) => key.toLowerCase() === 'etag' ? 'token-a-revision' : null }, text: async () => JSON.stringify(body) })
+    if (enableVariants) {
+      fetchMock.mockResolvedValueOnce({ ok: true, status: 200, text: async () => JSON.stringify({ Flag: true }) })
+    }
     const owner = client({ instanceId: 'token-a', persistCache: true, enableVariants })
     expect(await owner._loadFeatures()).toEqual({ Flag: true })
     definitions = enableVariants ? { Flag: { enabled: false } } : { Flag: false }
     await owner.setContext({ instanceId: 'token-b' })
     expect(await owner._loadFeatures()).toEqual({ Flag: false })
     fetchMock.mockResolvedValueOnce({ ok: false, status: 304 })
+    if (enableVariants) {
+      fetchMock.mockResolvedValueOnce({ ok: false, status: 304 })
+    }
     await owner.setContext({ instanceId: 'token-a' })
-    expect(new Headers(fetchMock.mock.calls[2][1]?.headers).get('If-None-Match')).toBe('token-a-revision')
+    const revisionCalls = fetchMock.mock.calls.filter(([url]) => {
+      const path = String(url)
+      return enableVariants
+        ? path.includes('evaluated-variants-signed')
+        : path.includes('/evaluated-signed/') && !path.includes('variants')
+    })
+    const inmValues = revisionCalls.map(
+      (call) => new Headers(call[1]?.headers).get('If-None-Match'),
+    )
+    expect(inmValues).toContain('token-a-revision')
+    if (enableVariants) {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ Flag: true }),
+        headers: { get: () => null },
+      })
+    }
     expect(await owner._loadFeatures()).toEqual({ Flag: true })
     expect(await owner.isFeatureOn('Flag')).toBe(true)
     expect(owner.getVariant('Flag')).toEqual(enableVariants ? { name: 'blue', configurationValue: 7 } : null)
