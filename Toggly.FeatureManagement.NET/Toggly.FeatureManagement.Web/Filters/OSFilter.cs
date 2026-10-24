@@ -4,7 +4,6 @@ using Microsoft.FeatureManagement;
 using Microsoft.FeatureManagement.FeatureFilters;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using UAParser;
 
@@ -46,11 +45,10 @@ namespace Toggly.FeatureManagement.Web.Filters
 
             var userAgent = _httpContextAccessor.HttpContext.Request.Headers["User-Agent"];
 
-            var uaParser = Parser.GetDefault();
-            var ua = uaParser.Parse(userAgent);
+            var ua = Parser.GetDefault().Parse(userAgent);
+            var osFamily = UserAgentSegmentFields.GetOperatingSystemFamily(ua);
 
-            return settings.OperatingSystem != null &&
-                   settings.OperatingSystem.Any(t => !string.IsNullOrWhiteSpace(t) && ua.OS.Family.Contains(t, StringComparison.OrdinalIgnoreCase));
+            return UserAgentSegmentFields.MatchesIndexedAllowList(osFamily, settings.OperatingSystem);
         }
 
         public class OSFilterSettings

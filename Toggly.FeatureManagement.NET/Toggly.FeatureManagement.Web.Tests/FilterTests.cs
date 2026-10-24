@@ -417,7 +417,11 @@ public class CountryFilterTests
 
 public class DeviceTypeFilterTests
 {
+    private const string MacChromeDesktopUa =
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
     private static readonly string[] IPhoneDevice = { "iPhone" };
+    private static readonly string[] MacintoshDevice = { "Macintosh" };
     private static readonly string[] IPhoneAndWhitespace = { "iPhone", " " };
 
     private readonly Mock<IHttpContextAccessor> _httpContextAccessorMock;
@@ -482,6 +486,14 @@ public class DeviceTypeFilterTests
 
         // Assert
         result.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_WithMacDesktopUa_AndMacintoshDeviceType_ReturnsTrue()
+    {
+        SetupUserAgent(MacChromeDesktopUa);
+        var result = await _filter.EvaluateAsync(CreateContext(MacintoshDevice, 100));
+        result.Should().BeTrue();
     }
 
     [Fact]

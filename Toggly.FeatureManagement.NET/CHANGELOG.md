@@ -1,5 +1,12 @@
 # Changelog
 
+## All .NET SDK packages 3.14.3 - 2026-10-23
+
+### Fixed
+- `DeviceTypeFilter` maps UAParser desktop device family `Mac` to `Macintosh`
+  so platform `DeviceType` rules match (parity with Elixir / backend semantics)
+  [OPS-2014].
+
 ## All .NET SDK packages 3.14.2 - 2026-10-22
 
 ### Added
