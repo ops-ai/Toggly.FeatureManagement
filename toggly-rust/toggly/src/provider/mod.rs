@@ -1,5 +1,6 @@
 //! Feature definitions provider.
 
+use crate::cache::Cache;
 use crate::config::TogglyConfig;
 use crate::crypto::verify_signed_definitions;
 use crate::definition_cache::{
@@ -11,7 +12,7 @@ use crate::sdk_identity::{append_sdk_query, sdk_user_agent};
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use parking_lot::RwLock;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::watch;
@@ -33,6 +34,13 @@ struct JwksCache {
     expiry: Instant,
 }
 
+struct WsRefreshAction {
+    msg_type: &'static str,
+    force_jwks: bool,
+    /// Skip `If-None-Match` / `If-Modified-Since` so same-revision bodies apply.
+    omit_conditional_headers: bool,
+}
+
 /// Provider for fetching and caching feature definitions.
 pub struct DefinitionsProvider {
     config: TogglyConfig,
@@ -52,6 +60,8 @@ pub struct DefinitionsProvider {
     pending_ws_refresh: Arc<AtomicBool>,
     definitions_loaded: Arc<AtomicBool>,
     cache_recorder: Arc<RwLock<Option<Arc<dyn DefinitionCacheRecorder>>>>,
+    evaluation_cache: Arc<RwLock<Option<Arc<Cache<bool>>>>>,
+    definitions_generation: Arc<RwLock<Option<Arc<AtomicU64>>>>,
 }
 
 impl DefinitionsProvider {
@@ -80,7 +90,19 @@ impl DefinitionsProvider {
             pending_ws_refresh: Arc::new(AtomicBool::new(false)),
             definitions_loaded: Arc::new(AtomicBool::new(false)),
             cache_recorder: Arc::new(RwLock::new(None)),
+            evaluation_cache: Arc::new(RwLock::new(None)),
+            definitions_generation: Arc::new(RwLock::new(None)),
         })
+    }
+
+    /// Share the client's per-context evaluation cache; cleared whenever definitions apply.
+    pub fn set_evaluation_cache(&self, cache: Arc<Cache<bool>>) {
+        *self.evaluation_cache.write() = Some(cache);
+    }
+
+    /// Share the client's definitions generation counter (invalidates eval cache keys).
+    pub fn set_definitions_generation(&self, generation: Arc<AtomicU64>) {
+        *self.definitions_generation.write() = Some(generation);
     }
 
     /// Attach a usage recorder for definition-refresh cache hit/miss counts.
@@ -137,6 +159,8 @@ impl DefinitionsProvider {
         let pending_ws_refresh = Arc::clone(&self.pending_ws_refresh);
         let definitions_loaded = Arc::clone(&self.definitions_loaded);
         let cache_recorder = Arc::clone(&self.cache_recorder);
+        let evaluation_cache = Arc::clone(&self.evaluation_cache);
+        let definitions_generation = Arc::clone(&self.definitions_generation);
 
         if config.enable_live_updates {
             let ws_definitions = Arc::clone(&definitions);
@@ -155,6 +179,8 @@ impl DefinitionsProvider {
             let ws_pending = Arc::clone(&pending_ws_refresh);
             let ws_loaded = Arc::clone(&definitions_loaded);
             let ws_recorder = Arc::clone(&cache_recorder);
+            let ws_evaluation_cache = Arc::clone(&evaluation_cache);
+            let ws_definitions_generation = Arc::clone(&definitions_generation);
             let mut ws_shutdown_rx = shutdown_rx.clone();
 
             tokio::spawn(async move {
@@ -199,6 +225,8 @@ impl DefinitionsProvider {
                                                         &ws_pending,
                                                         &ws_loaded,
                                                         &ws_recorder,
+                                                        &ws_evaluation_cache,
+                                                        &ws_definitions_generation,
                                                     ).await;
                                                 }
                                             }
@@ -280,6 +308,9 @@ impl DefinitionsProvider {
                             &pending_ws_refresh,
                             &definitions_loaded,
                             &cache_recorder,
+                            &evaluation_cache,
+                            &definitions_generation,
+                            false,
                             false,
                             false,
                         ).await {
@@ -297,30 +328,55 @@ impl DefinitionsProvider {
         });
     }
 
-    fn ws_refresh_action(text: &str, cached_etag: Option<&str>) -> Option<(&'static str, bool)> {
+    fn ws_refresh_action(text: &str, cached_etag: Option<&str>) -> Option<WsRefreshAction> {
         if let Ok(message) = serde_json::from_str::<serde_json::Value>(text) {
             if let Some(kind) = message.get("type").and_then(|value| value.as_str()) {
                 let incoming = message.get("etag").and_then(|value| value.as_str());
                 return match kind {
-                    "signing-key-updated" => Some(("signing-key-updated", true)),
+                    "signing-key-updated" => Some(WsRefreshAction {
+                        msg_type: "signing-key-updated",
+                        force_jwks: true,
+                        omit_conditional_headers: false,
+                    }),
                     "sync" => {
                         let unchanged = message.get("unchanged").and_then(|value| value.as_bool())
                             == Some(true);
-                        (!unchanged && Self::ws_revision_changed(incoming, cached_etag, false))
-                            .then_some(("sync", false))
+                        if !unchanged && Self::ws_revision_changed(incoming, cached_etag, false) {
+                            Some(WsRefreshAction {
+                                msg_type: "sync",
+                                force_jwks: false,
+                                omit_conditional_headers: false,
+                            })
+                        } else {
+                            None
+                        }
                     }
-                    "flags-updated" => Self::ws_revision_changed(incoming, cached_etag, true)
-                        .then_some(("flags-updated", false)),
-                    "update" => Self::ws_revision_changed(incoming, cached_etag, true)
-                        .then_some(("update", false)),
+                    "flags-updated" => Some(WsRefreshAction {
+                        msg_type: "flags-updated",
+                        force_jwks: false,
+                        omit_conditional_headers: true,
+                    }),
+                    "update" => Some(WsRefreshAction {
+                        msg_type: "update",
+                        force_jwks: false,
+                        omit_conditional_headers: true,
+                    }),
                     _ => None,
                 };
             }
         }
 
         match text.trim() {
-            "update" => Some(("update", false)),
-            "flags-updated" => Some(("flags-updated", false)),
+            "update" => Some(WsRefreshAction {
+                msg_type: "update",
+                force_jwks: false,
+                omit_conditional_headers: true,
+            }),
+            "flags-updated" => Some(WsRefreshAction {
+                msg_type: "flags-updated",
+                force_jwks: false,
+                omit_conditional_headers: true,
+            }),
             _ => None,
         }
     }
@@ -355,14 +411,17 @@ impl DefinitionsProvider {
         pending_ws_refresh: &AtomicBool,
         definitions_loaded: &AtomicBool,
         cache_recorder: &RwLock<Option<Arc<dyn DefinitionCacheRecorder>>>,
+        evaluation_cache: &RwLock<Option<Arc<Cache<bool>>>>,
+        definitions_generation: &RwLock<Option<Arc<AtomicU64>>>,
     ) {
         let cached_etag = etag.read().clone();
-        if let Some((msg_type, force_jwks)) = Self::ws_refresh_action(text, cached_etag.as_deref())
-        {
-            // Keep the loaded ETag until refresh successfully applies a new
-            // revision. Preloading the WS-announced ETag into If-None-Match
-            // can yield 304 / SameRevision and count a hit without applying.
-            debug!(msg_type, force_jwks, "WebSocket: refreshing definitions");
+        if let Some(action) = Self::ws_refresh_action(text, cached_etag.as_deref()) {
+            debug!(
+                msg_type = action.msg_type,
+                force_jwks = action.force_jwks,
+                omit_conditional_headers = action.omit_conditional_headers,
+                "WebSocket: refreshing definitions"
+            );
             // WS-forced refresh must not be suppressed by scheduled poll skip.
             if let Err(e) = Self::refresh_impl(
                 http_client,
@@ -379,8 +438,11 @@ impl DefinitionsProvider {
                 pending_ws_refresh,
                 definitions_loaded,
                 cache_recorder,
+                evaluation_cache,
+                definitions_generation,
                 true,
-                force_jwks,
+                action.force_jwks,
+                action.omit_conditional_headers,
             )
             .await
             {
@@ -417,8 +479,11 @@ impl DefinitionsProvider {
             &self.pending_ws_refresh,
             &self.definitions_loaded,
             &self.cache_recorder,
+            &self.evaluation_cache,
+            &self.definitions_generation,
             from_websocket,
             force_jwks_refresh,
+            false,
         )
         .await
     }
@@ -439,8 +504,11 @@ impl DefinitionsProvider {
         pending_ws_refresh: &AtomicBool,
         definitions_loaded: &AtomicBool,
         cache_recorder: &RwLock<Option<Arc<dyn DefinitionCacheRecorder>>>,
+        evaluation_cache: &RwLock<Option<Arc<Cache<bool>>>>,
+        definitions_generation: &RwLock<Option<Arc<AtomicU64>>>,
         from_websocket: bool,
         force_jwks_refresh: bool,
+        omit_conditional_headers: bool,
     ) -> crate::Result<()> {
         // Concurrent refresh skipped (in flight) — do not count.
         if refresh_in_flight
@@ -465,7 +533,10 @@ impl DefinitionsProvider {
             last_error_time,
             jwks,
             definitions_loaded,
+            evaluation_cache,
+            definitions_generation,
             force_jwks_refresh,
+            omit_conditional_headers,
         )
         .await;
 
@@ -498,8 +569,11 @@ impl DefinitionsProvider {
                 pending_ws_refresh,
                 definitions_loaded,
                 cache_recorder,
+                evaluation_cache,
+                definitions_generation,
                 true,
                 false,
+                true,
             ))
             .await;
             // Prefer a successful concurrent WS update over the original failure so
@@ -604,6 +678,8 @@ impl DefinitionsProvider {
             &self.pending_ws_refresh,
             &self.definitions_loaded,
             &self.cache_recorder,
+            &self.evaluation_cache,
+            &self.definitions_generation,
         )
         .await;
     }
@@ -638,16 +714,31 @@ impl DefinitionsProvider {
         }
     }
 
+    fn invalidate_evaluation_cache(
+        evaluation_cache: Option<&Cache<bool>>,
+        definitions_generation: Option<&AtomicU64>,
+    ) {
+        if let Some(cache) = evaluation_cache {
+            cache.clear();
+        }
+        if let Some(generation) = definitions_generation {
+            generation.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
     fn apply_definitions(
         definitions: &DashMap<String, FeatureDefinition>,
         parsed: Vec<FeatureDefinition>,
         definitions_loaded: &AtomicBool,
+        evaluation_cache: Option<&Cache<bool>>,
+        definitions_generation: Option<Arc<AtomicU64>>,
     ) {
         definitions.clear();
         for definition in parsed {
             definitions.insert(definition.feature_key.clone(), definition);
         }
         definitions_loaded.store(true, Ordering::SeqCst);
+        Self::invalidate_evaluation_cache(evaluation_cache, definitions_generation.as_deref());
         info!(count = definitions.len(), "Loaded feature definitions");
     }
 
@@ -665,7 +756,10 @@ impl DefinitionsProvider {
         last_error_time: &RwLock<Option<DateTime<Utc>>>,
         jwks: &RwLock<Option<JwksCache>>,
         definitions_loaded: &AtomicBool,
+        evaluation_cache: &RwLock<Option<Arc<Cache<bool>>>>,
+        definitions_generation: &RwLock<Option<Arc<AtomicU64>>>,
         force_jwks_refresh: bool,
+        omit_conditional_headers: bool,
     ) -> crate::Result<RefreshCacheOutcome> {
         if force_jwks_refresh {
             Self::clear_jwks(jwks, etag);
@@ -678,11 +772,13 @@ impl DefinitionsProvider {
         let existing_lm = last_modified.read().clone();
 
         let mut request = http_client.get(&url);
-        if let Some(ref e) = existing_etag {
-            request = request.header("If-None-Match", e.clone());
-        }
-        if let Some(ref lm) = existing_lm {
-            request = request.header("If-Modified-Since", lm.clone());
+        if !omit_conditional_headers {
+            if let Some(ref e) = existing_etag {
+                request = request.header("If-None-Match", e.clone());
+            }
+            if let Some(ref lm) = existing_lm {
+                request = request.header("If-Modified-Since", lm.clone());
+            }
         }
 
         let response = match request.send().await {
@@ -769,7 +865,14 @@ impl DefinitionsProvider {
         }
 
         Self::store_revision_headers(etag, last_modified, response_etag, response_lm);
-        Self::apply_definitions(definitions, parsed_definitions, definitions_loaded);
+        let eval_cache = evaluation_cache.read().as_ref().map(Arc::clone);
+        Self::apply_definitions(
+            definitions,
+            parsed_definitions,
+            definitions_loaded,
+            eval_cache.as_deref(),
+            definitions_generation.read().as_ref().map(Arc::clone),
+        );
 
         *last_fetch.write() = Some(Instant::now());
         *last_error.write() = None;
@@ -1008,7 +1111,7 @@ mod tests {
     use async_trait::async_trait;
     use parking_lot::Mutex as PlMutex;
     use std::sync::Mutex as StdMutex;
-    use wiremock::matchers::{header, method, path_regex};
+    use wiremock::matchers::{method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     struct CountingRecorder {
@@ -1074,32 +1177,35 @@ mod tests {
             (
                 r#"{"type":"sync","etag":"rev2"}"#,
                 Some("rev1"),
-                Some(("sync", false)),
+                Some(("sync", false, false)),
             ),
             (
                 r#"{"type":"sync","etag":"rev2"}"#,
                 None,
-                Some(("sync", false)),
+                Some(("sync", false, false)),
             ),
             (
                 r#"{"type":"flags-updated"}"#,
                 Some("rev1"),
-                Some(("flags-updated", false)),
+                Some(("flags-updated", false, true)),
+            ),
+            (
+                r#"{"type":"flags-updated","etag":"rev1"}"#,
+                Some("rev1"),
+                Some(("flags-updated", false, true)),
             ),
             (
                 r#"{"type":"signing-key-updated"}"#,
                 Some("rev1"),
-                Some(("signing-key-updated", true)),
+                Some(("signing-key-updated", true, false)),
             ),
-            ("update", Some("rev1"), Some(("update", false))),
+            ("update", Some("rev1"), Some(("update", false, true))),
             ("unrecognized", Some("rev1"), None),
         ];
         for (message, cached_etag, expected) in cases {
-            assert_eq!(
-                DefinitionsProvider::ws_refresh_action(message, cached_etag),
-                expected,
-                "{message}"
-            );
+            let action = DefinitionsProvider::ws_refresh_action(message, cached_etag);
+            let mapped = action.map(|a| (a.msg_type, a.force_jwks, a.omit_conditional_headers));
+            assert_eq!(mapped, expected, "{message}");
         }
     }
 
@@ -1517,10 +1623,65 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn evaluation_cache_cleared_when_definitions_apply() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "\"rev-1\"")
+                    .set_body_json(feature_json("feat-a")),
+            )
+            .mount(&server)
+            .await;
+
+        let provider = provider_against(&server).await;
+        let eval_cache = Arc::new(crate::cache::Cache::new(
+            std::time::Duration::from_secs(3600),
+            100,
+        ));
+        provider.set_evaluation_cache(eval_cache.clone());
+        eval_cache.insert("filter-targeting:alice:".to_string(), true);
+        provider.refresh(false, false).await.unwrap();
+        assert_eq!(eval_cache.get("filter-targeting:alice:"), None);
+    }
+
+    #[tokio::test]
+    async fn ws_flags_updated_same_revision_clears_evaluation_cache() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path_regex(r"/definitions/.+"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("etag", "\"rev-1\"")
+                    .set_body_json(feature_json("feat-a")),
+            )
+            .mount(&server)
+            .await;
+
+        let provider = provider_against(&server).await;
+        let eval_cache = Arc::new(crate::cache::Cache::new(
+            std::time::Duration::from_secs(3600),
+            100,
+        ));
+        provider.set_evaluation_cache(eval_cache.clone());
+        provider.refresh(false, false).await.unwrap();
+        eval_cache.insert("filter-targeting:alice:".to_string(), true);
+
+        let msg = r#"{"type":"flags-updated","etag":"\"rev-1\""}"#;
+        provider.handle_ws_message_for_test(msg).await;
+
+        assert_eq!(
+            eval_cache.get("filter-targeting:alice:"),
+            None,
+            "same-revision flags-updated must still apply body and clear eval cache"
+        );
+    }
+
+    #[tokio::test]
     async fn ws_flags_updated_applies_new_revision_as_miss() {
-        // Regression: do not preload the WS-announced ETag before fetch/apply.
-        // If If-None-Match used the new ETag, the server would 304 and we would
-        // record a hit without applying the new definitions.
+        // Regression: `flags-updated` must refetch without validators so a new
+        // revision body is applied (not a 304 on a matching If-None-Match).
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path_regex(r"/definitions/.+"))
@@ -1534,13 +1695,6 @@ mod tests {
             .await;
         Mock::given(method("GET"))
             .and(path_regex(r"/definitions/.+"))
-            .and(header("if-none-match", "\"rev-2\""))
-            .respond_with(ResponseTemplate::new(304).insert_header("etag", "\"rev-2\""))
-            .mount(&server)
-            .await;
-        Mock::given(method("GET"))
-            .and(path_regex(r"/definitions/.+"))
-            .and(header("if-none-match", "\"rev-1\""))
             .respond_with(
                 ResponseTemplate::new(200)
                     .insert_header("etag", "\"rev-2\"")

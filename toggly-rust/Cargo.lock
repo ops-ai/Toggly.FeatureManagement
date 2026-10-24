@@ -1439,7 +1439,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower-service",
- "webpki-roots 1.0.9",
+ "webpki-roots 1.0.10",
 ]
 
 [[package]]
@@ -2600,7 +2600,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "webpki-roots 1.0.9",
+ "webpki-roots 1.0.10",
 ]
 
 [[package]]
@@ -2809,9 +2809,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.15"
+version = "0.103.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2"
+checksum = "4443b1b6d39d7c663139942cc4558262562d2c84123bb6282ef177009ca8b281"
 dependencies = [
  "ring",
  "rustls-pki-types",
@@ -3309,7 +3309,7 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "toggly"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "async-trait",
  "base64 0.23.1",
@@ -3347,7 +3347,7 @@ dependencies = [
 
 [[package]]
 name = "toggly-actix"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "actix-rt",
  "actix-web",
@@ -3363,7 +3363,7 @@ dependencies = [
 
 [[package]]
 name = "toggly-axum"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "axum 0.7.9",
  "axum-test",
@@ -3409,7 +3409,7 @@ dependencies = [
 
 [[package]]
 name = "toggly-macros"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -3421,7 +3421,7 @@ dependencies = [
 
 [[package]]
 name = "toggly-rocket"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "rocket",
  "serde",
@@ -4024,14 +4024,14 @@ version = "0.26.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9"
 dependencies = [
- "webpki-roots 1.0.9",
+ "webpki-roots 1.0.10",
 ]
 
 [[package]]
 name = "webpki-roots"
-version = "1.0.9"
+version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7dcd9d09a39985f5344844e66b0c530a33843579125f23e21e9f0f220850f22a"
+checksum = "1c1c8e20c8a38fc7d65abfe74eb7280e4aa667e8eec8bc84996d2874810748d9"
 dependencies = [
  "rustls-pki-types",
 ]

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.1
+
+2026-10-23
+
+### Fixed
+- Clear the per-identity evaluation cache whenever the definitions provider applies a new revision (WebSocket / background refresh), so flags that go from targeted filters to empty filters re-evaluate OFF instead of serving a stale ON [OPS-2012].
+- Bump a shared definitions generation counter on apply and include it in evaluation cache keys so in-flight `is_enabled` calls cannot repopulate the cache after a refresh.
+
 ## 0.11.0
 
 2026-10-12

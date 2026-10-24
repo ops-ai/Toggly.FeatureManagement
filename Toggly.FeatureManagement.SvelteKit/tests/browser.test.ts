@@ -279,6 +279,51 @@ it('uses verified conditional polling, ignores unchanged sync, pins only new rev
   expect(new URL(Socket.all[1].url).searchParams.get('rev')).toBe('r2');
   t.dispose();
 });
+it('refreshes when flags-updated repeats the current revision (evaluated body can change)', async () => {
+  vi.useFakeTimers();
+  const Socket = socket();
+  let filterTargeting = true;
+  const revision = 'rev-same';
+  const fetcher = vi.fn(async (input: any, init: any) => {
+    if (String(input).endsWith('/.well-known/jwks'))
+      return new Response(JSON.stringify({ keys: [jwk] }));
+    if (new Headers(init?.headers).get('if-none-match') === revision) {
+      return new Response(null, { status: 304 });
+    }
+    return new Response(envelope({ 'filter-targeting': filterTargeting }), {
+      headers: { ETag: revision },
+    });
+  });
+  vi.stubGlobal('fetch', fetcher);
+  const t = createToggly(
+    {
+      definitions: {},
+      context: { identity: 'alice' },
+      expose: ['filter-targeting'],
+      source: 'defaults',
+    },
+    {
+      appKey: 'frontend',
+      baseURI: 'https://definitions.test',
+      environment: 'Test',
+      refreshInterval: 0,
+    },
+  );
+  await t.start();
+  await vi.waitFor(() => expect(t.isEnabled('filter-targeting')).toBe(true));
+  const defsCallsBefore = fetcher.mock.calls.filter(
+    (call) => !String(call[0]).endsWith('/.well-known/jwks'),
+  ).length;
+  filterTargeting = false;
+  Socket.all[0].onmessage({ data: `{"type":"flags-updated","etag":"${revision}"}` });
+  await vi.advanceTimersByTimeAsync(350);
+  await vi.waitFor(() => expect(t.isEnabled('filter-targeting')).toBe(false));
+  expect(
+    fetcher.mock.calls.filter((call) => !String(call[0]).endsWith('/.well-known/jwks')).length,
+  ).toBeGreaterThan(defsCallsBefore);
+  t.dispose();
+});
+
 it('rejects an initial 304 and reports timeout cancellation without changing defaults', async () => {
   vi.useFakeTimers();
   socket();
