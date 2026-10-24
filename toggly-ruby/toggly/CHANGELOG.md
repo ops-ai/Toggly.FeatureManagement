@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sole-filter flags no longer default to enabled when evaluators return `nil`
   (e.g. Targeting with a non-listed user and 0% default rollout). Sequential
   multi-rule chains still fall through on `nil` [OPS-2011].
+- `Targeting` default rollout now matches .NET / toggly-eval / Go: `>= 100%`
+  enables without identity; `<= 0%` and partial rollout without identity fail
+  closed [OPS-2011].
 
 ## [1.4.2] - 2026-10-16
 ### Added

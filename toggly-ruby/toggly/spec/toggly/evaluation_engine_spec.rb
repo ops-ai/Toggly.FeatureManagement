@@ -83,17 +83,56 @@ RSpec.describe Toggly::EvaluationEngine do
         expect(engine.evaluate(definition, Toggly::Context.new(identity: "bob"))).to be false
       end
 
-      it "reports no_match when no rule decides" do
+      it "reports rule_matched false when Targeting rejects a user" do
         definition = Toggly::FeatureDefinition.new(
           feature_key: "filter-targeting",
           enabled: true,
-          rules: [{ "type" => "targeting", "users" => ["alice"] }]
+          rules: [
+            {
+              "name" => "Targeting",
+              "parameters" => {
+                "Audience.DefaultRolloutPercentage" => 0,
+                "Audience.Users:0" => "alice"
+              }
+            }
+          ]
         )
 
         result = engine.evaluate_with_details(definition, Toggly::Context.new(identity: "bob"))
 
         expect(result.enabled).to be false
-        expect(result.reason).to eq("no_match")
+        expect(result.reason).to eq("rule_matched")
+      end
+
+      it "enables sole Targeting at 100% default rollout without identity" do
+        definition = Toggly::FeatureDefinition.new(
+          feature_key: "rollout-all",
+          enabled: true,
+          rules: [
+            {
+              "name" => "Targeting",
+              "parameters" => { "Audience.DefaultRolloutPercentage" => 100 }
+            }
+          ]
+        )
+
+        expect(engine.evaluate(definition, nil)).to be true
+        expect(engine.evaluate(definition, Toggly::Context.new(identity: ""))).to be true
+      end
+
+      it "disables sole Targeting at partial default rollout without identity" do
+        definition = Toggly::FeatureDefinition.new(
+          feature_key: "rollout-partial",
+          enabled: true,
+          rules: [
+            {
+              "name" => "Targeting",
+              "parameters" => { "Audience.DefaultRolloutPercentage" => 50 }
+            }
+          ]
+        )
+
+        expect(engine.evaluate(definition, nil)).to be false
       end
     end
 

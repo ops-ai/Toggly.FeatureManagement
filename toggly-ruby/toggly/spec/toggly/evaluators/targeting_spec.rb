@@ -18,11 +18,14 @@ RSpec.describe Toggly::Evaluators::Targeting do
         expect(evaluator.evaluate(rule, context, feature_key: "test")).to be true
       end
 
-      it "returns nil when user is not in list" do
-        rule = { "users" => %w[user-1 user-2] }
+      it "returns false when user is not in list and default rollout is 0%" do
+        rule = {
+          "users" => %w[user-1 user-2],
+          "Audience.DefaultRolloutPercentage" => 0
+        }
         context = Toggly::Context.new(identity: "user-999")
 
-        expect(evaluator.evaluate(rule, context, feature_key: "test")).to be_nil
+        expect(evaluator.evaluate(rule, context, feature_key: "test")).to be false
       end
 
       it "returns false when user is excluded" do
@@ -41,11 +44,14 @@ RSpec.describe Toggly::Evaluators::Targeting do
         expect(evaluator.evaluate(rule, context, feature_key: "test")).to be true
       end
 
-      it "returns nil when user is not in any targeted group" do
-        rule = { "groups" => %w[beta premium] }
+      it "returns false when user is not in any targeted group and default rollout is 0%" do
+        rule = {
+          "groups" => %w[beta premium],
+          "Audience.DefaultRolloutPercentage" => 0
+        }
         context = Toggly::Context.new(identity: "user-1", groups: ["standard"])
 
-        expect(evaluator.evaluate(rule, context, feature_key: "test")).to be_nil
+        expect(evaluator.evaluate(rule, context, feature_key: "test")).to be false
       end
 
       it "returns false when user is in excluded group" do
@@ -56,11 +62,38 @@ RSpec.describe Toggly::Evaluators::Targeting do
       end
     end
 
-    context "without context" do
-      it "returns nil" do
-        rule = { "users" => ["user-1"] }
+    context "default rollout (Definitions parity)" do
+      let(:rollout_rule) do
+        { "name" => "Targeting", "parameters" => { "Audience.DefaultRolloutPercentage" => 100 } }
+      end
 
-        expect(evaluator.evaluate(rule, nil, feature_key: "test")).to be_nil
+      it "returns true for 100% default rollout with nil context" do
+        expect(evaluator.evaluate(rollout_rule, nil, feature_key: "f")).to be true
+      end
+
+      it "returns true for 100% default rollout with blank identity" do
+        expect(evaluator.evaluate(rollout_rule, Toggly::Context.new(identity: ""), feature_key: "f")).to be true
+      end
+
+      it "returns false for 0% default rollout with no identity" do
+        rule = { "parameters" => { "Audience.DefaultRolloutPercentage" => 0, "Audience.Users:0" => "alice" } }
+        expect(evaluator.evaluate(rule, Toggly::Context.anonymous, feature_key: "filter-targeting")).to be false
+      end
+
+      it "returns false for partial default rollout with no identity" do
+        rule = { "parameters" => { "Audience.DefaultRolloutPercentage" => 50 } }
+        expect(evaluator.evaluate(rule, nil, feature_key: "f")).to be false
+      end
+
+      it "enables alice and disables bob for LiveE2E filter-targeting shape" do
+        rule = {
+          "parameters" => {
+            "Audience.DefaultRolloutPercentage" => 0,
+            "Audience.Users:0" => "alice"
+          }
+        }
+        expect(evaluator.evaluate(rule, Toggly::Context.new(identity: "alice"), feature_key: "filter-targeting")).to be true
+        expect(evaluator.evaluate(rule, Toggly::Context.new(identity: "bob"), feature_key: "filter-targeting")).to be false
       end
     end
 
