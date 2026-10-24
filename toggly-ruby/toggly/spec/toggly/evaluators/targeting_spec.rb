@@ -85,6 +85,23 @@ RSpec.describe Toggly::Evaluators::Targeting do
         expect(evaluator.evaluate(rule, nil, feature_key: "f")).to be false
       end
 
+      it "returns false when default rollout is unset and user is not listed" do
+        rule = { "users" => ["alice"] }
+        expect(evaluator.evaluate(rule, Toggly::Context.new(identity: "bob"), feature_key: "f")).to be false
+      end
+
+      it "uses sticky hash for partial default rollout with identity" do
+        feature_key = "targeting-rollout"
+        identity = "sticky-user"
+        bucket = Toggly::StickyHash.compute_percentile(identity, feature_key)
+
+        above = { "parameters" => { "Audience.DefaultRolloutPercentage" => bucket + 0.01 } }
+        expect(evaluator.evaluate(above, Toggly::Context.new(identity: identity), feature_key: feature_key)).to be true
+
+        below = { "parameters" => { "Audience.DefaultRolloutPercentage" => bucket - 0.01 } }
+        expect(evaluator.evaluate(below, Toggly::Context.new(identity: identity), feature_key: feature_key)).to be false
+      end
+
       it "enables alice and disables bob for LiveE2E filter-targeting shape" do
         rule = {
           "parameters" => {

@@ -1,0 +1,16 @@
+{
+  "id": "targeting-rollout-partial-anonymous",
+  "description": "Targeting partial default rollout fails closed without identity",
+  "featureKey": "parity-targeting-rollout-partial",
+  "requirementType": "Any",
+  "filters": [
+    {
+      "name": "Targeting",
+      "parameters": {
+        "Audience.DefaultRolloutPercentage": 50
+      }
+    }
+  ],
+  "context": {},
+  "expected": false
+}

@@ -1,0 +1,16 @@
+{
+  "id": "targeting-rollout-100-anonymous",
+  "description": "Targeting 100% default rollout enables without identity",
+  "featureKey": "parity-targeting-rollout-100",
+  "requirementType": "Any",
+  "filters": [
+    {
+      "name": "Targeting",
+      "parameters": {
+        "Audience.DefaultRolloutPercentage": 100
+      }
+    }
+  ],
+  "context": {},
+  "expected": true
+}
