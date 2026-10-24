@@ -63,6 +63,77 @@ RSpec.describe Toggly::EvaluationEngine do
         context = Toggly::Context.new(identity: "specific-user")
         expect(engine.evaluate(definition, context)).to be true
       end
+
+      it "fails closed when sole Targeting filter does not match (LiveE2E filter-targeting)" do
+        definition = Toggly::FeatureDefinition.new(
+          feature_key: "filter-targeting",
+          enabled: true,
+          rules: [
+            {
+              "name" => "Targeting",
+              "parameters" => {
+                "Audience.DefaultRolloutPercentage" => 0,
+                "Audience.Users:0" => "alice"
+              }
+            }
+          ]
+        )
+
+        expect(engine.evaluate(definition, Toggly::Context.new(identity: "alice"))).to be true
+        expect(engine.evaluate(definition, Toggly::Context.new(identity: "bob"))).to be false
+      end
+
+      it "reports rule_matched false when Targeting rejects a user" do
+        definition = Toggly::FeatureDefinition.new(
+          feature_key: "filter-targeting",
+          enabled: true,
+          rules: [
+            {
+              "name" => "Targeting",
+              "parameters" => {
+                "Audience.DefaultRolloutPercentage" => 0,
+                "Audience.Users:0" => "alice"
+              }
+            }
+          ]
+        )
+
+        result = engine.evaluate_with_details(definition, Toggly::Context.new(identity: "bob"))
+
+        expect(result.enabled).to be false
+        expect(result.reason).to eq("rule_matched")
+      end
+
+      it "enables sole Targeting at 100% default rollout without identity" do
+        definition = Toggly::FeatureDefinition.new(
+          feature_key: "rollout-all",
+          enabled: true,
+          rules: [
+            {
+              "name" => "Targeting",
+              "parameters" => { "Audience.DefaultRolloutPercentage" => 100 }
+            }
+          ]
+        )
+
+        expect(engine.evaluate(definition, nil)).to be true
+        expect(engine.evaluate(definition, Toggly::Context.new(identity: ""))).to be true
+      end
+
+      it "disables sole Targeting at partial default rollout without identity" do
+        definition = Toggly::FeatureDefinition.new(
+          feature_key: "rollout-partial",
+          enabled: true,
+          rules: [
+            {
+              "name" => "Targeting",
+              "parameters" => { "Audience.DefaultRolloutPercentage" => 50 }
+            }
+          ]
+        )
+
+        expect(engine.evaluate(definition, nil)).to be false
+      end
     end
 
     context "with nil definition" do

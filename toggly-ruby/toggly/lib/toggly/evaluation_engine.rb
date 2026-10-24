@@ -142,8 +142,8 @@ module Toggly
         end
       end
 
-      result&.reason = "default_enabled"
-      true
+      result&.reason = "no_match"
+      false
     end
 
     def log_warn(message)

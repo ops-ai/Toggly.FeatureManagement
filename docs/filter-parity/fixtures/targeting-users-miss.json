@@ -1,0 +1,19 @@
+{
+  "id": "targeting-users-miss",
+  "description": "Targeting fails when identity is not listed and default rollout is 0%",
+  "featureKey": "filter-targeting",
+  "requirementType": "Any",
+  "filters": [
+    {
+      "name": "Targeting",
+      "parameters": {
+        "Audience.DefaultRolloutPercentage": 0,
+        "Audience.Users:0": "alice"
+      }
+    }
+  ],
+  "context": {
+    "identity": "bob"
+  },
+  "expected": false
+}
