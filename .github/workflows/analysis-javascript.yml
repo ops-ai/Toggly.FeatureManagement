@@ -1,6 +1,8 @@
 name: JavaScript/TypeScript SDKs - Tests & Analysis
 # OPS-1765: Angular host script-only pushes still need this workflow path matched.
 # OPS-1765: keep path-filter PR triggers healthy when only Angular scripts change
+# ubuntu-latest is 26.04. Playwright 1.58, Puppeteer, and the Gatsby packed
+# host cannot run there. Stay on 24.04 until those tools support 26.04.
 
 concurrency:
   group: >-
@@ -113,7 +115,7 @@ env:
 jobs:
   prepare:
     name: Prepare analysis filter
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       filter: ${{ steps.filter.outputs.filter }}
       need_shared_deps: ${{ steps.filter.outputs.need_shared_deps }}
@@ -153,7 +155,7 @@ jobs:
     name: Build shared JS deps
     needs: [prepare]
     if: needs.prepare.outputs.need_shared_deps == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout code
@@ -204,7 +206,7 @@ jobs:
       always() &&
       needs.prepare.outputs.run_test == 'true' &&
       (needs.prepare.outputs.need_shared_deps != 'true' || needs.build-shared-js-deps.result == 'success')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare.outputs.test_matrix) }}
@@ -385,7 +387,7 @@ jobs:
     name: Current Docusaurus packed production host (Node 24)
     needs: [prepare]
     if: needs.prepare.outputs.run_test_docusaurus_host == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout code
@@ -446,7 +448,7 @@ jobs:
     name: Astro ${{ matrix.astro-major }} packed host (Node 24)
     needs: [prepare]
     if: needs.prepare.outputs.run_test_astro_hosts == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -493,7 +495,7 @@ jobs:
     name: Current ${{ matrix.host.sdk }} packed host (Node ${{ matrix.node-version }})
     needs: [prepare]
     if: needs.prepare.outputs.run_test_current_browser_hosts == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare.outputs.browser_host_matrix) }}
@@ -549,7 +551,7 @@ jobs:
       always() &&
       needs.prepare.outputs.run_test_node_server == 'true' &&
       (needs.prepare.outputs.need_shared_deps != 'true' || needs.build-shared-js-deps.result == 'success')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -644,7 +646,7 @@ jobs:
       always() &&
       needs.prepare.outputs.run_smoke_test == 'true' &&
       (needs.prepare.outputs.need_shared_deps != 'true' || needs.build-shared-js-deps.result == 'success')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     strategy:
       fail-fast: false
@@ -712,7 +714,7 @@ jobs:
       always() &&
       needs.prepare.outputs.run_smoke_test_node_server == 'true' &&
       (needs.prepare.outputs.need_shared_deps != 'true' || needs.build-shared-js-deps.result == 'success')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
@@ -760,7 +762,7 @@ jobs:
 
   sonar:
     name: SonarQube Analysis
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [prepare, build-shared-js-deps, test, test-node-server, test-docusaurus-host, dependency-check]
     if: |
       always() &&
@@ -1031,7 +1033,7 @@ jobs:
     name: OWASP Dependency Check
     needs: [prepare]
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
@@ -1085,7 +1087,7 @@ jobs:
 
   summary:
     name: Analysis Summary
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [prepare, test, test-node-server, smoke-test, smoke-test-node-server, solidstart-host, test-current-browser-hosts, test-docusaurus-host, test-astro-hosts, sonar, dependency-check]
     if: always()
 
@@ -1140,7 +1142,7 @@ jobs:
     needs: [prepare]
     if: needs.prepare.outputs.run_solidstart_host == 'true'
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: Toggly.FeatureManagement.Solid
