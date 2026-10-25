@@ -6,6 +6,19 @@ if (!appKey) {
   process.exit(0);
 }
 
+function websocketMessageText(data) {
+  if (typeof data === 'string') {
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return new TextDecoder().decode(Buffer.concat(data));
+  }
+  if (data instanceof ArrayBuffer || Buffer.isBuffer(data)) {
+    return new TextDecoder().decode(data);
+  }
+  throw new Error('Unexpected WebSocket message payload');
+}
+
 const ws = new WebSocket(`wss://definitions.toggly.io/${appKey}/ws`);
 
 const timeout = setTimeout(() => {
@@ -14,11 +27,12 @@ const timeout = setTimeout(() => {
 }, 10_000);
 
 ws.on('message', (data) => {
-  const parsed = JSON.parse(data.toString());
+  const text = websocketMessageText(data);
+  const parsed = JSON.parse(text);
   if (parsed.type === 'ping') return; // skip ping messages
   clearTimeout(timeout);
   if (!parsed.type) {
-    throw new Error(`Missing type field in message: ${data}`);
+    throw new Error(`Missing type field in message: ${text}`);
   }
   if (!['sync', 'definitions', 'evaluated'].includes(parsed.type)) {
     throw new Error(`Expected type=sync, definitions, or evaluated, received ${parsed.type}`);

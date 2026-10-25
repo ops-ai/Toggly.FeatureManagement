@@ -113,7 +113,7 @@ async function loadManifest(env: Env): Promise<PageFeatureMapping> {
     return {};
   }
 
-  const manifest = (await response.json()) as PageFeatureMapping;
+  const manifest: PageFeatureMapping = await response.json();
   manifestCache = manifest;
   manifestCacheTimestamp = now;
   return manifest;
@@ -166,7 +166,7 @@ async function fetchFlagsFromTogglyApi(env: Env): Promise<Flags> {
     if (!response.ok) {
       return {};
     }
-    const payload = (await response.json()) as TogglyApiPayload | Flags;
+    const payload: TogglyApiPayload | Flags = await response.json();
     const defs = (payload as TogglyApiPayload).defs;
     return defs ?? (payload as Flags);
   } catch {
@@ -186,7 +186,7 @@ async function loadFlags(env: Env): Promise<Flags> {
   );
   const cached = await caches.default.match(cacheKey);
   if (cached) {
-    return (await cached.json()) as Flags;
+    return cached.json();
   }
 
   const flags = await fetchFlagsFromTogglyApi(env);
