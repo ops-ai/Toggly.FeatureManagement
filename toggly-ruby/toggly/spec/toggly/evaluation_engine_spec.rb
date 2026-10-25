@@ -101,7 +101,45 @@ RSpec.describe Toggly::EvaluationEngine do
         result = engine.evaluate_with_details(definition, Toggly::Context.new(identity: "bob"))
 
         expect(result.enabled).to be false
-        expect(result.reason).to eq("rule_matched")
+        expect(result.reason).to eq("no_match")
+      end
+
+      it "with requirement Any, evaluates all filters and passes when any matches (reference SDK parity)" do
+        targeting = {
+          "name" => "Targeting",
+          "parameters" => {
+            "Audience.DefaultRolloutPercentage" => 0,
+            "Audience.Users:0" => "alice"
+          }
+        }
+        definition = Toggly::FeatureDefinition.new(
+          feature_key: "any-targeting-then-always-on",
+          enabled: true,
+          requirement_type: "Any",
+          rules: [targeting, { "type" => "always_on" }]
+        )
+
+        expect(engine.evaluate(definition, Toggly::Context.new(identity: "bob"))).to be true
+        expect(engine.evaluate(definition, Toggly::Context.new(identity: "alice"))).to be true
+      end
+
+      it "with requirement All, requires every filter to pass" do
+        targeting = {
+          "name" => "Targeting",
+          "parameters" => {
+            "Audience.DefaultRolloutPercentage" => 0,
+            "Audience.Users:0" => "alice"
+          }
+        }
+        definition = Toggly::FeatureDefinition.new(
+          feature_key: "all-targeting-and-always-on",
+          enabled: true,
+          requirement_type: "All",
+          rules: [targeting, { "type" => "always_on" }]
+        )
+
+        expect(engine.evaluate(definition, Toggly::Context.new(identity: "bob"))).to be false
+        expect(engine.evaluate(definition, Toggly::Context.new(identity: "alice"))).to be true
       end
 
       it "enables sole Targeting at 100% default rollout without identity" do
