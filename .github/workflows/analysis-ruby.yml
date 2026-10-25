@@ -23,10 +23,13 @@ permissions:
   contents: read
   security-events: write
 
+# ubuntu-latest is Ubuntu 26.04. Ruby 3.2 headers do not compile native
+# extensions (google-protobuf) with that image's GCC 15. Stay on 24.04
+# while these gems still support Ruby 3.2.
 jobs:
   test-core:
     name: Test toggly (Ruby ${{ matrix.ruby }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -61,7 +64,7 @@ jobs:
 
   smoke-test:
     name: Smoke Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     # Skip native grpc/protobuf compile; smoke_spec does not need them.
     env:
@@ -88,7 +91,7 @@ jobs:
 
   test-rails:
     name: Test toggly-rails (Ruby ${{ matrix.ruby }}, Rails ${{ matrix.rails }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -145,7 +148,7 @@ jobs:
 
   test-cache:
     name: Test toggly-cache (Ruby ${{ matrix.ruby }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -193,7 +196,7 @@ jobs:
 
   test-packed-hosts:
     name: Test packed hosts (Ruby ${{ matrix.ruby }}, Rails ${{ matrix.rails }}, Redis ${{ matrix.redis }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -231,7 +234,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # RuboCop does not need native grpc/protobuf; keep install lean.
     env:
       BUNDLE_WITHOUT: grpc_test
@@ -272,7 +275,7 @@ jobs:
 
   sonar:
     name: SonarQube Analysis
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [test-core, test-rails, test-cache, test-packed-hosts, dependency-check]
     if: ${{ always() && toJSON(inputs.run_reporting) != 'false' }}
 
@@ -349,12 +352,18 @@ jobs:
           manifest: toggly-ruby/toggly/lib/toggly/version.rb
           suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
 
+      # toggly-sdks-ruby's main branch is still named master. A develop
+      # push is a short-lived branch, and the org cannot read quality-gate
+      # status for those. Publish develop pushes as master. Pull requests
+      # keep automatic PR analysis.
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.3.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
+          GITHUB_REF: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' && 'refs/heads/master' || github.ref }}
+          GITHUB_REF_NAME: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' && 'master' || github.ref_name }}
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-ruby
@@ -366,6 +375,7 @@ jobs:
             -Dsonar.tests=${{ env.SDK_ROOT }}
             -Dsonar.test.inclusions=**/spec/**,**/test/**,**/host-fixtures/**
             -Dsonar.ruby.coverage.reportPaths=coverage/core-coverage.json,coverage/rails-coverage.json,coverage/cache-coverage.json
+            ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' && '-Dsonar.branch.name=master' || '' }}
             -Dsonar.qualitygate.wait=true
 
       - name: Download Dependency Check report (for SonarQube Server)
@@ -395,7 +405,7 @@ jobs:
 
   dependency-check:
     name: OWASP Dependency Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: ${{ toJSON(inputs.run_reporting) != 'false' }}
 
     steps:
@@ -443,7 +453,7 @@ jobs:
 
   summary:
     name: Analysis Summary
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [test-core, smoke-test, test-rails, test-cache, test-packed-hosts, lint, sonar, dependency-check]
     if: always()
 
