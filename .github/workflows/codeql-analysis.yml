@@ -53,12 +53,15 @@ jobs:
     - name: Setup .NET SDKs
       uses: actions/setup-dotnet@v6
       with:
+        # Exact versions skip aka.ms. Floating channels resolve through
+        # aka.ms to dotnetorigin.blob.core.windows.net, which returns 409
+        # for the current 8.0/9.0/10.0 packages. The builds feed has them.
         # Match analysis-dotnet / sdk-dotnet-release: EF targets net10.0.
         dotnet-version: |
-          6.0.x
-          8.0.x
-          9.0.x
-          10.0.x
+          6.0.428
+          8.0.427
+          9.0.320
+          10.0.403
 
     # Repo root has no .sln; the .NET SDK solution lives under Toggly.FeatureManagement.NET/.
     - name: Build with dotnet
