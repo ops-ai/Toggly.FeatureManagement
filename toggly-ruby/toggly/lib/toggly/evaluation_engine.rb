@@ -103,24 +103,13 @@ module Toggly
       matched_rule_index = nil
 
       rules.each_with_index do |rule, index|
-        rule_type = rule["type"] || rule[:type] || rule["name"] || rule[:name] || "AlwaysOn"
-        evaluator = @registry.get(rule_type)
-
-        unless evaluator
-          log_warn("Unknown evaluator type: #{rule_type} for feature #{feature_key}")
+        rule_passed, unknown = evaluate_filter_rule(rule, index, context, feature_key)
+        if unknown
           if all_mode
             result&.reason = "unknown_filter"
             return false
           end
           next
-        end
-
-        begin
-          value = evaluator.evaluate(rule, context, feature_key: feature_key)
-          rule_passed = value == true
-        rescue StandardError => e
-          log_error("Error evaluating filter #{index} for #{feature_key}: #{e.message}")
-          rule_passed = false
         end
 
         if all_mode
@@ -142,17 +131,37 @@ module Toggly
         break
       end
 
-      if result
-        if matched
-          result.matched_rule = matched_rule
-          result.matched_rule_index = matched_rule_index
-          result.reason = "rule_matched"
-        else
-          result.reason = "no_match"
-        end
+      record_filter_group_result(result, matched, matched_rule, matched_rule_index)
+      matched
+    end
+
+    def evaluate_filter_rule(rule, index, context, feature_key)
+      rule_type = rule["type"] || rule[:type] || rule["name"] || rule[:name] || "AlwaysOn"
+      evaluator = @registry.get(rule_type)
+      unless evaluator
+        log_warn("Unknown evaluator type: #{rule_type} for feature #{feature_key}")
+        return [false, true]
       end
 
-      matched
+      begin
+        value = evaluator.evaluate(rule, context, feature_key: feature_key)
+        [value == true, false]
+      rescue StandardError => e
+        log_error("Error evaluating filter #{index} for #{feature_key}: #{e.message}")
+        [false, false]
+      end
+    end
+
+    def record_filter_group_result(result, matched, matched_rule, matched_rule_index)
+      return unless result
+
+      if matched
+        result.matched_rule = matched_rule
+        result.matched_rule_index = matched_rule_index
+        result.reason = "rule_matched"
+      else
+        result.reason = "no_match"
+      end
     end
 
     def log_warn(message)
