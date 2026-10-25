@@ -63,6 +63,115 @@ RSpec.describe Toggly::EvaluationEngine do
         context = Toggly::Context.new(identity: "specific-user")
         expect(engine.evaluate(definition, context)).to be true
       end
+
+      it "fails closed when sole Targeting filter does not match (LiveE2E filter-targeting)" do
+        definition = Toggly::FeatureDefinition.new(
+          feature_key: "filter-targeting",
+          enabled: true,
+          rules: [
+            {
+              "name" => "Targeting",
+              "parameters" => {
+                "Audience.DefaultRolloutPercentage" => 0,
+                "Audience.Users:0" => "alice"
+              }
+            }
+          ]
+        )
+
+        expect(engine.evaluate(definition, Toggly::Context.new(identity: "alice"))).to be true
+        expect(engine.evaluate(definition, Toggly::Context.new(identity: "bob"))).to be false
+      end
+
+      it "reports rule_matched false when Targeting rejects a user" do
+        definition = Toggly::FeatureDefinition.new(
+          feature_key: "filter-targeting",
+          enabled: true,
+          rules: [
+            {
+              "name" => "Targeting",
+              "parameters" => {
+                "Audience.DefaultRolloutPercentage" => 0,
+                "Audience.Users:0" => "alice"
+              }
+            }
+          ]
+        )
+
+        result = engine.evaluate_with_details(definition, Toggly::Context.new(identity: "bob"))
+
+        expect(result.enabled).to be false
+        expect(result.reason).to eq("no_match")
+      end
+
+      it "with requirement Any, evaluates all filters and passes when any matches (reference SDK parity)" do
+        targeting = {
+          "name" => "Targeting",
+          "parameters" => {
+            "Audience.DefaultRolloutPercentage" => 0,
+            "Audience.Users:0" => "alice"
+          }
+        }
+        definition = Toggly::FeatureDefinition.new(
+          feature_key: "any-targeting-then-always-on",
+          enabled: true,
+          requirement_type: "Any",
+          rules: [targeting, { "type" => "always_on" }]
+        )
+
+        expect(engine.evaluate(definition, Toggly::Context.new(identity: "bob"))).to be true
+        expect(engine.evaluate(definition, Toggly::Context.new(identity: "alice"))).to be true
+      end
+
+      it "with requirement All, requires every filter to pass" do
+        targeting = {
+          "name" => "Targeting",
+          "parameters" => {
+            "Audience.DefaultRolloutPercentage" => 0,
+            "Audience.Users:0" => "alice"
+          }
+        }
+        definition = Toggly::FeatureDefinition.new(
+          feature_key: "all-targeting-and-always-on",
+          enabled: true,
+          requirement_type: "All",
+          rules: [targeting, { "type" => "always_on" }]
+        )
+
+        expect(engine.evaluate(definition, Toggly::Context.new(identity: "bob"))).to be false
+        expect(engine.evaluate(definition, Toggly::Context.new(identity: "alice"))).to be true
+      end
+
+      it "enables sole Targeting at 100% default rollout without identity" do
+        definition = Toggly::FeatureDefinition.new(
+          feature_key: "rollout-all",
+          enabled: true,
+          rules: [
+            {
+              "name" => "Targeting",
+              "parameters" => { "Audience.DefaultRolloutPercentage" => 100 }
+            }
+          ]
+        )
+
+        expect(engine.evaluate(definition, nil)).to be true
+        expect(engine.evaluate(definition, Toggly::Context.new(identity: ""))).to be true
+      end
+
+      it "disables sole Targeting at partial default rollout without identity" do
+        definition = Toggly::FeatureDefinition.new(
+          feature_key: "rollout-partial",
+          enabled: true,
+          rules: [
+            {
+              "name" => "Targeting",
+              "parameters" => { "Audience.DefaultRolloutPercentage" => 50 }
+            }
+          ]
+        )
+
+        expect(engine.evaluate(definition, nil)).to be false
+      end
     end
 
     context "with nil definition" do

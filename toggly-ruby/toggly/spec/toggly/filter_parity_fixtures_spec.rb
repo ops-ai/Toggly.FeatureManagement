@@ -14,6 +14,11 @@ REQUIRED_FILTER_PARITY_IDS = %w[
   user-claims-match
   user-claims-miss
   targeting-groups-match
+  targeting-groups-miss
+  targeting-users-match
+  targeting-users-miss
+  targeting-rollout-100-anonymous
+  targeting-rollout-partial-anonymous
   percentage-missing-fail-closed
   percentage-zero-fail-closed
   unknown-filter-fail-closed

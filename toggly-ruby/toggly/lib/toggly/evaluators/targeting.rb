@@ -22,23 +22,23 @@ module Toggly
       # @param rule [Hash] Rule with users/groups or Audience.* params
       # @param context [Context] Evaluation context
       # @param feature_key [String] The feature key
-      # @return [Boolean, nil] True if matched, false if excluded, nil to continue
+      # @return [Boolean] True if matched, false if excluded or rollout does not apply
       def evaluate(rule, context, feature_key: nil)
-        return nil unless context
+        ctx = context || Context.anonymous
 
         users = collect_users(rule)
         excluded_users = Array(rule_value(rule, "excludedUsers") || rule_value(rule, "excluded_users"))
 
-        if context.identity?
-          return false if excluded_users.any? { |u| u.to_s == context.identity }
-          return true if users.include?(context.identity)
+        if ctx.identity?
+          return false if excluded_users.any? { |u| u.to_s == ctx.identity }
+          return true if users.include?(ctx.identity)
         end
 
         groups = collect_groups(rule)
         excluded_groups = Array(rule_value(rule, "excludedGroups") || rule_value(rule, "excluded_groups"))
 
-        return false if excluded_groups.any? { |g| context.in_group?(g) }
-        return true if groups.any? { |g| context.in_group?(g) }
+        return false if excluded_groups.any? { |g| ctx.in_group?(g) }
+        return true if groups.any? { |g| ctx.in_group?(g) }
 
         default_percentage = SegmentHelpers.as_float(
           rule,
@@ -48,10 +48,11 @@ module Toggly
           "default_percentage",
           "Percentage"
         )
-        return StickyHash.compute_percentile(context.identity, feature_key.to_s) < default_percentage if default_percentage&.positive? && context.identity?
+        return false if default_percentage.nil? || default_percentage <= 0
+        return true if default_percentage >= 100
+        return false unless ctx.identity?
 
-        # No match — continue evaluation for legacy sequential rules
-        nil
+        StickyHash.compute_percentile(ctx.identity, feature_key.to_s) < default_percentage
       end
 
       private

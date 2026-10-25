@@ -82,7 +82,8 @@ module Toggly
         return evaluate_filter_group(user_rules, definition.requirement_type, context, definition.feature_key, result)
       end
 
-      sequential_rules(user_rules.empty? ? definition.rules : user_rules, definition, context, result)
+      rules = user_rules.empty? ? definition.rules : user_rules
+      evaluate_filter_group(rules, definition.requirement_type, context, definition.feature_key, result)
     end
 
     def evaluate_entity_group(definition, rules, context)
@@ -96,54 +97,71 @@ module Toggly
 
     def evaluate_filter_group(rules, requirement_type, context, feature_key, result)
       req = (requirement_type || "Any").to_s
-      evaluations = rules.map do |rule|
-        rule_type = rule["type"] || rule[:type] || rule["name"] || rule[:name] || "AlwaysOn"
-        evaluator = @registry.get(rule_type)
-        next false unless evaluator
+      all_mode = req.casecmp?("All")
+      matched = false
+      matched_rule = nil
+      matched_rule_index = nil
 
-        begin
-          value = evaluator.evaluate(rule, context, feature_key: feature_key)
-          value == true
-        rescue StandardError
-          false
-        end
-      end
-      passed = req.casecmp?("All") ? evaluations.all? : evaluations.any?
-      result&.reason = passed ? "rule_matched" : "no_match" if result
-      passed
-    end
-
-    def sequential_rules(rules, definition, context, result)
       rules.each_with_index do |rule, index|
-        rule_type = rule["type"] || rule[:type] || rule["name"] || rule[:name] || "AlwaysOn"
-        evaluator = @registry.get(rule_type)
-
-        unless evaluator
-          log_warn("Unknown evaluator type: #{rule_type} for feature #{definition.feature_key}")
-          result&.reason = "unknown_filter"
-          return false
-        end
-
-        begin
-          evaluation = evaluator.evaluate(rule, context, feature_key: definition.feature_key)
-
-          next if evaluation.nil?
-
-          if result
-            result.matched_rule = rule
-            result.matched_rule_index = index
-            result.reason = "rule_matched"
+        rule_passed, unknown = evaluate_filter_rule(rule, index, context, feature_key)
+        if unknown
+          if all_mode
+            result&.reason = "unknown_filter"
+            return false
           end
-
-          return evaluation
-        rescue StandardError => e
-          log_error("Error evaluating rule #{index} for #{definition.feature_key}: #{e.message}")
           next
         end
+
+        if all_mode
+          unless rule_passed
+            result&.reason = "no_match" if result
+            return false
+          end
+          matched = true
+          matched_rule = rule
+          matched_rule_index = index
+          next
+        end
+
+        next unless rule_passed
+
+        matched = true
+        matched_rule = rule
+        matched_rule_index = index
+        break
       end
 
-      result&.reason = "default_enabled"
-      true
+      record_filter_group_result(result, matched, matched_rule, matched_rule_index)
+      matched
+    end
+
+    def evaluate_filter_rule(rule, index, context, feature_key)
+      rule_type = rule["type"] || rule[:type] || rule["name"] || rule[:name] || "AlwaysOn"
+      evaluator = @registry.get(rule_type)
+      unless evaluator
+        log_warn("Unknown evaluator type: #{rule_type} for feature #{feature_key}")
+        return [false, true]
+      end
+
+      begin
+        value = evaluator.evaluate(rule, context, feature_key: feature_key)
+        [value == true, false]
+      rescue StandardError => e
+        log_error("Error evaluating filter #{index} for #{feature_key}: #{e.message}")
+        [false, false]
+      end
+    end
+
+    def record_filter_group_result(result, matched, matched_rule, matched_rule_index)
+      return unless result
+
+      if matched
+        result.matched_rule = matched_rule
+        result.matched_rule_index = matched_rule_index
+        result.reason = "rule_matched"
+      else
+        result.reason = "no_match"
+      end
     end
 
     def log_warn(message)
