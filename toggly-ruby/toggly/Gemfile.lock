@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    toggly (1.4.3)
+    toggly (2.0.0)
 
 GEM
   remote: https://rubygems.org/
