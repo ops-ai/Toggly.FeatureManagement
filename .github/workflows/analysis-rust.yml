@@ -304,12 +304,18 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: test -n "${SONAR_TOKEN}" || { echo "SonarCloud token is required"; exit 1; }
 
+      # toggly-sdks-rust's main branch is still named master. A develop
+      # push is a short-lived branch, and the org cannot read quality-gate
+      # status for those. Publish develop pushes as master. Pull requests
+      # keep automatic PR analysis. The self-hosted server scan stays on develop.
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.3.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
+          GITHUB_REF: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' && 'refs/heads/master' || github.ref }}
+          GITHUB_REF_NAME: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' && 'master' || github.ref_name }}
         with:
           projectBaseDir: ${{ env.SDK_ROOT }}
           args: >
@@ -325,6 +331,7 @@ jobs:
             -Dsonar.issue.ignore.multicriteria=kidSha1
             -Dsonar.issue.ignore.multicriteria.kidSha1.ruleKey=rust:S4790
             -Dsonar.issue.ignore.multicriteria.kidSha1.resourceKey=**/jwks.rs
+            ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' && format('-Dsonar.branch.name=master -Dsonar.scm.revision={0}', github.sha) || '' }}
             -Dsonar.qualitygate.wait=true
 
       - name: Download Dependency Check report (for SonarQube Server)

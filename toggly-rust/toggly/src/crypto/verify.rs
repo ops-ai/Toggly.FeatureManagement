@@ -90,8 +90,8 @@ mod tests {
     use super::*;
     use crate::definitions::Jwk;
     use p256::ecdsa::{signature::hazmat::PrehashSigner, SigningKey};
+    use p256::elliptic_curve::Generate;
     use p256::SecretKey;
-    use rand::rngs::OsRng;
     use sha1::{Digest, Sha1};
 
     fn pad32(b: &[u8]) -> [u8; 32] {
@@ -102,10 +102,10 @@ mod tests {
     }
 
     fn make_keypair() -> (SigningKey, Jwk) {
-        let secret = SecretKey::random(&mut OsRng);
+        let secret = SecretKey::generate();
         let signing = SigningKey::from(secret);
         let verifying = signing.verifying_key();
-        let point = verifying.to_encoded_point(false);
+        let point = verifying.to_sec1_point(false);
         let x = pad32(point.x().unwrap());
         let y = pad32(point.y().unwrap());
 
@@ -130,7 +130,7 @@ mod tests {
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 
     fn sign_p1363(signing: &SigningKey, hash: &[u8]) -> Vec<u8> {
-        let (sig, _) = signing.sign_prehash(hash).expect("sign");
+        let sig: p256::ecdsa::Signature = signing.sign_prehash(hash).expect("sign");
         sig.to_bytes().to_vec()
     }
 
