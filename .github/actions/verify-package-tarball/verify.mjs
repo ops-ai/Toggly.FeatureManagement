@@ -115,7 +115,10 @@ try {
   }
   const { tarballSrc, filename } = packed;
   const tarball = path.join(packDir, filename);
-  fs.renameSync(tarballSrc, tarball);
+  // Hosted runners mount /tmp on a different filesystem than the workspace.
+  // rename() then fails with EXDEV and the publish never reaches npm.
+  fs.copyFileSync(tarballSrc, tarball);
+  fs.rmSync(tarballSrc, { force: true });
   console.log(`Packed ${filename} (${packed.via})`);
 
   const packedManifest = JSON.parse(
