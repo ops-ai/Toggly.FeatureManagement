@@ -26,12 +26,12 @@ coroutines = "1.10.2"
 kotlinxSerialization = "1.7.3"
 
 # Networking
-okhttp = "4.12.0"
+okhttp = "4.12.1"
 retrofit = "2.11.0"
 
 # Storage
 room = "2.6.1"
-datastore = "1.1.1"
+datastore = "1.3.0"
 
 # DI
 hilt = "2.60.1"
