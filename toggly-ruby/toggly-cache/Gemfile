@@ -8,7 +8,7 @@ gem "toggly", path: "../toggly"
 
 group :development, :test do
   gem "mock_redis", "~> 0.44"
-  gem "parallel", "~> 1.27"
+  gem "parallel", "~> 2.3"
   gem "rake", "~> 13.0"
   gem "rspec", "~> 3.12"
   gem "rubocop", "~> 1.90", require: false
