@@ -7,7 +7,7 @@ gemspec
 gem "toggly", path: "../toggly"
 
 group :development, :test do
-  gem "parallel", "~> 1.27"
+  gem "parallel", "~> 2.3"
   # Ruby 4 no longer ships OpenStruct as a default gem; the Rails specs use it
   # to construct request users and controller fixtures.
   gem "ostruct", "~> 0.6"
