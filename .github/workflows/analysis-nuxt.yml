@@ -1,4 +1,6 @@
 name: Nuxt SDKs - Tests & Analysis
+# ubuntu-latest is 26.04. Locked Nuxt packed-host consumers install Playwright
+# from their lockfile; Playwright 1.58 cannot install Chromium on 26.04 yet.
 
 on:
   pull_request:
@@ -125,7 +127,7 @@ jobs:
   packed-host:
     name: Packed Nuxt ${{ matrix.nuxt-version }} host (Node ${{ matrix.node-version }})
     needs: [build-shared-js-deps]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
       fail-fast: false
