@@ -1,6 +1,6 @@
 import {verifyBrowserCleanup} from './browser-cleanup.mjs'
 import {bounded,withResources,closeServer,stopChild,runOwned,launchBrowser,readHttp,clearBrowserHeaders} from './owned-resources.mjs'
-import { mkdtemp, cp, writeFile, readFile, mkdir, readdir, rm } from 'node:fs/promises'
+import { mkdtemp, cp, writeFile, readFile, mkdir, readdir, rm, access } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, resolve, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -93,7 +93,20 @@ for (const name of ['core', 'client', 'server', '']) {
 }
 const segmentsRoot = resolve(root, '../toggly-segments')
 const segmentsPackage = JSON.parse(await readFile(join(segmentsRoot, 'package.json')))
-await run('npm', ['run', 'build'], segmentsRoot)
+const segmentsDist = join(segmentsRoot, 'dist', 'index.js')
+let segmentsBuilt = false
+try {
+  await access(segmentsDist)
+  segmentsBuilt = true
+} catch {}
+if (!segmentsBuilt) {
+  try {
+    await run('npm', ['ci'], segmentsRoot)
+  } catch {
+    await run('npm', ['install'], segmentsRoot)
+  }
+  await run('npm', ['run', 'build'], segmentsRoot)
+}
 await run('npm', ['pack', '--pack-destination', join(work, 'artifacts')], segmentsRoot)
 dependencies[segmentsPackage.name] =
   `file:artifacts/${segmentsPackage.name.replace('@', '').replace('/', '-')}-${segmentsPackage.version}.tgz`

@@ -4,6 +4,10 @@ import { test } from 'node:test';
 import { failedRequiredJobs } from '../actions/verify-required-jobs/verify-required-jobs.mjs';
 
 const workflow = readFileSync(new URL('./analysis-nuxt.yml', import.meta.url), 'utf8');
+const packedHostRunner = readFileSync(
+  new URL('../../Toggly.FeatureManagement.Nuxt/tests/hosts/run.mjs', import.meta.url),
+  'utf8',
+);
 
 function job(name) {
   const start = workflow.indexOf(`\n  ${name}:\n`);
@@ -68,6 +72,16 @@ test('Nuxt reporting jobs skip only when run_reporting is explicitly false', () 
   for (const eventName of ['pull_request', 'workflow_dispatch']) {
     assert.equal(reportingIsSkipped(''), false, `${eventName} direct analysis runs reporting`);
   }
+});
+
+test('packed host runner uses restored segments dist without requiring local tsc', () => {
+  assert.match(packedHostRunner, /const segmentsDist = join\(segmentsRoot, 'dist', 'index\.js'\)/);
+  assert.match(packedHostRunner, /if \(!segmentsBuilt\)/);
+  assert.match(packedHostRunner, /await run\('npm', \['ci'\], segmentsRoot\)/);
+  assert.doesNotMatch(
+    packedHostRunner,
+    /const segmentsPackage[\s\S]*?await run\('npm', \['run', 'build'\], segmentsRoot\)\s*await run\('npm', \['pack'/,
+  );
 });
 
 test('Nuxt summary requires Sonar and permits only explicit reporting skips', () => {
