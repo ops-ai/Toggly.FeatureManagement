@@ -290,6 +290,9 @@ impl Evaluator for TargetingEvaluator {
             ],
         )
         .unwrap_or(0.0);
+        if default_percentage >= 100.0 {
+            return Ok(true);
+        }
         if default_percentage > 0.0 {
             if let Some(identity) = identity_str(context) {
                 return Ok(compute_percentile(identity, feature_key) < default_percentage);
@@ -716,6 +719,22 @@ mod tests {
             .group("free")
             .build();
         assert!(!evaluator.evaluate("test", &filter, &context2).unwrap());
+    }
+
+    #[test]
+    fn test_targeting_default_rollout_anonymous() {
+        let evaluator = TargetingEvaluator;
+        let full = make_filter(
+            "Targeting",
+            serde_json::json!({"Audience.DefaultRolloutPercentage": 100}),
+        );
+        let partial = make_filter(
+            "Targeting",
+            serde_json::json!({"Audience.DefaultRolloutPercentage": 50}),
+        );
+        let anonymous = EvalContext::default();
+        assert!(evaluator.evaluate("feature", &full, &anonymous).unwrap());
+        assert!(!evaluator.evaluate("feature", &partial, &anonymous).unwrap());
     }
 
     #[test]

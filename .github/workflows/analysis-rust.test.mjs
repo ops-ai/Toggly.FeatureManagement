@@ -70,7 +70,10 @@ test('rust SonarCloud and Server scans require credentials and distinct quality 
   assert.match(cloud, /SONAR_HOST_URL: https:\/\/sonarcloud\.io/);
   assert.match(cloud, /-Dsonar\.organization=ops-ai/);
   assert.match(cloud, /-Dsonar\.qualitygate\.wait=true/);
+  assert.match(cloud, /sonar\.branch\.name=master/);
+  assert.match(cloud, /refs\/heads\/develop/);
   assert.doesNotMatch(cloud, /continue-on-error/);
+  assert.doesNotMatch(server, /sonar\.branch\.name=master/);
   assert.match(server, /SONAR_HOST_URL: \$\{\{ secrets\.SONAR_HOST_URL \}\}/);
   assert.doesNotMatch(server, /-Dsonar\.organization=ops-ai/);
   assert.match(server, /-Dsonar\.qualitygate\.wait=true/);

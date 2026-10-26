@@ -3,8 +3,7 @@
 use crate::definitions::Jwk;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use p256::ecdsa::VerifyingKey;
-use p256::elliptic_curve::sec1::FromEncodedPoint;
-use p256::{EncodedPoint, PublicKey};
+use p256::PublicKey;
 use sha1::{Digest, Sha1};
 use std::collections::HashSet;
 use thiserror::Error;
@@ -91,11 +90,8 @@ pub fn validate_and_parse_es256_key(
     uncompressed.extend_from_slice(&x_bytes);
     uncompressed.extend_from_slice(&y_bytes);
 
-    let point = EncodedPoint::from_bytes(&uncompressed)
-        .map_err(|e| DecodeB64Error::InvalidPoint(e.to_string()))?;
-    let public_key = PublicKey::from_encoded_point(&point)
-        .into_option()
-        .ok_or_else(|| DecodeB64Error::InvalidPoint("failed to decode public key".to_string()))?;
+    let public_key = PublicKey::from_sec1_bytes(&uncompressed)
+        .map_err(|_| DecodeB64Error::InvalidPoint("failed to decode public key".to_string()))?;
 
     Ok(VerifyingKey::from(public_key))
 }
