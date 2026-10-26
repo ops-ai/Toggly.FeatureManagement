@@ -11,8 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Require Ruby 3.3 or newer. Ruby 3.2 reached end of life on April 1, 2026.
 
-## [1.4.3] - 2026-10-23
 ### Fixed
+
 - Sole-filter flags no longer default to enabled when evaluators return `nil`
   (e.g. Targeting with a non-listed user and 0% default rollout). Sequential
   multi-rule chains still fall through on `nil` [OPS-2011].
