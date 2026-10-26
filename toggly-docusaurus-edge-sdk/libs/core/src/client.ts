@@ -335,7 +335,7 @@ export function createTogglyClientCore(
         headers: { Accept: 'application/json' },
         fetchImpl: resolvedFetch,
       });
-      const flags = (verifySignatures ? (parsed as Flags) : unwrapDefsPayload(parsed)) as Flags;
+      const flags: Flags = verifySignatures ? (parsed as Flags) : unwrapDefsPayload(parsed);
 
       if (isDebug) {
         console.log(`Toggly.fetchFeatureFlags - ${JSON.stringify(flags)}`);

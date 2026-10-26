@@ -41,7 +41,7 @@ async function fetchManifest(env: Env): Promise<PageFeatureMapping> {
   }
 
   try {
-    const manifest = (await response.json()) as PageFeatureMapping;
+    const manifest: PageFeatureMapping = await response.json();
     return manifest;
   } catch (error) {
     throw new Error(`Failed to parse manifest JSON: ${error instanceof Error ? error.message : String(error)}`);
@@ -67,7 +67,7 @@ export async function getManifest(
   if (cache) {
     const cachedResponse = await cache.match(cacheKey);
     if (cachedResponse) {
-      const manifest = (await cachedResponse.json()) as PageFeatureMapping;
+      const manifest: PageFeatureMapping = await cachedResponse.json();
       // Update in-memory cache
       manifestCache = manifest;
       manifestCacheTimestamp = now;

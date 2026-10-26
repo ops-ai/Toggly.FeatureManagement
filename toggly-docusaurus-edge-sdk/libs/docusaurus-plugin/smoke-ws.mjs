@@ -1,4 +1,5 @@
 import WebSocket from 'ws';
+import { websocketMessageText } from './src/lib/websocket-message-text.mjs';
 
 const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
 
@@ -14,11 +15,12 @@ const timeout = setTimeout(() => {
 }, 10_000);
 
 ws.on('message', (data) => {
-  const parsed = JSON.parse(data.toString());
+  const text = websocketMessageText(data);
+  const parsed = JSON.parse(text);
   if (parsed.type === 'ping') return; // skip ping messages
   clearTimeout(timeout);
   if (!parsed.type) {
-    throw new Error(`Missing type field in message: ${data}`);
+    throw new Error(`Missing type field in message: ${text}`);
   }
   if (!['sync', 'definitions', 'evaluated'].includes(parsed.type)) {
     throw new Error(`Expected type=sync, definitions, or evaluated, received ${parsed.type}`);

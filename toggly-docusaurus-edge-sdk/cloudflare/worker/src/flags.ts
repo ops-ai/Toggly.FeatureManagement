@@ -93,7 +93,7 @@ async function fetchFlagsFromTogglyApi(env: Env): Promise<Flags> {
     if (!response.ok) {
       throw new Error(`Failed to fetch flags: ${response.status} ${response.statusText}`);
     }
-    const payload = (await response.json()) as TogglyApiPayload | Flags;
+    const payload: TogglyApiPayload | Flags = await response.json();
     const defs = (payload as TogglyApiPayload).defs;
     return (defs ?? (payload as Flags)) as Flags;
   } finally {
@@ -133,7 +133,7 @@ export async function getFlags(
   if (cache) {
     const cachedResponse = await cache.match(cacheRequest);
     if (cachedResponse) {
-      const flags = (await cachedResponse.json()) as Flags;
+      const flags: Flags = await cachedResponse.json();
       updateFlagsMemoryCache(flags);
       recorder?.recordDefinitionCacheHit();
       return flags;
