@@ -1,6 +1,6 @@
 import {verifyBrowserCleanup} from './browser-cleanup.mjs'
 import {bounded,withResources,closeServer,stopChild,runOwned,launchBrowser,readHttp,clearBrowserHeaders} from './owned-resources.mjs'
-import { mkdtemp, cp, writeFile, readFile, mkdir, readdir, rm, access } from 'node:fs/promises'
+import { mkdtemp, cp, writeFile, readFile, mkdir, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, resolve, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -11,6 +11,7 @@ import { gunzipSync } from 'node:zlib'
 import assert from 'node:assert/strict'
 import { verifyAutomaticStartup } from './automatic-startup.test.mjs'
 import { verifyRuntimePolicy } from './runtime-policy.test.mjs'
+import { ensureTogglySegmentsDist } from '../../../../.github/scripts/ensure-toggly-segments-dist.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const version = process.argv[2] || '4.5.2'
@@ -93,20 +94,7 @@ for (const name of ['core', 'client', 'server', '']) {
 }
 const segmentsRoot = resolve(root, '../toggly-segments')
 const segmentsPackage = JSON.parse(await readFile(join(segmentsRoot, 'package.json')))
-const segmentsDist = join(segmentsRoot, 'dist', 'index.js')
-let segmentsBuilt = false
-try {
-  await access(segmentsDist)
-  segmentsBuilt = true
-} catch {}
-if (!segmentsBuilt) {
-  try {
-    await run('npm', ['ci'], segmentsRoot)
-  } catch {
-    await run('npm', ['install'], segmentsRoot)
-  }
-  await run('npm', ['run', 'build'], segmentsRoot)
-}
+await ensureTogglySegmentsDist(segmentsRoot, (args) => run('npm', args, segmentsRoot))
 await run('npm', ['pack', '--pack-destination', join(work, 'artifacts')], segmentsRoot)
 dependencies[segmentsPackage.name] =
   `file:artifacts/${segmentsPackage.name.replace('@', '').replace('/', '-')}-${segmentsPackage.version}.tgz`

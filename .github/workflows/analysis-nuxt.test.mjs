@@ -79,13 +79,11 @@ test('packed host jobs stay on ubuntu-24.04 for Playwright consumer installs', (
   assert.match(packedHost, /runs-on: ubuntu-24\.04/);
 });
 
-test('packed host runner uses restored segments dist without requiring local tsc', () => {
-  assert.match(packedHostRunner, /const segmentsDist = join\(segmentsRoot, 'dist', 'index\.js'\)/);
-  assert.match(packedHostRunner, /if \(!segmentsBuilt\)/);
-  assert.match(packedHostRunner, /await run\('npm', \['ci'\], segmentsRoot\)/);
+test('packed host runner uses shared segments dist helper before packing', () => {
+  assert.match(packedHostRunner, /ensureTogglySegmentsDist/);
   assert.doesNotMatch(
     packedHostRunner,
-    /const segmentsPackage[\s\S]*?await run\('npm', \['run', 'build'\], segmentsRoot\)\s*await run\('npm', \['pack'/,
+    /await run\('npm', \['run', 'build'\], segmentsRoot\)/,
   );
 });
 

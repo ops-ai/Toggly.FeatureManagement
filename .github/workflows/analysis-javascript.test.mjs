@@ -403,6 +403,17 @@ test('excludes fixture and packaging lockfiles from the JS OWASP Node Audit scan
   assert.ok(aggregate.owaspPaths.includes('Toggly.FeatureManagement.Angular/projects/ngx-feature-flags-toggly'));
 });
 
+test('Gatsby packed host restores segments dist and isolates gatsby-worker diagnostics', () => {
+  const packedHost = readFileSync(
+    new URL('../../Toggly.FeatureManagement.Gatsby/tests/packed-host.mjs', import.meta.url),
+    'utf8',
+  );
+  assert.match(packedHost, /ensureTogglySegmentsDist/);
+  assert.match(packedHost, /TMPDIR: gatsbyTmp/);
+  assert.match(packedHost, /node_modules\/gatsby\/dist\/bin\/gatsby\.js/);
+  assert.doesNotMatch(packedHost, /NODE_OPTIONS:.*build-diagnostics/);
+});
+
 test('runs the current Gatsby packed host on Node 24', () => {
   assert.match(workflow, /'Toggly\.FeatureManagement\.Gatsby\/\*\*'/);
   for (const sdks of ['all', 'Gatsby']) {

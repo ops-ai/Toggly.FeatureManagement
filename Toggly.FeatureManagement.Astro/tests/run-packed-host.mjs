@@ -11,6 +11,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 import {withResources, bounded, closeServer, stopChild, ownBrowser, readHttp} from './host-resources.mjs';
+import { ensureTogglySegmentsDist } from '../../../.github/scripts/ensure-toggly-segments-dist.mjs';
 
 await withResources(async defer => {
 const packageDir = fileURLToPath(new URL('..', import.meta.url));
@@ -65,7 +66,7 @@ if (registryVersion) {
   segmentsDependency = undefined;
 } else {
   const segmentsDir = path.join(packageDir, '..', 'toggly-segments');
-  await run([npm, 'run', 'build'], segmentsDir);
+  await ensureTogglySegmentsDist(segmentsDir, (args) => run([npm, ...args], segmentsDir));
   await run([npm, 'pack', '--pack-destination', root], segmentsDir);
   const segmentsManifest = JSON.parse(await readFile(path.join(segmentsDir, 'package.json')));
   const segmentsName = `ops-ai-toggly-segments-${segmentsManifest.version}.tgz`;
