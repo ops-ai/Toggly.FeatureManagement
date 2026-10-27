@@ -14,6 +14,8 @@ on:
       - 'toggly-signed-defs/**'
       - 'toggly-client-telemetry/**'
       - '.github/workflows/analysis-nuxt.yml'
+      - '.github/workflows/analysis-nuxt.test.mjs'
+      - '.github/scripts/ensure-toggly-segments-dist.mjs'
       - '.github/actions/install-local-client-telemetry/**'
       - '.github/actions/install-local-client-telemetry-pnpm/**'
       - '.github/workflows/sdk-nuxt-release.yml'
@@ -94,6 +96,11 @@ jobs:
 
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
+
+      - name: Verify Nuxt analysis workflow contract
+        if: matrix.package == 'nuxt-toggly-core'
+        working-directory: .
+        run: node --test .github/workflows/analysis-nuxt.test.mjs
 
       - name: Install dependencies with local client-telemetry
         uses: ./.github/actions/install-local-client-telemetry-pnpm
