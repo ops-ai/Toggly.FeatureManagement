@@ -11,7 +11,7 @@ import { gunzipSync } from 'node:zlib'
 import assert from 'node:assert/strict'
 import { verifyAutomaticStartup } from './automatic-startup.test.mjs'
 import { verifyRuntimePolicy } from './runtime-policy.test.mjs'
-import { ensureTogglySegmentsDist } from '../../../../.github/scripts/ensure-toggly-segments-dist.mjs'
+import { ensureTogglySegmentsDist } from '../../../.github/scripts/ensure-toggly-segments-dist.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const version = process.argv[2] || '4.5.2'
