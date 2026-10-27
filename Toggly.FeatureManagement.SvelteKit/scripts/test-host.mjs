@@ -12,7 +12,7 @@ import semver from 'semver';
 import { WebSocketServer } from 'ws';
 import { chromium } from '@playwright/test';
 import { run, cleanupAll, closeBrowser, stopChild } from './host-resources.mjs';
-import { ensureTogglySegmentsDist } from '../../../.github/scripts/ensure-toggly-segments-dist.mjs';
+import { ensureTogglySegmentsDist } from '../../.github/scripts/ensure-toggly-segments-dist.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const hostFixture = process.argv[2] || 'host';

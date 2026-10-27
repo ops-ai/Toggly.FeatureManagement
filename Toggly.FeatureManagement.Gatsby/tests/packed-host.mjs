@@ -10,7 +10,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { gunzipSync } from 'node:zlib';
-import { ensureTogglySegmentsDist } from '../../../.github/scripts/ensure-toggly-segments-dist.mjs';
+import { ensureTogglySegmentsDist } from '../../.github/scripts/ensure-toggly-segments-dist.mjs';
 
 const packageDirectory = dirname(fileURLToPath(import.meta.url));
 const sdkDirectory = dirname(packageDirectory);

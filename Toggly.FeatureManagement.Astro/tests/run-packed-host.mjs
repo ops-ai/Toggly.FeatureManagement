@@ -11,7 +11,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 import {withResources, bounded, closeServer, stopChild, ownBrowser, readHttp} from './host-resources.mjs';
-import { ensureTogglySegmentsDist } from '../../../.github/scripts/ensure-toggly-segments-dist.mjs';
+import { ensureTogglySegmentsDist } from '../../.github/scripts/ensure-toggly-segments-dist.mjs';
 
 await withResources(async defer => {
 const packageDir = fileURLToPath(new URL('..', import.meta.url));
