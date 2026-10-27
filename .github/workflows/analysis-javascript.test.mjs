@@ -412,6 +412,11 @@ test('Gatsby packed host restores segments dist and isolates gatsby-worker diagn
   assert.match(packedHost, /TMPDIR: gatsbyTmp/);
   assert.match(packedHost, /node_modules\/gatsby\/dist\/bin\/gatsby\.js/);
   assert.doesNotMatch(packedHost, /NODE_OPTIONS:.*build-diagnostics/);
+  const diagnostics = readFileSync(
+    new URL('../../Toggly.FeatureManagement.Gatsby/tests/build-diagnostics.cjs', import.meta.url),
+    'utf8',
+  );
+  assert.match(diagnostics, /GATSBY_WORKER_ID/);
 });
 
 test('runs the current Gatsby packed host on Node 24', () => {
