@@ -1,4 +1,6 @@
 name: Nuxt SDKs - Tests & Analysis
+# ubuntu-latest is 26.04. Locked Nuxt packed-host consumers install Playwright
+# from their lockfile; Playwright 1.58 cannot install Chromium on 26.04 yet.
 
 on:
   pull_request:
@@ -12,6 +14,8 @@ on:
       - 'toggly-signed-defs/**'
       - 'toggly-client-telemetry/**'
       - '.github/workflows/analysis-nuxt.yml'
+      - '.github/workflows/analysis-nuxt.test.mjs'
+      - '.github/scripts/ensure-toggly-segments-dist.mjs'
       - '.github/actions/install-local-client-telemetry/**'
       - '.github/actions/install-local-client-telemetry-pnpm/**'
       - '.github/workflows/sdk-nuxt-release.yml'
@@ -93,6 +97,11 @@ jobs:
       - name: Restore shared JS deps
         uses: ./.github/actions/download-shared-js-deps
 
+      - name: Verify Nuxt analysis workflow contract
+        if: matrix.package == 'nuxt-toggly-core'
+        working-directory: .
+        run: node --test .github/workflows/analysis-nuxt.test.mjs
+
       - name: Install dependencies with local client-telemetry
         uses: ./.github/actions/install-local-client-telemetry-pnpm
         with:
@@ -125,7 +134,7 @@ jobs:
   packed-host:
     name: Packed Nuxt ${{ matrix.nuxt-version }} host (Node ${{ matrix.node-version }})
     needs: [build-shared-js-deps]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
       fail-fast: false

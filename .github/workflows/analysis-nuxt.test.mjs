@@ -4,6 +4,10 @@ import { test } from 'node:test';
 import { failedRequiredJobs } from '../actions/verify-required-jobs/verify-required-jobs.mjs';
 
 const workflow = readFileSync(new URL('./analysis-nuxt.yml', import.meta.url), 'utf8');
+const packedHostRunner = readFileSync(
+  new URL('../../Toggly.FeatureManagement.Nuxt/tests/hosts/run.mjs', import.meta.url),
+  'utf8',
+);
 
 function job(name) {
   const start = workflow.indexOf(`\n  ${name}:\n`);
@@ -68,6 +72,19 @@ test('Nuxt reporting jobs skip only when run_reporting is explicitly false', () 
   for (const eventName of ['pull_request', 'workflow_dispatch']) {
     assert.equal(reportingIsSkipped(''), false, `${eventName} direct analysis runs reporting`);
   }
+});
+
+test('packed host jobs stay on ubuntu-24.04 for Playwright consumer installs', () => {
+  const packedHost = job('packed-host');
+  assert.match(packedHost, /runs-on: ubuntu-24\.04/);
+});
+
+test('packed host runner uses shared segments dist helper before packing', () => {
+  assert.match(packedHostRunner, /ensureTogglySegmentsDist/);
+  assert.doesNotMatch(
+    packedHostRunner,
+    /await run\('npm', \['run', 'build'\], segmentsRoot\)/,
+  );
 });
 
 test('Nuxt summary requires Sonar and permits only explicit reporting skips', () => {

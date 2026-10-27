@@ -11,6 +11,7 @@ import { gunzipSync } from 'node:zlib'
 import assert from 'node:assert/strict'
 import { verifyAutomaticStartup } from './automatic-startup.test.mjs'
 import { verifyRuntimePolicy } from './runtime-policy.test.mjs'
+import { ensureTogglySegmentsDist } from '../../../.github/scripts/ensure-toggly-segments-dist.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const version = process.argv[2] || '4.5.2'
@@ -93,7 +94,7 @@ for (const name of ['core', 'client', 'server', '']) {
 }
 const segmentsRoot = resolve(root, '../toggly-segments')
 const segmentsPackage = JSON.parse(await readFile(join(segmentsRoot, 'package.json')))
-await run('npm', ['run', 'build'], segmentsRoot)
+await ensureTogglySegmentsDist(segmentsRoot, (args) => run('npm', args, segmentsRoot))
 await run('npm', ['pack', '--pack-destination', join(work, 'artifacts')], segmentsRoot)
 dependencies[segmentsPackage.name] =
   `file:artifacts/${segmentsPackage.name.replace('@', '').replace('/', '-')}-${segmentsPackage.version}.tgz`

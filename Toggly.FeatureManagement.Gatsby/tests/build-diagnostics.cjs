@@ -1,4 +1,8 @@
 // Owned Gatsby build diagnostics only. Never log environment values or request payloads.
+// gatsby-worker forks inherit parent execArgv (--require); skip worker children.
+if (process.env.GATSBY_WORKER_ID || process.env.GATSBY_WORKER_MODULE_PATH) {
+  return;
+}
 const { createHook } = require('node:async_hooks');
 const active = new Map();
 const started = Date.now();

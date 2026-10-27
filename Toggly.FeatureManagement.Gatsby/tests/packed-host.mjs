@@ -10,6 +10,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { gunzipSync } from 'node:zlib';
+import { ensureTogglySegmentsDist } from '../../.github/scripts/ensure-toggly-segments-dist.mjs';
 
 const packageDirectory = dirname(fileURLToPath(import.meta.url));
 const sdkDirectory = dirname(packageDirectory);
@@ -445,7 +446,7 @@ try {
   await run('npm', ['run', 'build']);
   await runAsync(process.execPath, [join(packageDirectory, 'provider-ownership.mjs')]);
   const segmentsDirectory = resolve(sdkDirectory, '../toggly-segments');
-  await run('npm', ['run', 'build'], { cwd: segmentsDirectory });
+  await ensureTogglySegmentsDist(segmentsDirectory, (args) => run('npm', args, { cwd: segmentsDirectory }));
   const segmentsPacked = JSON.parse(
     await run('npm', ['pack', '--json', '--pack-destination', temporary], { cwd: segmentsDirectory }),
   )[0];
@@ -513,9 +514,25 @@ try {
     '--target', 'ES2022', '--types', 'react', 'consumer.mts',
   ], { cwd: host, stdio: 'inherit' });
   await runAsync(process.execPath, ['consumer.mjs'], { cwd: host });
-  await runAsync(join(host, 'node_modules', '.bin', 'gatsby'), ['build'], {
-    cwd: host, env: { CI: 'true', GATSBY_TELEMETRY_DISABLED: '1', TOGGLY_GATSBY_BUILD_DIAGNOSTICS: '1', NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --require=${JSON.stringify(join(packageDirectory, 'build-diagnostics.cjs'))}` },
-  });
+  const gatsbyTmp = join(temporary, 'gatsby-tmp');
+  mkdirSync(gatsbyTmp, { recursive: true });
+  const { NODE_OPTIONS: _dropNodeOptions, ...parentEnv } = process.env;
+  const gatsbyBuildEnv = {
+    ...parentEnv,
+    CI: 'true',
+    GATSBY_TELEMETRY_DISABLED: '1',
+    TOGGLY_GATSBY_BUILD_DIAGNOSTICS: '1',
+    TMPDIR: gatsbyTmp,
+    TMP: gatsbyTmp,
+    TEMP: gatsbyTmp,
+  };
+  // Load build diagnostics only on the Gatsby CLI process. NODE_OPTIONS would
+  // propagate into gatsby-worker children and race their signal-exit JSON dumps.
+  await runAsync(process.execPath, [
+    '--require', join(packageDirectory, 'build-diagnostics.cjs'),
+    join(host, 'node_modules/gatsby/dist/bin/gatsby.js'),
+    'build',
+  ], { cwd: host, env: gatsbyBuildEnv });
 
   const pageFeatures = JSON.parse(readFileSync(join(host, 'public', 'toggly-page-features.json'), 'utf8'));
   const config = JSON.parse(readFileSync(join(host, 'public', 'toggly-config.json'), 'utf8'));

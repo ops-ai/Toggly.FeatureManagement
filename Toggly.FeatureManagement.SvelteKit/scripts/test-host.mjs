@@ -12,6 +12,7 @@ import semver from 'semver';
 import { WebSocketServer } from 'ws';
 import { chromium } from '@playwright/test';
 import { run, cleanupAll, closeBrowser, stopChild } from './host-resources.mjs';
+import { ensureTogglySegmentsDist } from '../../.github/scripts/ensure-toggly-segments-dist.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const hostFixture = process.argv[2] || 'host';
@@ -32,7 +33,7 @@ try {
   const coreRoot = join(root, '../Toggly.FeatureManagement.Node/toggly-node-core');
   const segmentsRoot = join(root, '../toggly-segments');
   await run('pnpm', ['pack', '--pack-destination', temporary], coreRoot);
-  await run('npm', ['run', 'build'], segmentsRoot);
+  await ensureTogglySegmentsDist(segmentsRoot, (args) => run('npm', args, segmentsRoot));
   await run('npm', ['pack', '--pack-destination', temporary], segmentsRoot);
   await cp(join(root, 'tests', hostFixture), host, { recursive: true });
   const archive = join(

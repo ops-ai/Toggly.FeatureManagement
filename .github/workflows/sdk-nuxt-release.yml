@@ -103,7 +103,7 @@ jobs:
   publish:
     needs: [resolve, gates]
     if: needs.resolve.outputs.action != 'fail' && needs.gates.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: npm-publish
     defaults:
       run:

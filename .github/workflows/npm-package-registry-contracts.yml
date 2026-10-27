@@ -15,6 +15,8 @@ on:
       - '.github/scripts/wait-javascript-aggregate-analysis.mjs'
       - '.github/workflows/javascript-aggregate-release-gate.yml'
       - '.github/scripts/organize-js-coverage*.mjs'
+      - '.github/scripts/ensure-toggly-segments-dist*.mjs'
+      - '.github/workflows/analysis-nuxt.test.mjs'
       - '.github/workflows/analysis-python.test.mjs'
       - '.github/workflows/analysis-rust.test.mjs'
       - '.github/workflows/analysis-security-events.test.mjs'
@@ -39,6 +41,8 @@ on:
       - '.github/scripts/wait-javascript-aggregate-analysis.mjs'
       - '.github/workflows/javascript-aggregate-release-gate.yml'
       - '.github/scripts/organize-js-coverage*.mjs'
+      - '.github/scripts/ensure-toggly-segments-dist*.mjs'
+      - '.github/workflows/analysis-nuxt.test.mjs'
       - '.github/workflows/analysis-python.test.mjs'
       - '.github/workflows/analysis-rust.test.mjs'
       - '.github/workflows/analysis-security-events.test.mjs'
@@ -109,7 +113,7 @@ jobs:
         run: node --test .github/workflows/analysis-rust.test.mjs
 
       - name: Verify fail-closed JavaScript analysis quality gates
-        run: node --test .github/workflows/analysis-javascript.test.mjs .github/scripts/organize-js-coverage.test.mjs .github/scripts/wait-javascript-aggregate-analysis.test.mjs .github/package-registry/javascript-aggregate-release-gate-contract.test.mjs .github/package-registry/js-coverage-contract.test.mjs
+        run: node --test .github/workflows/analysis-javascript.test.mjs .github/scripts/organize-js-coverage.test.mjs .github/scripts/wait-javascript-aggregate-analysis.test.mjs .github/scripts/ensure-toggly-segments-dist.test.mjs .github/package-registry/javascript-aggregate-release-gate-contract.test.mjs .github/package-registry/js-coverage-contract.test.mjs
 
       - name: Verify Python Sonar test inclusions stay path-scoped
         run: node --test .github/workflows/analysis-python.test.mjs
