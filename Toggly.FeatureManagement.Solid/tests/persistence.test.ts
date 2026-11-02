@@ -530,7 +530,9 @@ describe('restored key and envelope validation', () => {
     vi.setSystemTime(new Date('2026-06-15T12:00:00.000Z'));
     try {
       const now = Math.floor(Date.now() / 1000);
-      const keys = { keys: [{ ...jwks.keys[0], use: 'sig', key_ops: ['verify'], exp: now + 1000 }] };
+      const keys = {
+        keys: [{ ...jwks.keys[0], use: 'sig', key_ops: ['verify'], exp: now + 1000 }],
+      };
       expect((await verifyEnvelope(envelope({ on: true }), keys, {})).definitions).toEqual({
         on: true,
       });
