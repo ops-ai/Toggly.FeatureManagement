@@ -27,6 +27,17 @@
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
   </PropertyGroup>
+  <!--
+    net11.0 is RC. Projects append $(TogglyNet11Tfm) to TargetFrameworks so the
+    TFM is present for local builds and the allow-failure preview job
+    (IncludeNet11Preview=true), but omitted from required CI restore/build/pack.
+    Do not strip TargetFrameworks late in Directory.Build.targets — that leaves a
+    semicolon list in TargetFramework and triggers NETSDK1046.
+  -->
+  <PropertyGroup>
+    <TogglyNet11Tfm>;net11.0</TogglyNet11Tfm>
+    <TogglyNet11Tfm Condition="'$(ExcludeNet11Preview)' == 'true' Or ('$(CI)' == 'true' And '$(IncludeNet11Preview)' != 'true')"></TogglyNet11Tfm>
+  </PropertyGroup>
   <ItemGroup Condition="'$(IsPackable)' != 'false'">
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
   </ItemGroup>
