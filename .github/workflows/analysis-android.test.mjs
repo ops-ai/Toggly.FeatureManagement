@@ -245,8 +245,11 @@ test('preserves Android Java matrix, Gradle checks, native telemetry coverage an
     ['lint', 'Run Android Lint', './gradlew lint'],
     ['build-samples', 'Build release artifacts', './gradlew assembleRelease'],
     ['smoke-test', 'Compile smoke tests', './gradlew :toggly-android-core:compileDebugUnitTestKotlin'],
-    ['smoke-test', 'Run smoke test', './gradlew :toggly-android-core:testDebugUnitTest --tests "io.toggly.core.SmokeTest"'],
   ]) assert.ok(step(job(jobName), stepName).includes(`run: ${command}`));
+  const smokeRun = step(job('smoke-test'), 'Run smoke test');
+  assert.ok(smokeRun.includes('./gradlew :toggly-android-core:testDebugUnitTest --tests "io.toggly.core.SmokeTest"'));
+  assert.match(smokeRun, /for attempt in 1 2 3 4 5/);
+  assert.match(smokeRun, /retrying in \$\{sleep_seconds\}s/);
   assert.match(step(job('api-compatibility'), 'Check API compatibility'), /\.\/gradlew apiCheck/);
   const coverage = job('code-coverage');
   assert.match(coverage, /runs-on: macos-15-intel/);
