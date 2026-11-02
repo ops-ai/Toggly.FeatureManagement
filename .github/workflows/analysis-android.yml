@@ -30,7 +30,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        java: ['17', '21']
+        # AGP 9.5 supports JDK 17+; include 25 (Temurin) alongside LTS 17/21.
+        java: ['17', '21', '25']
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -144,10 +145,10 @@ jobs:
           python -m coverage report --omit='tool/test_*.py' --fail-under=80
           python -m coverage xml --omit='tool/test_*.py' -o coverage.xml
 
-      - name: Measure public acceptance Activity coverage on Android API 35
+      - name: Measure public acceptance Activity coverage on Android API 37
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 37
           arch: x86_64
           disable-animations: true
           working-directory: Toggly.FeatureManagement.Android/acceptance/public-telemetry-host

@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Toolchain: AGP 8.7.3 → 9.5.0 (built-in Kotlin), Gradle 8.14.5 → 9.6.0,
+  Kotlin 2.0.21 → 2.4.21, KSP 2.0.21-1.0.28 → 2.3.13, compileSdk/targetSdk
+  35 → 37 (minSdk 24 unchanged).
+- Dependencies: Compose BOM 2024.12.01 → 2026.09.00, core-ktx 1.15.0 → 1.19.1,
+  lifecycle 2.8.7 → 2.11.0, activity 1.9.3 → 1.13.0, Room 2.6.1 → 2.8.5,
+  DataStore 1.1.1 → 1.3.0, coroutines 1.10.2 → 1.11.0, serialization 1.7.3 →
+  1.12.0, mockk 1.13.17 → 1.14.11, OkHttp 4.12.0 → 4.12.1, Retrofit 2.11.0 →
+  2.12.0 (majors unchanged).
+- CI Java matrix 17/21 → 17/21/25; acceptance emulator API 35 → 37.
+
+### Added
+- Unit tests that drive public flag evaluation from mocked `evaluated-signed`
+  / `evaluated-variants-signed` payloads, plus contract suites that load
+  `docs/filter-parity/fixtures` and `variant-allocator-corpus/cases.json`.
+
 ## 1.9.1
 
 2026-10-12
