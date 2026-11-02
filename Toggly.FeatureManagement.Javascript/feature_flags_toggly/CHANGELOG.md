@@ -2,8 +2,9 @@
 
 ### Changed
 - Replace `uuid` (^9) with `globalThis.crypto.randomUUID()` for anonymous
-  identity minting (same UUID v4 format; available on Node 22+ and modern
-  browsers). Drop `@types/uuid`.
+  identity minting (same UUID v4 format), with a `getRandomValues` UUID-v4
+  fallback for non-localhost HTTP origins where `randomUUID` is unavailable.
+  Drop `@types/uuid`.
 - Bump runtime deps: `rxjs` ^7.5.7 → ^7.8.2, and `@ops-ai/toggly-*` packages to
   current stable minors.
 - Bump dev tooling to current stable (Jest 30, TypeScript 5.9, webpack-cli 7,
