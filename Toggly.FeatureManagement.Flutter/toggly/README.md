@@ -8,7 +8,7 @@ Can be used *WITH* or *WITHOUT* [Toggly.io](https://toggly.io).
 | --- | --- | --- |
 | Declared Dart SDK | `>=2.18.2 <4.0.0` | Keep this floor until a deliberate SemVer bump (OPS-1563 / OPS-1566) |
 | CI | Flutter `stable` channel | Proves current Dart 3 toolchains without raising the pub floor |
-| equatable | `^2.x` | equatable 3 requires Dart ≥3.0 — Dependabot majors ignored until the floor moves |
+| equatable | `^3.0.0` | Requires Dart ≥3.0 to resolve; declared package floor remains `>=2.18.2` |
 
 See repo root [`SUPPORT_MATRIX.md`](../../SUPPORT_MATRIX.md).
 

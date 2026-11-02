@@ -1,6 +1,7 @@
 ## Unreleased
 
 ### Changed
+- Dependency: `equatable` `^2.0.5` → `^3.0.0` (unused transitively by public API; Dart ≥3.0 required to resolve).
 - Dev tooling: `flutter_lints`/`lints` `^2` → `^6` (requires Dart ^3.8 for package development CI).
 - CI now probes Flutter **3.32.0** (oldest resolvable with current dev deps) alongside stable.
 - Example host SDK ceiling widened `<3.0.0` → `<4.0.0` to match the package (floor unchanged).

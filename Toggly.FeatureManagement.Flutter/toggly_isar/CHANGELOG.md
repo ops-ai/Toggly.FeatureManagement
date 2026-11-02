@@ -1,6 +1,7 @@
 ## Unreleased
 
 ### Changed
+- Transitive: resolves `equatable` `^3.0.0` via local `feature_flags_toggly` (no direct dependency).
 - Dev tooling: `flutter_lints`/`lints` `^2` → `^6`.
 
 ## 0.5.0

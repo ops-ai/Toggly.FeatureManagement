@@ -208,12 +208,6 @@ updates:
         update-types:
           - minor
           - patch
-    ignore:
-      # equatable 3 requires Dart >=3.0 and breaks the declared Flutter SDK
-      # floor (>=2.18.2). Defer until Wave 3 raises the Dart floor (OPS-1566).
-      - dependency-name: equatable
-        update-types: ["version-update:semver-major"]
-
   - package-ecosystem: cargo
     directories:
       - "**/*"

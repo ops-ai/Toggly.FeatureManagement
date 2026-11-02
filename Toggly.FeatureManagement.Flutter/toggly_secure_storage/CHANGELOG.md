@@ -1,6 +1,7 @@
 ## Unreleased
 
 ### Changed
+- Transitive: resolves `equatable` `^3.0.0` via local `feature_flags_toggly` (no direct dependency).
 - Dev tooling: `flutter_lints`/`lints` `^2` → `^6`.
 - CI secure-storage plugin matrix now includes **11.2.0** (latest) alongside 9.x/10.x/11.1.1.
 
