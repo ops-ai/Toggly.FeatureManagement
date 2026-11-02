@@ -76,7 +76,9 @@ end
 # Test helpers
 module TestHelpers
   def build_definitions_response(features)
-    { "features" => features }.to_json
+    # Prefer stdlib JSON over ActiveSupport::JSON so the fixture helper does
+    # not depend on Rails/json quirks_mode compatibility across host majors.
+    JSON.generate({ "features" => features })
   end
 
   def stub_definitions_api(app_key:, environment:, features:, status: 200)

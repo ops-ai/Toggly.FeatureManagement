@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- CI Rails hosts bumped to latest patches: 7.2.4 and 8.1.4 (7.0.10, 7.1.6, and
+  8.0.5.1 were already current). Declared floor remains `railties >= 7.0`.
+- Pin development/test `json` to `~> 2.7` so Rails 7.0 / 7.1 / 8.0 hosts keep
+  working (ActiveSupport still passes `quirks_mode` removed in json 3).
+
 ## [0.5.0] - 2026-10-25
 
 ### Changed
