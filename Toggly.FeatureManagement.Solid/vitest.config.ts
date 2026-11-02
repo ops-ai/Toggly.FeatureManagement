@@ -10,7 +10,7 @@ export default defineConfig({
           setupFiles: ['tests/setup.ts'],
           environment: 'jsdom',
           include: ['tests/*.test.ts', 'tests/*.test.tsx'],
-          exclude: ['tests/server.test.ts', 'tests/native-ssr.test.tsx'],
+          exclude: ['tests/server.test.ts', 'tests/server-*.test.ts', 'tests/native-ssr.test.tsx'],
         },
       },
       {
@@ -19,7 +19,7 @@ export default defineConfig({
         test: {
           name: 'server',
           environment: 'node',
-          include: ['tests/server.test.ts', 'tests/native-ssr.test.tsx'],
+          include: ['tests/server.test.ts', 'tests/server-*.test.ts', 'tests/native-ssr.test.tsx'],
         },
       },
     ],

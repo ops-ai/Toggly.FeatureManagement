@@ -68,6 +68,21 @@ export const FULL_TEST_MATRIX = [
     sdk: 'SolidJS',
     path: 'Toggly.FeatureManagement.Solid',
     'test-cmd': 'npm run test:coverage',
+    'node-version': '22.x',
+    'has-lint': false,
+  },
+  {
+    sdk: 'SolidJS',
+    path: 'Toggly.FeatureManagement.Solid',
+    'test-cmd': 'npm run test:coverage',
+    'node-version': '24.x',
+    'has-lint': false,
+  },
+  {
+    sdk: 'SolidJS',
+    path: 'Toggly.FeatureManagement.Solid',
+    'test-cmd': 'npm run test:coverage',
+    'node-version': '26.x',
     'has-lint': false,
   },
   {

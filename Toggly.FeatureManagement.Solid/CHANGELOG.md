@@ -1,3 +1,19 @@
+## Unreleased
+
+### Changed
+
+- Widen `@ops-ai/toggly-node-core` dependency to `^0.11.0 || ^0.12.0 || ^0.13.0` so apps can use current 0.13.x without overrides.
+- CI unit matrix now exercises Node 22.x, 24.x, and 26.x (engines remain `>=22.12.0`).
+- Dev dependency pins refreshed within declared majors (`solid-js` 1.9.18, `vitest`/`@vitest/coverage-v8` 4.1.12, `vite` 6.4.x, `vite-plugin-solid` 2.11.15).
+
+### Added
+
+- API-contract evaluation tests for browser `evaluated-signed` and server `definitions-signed` public entry points, plus shared `docs/filter-parity/fixtures` coverage through `createTogglyClient`.
+
+### Known issues
+
+- Filter-parity fixture `targeting-rollout-partial-anonymous`: `@ops-ai/toggly-node-core` sticky-buckets an anonymous UUID when identity is omitted, so 50% Targeting rollout is not fail-closed (unlike `@ops-ai/toggly-eval` / the golden fixture). Empty-string identity does fail closed. Owner decision needed; Solid does not change evaluation to mask this.
+
 ## 0.6.0
 
 2026-10-11
