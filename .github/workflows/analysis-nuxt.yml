@@ -175,10 +175,10 @@ jobs:
       - name: Install Chromium system dependencies
         run: npx --yes playwright install-deps chromium
 
-      # Concurrent matrix cells share ~/.cache/ms-playwright by default; Node 26
-      # host installs hung for the full 5m command budget while two cells
-      # downloaded the same Chromium revision. Isolate the browser cache per cell
-      # via RUNNER_TEMP (runner context is not available in job-level env).
+      # Concurrent matrix cells share ~/.cache/ms-playwright by default. Isolate
+      # the browser cache per cell via RUNNER_TEMP (runner context is not
+      # available in job-level env). Hosts pin Playwright >=1.60 so Chromium
+      # extract does not hang on Node 24.16+/26 after download reaches 100%.
       - name: Isolate Playwright browser cache
         run: echo "PLAYWRIGHT_BROWSERS_PATH=${RUNNER_TEMP}/ms-playwright-${{ matrix.nuxt-version }}-node${{ matrix.node-version }}" >> "$GITHUB_ENV"
 

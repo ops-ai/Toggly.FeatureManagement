@@ -9,10 +9,11 @@ node tests/hosts/run.mjs 4.6.3 locked   # current Nuxt 4 major (CI)
 ```
 
 Use Node 22.22+ / 24.15+ / 26+ for these current hosts (SDK engines:
-`>=22`; Nuxt 4.6 also drops Node 20). CI sets a per-matrix
-`PLAYWRIGHT_BROWSERS_PATH` so concurrent packed-host jobs do not contend on
-the shared Playwright Chromium cache (Node 26 installs otherwise hung). The
-historical `locks/3.16.2/` Node 18.20.8 profile remains on disk as frozen
+`>=22`; Nuxt 4.6 also drops Node 20). Current hosts pin Playwright **1.64.1**
+(≥1.60 required: 1.58.x hangs forever extracting Chromium on Node 24.16+/26
+after download hits 100%). CI also sets a per-matrix `PLAYWRIGHT_BROWSERS_PATH`
+so concurrent packed-host jobs do not contend on the shared Chromium cache.
+The historical `locks/3.16.2/` Node 18.20.8 profile remains on disk as frozen
 evidence only and is no longer a supported CI target. The runner packs all
 four sibling packages, installs them in an isolated temporary application, and
 runs Nuxt prepare, public type checking, production build, real HTTP SSR,

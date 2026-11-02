@@ -78,7 +78,9 @@ if (version === '3.0.0') {
 await mkdir(join(work, 'artifacts'))
 const dependencies = retainedNode18
   ? { nuxt: version, '@nuxt/kit': '3.16.2', vue: '3.5.13', playwright: '1.51.1', typescript: '5.7.3', 'vue-tsc': '2.2.4' }
-  : { nuxt: version, vue: '3.5.44', playwright: '1.58.2', typescript: '5.9.3', 'vue-tsc': '3.2.4' }
+  // Playwright 1.60+ vendors the yauzl destroy-lifecycle fix; 1.58.2 hangs
+  // forever extracting Chromium on Node 24.16+ / 26 after download hits 100%.
+  : { nuxt: version, vue: '3.5.44', playwright: '1.64.1', typescript: '5.9.3', 'vue-tsc': '3.2.4' }
 if (process.env.TOGGLY_CLIENT_TELEMETRY_SOURCE) {
   const reporterSource = resolve(process.env.TOGGLY_CLIENT_TELEMETRY_SOURCE)
   const reporterPackage = JSON.parse(await readFile(join(reporterSource, 'package.json')))
@@ -148,8 +150,9 @@ if (lockOnly) {assert.equal(lockMode,'record');return}
 await run('npm', [lockMode === 'fresh' ? 'install' : 'ci', '--no-audit', '--no-fund', ...(retainedNode18 ? ['--engine-strict'] : [])])
 // Install the browser through this consumer's own Playwright dependency. This
 // keeps Nuxt 3's locked host and Nuxt 4's fresh host aligned with the exact
-// Playwright revision that each packed consumer resolved.
-await run('npx', ['playwright', 'install', 'chromium'])
+// Playwright revision that each packed consumer resolved. Call the local CLI
+// directly so npx does not re-resolve a different Playwright on PATH.
+await run(process.execPath, [join(work, 'node_modules/playwright/cli.js'), 'install', 'chromium'])
 const consumerLock = JSON.parse(await readFile(join(work, 'package-lock.json'), 'utf8'))
 for (const [name, spec] of packedCandidateDependencies) {
   assert.equal(consumerLock.packages[`node_modules/${name}`]?.integrity, await artifactIntegrity(spec), `${name} integrity must match its packed candidate`)
