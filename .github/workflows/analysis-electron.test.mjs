@@ -199,3 +199,37 @@ test('Electron workflow runs its contract checks and keeps the existing host and
   assert.match(step(tests, 'Run tests with coverage'), /xvfb-run.*npm run test:coverage/);
   assert.match(step(tests, 'Run packed Electron floor and current hosts'), /xvfb-run.*npm run test:hosts/);
 });
+
+// Sonar resolves report paths from projectBaseDir. Electron sits one directory
+// below the checkout, and the organized reports live at the checkout root.
+function repoRelative(baseDir, reportPath) {
+  const parts = [];
+  for (const part of `${baseDir}/${reportPath}`.split('/')) {
+    if (part === '' || part === '.') continue;
+    if (part === '..') {
+      assert.ok(parts.length > 0, `${reportPath} escapes the checkout from ${baseDir}`);
+      parts.pop();
+      continue;
+    }
+    parts.push(part);
+  }
+  return parts.join('/');
+}
+
+test('Electron coverage and dependency-check reports resolve inside the checkout', () => {
+  const sonar = job('sonar');
+  for (const name of ['SonarCloud Scan', 'SonarQube Server Scan']) {
+    const scan = step(sonar, name);
+    const base = scan.match(/projectBaseDir: (\S+)/)[1];
+    assert.equal(base, 'Toggly.FeatureManagement.Electron');
+    for (const key of ['javascript', 'typescript']) {
+      const report = scan.match(new RegExp(`-Dsonar\\.${key}\\.lcov\\.reportPaths=(\\S+)`))[1];
+      assert.equal(repoRelative(base, report), 'coverage/Electron-lcov.info', `${name} ${key}`);
+    }
+  }
+  const dependencyCheck = step(sonar, 'SonarQube Server Scan').match(/-Dsonar\.dependencyCheck\.reportPath=(\S+)/)[1];
+  assert.equal(
+    repoRelative('Toggly.FeatureManagement.Electron', dependencyCheck),
+    'dependency-check-reports/dependency-check-report.xml',
+  );
+});
