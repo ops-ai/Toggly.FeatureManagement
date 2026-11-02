@@ -7,6 +7,7 @@
 - Declare Node `>=22` (Node 18/20 dropped). Packed hosts and CI now prove Nuxt **3.21.11** and **4.6.3** on Node 22/24/26.
 - Packed-host consumer Vue pin `3.5.42` → `3.5.44` so Nuxt 4.6’s `vue@^3.5.44` floor does not leave a duplicate Vue graph for Nitro tracing.
 - Leave `h3` peer at `^1` on the server package: Nuxt 4.6.x / `@nuxt/nitro-server` still depend on `h3@^1.15`, not stable `h3@2`.
+- Packed-host Playwright `1.58.2` → `1.64.1` so Chromium install finishes on Node 24.16+/26 (1.58.x hung forever after download during zip extract).
 
 ## 1.4.0 — 2026-09-22
 
