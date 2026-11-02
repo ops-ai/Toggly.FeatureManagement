@@ -36,3 +36,24 @@ test('iOS Sonar scans retain quality gates without scanner-wide issue exclusions
     assert.match(step, /-Dsonar\.qualitygate\.wait=true/);
   }
 });
+
+test('iOS build-and-test keeps Xcode 16.1 floor and proves current 26.x / 27.x', () => {
+  const build = job('build-and-test');
+  assert.match(build, /runs-on: \$\{\{ matrix\.os \}\}/);
+  assert.match(build, /os: macos-15[\s\S]*xcode: '16\.1'/);
+  assert.match(build, /os: macos-15[\s\S]*xcode: '16\.2'/);
+  assert.match(build, /os: macos-15[\s\S]*xcode: '16\.4'/);
+  assert.match(build, /os: macos-26[\s\S]*xcode: '26\.6'/);
+  assert.match(build, /os: xcode-27[\s\S]*xcode: '27\.1'/);
+  assert.match(build, /coverage: true/);
+  assert.match(build, /if: matrix\.coverage/);
+});
+
+test('iOS smoke and platform builds use current Xcode 26.6 on macos-26', () => {
+  const smoke = job('smoke-test');
+  const platforms = job('build-platforms');
+  assert.match(smoke, /runs-on: macos-26/);
+  assert.match(smoke, /Xcode_26\.6\.app/);
+  assert.match(platforms, /runs-on: macos-26/);
+  assert.match(platforms, /Xcode_26\.6\.app/);
+});

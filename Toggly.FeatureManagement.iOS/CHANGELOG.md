@@ -2,6 +2,16 @@
 
 All notable changes to the Toggly iOS SDK are documented in this file.
 
+## Unreleased
+
+### Changed
+- CI Xcode matrix now keeps the Xcode 16.1 floor on `macos-15` and proves
+  current toolchains: Xcode 26.6 on `macos-26` and Xcode 27.1 on `xcode-27`.
+  Simulator coverage runs on the 26.6 job.
+- Added mocked-HTTP API contract evaluation tests that exercise public
+  `isEnabled` / `evaluateFeatureGate` entry points against realistic
+  `evaluated-signed` boolean + entity-gate payloads.
+
 ## 1.8.3
 
 2026-10-18
