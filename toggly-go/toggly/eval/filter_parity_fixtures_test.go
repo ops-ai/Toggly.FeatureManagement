@@ -11,6 +11,8 @@ import (
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 )
 
+const filterParityDirRel = "docs/filter-parity/fixtures"
+
 // knownFilterParityFailures lists fixture IDs that diverge from shared golden
 // expectations. Do not change evaluation behavior to force a pass; skip with a
 // clear reason and document the case in the PR. Currently empty — all fixtures pass.
@@ -60,37 +62,27 @@ type fixtureContext struct {
 	} `json:"request"`
 }
 
-func resolveFilterParityFixturesDir(t *testing.T) string {
-	t.Helper()
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	candidates := []string{
-		filepath.Join(cwd, "docs", "filter-parity", "fixtures"),
-		filepath.Join(cwd, "..", "docs", "filter-parity", "fixtures"),
-		filepath.Join(cwd, "..", "..", "docs", "filter-parity", "fixtures"),
-		filepath.Join(cwd, "..", "..", "..", "docs", "filter-parity", "fixtures"),
-		filepath.Join(cwd, "..", "..", "..", "..", "docs", "filter-parity", "fixtures"),
-	}
-	for _, candidate := range candidates {
+func firstExistingDir(paths []string) string {
+	for _, candidate := range paths {
 		if st, err := os.Stat(candidate); err == nil && st.IsDir() {
-			abs, err := filepath.Abs(candidate)
-			if err != nil {
-				return candidate
+			if abs, err := filepath.Abs(candidate); err == nil {
+				return abs
 			}
-			return abs
+			return candidate
 		}
 	}
-	walk := cwd
-	for i := 0; i < 6; i++ {
-		candidate := filepath.Join(walk, "docs", "filter-parity", "fixtures")
+	return ""
+}
+
+func walkForDir(start, rel string, maxDepth int) string {
+	walk := start
+	for i := 0; i < maxDepth; i++ {
+		candidate := filepath.Join(walk, rel)
 		if st, err := os.Stat(candidate); err == nil && st.IsDir() {
-			abs, err := filepath.Abs(candidate)
-			if err != nil {
-				return candidate
+			if abs, err := filepath.Abs(candidate); err == nil {
+				return abs
 			}
-			return abs
+			return candidate
 		}
 		parent := filepath.Dir(walk)
 		if parent == walk {
@@ -98,7 +90,29 @@ func resolveFilterParityFixturesDir(t *testing.T) string {
 		}
 		walk = parent
 	}
-	t.Fatal("docs/filter-parity/fixtures not found")
+	return ""
+}
+
+func resolveFilterParityFixturesDir(t *testing.T) string {
+	t.Helper()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	candidates := []string{
+		filepath.Join(cwd, filterParityDirRel),
+		filepath.Join(cwd, "..", filterParityDirRel),
+		filepath.Join(cwd, "..", "..", filterParityDirRel),
+		filepath.Join(cwd, "..", "..", "..", filterParityDirRel),
+		filepath.Join(cwd, "..", "..", "..", "..", filterParityDirRel),
+	}
+	if found := firstExistingDir(candidates); found != "" {
+		return found
+	}
+	if found := walkForDir(cwd, filterParityDirRel, 6); found != "" {
+		return found
+	}
+	t.Fatal(filterParityDirRel + " not found")
 	return ""
 }
 
