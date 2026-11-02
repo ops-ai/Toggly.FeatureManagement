@@ -11,8 +11,9 @@ dependencies:
     
   feature_flags_toggly:
     path: ../
-    version: 1.13.1
+    version: 1.14.2
   benchmark_harness: ^2.4.0
 
 dev_dependencies:
-  lints: ^2.0.0
+  flutter_lints: ^6.0.0
+  lints: ^6.0.0

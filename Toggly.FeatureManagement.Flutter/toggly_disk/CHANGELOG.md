@@ -1,3 +1,8 @@
+## Unreleased
+
+### Changed
+- Dev tooling: `flutter_lints`/`lints` `^2` → `^6`.
+
 ## 0.4.0
 
 2026-07-11

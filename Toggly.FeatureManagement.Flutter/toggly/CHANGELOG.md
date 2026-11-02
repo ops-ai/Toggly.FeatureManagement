@@ -1,3 +1,11 @@
+## Unreleased
+
+### Changed
+- Dev tooling: `flutter_lints`/`lints` `^2` → `^6` (requires Dart ^3.8 for package development CI).
+- CI now probes Flutter **3.32.0** (oldest resolvable with current dev deps) alongside stable.
+- Example host SDK ceiling widened `<3.0.0` → `<4.0.0` to match the package (floor unchanged).
+- Added `api_contract_evaluation_test.dart`: mocked evaluated-signed HTTP + public `isFeatureOn`/`evaluateFeatureGate` coverage.
+
 ## 1.13.2
 
 2026-10-12

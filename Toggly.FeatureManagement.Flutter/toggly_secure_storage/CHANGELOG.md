@@ -1,3 +1,9 @@
+## Unreleased
+
+### Changed
+- Dev tooling: `flutter_lints`/`lints` `^2` → `^6`.
+- CI secure-storage plugin matrix now includes **11.2.0** (latest) alongside 9.x/10.x/11.1.1.
+
 ## 0.5.0
 
 2026-09-14
