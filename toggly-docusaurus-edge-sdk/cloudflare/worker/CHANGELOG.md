@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Bump Worker `compatibility_date` from `2024-01-01` to `2026-11-02`.
+- Bump `wrangler` to `^4.156.1` and `@cloudflare/workers-types` to `5.20261102.1`.
+- Add `@cloudflare/vitest-plugin` workerd suite covering flag evaluation and
+  HTMLRewriter feature gating; keep the existing fetch-mocked Node flag tests.
+- Require Node `>=22` (Node 18/20 dropped per owner support policy).
+
 ## 0.4.1
 
 2026-09-17
