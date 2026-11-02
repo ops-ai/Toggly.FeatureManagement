@@ -25,6 +25,27 @@ const selectedFamilies = families(inventory).filter((family) =>
 );
 const run = (binary, args) =>
   execFileSync(binary, args, { cwd: repoRoot, stdio: "inherit" });
+/** Resolve inventory `testProject` (directory or file) to a concrete .csproj path. */
+const resolveTestProjectFile = (testProject) => {
+  const absolute = path.join(repoRoot, testProject);
+  if (fs.existsSync(absolute) && fs.statSync(absolute).isFile()) {
+    return testProject;
+  }
+  if (fs.existsSync(absolute) && fs.statSync(absolute).isDirectory()) {
+    const matches = fs
+      .readdirSync(absolute)
+      .filter((name) => name.endsWith(".csproj"))
+      .sort();
+    if (matches.length === 1) {
+      return path.join(testProject, matches[0]);
+    }
+    const preferred = `${path.basename(testProject)}.csproj`;
+    if (matches.includes(preferred)) {
+      return path.join(testProject, preferred);
+    }
+  }
+  throw new Error(`Unable to resolve test project file for ${testProject}`);
+};
 /** Unconditional TargetFramework(s) from a csproj (ignores Condition-gated extras like net11). */
 const readTestFrameworks = (projectPath) => {
   const xml = fs.readFileSync(path.join(repoRoot, projectPath), "utf8");
