@@ -42,23 +42,18 @@
 		<PackageReference Include="Websocket.Client" Version="5.5.0" />
 	</ItemGroup>
 
-	<!-- Azure.Core 1.64 pulls Hosting.Abstractions 10.x, which conflicts with the Hosting.Abstractions 3.1
-	     pin required for netstandard2.1 / netcoreapp3.1 / net5.0 consumers. Keep Azure.Core 1.50 there. -->
-	<ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1' OR '$(TargetFramework)' == 'netcoreapp3.1' OR '$(TargetFramework)' == 'net5.0'">
+	<!-- Azure.Core 1.51+ pulls System.ClientModel / Hosting.Abstractions 10.x (NU1605 for
+	     net6–net9 apps pinning Extensions 6/7/8/9). Keep 1.50 + Hosting 3.1 through net9;
+	     reserve Azure.Core 1.64 + Hosting 10 for net10/net11 assets only. -->
+	<ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1' OR '$(TargetFramework)' == 'netcoreapp3.1' OR '$(TargetFramework)' == 'net5.0' OR '$(TargetFramework)' == 'net6.0' OR '$(TargetFramework)' == 'net7.0' OR '$(TargetFramework)' == 'net8.0'">
 		<PackageReference Include="Azure.Core" Version="1.50.0" />
 		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="3.1.0" />
 		<PackageReference Include="System.Net.Http.Json" Version="8.0.1" />
 	</ItemGroup>
 
-	<ItemGroup Condition="'$(TargetFramework)' == 'net6.0' OR '$(TargetFramework)' == 'net7.0' OR '$(TargetFramework)' == 'net8.0'">
-		<PackageReference Include="Azure.Core" Version="1.64.0" />
-		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.10" />
-		<PackageReference Include="System.Net.Http.Json" Version="8.0.1" />
-	</ItemGroup>
-
 	<ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
-		<PackageReference Include="Azure.Core" Version="1.64.0" />
-		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.10" />
+		<PackageReference Include="Azure.Core" Version="1.50.0" />
+		<PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="3.1.0" />
 		<PackageReference Include="System.Net.Http.Json" Version="9.0.14" />
 	</ItemGroup>
 

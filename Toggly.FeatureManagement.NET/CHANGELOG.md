@@ -16,8 +16,10 @@
   `System.Net.Http.Json` to the latest compatible version per TFM.
 - Upgrade `MongoDB.Driver` 2.x → 3.13.0 and `RavenDB.Client` 6.x → 7.2.7
   (both still provide `netstandard2.1` assets for older TFMs).
-- Use `Azure.Core` 1.64.0 on net6.0+; keep 1.50.0 on netstandard2.1 /
-  netcoreapp3.1 / net5.0 where Hosting.Abstractions 10 conflicts.
+- Use `Azure.Core` 1.64.0 (+ Hosting.Abstractions 10.0.10) only on net10.0 /
+  net11.0. netstandard2.1–net9.0 keep Azure.Core 1.50.0 / Hosting.Abstractions
+  3.1.0 so consumers pinning Extensions 6/7/8/9 do not hit NU1605 (Azure.Core
+  1.51+ pulls Hosting 10 via System.ClientModel).
 - Stay on FluentAssertions 6.12.x (Apache-licensed); pin SystemMetrics tests
   back from 8.x.
 - CI installs SDKs/runtimes for every library TFM and runs the TFM × test
