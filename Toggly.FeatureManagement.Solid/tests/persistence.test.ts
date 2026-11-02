@@ -534,7 +534,9 @@ describe('restored key and envelope validation', () => {
         maxSignatureAgeSeconds: 60,
       }),
     ).rejects.toThrow('maxSignatureAgeSeconds');
-    await expect(verifyEnvelope(envelope({ on: true }, 'der', now + 61), keys, {})).rejects.toThrow(
+    // Stay well beyond the +60s skew window so wall-clock delay between capturing
+    // `now` and verifyEnvelope's Date.now() cannot make a future stamp look fresh.
+    await expect(verifyEnvelope(envelope({ on: true }, 'der', now + 120), keys, {})).rejects.toThrow(
       'timestamp',
     );
     await expect(
