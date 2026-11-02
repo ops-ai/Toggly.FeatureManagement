@@ -35,21 +35,31 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # consumer_ios is the Git-consumer simulator triple used by
+          # verify-swift-distribution. Package.swift still declares iOS 14;
+          # Xcode 27's iPhoneSimulator SDK only accepts 15.0+, so that job
+          # proves the current toolchain at the SDK's minimum while 16.x/26.x
+          # keep proving the declared iOS 14 floor.
           - os: macos-15
             xcode: '16.1'
             coverage: false
+            consumer_ios: '14.0'
           - os: macos-15
             xcode: '16.2'
             coverage: false
+            consumer_ios: '14.0'
           - os: macos-15
             xcode: '16.4'
             coverage: false
+            consumer_ios: '14.0'
           - os: macos-26
             xcode: '26.6'
             coverage: true
+            consumer_ios: '14.0'
           - os: xcode-27
             xcode: '27.1'
             coverage: false
+            consumer_ios: '15.0'
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -67,7 +77,7 @@ jobs:
         timeout-minutes: 10
         run: |
           python3 .github/scripts/verify-swift-distribution.test.py
-          python3 .github/scripts/verify-swift-distribution.py --repository "https://github.com/${{ github.repository }}.git" --revision "$(git rev-parse HEAD)" --consumer-target arm64-apple-ios14.0-simulator --consumer-sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          python3 .github/scripts/verify-swift-distribution.py --repository "https://github.com/${{ github.repository }}.git" --revision "$(git rev-parse HEAD)" --consumer-target "arm64-apple-ios${{ matrix.consumer_ios }}-simulator" --consumer-sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"
 
       - name: Resolve package dependencies
         working-directory: ${{ env.SDK_ROOT }}

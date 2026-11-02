@@ -10,7 +10,6 @@ on:
       - '.github/scripts/verify-swift-distribution*'
       - '.github/workflows/sdk-ios-release.yml'
       - '.github/workflows/analysis-ios.yml'
-      - '.github/workflows/analysis-ios.test.mjs'
       - '.github/actions/resolve-release-version/**'
   workflow_dispatch:
     inputs:
@@ -87,7 +86,7 @@ jobs:
           sed -i "s/public let togglyCombineVersion = \".*\"/public let togglyCombineVersion = \"$NEW_VERSION\"/" \
             ${{ env.SDK_ROOT }}/TogglyCombine/Sources/TogglyCombine.swift
 
-  # iOS SDK is covered by analysis-ios.yml's Xcode 16.1/16.2/16.4/26.6/27.1 matrix.
+  # iOS SDK is covered by analysis-ios.yml's Xcode 16.1/16.2 build-and-test matrix.
   gates:
     needs: validate
     if: needs.validate.outputs.action == 'publish'

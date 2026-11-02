@@ -26,7 +26,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Java Redis | Jedis 5 + Jedis 8 | dual artifacts | Jedis 8 | No Lettuce 7 |
 | Android | AGP 8.7 / Kotlin 2.0 | Java 17+21 | AGP 9 / Kotlin 2.2+ | Wave 3 dual line |
 | Flutter | Dart `>=2.18.2 <4` | Flutter stable (Dart 3) | Dart 3 | Keep floor; equatable 3 deferred |
-| iOS | iOS 14 / macOS 11 / tvOS 14 / watchOS 7 / swift-tools 5.5 | Xcode 16.1+16.2+16.4 (macos-15), 26.6 (macos-26), 27.1 (xcode-27) | Xcode 27.1 | Keep floor; prove current 26/27 |
+| iOS | iOS 14 / macOS 11 / tvOS 14 / watchOS 7 / swift-tools 5.5 | Xcode 16.1+16.2+16.4 (macos-15), 26.6 (macos-26), 27.1 (xcode-27; consumer sim iOS 15 — Xcode 27 SDK floor) | Xcode 27.1 | Keep declared iOS 14; Xcode 27 sim SDK min is 15 |
 | Rust axum | axum 0.7 + axum08 | dual crates | 0.8 | `toggly-axum08` 0.1.1+ accepts workspace `toggly` range |
 | Go | Go 1.25; grpc 1.80 | CI | newer grpc | Coordinated bump only |
 

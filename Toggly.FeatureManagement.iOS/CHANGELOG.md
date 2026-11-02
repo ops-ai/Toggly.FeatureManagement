@@ -7,7 +7,9 @@ All notable changes to the Toggly iOS SDK are documented in this file.
 ### Changed
 - CI Xcode matrix now keeps the Xcode 16.1 floor on `macos-15` and proves
   current toolchains: Xcode 26.6 on `macos-26` and Xcode 27.1 on `xcode-27`.
-  Simulator coverage runs on the 26.6 job.
+  Simulator coverage runs on the 26.6 job. Declared platforms stay iOS 14 /
+  macOS 11 / tvOS 14 / watchOS 7; the Xcode 27 Git-consumer simulator triple
+  uses iOS 15.0 because that SDK's supported deployment range starts at 15.0.
 - Added mocked-HTTP API contract evaluation tests that exercise public
   `isEnabled` / `evaluateFeatureGate` entry points against realistic
   `evaluated-signed` boolean + entity-gate payloads.
