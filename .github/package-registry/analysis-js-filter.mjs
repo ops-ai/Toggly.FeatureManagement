@@ -62,6 +62,9 @@ export const FULL_TEST_MATRIX = [
     sdk: 'Vue',
     path: 'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly',
     'test-cmd': 'npm test -- --coverage && npm run test:host',
+    // Pin off lts/*: Node 26 + jsdom^23 leaves localStorage undefined in vitest.
+    // Packed browser hosts still prove Vue on Node 22/24/26 separately.
+    'node-version': '24.x',
     'has-lint': false,
   },
   {
@@ -74,6 +77,8 @@ export const FULL_TEST_MATRIX = [
     sdk: 'Svelte',
     path: 'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly',
     'test-cmd': 'npx vitest run --coverage && npm run test:host',
+    // Same Node 26 + jsdom localStorage gap as Vue; hosts cover 22/24/26.
+    'node-version': '24.x',
     'has-lint': false,
   },
   {
@@ -86,6 +91,8 @@ export const FULL_TEST_MATRIX = [
     sdk: 'Astro',
     path: 'Toggly.FeatureManagement.Astro',
     'test-cmd': 'npm test -- --coverage',
+    // Same Node 26 + jsdom localStorage gap as Vue; Astro packed hosts cover 5/6/7.
+    'node-version': '24.x',
     'has-lint': false,
   },
   {
@@ -95,12 +102,15 @@ export const FULL_TEST_MATRIX = [
     'node-version': '24.x',
     'has-lint': false,
   },
-  {
+  // Vanilla JS SDK: exercise Node 22 (floor), 24, and 26 (latest current).
+  // Coverage artifact uploads only from the 22.x row (see analysis-javascript.yml).
+  ...['22.x', '24.x', '26.x'].map((nodeVersion) => ({
     sdk: 'JavaScript',
     path: 'Toggly.FeatureManagement.Javascript/feature_flags_toggly',
     'test-cmd': 'npm test -- --coverage && npm run test:browser-host',
+    'node-version': nodeVersion,
     'has-lint': false,
-  },
+  })),
   {
     sdk: 'Docusaurus',
     path: 'toggly-docusaurus-edge-sdk/libs/docusaurus-plugin',
