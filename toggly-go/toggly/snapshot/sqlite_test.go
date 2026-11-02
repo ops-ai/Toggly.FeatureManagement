@@ -307,6 +307,84 @@ func TestSQLiteProvider_DefaultOptions(t *testing.T) {
 	if provider.jwksID != "toggly_jwks" {
 		t.Errorf("expected default JWKS ID toggly_jwks, got %s", provider.jwksID)
 	}
+	if !provider.autoCreate {
+		t.Error("expected autoCreate true by default")
+	}
+}
+
+func sqliteTableExists(t *testing.T, db *sql.DB, tableName string) bool {
+	t.Helper()
+	var name string
+	err := db.QueryRow(
+		`SELECT name FROM sqlite_master WHERE type='table' AND name=?`,
+		tableName,
+	).Scan(&name)
+	if err == sql.ErrNoRows {
+		return false
+	}
+	if err != nil {
+		t.Fatalf("sqlite_master query failed: %v", err)
+	}
+	return name == tableName
+}
+
+func TestSQLiteProvider_DefaultCreatesTable(t *testing.T) {
+	db := newTestSQLiteDB(t)
+	defer func() { _ = db.Close() }()
+
+	provider := NewSQLiteProvider(SQLiteOptions{DB: db})
+	ctx := context.Background()
+
+	if sqliteTableExists(t, db, "toggly_snapshots") {
+		t.Fatal("expected no table before first use")
+	}
+
+	snap, err := provider.LoadDefinitions(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if snap != nil {
+		t.Fatalf("expected nil snapshot, got %+v", snap)
+	}
+	if !sqliteTableExists(t, db, "toggly_snapshots") {
+		t.Fatal("expected default provider to create toggly_snapshots")
+	}
+}
+
+func TestSQLiteProvider_DisableAutoCreateTable(t *testing.T) {
+	db := newTestSQLiteDB(t)
+	defer func() { _ = db.Close() }()
+
+	provider := NewSQLiteProvider(SQLiteOptions{
+		DB:                     db,
+		DisableAutoCreateTable: true,
+	})
+	ctx := context.Background()
+
+	if provider.autoCreate {
+		t.Fatal("expected autoCreate false when DisableAutoCreateTable is set")
+	}
+
+	snap, err := provider.LoadDefinitions(ctx)
+	if err == nil {
+		t.Fatal("expected error when table does not exist and auto-create is disabled")
+	}
+	if snap != nil {
+		t.Fatalf("expected nil snapshot on error, got %+v", snap)
+	}
+	if sqliteTableExists(t, db, "toggly_snapshots") {
+		t.Fatal("expected no table when DisableAutoCreateTable is true")
+	}
+
+	// Deprecated AutoCreateTable must not override DisableAutoCreateTable.
+	providerIgnored := NewSQLiteProvider(SQLiteOptions{
+		DB:                     db,
+		AutoCreateTable:        false,
+		DisableAutoCreateTable: false,
+	})
+	if !providerIgnored.autoCreate {
+		t.Fatal("expected AutoCreateTable to be ignored; default remains create-on")
+	}
 }
 
 func TestSQLiteProvider_ImplementsInterface(t *testing.T) {
