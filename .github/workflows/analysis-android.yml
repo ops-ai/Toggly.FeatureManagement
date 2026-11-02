@@ -148,7 +148,8 @@ jobs:
       - name: Measure public acceptance Activity coverage on Android API 37
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 37
+          # SDK packages are published as android-37.0 (not android-37).
+          api-level: 37.0
           arch: x86_64
           disable-animations: true
           working-directory: Toggly.FeatureManagement.Android/acceptance/public-telemetry-host
