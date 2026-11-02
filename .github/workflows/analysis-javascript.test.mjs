@@ -108,6 +108,7 @@ test('all Sonar scans measure the complete Client Core and Docusaurus executable
       }
     }
     assert.ok(globs('exclusions').includes('toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/test-setup.ts'));
+    assert.ok(globs('exclusions').includes('Toggly.FeatureManagement.Gatsby/src/__tests__/setup-jsdom-storage.ts'));
     assert.ok(globs('coverage.exclusions').includes('toggly-docusaurus-edge-sdk/cloudflare/worker/**'));
   }
 });

@@ -36,11 +36,10 @@ function ensureLocalStorage(): void {
   if (current && typeof current.clear === 'function' && typeof current.getItem === 'function') {
     return;
   }
+  const windowStorage = globalThis.window?.localStorage;
   const storage =
-    typeof globalThis.window !== 'undefined' &&
-    globalThis.window.localStorage &&
-    typeof globalThis.window.localStorage.clear === 'function'
-      ? globalThis.window.localStorage
+    windowStorage && typeof windowStorage.clear === 'function'
+      ? windowStorage
       : createMemoryStorage();
 
   Object.defineProperty(globalThis, 'localStorage', {
@@ -49,7 +48,7 @@ function ensureLocalStorage(): void {
     value: storage,
     writable: true,
   });
-  if (typeof globalThis.window !== 'undefined') {
+  if (globalThis.window !== undefined) {
     Object.defineProperty(globalThis.window, 'localStorage', {
       configurable: true,
       enumerable: true,
