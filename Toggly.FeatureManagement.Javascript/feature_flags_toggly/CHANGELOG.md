@@ -11,7 +11,9 @@
   webpack 5.112, ts-jest 29.4, ws 8.22, `@types/node` 24, etc.).
 - CI (`analysis-javascript.yml` / `analysis-js-filter.mjs`) now runs the vanilla
   JavaScript SDK test + packed browser host matrix on Node **22.x**, **24.x**,
-  and **26.x** (coverage artifact from 22.x).
+  and **26.x** (coverage artifact from 22.x; packed host uses system Chrome).
+- WebSocket smoke suite runs under Jest `node` environment so `ws` resolves to
+  the Node client after the Jest 30 bump (jsdom was selecting `ws/browser.js`).
 
 ### Added
 - API-contract evaluation specs exercising public `isFeatureOn` /
