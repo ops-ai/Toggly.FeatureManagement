@@ -639,11 +639,12 @@ jobs:
     name: Embedded NuGet consumer (${{ matrix.framework }})
     needs: [pack-packages]
     runs-on: ubuntu-latest
-    continue-on-error: ${{ matrix.framework == 'net11.0' }}
     strategy:
       fail-fast: false
       matrix:
-        framework: [net8.0, net9.0, net10.0, net11.0]
+        # net11.0 consumer verify lives in test-net11-preview (allow-failure) so a
+        # preview-only pack/restore failure cannot fail required checks.
+        framework: [net8.0, net9.0, net10.0]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
@@ -652,7 +653,6 @@ jobs:
             8.0.x
             9.0.x
             10.0.x
-            11.0.100-rc.3.26522.148
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
@@ -753,6 +753,9 @@ jobs:
     name: Test net11.0 preview (allow-failure)
     runs-on: ubuntu-latest
     continue-on-error: true
+    env:
+      # Opt into net11.0 for this job; required jobs leave CI default (strip net11).
+      IncludeNet11Preview: 'true'
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -768,13 +771,36 @@ jobs:
             10.0.x
             11.0.100-rc.3.26522.148
 
-      - name: Run parity, Dashboard, and Embedded tests on net11.0
+      - name: Setup Node.js for embedded consumer verify
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+
+      - name: Build and test net11.0 (parity, Dashboard, Embedded)
         run: |
           set -euo pipefail
           echo "::notice::net11.0 is RC; this job is allow-failure until GA"
+          # Explicit -f selects net11; IncludeNet11Preview keeps it in TargetFrameworks under CI.
           dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Parity.Tests/Toggly.FeatureManagement.Parity.Tests.csproj -c Release -f net11.0 --logger "trx;LogFileName=parity-net11.0.trx" --results-directory ./TestResults
           dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard.Tests/Toggly.FeatureManagement.Dashboard.Tests.csproj -c Release -f net11.0 --logger "trx;LogFileName=dashboard-net11.0.trx" --results-directory ./TestResults
           dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Embedded.Tests/Toggly.FeatureManagement.Embedded.Tests.csproj -c Release -f net11.0 --logger "trx;LogFileName=embedded-net11.0.trx" --results-directory ./TestResults
+
+      - name: Pack server packages with net11.0 for preview consumer
+        run: |
+          set -euo pipefail
+          node .github/package-registry/dotnet-ci.mjs pack
+          # dotnet-ci pack writes nuget-analysis-pack; keep a dedicated feed name for the consumer step
+          mv nuget-analysis-pack nuget-net11-preview-feed
+          ls nuget-net11-preview-feed/*.*nupkg | head
+
+      - name: Install browser test dependencies
+        working-directory: Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard.BrowserTests
+        run: |
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+
+      - name: Verify Embedded NuGet consumer on net11.0
+        run: python3 Toggly.FeatureManagement.NET/scripts/verify-embedded-packages.py --feed nuget-net11-preview-feed --framework net11.0
 
   summary:
     name: Analysis Summary

@@ -107,30 +107,30 @@ public class VariantAllocatorCorpusTests
         var expectedEnabled = expected.GetProperty("enabled").GetBoolean();
         var expectedReason = expected.GetProperty("assignmentReason").GetString();
 
-        string? actualReason = null;
-        bool? actualEnabledFromTelemetry = null;
-        if (capturedEvent is { } evt)
-        {
-            var tags = evt.Tags.ToDictionary(t => t.Key, t => t.Value);
-            if (tags.TryGetValue("Enabled", out var enabledObj) && enabledObj is bool enabledFlag)
-                actualEnabledFromTelemetry = enabledFlag;
-            if (tags.TryGetValue("VariantAssignmentReason", out var reasonObj) && reasonObj is VariantAssignmentReason reason)
-                actualReason = reason.ToString();
-        }
-
         if (KnownFailures.TryGetValue(caseId, out var knownReason))
         {
             Assert.True(true, $"Known failure '{caseId}': {knownReason}");
             return;
         }
 
+        // Mirror VariantOracle: require FeatureFlag telemetry before comparing
+        // enabled / assignmentReason — missing tags must fail the case, not skip.
+        capturedEvent.Should().NotBeNull(
+            "case {0}: FeatureFlag telemetry event was not captured", caseId);
+        var tags = capturedEvent!.Value.Tags.ToDictionary(t => t.Key, t => t.Value);
+
+        tags.TryGetValue("Enabled", out var enabledObj).Should().BeTrue(
+            "case {0}: Enabled telemetry tag missing", caseId);
+        enabledObj.Should().BeOfType<bool>("case {0}: Enabled telemetry tag must be bool", caseId);
+        ((bool)enabledObj!).Should().Be(expectedEnabled, "case {0}: enabled (telemetry)", caseId);
+
+        tags.TryGetValue("VariantAssignmentReason", out var reasonObj).Should().BeTrue(
+            "case {0}: VariantAssignmentReason telemetry tag missing", caseId);
+        reasonObj.Should().BeOfType<VariantAssignmentReason>(
+            "case {0}: VariantAssignmentReason telemetry tag must be VariantAssignmentReason", caseId);
+        reasonObj!.ToString().Should().Be(expectedReason, "case {0}: assignmentReason", caseId);
+
         (variant?.Name).Should().Be(expectedVariantName, "case {0}: variantName", caseId);
-
-        if (actualEnabledFromTelemetry.HasValue)
-            actualEnabledFromTelemetry.Value.Should().Be(expectedEnabled, "case {0}: enabled (telemetry)", caseId);
-
-        if (actualReason != null)
-            actualReason.Should().Be(expectedReason, "case {0}: assignmentReason", caseId);
 
         if (expected.TryGetProperty("configurationValue", out var expectedConfig) && expectedConfig.ValueKind != JsonValueKind.Null)
         {

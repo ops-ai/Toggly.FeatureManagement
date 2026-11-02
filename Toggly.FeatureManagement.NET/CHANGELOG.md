@@ -22,6 +22,8 @@
   back from 8.x.
 - CI installs SDKs/runtimes for every library TFM and runs the TFM × test
   matrix; `net11.0` is an allow-failure preview job while GA is out.
+  Required analyze/pack jobs strip `net11.0` via `Directory.Build.targets`
+  unless `IncludeNet11Preview=true`.
 
 ### Known filter-parity divergence
 - `unknown-filter-fail-closed`: production

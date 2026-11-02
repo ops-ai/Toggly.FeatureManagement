@@ -1,5 +1,14 @@
 <Project>
   <!--
+    net11.0 is RC: keep it out of required CI restore/build/pack unless the
+    allow-failure preview job opts in with IncludeNet11Preview=true. Local
+    builds (CI unset) still include every declared TFM.
+  -->
+  <PropertyGroup Condition="('$(ExcludeNet11Preview)' == 'true' Or ('$(CI)' == 'true' And '$(IncludeNet11Preview)' != 'true')) And '$(TargetFrameworks)' != ''">
+    <TargetFrameworks>$(TargetFrameworks.Replace('net11.0;', '').Replace(';net11.0', '').Replace('net11.0', ''))</TargetFrameworks>
+  </PropertyGroup>
+
+  <!--
     GenerateAssemblyInfo is false across .NET packages (hand-written AssemblyInfo.cs
     for InternalsVisibleTo). Still embed $(Version) so runtime UA can read it.
   -->
