@@ -139,6 +139,34 @@ class TargetingEvaluatorTest {
     }
 
     @Test
+    void shouldTreatBlankIdentityAsAnonymousForPartialRollout() {
+        Map<String, Object> params = new HashMap<>();
+        params.put("Audience.DefaultRolloutPercentage", 50);
+
+        FeatureFilter filter = FeatureFilter.of("Targeting", params);
+        EvaluationContext blankIdentity = EvaluationContext.builder().identity("").build();
+
+        assertFalse(evaluator.evaluate(filter, "test-feature", blankIdentity));
+    }
+
+    @Test
+    void shouldUseStickyBucketForPartialDefaultRolloutWithIdentity() {
+        String featureKey = "targeting-rollout";
+        String identity = "sticky-user";
+        double bucket = PercentageEvaluator.INSTANCE.calculateBucket(identity, featureKey);
+
+        Map<String, Object> above = new HashMap<>();
+        above.put("Audience.DefaultRolloutPercentage", bucket + 0.01);
+        assertTrue(evaluator.evaluate(FeatureFilter.of("Targeting", above), featureKey,
+                EvaluationContext.builder().identity(identity).build()));
+
+        Map<String, Object> below = new HashMap<>();
+        below.put("Audience.DefaultRolloutPercentage", bucket - 0.01);
+        assertFalse(evaluator.evaluate(FeatureFilter.of("Targeting", below), featureKey,
+                EvaluationContext.builder().identity(identity).build()));
+    }
+
+    @Test
     void shouldPreferUserMatchOverPercentage() {
         Map<String, Object> params = new HashMap<>();
         params.put("users", "special-user");

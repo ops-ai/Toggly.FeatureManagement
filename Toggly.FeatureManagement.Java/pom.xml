@@ -114,6 +114,15 @@
                 <version>${project.version}</version>
             </dependency>
 
+            <!-- JUnit BOM before Boot BOM so Jupiter 6.x wins over Boot's managed JUnit 5 -->
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>${junit.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
             <!-- Spring Boot BOM -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
@@ -188,13 +197,6 @@
             </dependency>
 
             <!-- Testing -->
-            <dependency>
-                <groupId>org.junit</groupId>
-                <artifactId>junit-bom</artifactId>
-                <version>${junit.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter</artifactId>
