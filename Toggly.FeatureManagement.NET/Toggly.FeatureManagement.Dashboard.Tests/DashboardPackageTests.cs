@@ -11,6 +11,8 @@ public sealed class DashboardPackageTests
     public async Task Packing_after_coverage_keeps_generated_reports_out_of_the_package()
     {
         var sdkRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../.."));
+        // bin/Release/<tfm>/ — pack only the TFM this test host built (avoids NU5026 for sibling TFMs).
+        var currentTfm = new DirectoryInfo(AppContext.BaseDirectory).Name;
         var project = Path.Combine(sdkRoot, "Toggly.FeatureManagement.Dashboard");
         var generated = Path.Combine(project, "coverage", "tmp", Guid.NewGuid().ToString("N"));
         var output = Path.Combine(Path.GetTempPath(), "toggly-dashboard-pack-" + Guid.NewGuid().ToString("N"));
@@ -28,7 +30,7 @@ public sealed class DashboardPackageTests
             };
             start.Environment["MSBUILDDISABLENODEREUSE"] = "1";
             foreach (var argument in new[] { "pack", Path.Combine(project, "Toggly.FeatureManagement.Dashboard.csproj"),
-                         "-c", "Release", "--no-build", "--no-restore", "-o", output })
+                         "-c", "Release", $"-p:TargetFrameworks={currentTfm}", "--no-build", "--no-restore", "-o", output })
                 start.ArgumentList.Add(argument);
             using var process = Process.Start(start)!;
             var stdout = process.StandardOutput.ReadToEndAsync();
