@@ -87,6 +87,7 @@ test('Nuxt analysis exercises Node 22/24/26 and current Nuxt 3/4 packed hosts', 
   const packedHost = job('packed-host');
   assert.match(packedHost, /node-version: \['22', '24', '26'\]/);
   assert.match(packedHost, /nuxt-version: \['3\.21\.11', '4\.6\.3'\]/);
+  assert.match(packedHost, /PLAYWRIGHT_BROWSERS_PATH: \$\{{\s*runner\.temp\s*\}\}\/ms-playwright-\$\{\{\s*matrix\.nuxt-version\s*\}\}-node\$\{\{\s*matrix\.node-version\s*\}\}/);
   assert.doesNotMatch(packedHost, /4\.5\.2|3\.21\.1[^\d]/);
 
   const smoke = job('smoke-test');

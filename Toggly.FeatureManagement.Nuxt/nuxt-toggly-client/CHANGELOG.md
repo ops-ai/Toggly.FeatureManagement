@@ -2,6 +2,7 @@
 
 ### Changed
 - Declare Node `>=22` (Node 18/20 dropped per owner support policy).
+- Vitest workers on Node 25+ pass `--no-webstorage` so happy-dom owns `localStorage` (Node’s built-in accessor otherwise leaves it `undefined`).
 
 ## 1.6.0
 

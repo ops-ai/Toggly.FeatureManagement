@@ -140,6 +140,11 @@ jobs:
         node-version: ['22', '24', '26']
         nuxt-version: ['3.21.11', '4.6.3']
         lock-mode: [locked]
+    env:
+      # Concurrent matrix cells share ~/.cache/ms-playwright by default; Node 26
+      # host installs hung for the full 5m command budget while two cells
+      # downloaded the same Chromium revision. Isolate the browser cache per cell.
+      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright-${{ matrix.nuxt-version }}-node${{ matrix.node-version }}
 
     steps:
       - name: Checkout code
