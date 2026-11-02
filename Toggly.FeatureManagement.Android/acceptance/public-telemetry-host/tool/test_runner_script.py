@@ -35,7 +35,7 @@ class RunnerScriptTest(unittest.TestCase):
         self.assertIn("runs-on: macos-15-intel", coverage)
         self.assertNotIn("- name: Enable KVM for Android emulator", coverage)
         self.assertNotIn("disable-linux-hw-accel:", coverage)
-        self.assertIn("api-level: 35", coverage)
+        self.assertIn("api-level: 37", coverage)
         self.assertIn("arch: x86_64", coverage)
         self.assertIn("script: bash tool/run_android_coverage.sh", coverage)
         self.assertIn("./gradlew testDebugUnitTest koverXmlReport", coverage)
