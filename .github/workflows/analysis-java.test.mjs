@@ -51,7 +51,7 @@ test('reporting only skips Sonar and OWASP on fork PRs or release calls without 
 
 test('the Java summary requires Sonar except for intentional reporting skips', () => {
   const summary = job('summary');
-  assert.match(summary, /required-jobs: build,current-hosts,smoke-test,code-quality,coverage,sonar,dependency-check/);
+  assert.match(summary, /required-jobs: build,current-hosts,spring-framework,smoke-test,code-quality,coverage,sonar,dependency-check/);
   assert.match(summary, /allow-skipped:.*toJSON\(inputs\.run_reporting\) == 'false'/);
   assert.match(summary, /allow-skipped:.*github\.event_name == 'pull_request'.*github\.event\.pull_request\.head\.repo\.fork/);
   assert.match(summary, /allow-skipped:.*dependency-check,sonar/);
@@ -75,4 +75,20 @@ test('Java coverage uses the configured default JaCoCo plugin without a missing 
   const sonar = job('sonar');
   assert.match(coverage, /mvn -B verify --file pom\.xml/);
   assert.doesNotMatch(coverage + sonar, /-Pcoverage/);
+});
+
+test('Java CI re-runs when filter-parity fixtures change', () => {
+  assert.match(workflow, /docs\/filter-parity\/\*\*/);
+});
+
+test('Java CI proves Spring Framework 6.2 and 7.0 for MVC/WebFlux', () => {
+  const spring = job('spring-framework');
+  assert.match(spring, /6\.2\.19/);
+  assert.match(spring, /7\.0\.10/);
+  assert.match(spring, /-pl toggly-spring-mvc,toggly-spring-webflux/);
+  assert.match(spring, /-Dspring\.version=/);
+  assert.match(spring, /-Dspring-framework\.version=/);
+  assert.match(spring, /-Dtoggly\.spring-security\.version=/);
+  assert.match(spring, /7\.1\.2/);
+  assert.match(job('build'), /java-version: \[17, 21, 25\]/);
 });
