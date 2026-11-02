@@ -109,9 +109,29 @@ class TargetingEvaluatorTest {
     }
 
     @Test
-    void shouldNotApplyDefaultPercentageWithoutIdentity() {
+    void shouldEnableAnonymousWhenDefaultRolloutIs100() {
         Map<String, Object> params = new HashMap<>();
-        params.put("DefaultRolloutPercentage", 100);
+        params.put("Audience.DefaultRolloutPercentage", 100);
+
+        FeatureFilter filter = FeatureFilter.of("Targeting", params);
+
+        assertTrue(evaluator.evaluate(filter, "test-feature", EvaluationContext.empty()));
+    }
+
+    @Test
+    void shouldDisableAnonymousWhenDefaultRolloutIs0() {
+        Map<String, Object> params = new HashMap<>();
+        params.put("Audience.DefaultRolloutPercentage", 0);
+
+        FeatureFilter filter = FeatureFilter.of("Targeting", params);
+
+        assertFalse(evaluator.evaluate(filter, "test-feature", EvaluationContext.empty()));
+    }
+
+    @Test
+    void shouldFailClosedAnonymousWhenDefaultRolloutIsPartial() {
+        Map<String, Object> params = new HashMap<>();
+        params.put("Audience.DefaultRolloutPercentage", 50);
 
         FeatureFilter filter = FeatureFilter.of("Targeting", params);
 

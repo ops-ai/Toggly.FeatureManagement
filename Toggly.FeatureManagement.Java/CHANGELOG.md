@@ -8,9 +8,11 @@
 - Spring MVC / WebFlux keep a Spring Framework **6.2.19** compile baseline and are
   proven on **7.0.10** via CI matrix + `host-fixtures/webflux-spring7`.
 - Java CI path filters include `docs/filter-parity/**` so golden-fixture changes
-  re-run the suite. `targeting-rollout-100-anonymous` is marked a known failure
-  (evaluator still requires identity for 100% default rollout; owner must approve
-  aligning with `toggly-eval`).
+  re-run the suite.
+- **Behavior:** Targeting default rollout of **100%** now enables for anonymous
+  (no identity) callers, matching `toggly-eval` and
+  `targeting-rollout-100-anonymous`. Partial rollouts remain fail-closed without
+  identity; 0% stays off (approved by Alexandru, 2026-11-01).
 
 ## 2.3.0
 

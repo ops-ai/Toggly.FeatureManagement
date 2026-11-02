@@ -26,10 +26,8 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.abort;
 import static org.junit.jupiter.api.DynamicTest.dynamicTest;
 
 /**
@@ -55,16 +53,6 @@ class FilterParityFixturesTest {
             "percentage-missing-fail-closed",
             "percentage-zero-fail-closed",
             "unknown-filter-fail-closed");
-
-    /**
-     * Known contract mismatch pending owner-approved evaluator change.
-     * Canonical {@code toggly-eval} returns true when
-     * {@code Audience.DefaultRolloutPercentage >= 100} even without identity;
-     * Java {@link TargetingEvaluator} currently requires a non-empty identity
-     * before applying any default rollout.
-     */
-    private static final String KNOWN_FAILURE_TARGETING_ROLLOUT_100_ANONYMOUS =
-            "targeting-rollout-100-anonymous";
 
     @Test
     void loadsRequiredWave1Cases() throws IOException {
@@ -96,30 +84,12 @@ class FilterParityFixturesTest {
                 JsonNode root = MAPPER.readTree(Files.readString(file));
                 String id = root.path("id").asText();
                 String description = root.path("description").asText();
-                String displayName = KNOWN_FAILURE_TARGETING_ROLLOUT_100_ANONYMOUS.equals(id)
-                        ? id + ": " + description + " [KNOWN FAILURE — evaluator]"
-                        : id + ": " + description;
-                tests.add(dynamicTest(displayName, () -> {
+                tests.add(dynamicTest(id + ": " + description, () -> {
                     FeatureDefinition definition = toDefinition(root);
                     EvaluationContext context = toContext(root);
                     boolean expected = root.path("expected").asBoolean();
-                    boolean actual = engine.evaluate(definition, context);
-                    if (KNOWN_FAILURE_TARGETING_ROLLOUT_100_ANONYMOUS.equals(id)) {
-                        // Pin current (incorrect) behavior so an accidental fix is noticed,
-                        // then abort as a documented known failure (do not change evaluator
-                        // without owner approval).
-                        assertFalse(actual,
-                                "KNOWN FAILURE guard: TargetingEvaluator still requires identity "
-                                        + "for 100% default rollout; remove this marker after "
-                                        + "owner-approved fix (match toggly-eval: pct >= 100 → true)");
-                        abort("KNOWN FAILURE: fixture expects true for 100% default rollout with "
-                                + "empty identity (toggly-eval / Microsoft.FeatureManagement). "
-                                + "Java TargetingEvaluator returns false when identity is null/empty "
-                                + "even at 100%. Proposed fix: if defaultRolloutPercentage >= 100, "
-                                + "return true before the identity check; for 0 < pct < 100 keep "
-                                + "fail-closed without identity. Owner must approve behavior change.");
-                    }
-                    assertEquals(expected, actual, () -> "fixture " + id + " failed");
+                    assertEquals(expected, engine.evaluate(definition, context),
+                            () -> "fixture " + id + " failed");
                 }));
             }
         }
