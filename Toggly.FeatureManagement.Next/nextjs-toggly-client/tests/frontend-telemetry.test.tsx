@@ -10,12 +10,26 @@ let context: ReturnType<typeof useToggly>
 function Probe() {context = useToggly(); const flag = useFeatureFlag('On'); return <span data-testid="flag">{flag.isEnabled ? 'on' : 'off'}</span>}
 const baseConfig = {appKey: 'browser', environment: 'Test', identity: 'owner', refreshInterval: 0, enableLiveUpdates: false, persistIdentity: false}
 
+/** In-memory Storage so Node 26's experimental localStorage (needs --localstorage-file) cannot break jsdom tests. */
+function createMemoryStorage(): Storage {
+  const store: Record<string, string> = {}
+  return {
+    get length() { return Object.keys(store).length },
+    clear() { for (const key of Object.keys(store)) delete store[key] },
+    getItem(key: string) { return Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null },
+    key(index: number) { return Object.keys(store)[index] ?? null },
+    removeItem(key: string) { delete store[key] },
+    setItem(key: string, value: string) { store[key] = String(value) },
+  }
+}
+
 describe('Next browser provider telemetry', () => {
   let definitions: Record<string, unknown>
   let sent: any[]
   beforeEach(() => {
     sent = []; definitions = {On: true, Off: false}
     vi.spyOn(console, 'warn').mockImplementation(() => {}); vi.spyOn(console, 'error').mockImplementation(() => {})
+    vi.stubGlobal('localStorage', createMemoryStorage())
     vi.stubGlobal('CompressionStream', undefined)
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
       if (url.includes('/api/frontend/telemetry')) {sent.push(JSON.parse(init!.body as string)); return {status: 202}}

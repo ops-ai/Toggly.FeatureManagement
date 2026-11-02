@@ -223,7 +223,7 @@ test('Next workflow executes contract checks in the existing lint job', () => {
 });
 
 test('preserves the Node matrix and runs packed Next browser hosts on its supported Node 22 row', () => {
-  assert.match(workflow, /node-version: \[18\.x, 20\.x, 22\.x\]/)
+  assert.match(workflow, /node-version: \[22\.x, 24\.x, 26\.x\]/)
   assert.match(workflow, /- name: Verify packed browser hosts\n\s+if: matrix\.node-version == '22\.x'\n\s+working-directory: \$\{\{ env\.SDK_ROOT \}\}\n\s+env:\n\s+CHROME_BIN: \/usr\/bin\/google-chrome\n\s+run: pnpm test:hosts/)
 })
 test('classifies the Next browser host harness and fixture as tests in both scans', () => {
