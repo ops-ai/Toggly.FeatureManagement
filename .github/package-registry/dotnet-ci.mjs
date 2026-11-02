@@ -113,7 +113,9 @@ if (command === "validate") {
     }
 
     const results = `TestResults/${family.name}`;
-    const frameworks = readTestFrameworks(`${family.testProject}.csproj`).filter(
+    const frameworks = readTestFrameworks(
+      resolveTestProjectFile(family.testProject),
+    ).filter(
       (framework) =>
         /^(netstandard|netcoreapp|net)\d/.test(framework) &&
         !framework.includes("$("),
