@@ -12,6 +12,10 @@ group :development, :test do
   # to construct request users and controller fixtures.
   gem "ostruct", "~> 0.6"
   gem "rails", ENV.fetch("RAILS_VERSION", ">= 7.0")
+  # json 3 removed `quirks_mode`; Rails 7.0 / 7.1 / 8.0 ActiveSupport still
+  # pass it to JSON.generate. Pin 2.x so the retained Rails floor hosts keep
+  # working in this Gemfile matrix (SDK itself has no json dependency).
+  gem "json", "~> 2.7"
   gem "rake", "~> 13.0"
   gem "rspec", "~> 3.12"
   gem "rspec-rails", "~> 6.0"
