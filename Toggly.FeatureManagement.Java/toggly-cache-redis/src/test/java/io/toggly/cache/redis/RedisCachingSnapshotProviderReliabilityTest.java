@@ -113,11 +113,16 @@ class RedisCachingSnapshotProviderReliabilityTest {
         when(pool.isClosed()).thenReturn(false);
 
         provider.setDefinitionCacheRecorder(recorder);
+        java.util.function.Consumer<FeatureSnapshot> listener = snapshot -> { };
+        provider.addRefreshListener(listener);
+        provider.removeRefreshListener(listener);
         provider.clearJwks();
         provider.clear();
         provider.close();
 
         verify(delegate).setDefinitionCacheRecorder(recorder);
+        verify(delegate).addRefreshListener(listener);
+        verify(delegate).removeRefreshListener(listener);
         verify(delegate).clearJwks();
         verify(jedis).del("unit:snapshot");
         verify(delegate).clear();

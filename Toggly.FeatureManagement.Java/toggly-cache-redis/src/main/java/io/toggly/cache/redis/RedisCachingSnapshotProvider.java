@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -201,6 +202,16 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     public void setDefinitionCacheRecorder(DefinitionCacheRecorder recorder) {
         this.definitionCacheRecorder.set(recorder);
         delegate.setDefinitionCacheRecorder(recorder);
+    }
+
+    @Override
+    public void addRefreshListener(Consumer<FeatureSnapshot> listener) {
+        delegate.addRefreshListener(listener);
+    }
+
+    @Override
+    public void removeRefreshListener(Consumer<FeatureSnapshot> listener) {
+        delegate.removeRefreshListener(listener);
     }
 
     @Override

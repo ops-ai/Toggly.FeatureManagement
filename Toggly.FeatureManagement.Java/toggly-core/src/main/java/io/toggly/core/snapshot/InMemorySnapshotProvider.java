@@ -5,14 +5,22 @@ import io.toggly.core.model.MetricDefinition;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Simple in-memory snapshot provider for testing or static configurations.
  */
 public final class InMemorySnapshotProvider implements SnapshotProvider {
 
+    private static final Logger LOGGER = Logger.getLogger(InMemorySnapshotProvider.class.getName());
+
     private final AtomicReference<FeatureSnapshot> snapshot;
+    private final CopyOnWriteArrayList<Consumer<FeatureSnapshot>> refreshListeners =
+            new CopyOnWriteArrayList<>();
 
     /**
      * Creates an empty provider.
@@ -68,7 +76,7 @@ public final class InMemorySnapshotProvider implements SnapshotProvider {
      */
     public void setFeatures(Map<String, FeatureDefinition> features) {
         FeatureSnapshot current = snapshot.get();
-        snapshot.set(new FeatureSnapshot(
+        FeatureSnapshot updated = new FeatureSnapshot(
                 features,
                 current.getMetrics(),
                 Instant.now(),
@@ -76,7 +84,9 @@ public final class InMemorySnapshotProvider implements SnapshotProvider {
                 current.getSignature(),
                 current.getKeyId(),
                 current.getSignedTimestamp(),
-                current.getSignedDefsJson()));
+                current.getSignedDefsJson());
+        snapshot.set(updated);
+        notifyRefreshListeners(updated);
     }
 
     /**
@@ -85,6 +95,32 @@ public final class InMemorySnapshotProvider implements SnapshotProvider {
      * @param newSnapshot the new snapshot
      */
     public void setSnapshot(FeatureSnapshot newSnapshot) {
-        snapshot.set(newSnapshot != null ? newSnapshot : FeatureSnapshot.empty());
+        FeatureSnapshot updated = newSnapshot != null ? newSnapshot : FeatureSnapshot.empty();
+        snapshot.set(updated);
+        notifyRefreshListeners(updated);
+    }
+
+    @Override
+    public void addRefreshListener(Consumer<FeatureSnapshot> listener) {
+        if (listener != null) {
+            refreshListeners.addIfAbsent(listener);
+        }
+    }
+
+    @Override
+    public void removeRefreshListener(Consumer<FeatureSnapshot> listener) {
+        if (listener != null) {
+            refreshListeners.remove(listener);
+        }
+    }
+
+    private void notifyRefreshListeners(FeatureSnapshot applied) {
+        for (Consumer<FeatureSnapshot> listener : refreshListeners) {
+            try {
+                listener.accept(applied);
+            } catch (Exception e) {
+                LOGGER.log(Level.WARNING, "Refresh listener threw", e);
+            }
+        }
     }
 }
