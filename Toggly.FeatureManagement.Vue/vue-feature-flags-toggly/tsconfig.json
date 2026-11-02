@@ -19,6 +19,6 @@
     "outDir": "dist",
     "declaration": true
   },
-  "include": ["vite.config.*", "src/**/*.ts", "src/**/*.d.ts", "src/**/*.vue"],
-  "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test.ts"]
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.vue"],
+  "exclude": ["node_modules", "dist", "src/__tests__", "**/*.spec.ts", "**/*.test.ts"]
 }

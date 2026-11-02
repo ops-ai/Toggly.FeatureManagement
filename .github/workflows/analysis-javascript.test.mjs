@@ -447,6 +447,52 @@ test('runs Vue packed browser telemetry checks with an explicit Chrome executabl
   assert.match(hostJob, /run: npm run test:host/);
 });
 
+test('Vue declares vue as a peer and packed hosts prove floor plus latest', () => {
+  const manifest = JSON.parse(
+    readFileSync(
+      new URL('../../Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/package.json', import.meta.url),
+      'utf8',
+    ),
+  );
+  assert.equal(manifest.peerDependencies?.vue, '^3.2.45');
+  assert.equal(manifest.devDependencies?.vue, '3.2.45');
+  assert.equal(manifest.dependencies?.vue, undefined);
+  assert.equal(manifest.engines?.node, '>=22');
+  assert.equal(manifest.scripts['test:host'], 'node scripts/test-host.mjs');
+
+  const hostScript = readFileSync(
+    new URL('../../Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs', import.meta.url),
+    'utf8',
+  );
+  assert.match(hostScript, /directory: 'vue-3\.2',\s*version: '3\.2\.45'/);
+  assert.match(hostScript, /directory: 'vue-3\.5',\s*version: '3\.5\.44'/);
+
+  const floorHost = JSON.parse(
+    readFileSync(
+      new URL(
+        '../../Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/vue-3.2/package.json',
+        import.meta.url,
+      ),
+      'utf8',
+    ),
+  );
+  const latestHost = JSON.parse(
+    readFileSync(
+      new URL(
+        '../../Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/vue-3.5/package.json',
+        import.meta.url,
+      ),
+      'utf8',
+    ),
+  );
+  assert.equal(floorHost.devDependencies.vue, '3.2.45');
+  assert.equal(latestHost.devDependencies.vue, '3.5.44');
+
+  const browserHosts = selectAnalysis('Vue');
+  assert.equal(browserHosts.runBrowserHosts, 'true');
+  assert.ok(browserHosts.requiredJobs.includes('test-current-browser-hosts'));
+});
+
 test('runs the complete packed Angular host matrix in the required test job', () => {
   const testJob = workflow.slice(workflow.indexOf('\n  test:'), workflow.indexOf('\n  test-docusaurus-host:'));
   assert.match(testJob, /- name: Verify packed Angular consumers in Chrome\s+if: matrix\.sdk == 'Angular'\s+working-directory: \$\{\{ matrix\.path \}\}\s+env:\s+CHROME_BIN: \/usr\/bin\/google-chrome\s+run: \|\s+test -x "\$CHROME_BIN"\s+npm run test:hosts/);
@@ -472,6 +518,24 @@ test('selects system Chrome before packed Client-Core tests', () => {
     workflow,
     /if: matrix\.sdk == 'Client-Telemetry' \|\| matrix\.sdk == 'Evaluator' \|\| matrix\.sdk == 'Local-Gates'/,
   );
+});
+
+test('selects system Chrome before packed JavaScript browser host', () => {
+  assert.match(
+    workflow,
+    /- name: Select system Chrome for packed JavaScript host\s+if: matrix\.sdk == 'JavaScript'/,
+  );
+  assert.match(workflow, /CHROME_BIN=\/usr\/bin\/google-chrome/);
+});
+
+test('pins Vue, Svelte, and Astro unit rows off Node 26 jsdom localStorage gap', () => {
+  for (const sdk of ['Vue', 'Svelte', 'Astro']) {
+    const matched = selectAnalysis(sdk).testMatrix.include.filter((row) => row.sdk === sdk);
+    assert.ok(matched.length >= 1, `${sdk} must appear in its filtered matrix`);
+    for (const row of matched) {
+      assert.equal(row['node-version'], '24.x', `${sdk} unit row must pin Node 24.x`);
+    }
+  }
 });
 
 
