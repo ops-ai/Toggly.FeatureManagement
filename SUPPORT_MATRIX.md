@@ -8,7 +8,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | SDK | Declared | Proven CI majors | Newest stable | Gap / action |
 | --- | --- | --- | --- | --- |
 | Next (`@ops-ai/nextjs-toggly-*`) | `next >=14` | 14.2.35, 15.5.25, 16.3.6 (webpack+turbopack) | 16.3.6 | Wave 1 done |
-| Nuxt | `^3 \|\| ^4` | 3 + 4 fixtures | 4.5.x | Maintain |
+| Nuxt | `^3 \|\| ^4` | 3.21.11 + 4.6.3 (Node 22/24/26) | 4.6.3 | Maintain |
 | Astro | `^5 \|\| ^6 \|\| ^7` | 5 / 6 / 7 (OPS-1179) | 7.3.x | Maintain |
 | NestJS | `^10 \|\| ^11 \|\| ^12` | release matrix 10, 11, 12 | 12.1.x | Wave 2 |
 | React Router | `^7 \|\| ^8` | 7 + 8 hosts | 8.4.x | Maintain / prove 8 |

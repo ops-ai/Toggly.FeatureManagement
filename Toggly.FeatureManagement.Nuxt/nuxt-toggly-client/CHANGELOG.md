@@ -1,3 +1,8 @@
+## Unreleased
+
+### Changed
+- Declare Node `>=22` (Node 18/20 dropped per owner support policy).
+
 ## 1.6.0
 
 2026-10-11

@@ -14,7 +14,7 @@ import { verifyRuntimePolicy } from './runtime-policy.test.mjs'
 import { ensureTogglySegmentsDist } from '../../../.github/scripts/ensure-toggly-segments-dist.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
-const version = process.argv[2] || '4.5.2'
+const version = process.argv[2] || '4.6.3'
 const lockMode = process.argv[3] || 'fresh'
 const lockOnly = process.argv.includes('--lock-only')
 assert(['fresh', 'record', 'locked'].includes(lockMode), 'use fresh, record, or locked mode')
@@ -78,7 +78,7 @@ if (version === '3.0.0') {
 await mkdir(join(work, 'artifacts'))
 const dependencies = retainedNode18
   ? { nuxt: version, '@nuxt/kit': '3.16.2', vue: '3.5.13', playwright: '1.51.1', typescript: '5.7.3', 'vue-tsc': '2.2.4' }
-  : { nuxt: version, vue: '3.5.42', playwright: '1.58.2', typescript: '5.9.3', 'vue-tsc': '3.2.4' }
+  : { nuxt: version, vue: '3.5.44', playwright: '1.58.2', typescript: '5.9.3', 'vue-tsc': '3.2.4' }
 if (process.env.TOGGLY_CLIENT_TELEMETRY_SOURCE) {
   const reporterSource = resolve(process.env.TOGGLY_CLIENT_TELEMETRY_SOURCE)
   const reporterPackage = JSON.parse(await readFile(join(reporterSource, 'package.json')))

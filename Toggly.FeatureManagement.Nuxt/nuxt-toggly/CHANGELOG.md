@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Widen `@nuxt/kit` (and `@nuxt/schema` for local typing) to `^3.16.0 || ^4.0.0` so Nuxt 4 hosts resolve kit 4.x while Nuxt 3 keeps the 3.16+ floor.
+- Declare Node `>=22` (Node 18/20 dropped). Packed hosts and CI now prove Nuxt **3.21.11** and **4.6.3** on Node 22/24/26.
+- Packed-host consumer Vue pin `3.5.42` → `3.5.44` so Nuxt 4.6’s `vue@^3.5.44` floor does not leave a duplicate Vue graph for Nitro tracing.
+- Leave `h3` peer at `^1` on the server package: Nuxt 4.6.x / `@nuxt/nitro-server` still depend on `h3@^1.15`, not stable `h3@2`.
+
 ## 1.4.0 — 2026-09-22
 
 ### Added
