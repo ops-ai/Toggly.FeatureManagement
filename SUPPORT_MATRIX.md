@@ -10,10 +10,12 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Next (`@ops-ai/nextjs-toggly-*`) | `next >=14` | 14.2.35, 15.5.25, 16.3.6 (webpack+turbopack) | 16.3.6 | Wave 1 done |
 | Nuxt | `^3 \|\| ^4` | 3 + 4 fixtures | 4.5.x | Maintain |
 | Astro | `^5 \|\| ^6 \|\| ^7` | 5 / 6 / 7 (OPS-1179) | 7.3.x | Maintain |
-| NestJS | `^10 \|\| ^11 \|\| ^12` | release matrix 10, 11, 12 | 12.1.x | Wave 2 |
+| NestJS | `^10 \|\| ^11 \|\| ^12` | release matrix 10, 11, 12 | 12.1.x | Wave 2 (separate SDK) |
+| Express (Node server) | `>=4` | 4.22.3 + 5.3.0 (Node 22/24/26) | 5.3.0 | Maintain |
+| Koa (Node server) | `^2 \|\| ^3` | 2.16.4 + 3.2.1 | 3.2.1 | Maintain |
 | React Router | `^7 \|\| ^8` | 7 + 8 hosts | 8.4.x | Maintain / prove 8 |
-| Fastify | `^4 \|\| ^5` | 4 + 5 | 5.12.x | Maintain |
-| Hono | `^4` | 4.x | 4.13.x | No major gap |
+| Fastify | `^4 \|\| ^5` | 4.29.1 + 5.12.7 (Node 22/24/26) | 5.12.7 | Maintain; Fastify 4 still published (`four` dist-tag) |
+| Hono | `^4` | 4.0.0 + 4.13.16 (Node 22/24/26) | 4.13.16 | No major gap; 4.0.0 runtime proved (TS 5.9 needs skipLibCheck on 4.0.0 types) |
 | Gatsby | `^5` | 5.x | 5.16.x | No Gatsby 6 |
 | Docusaurus | `^3` | 3.x | 3.10.x | No Docusaurus 4 |
 | Angular | `>=15` | workspace hosts | 22.x | Prove latest under floor |

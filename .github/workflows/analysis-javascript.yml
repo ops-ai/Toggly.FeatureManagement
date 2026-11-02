@@ -555,26 +555,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: ['18.x', '20.x', '22.x']
+        # Owner decision: drop EOL Node 18/20; maintain 22 (LTS), 24 (LTS), 26 (Current).
+        node-version: ['22.x', '24.x', '26.x']
         config:
           - { package: Core, dir: toggly-node-core }
           - { package: Express, dir: toggly-express }
           - { package: Fastify, dir: toggly-fastify }
           - { package: Hono, dir: toggly-hono }
           - { package: Koa, dir: toggly-koa }
-        include:
-          # Exercise the explicit ECDSA hash contract on the current Node runtime.
-          - node-version: '24.x'
-            config: { package: Core, dir: toggly-node-core }
-          # Exercise packed current framework hosts on maintained Node lines.
-          - node-version: '24.x'
-            config: { package: Express, dir: toggly-express }
-          - node-version: '24.x'
-            config: { package: Hono, dir: toggly-hono }
-          - node-version: '26.x'
-            config: { package: Express, dir: toggly-express }
-          - node-version: '26.x'
-            config: { package: Hono, dir: toggly-hono }
 
     steps:
       - name: Checkout code
@@ -583,8 +571,7 @@ jobs:
           ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 0
 
-      # Install pnpm before setup-node so action-setup uses the runner Node,
-      # not matrix Node 18 (pnpm/action-setup@v6 @pnpm/exe breaks on 18).
+      # Install pnpm before setup-node so action-setup uses the runner Node.
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
@@ -618,13 +605,16 @@ jobs:
         working-directory: Toggly.FeatureManagement.Node/${{ matrix.config.dir }}
         run: pnpm test:coverage
 
+      # Packed hosts prove oldest-supported + latest-stable framework majors
+      # (Express 4/5, Fastify 4/5, Hono 4.x floor/latest). Koa dual majors run
+      # inside toggly-koa vitest packed-host tests on every Node row.
       - name: Run packed host compatibility fixture
-        if: (matrix.config.package == 'Fastify' && matrix.node-version == '20.x') || ((matrix.node-version == '24.x' || matrix.node-version == '26.x') && (matrix.config.package == 'Express' || matrix.config.package == 'Hono'))
+        if: matrix.config.package == 'Express' || matrix.config.package == 'Fastify' || matrix.config.package == 'Hono'
         working-directory: Toggly.FeatureManagement.Node/${{ matrix.config.dir }}
         run: pnpm test:hosts
 
       - name: Label coverage artifact
-        if: matrix.node-version == '20.x'
+        if: matrix.node-version == '22.x'
         working-directory: Toggly.FeatureManagement.Node/${{ matrix.config.dir }}
         run: |
           test -s coverage/lcov.info
@@ -632,7 +622,7 @@ jobs:
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
-        if: matrix.node-version == '20.x'
+        if: matrix.node-version == '22.x'
         with:
           name: coverage-Node-${{ matrix.config.package }}
           path: Toggly.FeatureManagement.Node/${{ matrix.config.dir }}/coverage/
