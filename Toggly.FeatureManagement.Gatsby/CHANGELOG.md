@@ -1,3 +1,17 @@
+## Unreleased
+
+### Changed
+- Declare `engines.node` `>=22` (Node 18/20 dropped; CI exercises 22/24/26).
+- CI: unit matrix on Node 22/24/26; packed Gatsby 5.16.1 hosts prove React 18.3.1 and React 19.3.1
+  (React 19 warm-hydration probe expects minified error `#418` instead of `#425`/`#423`).
+- Add mocked HTTP API-contract evaluation specs for server `definitions-signed` and client
+  `evaluated-signed` through public entry points.
+
+### Notes
+- Deferred `nanostores` `^0.11.3` → `^1` and `@nanostores/react` `^0.8.0` → `^2`: nanostores 1.x
+  adds `eq` / `init` on store types; extending exported `TogglyReadableAtom` /
+  `TogglyWritableAtom` would change the public TypeScript surface (owner decision).
+
 ## 1.13.0
 
 2026-10-11

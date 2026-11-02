@@ -127,6 +127,7 @@ jobs:
       run_test_current_browser_hosts: ${{ steps.filter.outputs.run_test_current_browser_hosts }}
       run_test_docusaurus_host: ${{ steps.filter.outputs.run_test_docusaurus_host }}
       run_test_astro_hosts: ${{ steps.filter.outputs.run_test_astro_hosts }}
+      run_test_gatsby_hosts: ${{ steps.filter.outputs.run_test_gatsby_hosts }}
       required_jobs: ${{ steps.filter.outputs.required_jobs }}
       test_matrix: ${{ steps.filter.outputs.test_matrix }}
       browser_host_matrix: ${{ steps.filter.outputs.browser_host_matrix }}
@@ -370,18 +371,59 @@ jobs:
         run: find coverage -name lcov.info -size +0c -print -quit | grep -q .
 
       - name: Label coverage artifact
-        if: matrix.sdk != 'Docusaurus'
+        if: matrix.sdk != 'Docusaurus' && matrix['skip-coverage-upload'] != true
         working-directory: ${{ matrix.path }}
         run: printf '%s\n' 'coverage-${{ matrix.sdk }}' > coverage/artifact-name.txt
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
-        if: matrix.sdk != 'Docusaurus'
+        if: matrix.sdk != 'Docusaurus' && matrix['skip-coverage-upload'] != true
         with:
           name: coverage-${{ matrix.sdk }}
           path: ${{ matrix.path }}/coverage/
           retention-days: 7
           if-no-files-found: error
+
+  test-gatsby-hosts:
+    name: Gatsby packed host React ${{ matrix.react-major }} (Node 24)
+    needs: [prepare]
+    if: needs.prepare.outputs.run_test_gatsby_hosts == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        react-major: ['18', '19']
+    env:
+      GATSBY_TELEMETRY_DISABLED: '1'
+      GATSBY_FEEDBACK_DISABLED: '1'
+      GATSBY_REACT_MAJOR: ${{ matrix.react-major }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24.x'
+          cache: npm
+          cache-dependency-path: Toggly.FeatureManagement.Gatsby/package-lock.json
+
+      - name: Install locked Gatsby SDK dependencies
+        uses: ./.github/actions/install-local-client-telemetry
+        with:
+          package-dir: Toggly.FeatureManagement.Gatsby
+
+      - name: Build Gatsby SDK
+        working-directory: Toggly.FeatureManagement.Gatsby
+        run: npm run build
+
+      - name: Verify packed Gatsby host (React ${{ matrix.react-major }})
+        working-directory: Toggly.FeatureManagement.Gatsby
+        run: node tests/packed-host.mjs
 
   test-docusaurus-host:
     name: Current Docusaurus packed production host (Node 24)
@@ -1088,7 +1130,7 @@ jobs:
   summary:
     name: Analysis Summary
     runs-on: ubuntu-24.04
-    needs: [prepare, test, test-node-server, smoke-test, smoke-test-node-server, solidstart-host, test-current-browser-hosts, test-docusaurus-host, test-astro-hosts, sonar, dependency-check]
+    needs: [prepare, test, test-node-server, smoke-test, smoke-test-node-server, solidstart-host, test-current-browser-hosts, test-docusaurus-host, test-astro-hosts, test-gatsby-hosts, sonar, dependency-check]
     if: always()
 
     steps:
