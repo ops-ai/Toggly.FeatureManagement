@@ -20,8 +20,9 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Electron | `>=28` | hosts | 44.x | Prove latest under floor |
 | Svelte | `^4 \|\| ^5` | 4 + 5 | 5.x | Maintain |
 | SvelteKit | kit `^2 \|\| ^3` | 2.x, 3.1.0 packed host | 3.1.x | Maintain |
-| .NET core family | netstandard2.1…net9 + **net10** | multi-TFM build | net10 | Wave 2 |
-| .NET Mongo/Dapper/EF | includes net10 | net8/net10 consumers | net10 | Maintain |
+| .NET core family | netstandard2.1…net10 + **net11** (RC) | multi-TFM build + parity matrix | net10 / net11 RC | Maintain; net11 allow-failure until GA |
+| .NET Dashboard / Embedded | net8…net11 (RC) | unit + embedded consumer matrix | net10 / net11 RC | net8 floor (Razor); net11 allow-failure |
+| .NET Mongo/Dapper/EF | includes net10 + net11 RC | net8/net10/net11 consumers | net10 / net11 RC | Maintain |
 | Java Spring | Boot 3.5 + Boot 4.1 / Java 17 | Boot 3 + `toggly-spring-boot4-starter` tests | Boot 4.1 | Dual starter artifacts |
 | Java Redis | Jedis 5 + Jedis 8 | dual artifacts | Jedis 8 | No Lettuce 7 |
 | Android | AGP 8.7 / Kotlin 2.0 | Java 17+21 | AGP 9 / Kotlin 2.2+ | Wave 3 dual line |

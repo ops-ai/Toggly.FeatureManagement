@@ -1,5 +1,39 @@
 # Changelog
 
+## All .NET SDK packages 3.15.0 - 2026-11-02
+
+### Added
+- Target `net11.0` (RC) across the multi-TFM server SDK family; Dashboard and
+  Embedded now also target `net9.0`, `net10.0`, and `net11.0` (alongside
+  existing `net8.0`).
+- Filter-parity and variant-allocator corpus evaluation tests
+  (`Toggly.FeatureManagement.Parity.Tests`) that load shared fixtures and run
+  them against the .NET evaluator on every runnable TFM.
+
+### Changed
+- Bump `Microsoft.FeatureManagement` to 4.8.0, `Grpc.Net.*` to 2.85.0,
+  `Google.Protobuf` to 3.36.2, `Hangfire.Core` to 1.8.25, and
+  `System.Net.Http.Json` to the latest compatible version per TFM.
+- Upgrade `MongoDB.Driver` 2.x → 3.13.0 and `RavenDB.Client` 6.x → 7.2.7
+  (both still provide `netstandard2.1` assets for older TFMs).
+- Use `Azure.Core` 1.64.0 on net6.0+; keep 1.50.0 on netstandard2.1 /
+  netcoreapp3.1 / net5.0 where Hosting.Abstractions 10 conflicts.
+- Stay on FluentAssertions 6.12.x (Apache-licensed); pin SystemMetrics tests
+  back from 8.x.
+- CI installs SDKs/runtimes for every library TFM and runs the TFM × test
+  matrix; `net11.0` is an allow-failure preview job while GA is out.
+
+### Known filter-parity divergence
+- `unknown-filter-fail-closed`: production
+  `IgnoreMissingFeatureFilters=false` throws on unknown filters; the shared
+  contract expects a fail-closed `false` result. Documented in tests; behavior
+  unchanged.
+
+### Notes
+- RavenDB.Client/TestDriver 7.x: unit tests remain authoritative. Embedded-server
+  integration tests are `[SkippableFact]` and skip when the TestDriver server
+  cannot start (host shared-framework / storage constraints).
+
 ## All .NET SDK packages 3.14.3 - 2026-10-23
 
 ### Fixed
