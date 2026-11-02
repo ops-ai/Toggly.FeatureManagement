@@ -28,6 +28,6 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Flutter | Dart `>=2.18.2 <4` | Flutter stable (Dart 3) | Dart 3 | Keep floor; equatable 3 deferred |
 | iOS | iOS 14 / macOS 11 | Xcode 16.x matrix | Xcode 16.4 | Keep floor |
 | Rust axum | axum 0.7 + axum08 | dual crates | 0.8 | `toggly-axum08` 0.1.1+ accepts workspace `toggly` range |
-| Go | Go 1.25; grpc 1.80 | CI | newer grpc | Coordinated bump only |
+| Go | Go 1.26; grpc 1.85 | CI 1.26 + 1.27 | — | Floor Go 1.26; CI also runs latest stable |
 
 Update this file in the same PR that changes peers, fixtures, or TFMs.
