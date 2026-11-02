@@ -11,7 +11,8 @@
   DataStore 1.1.1 → 1.3.0, coroutines 1.10.2 → 1.11.0, serialization 1.7.3 →
   1.12.0, mockk 1.13.17 → 1.14.11, OkHttp 4.12.0 → 4.12.1, Retrofit 2.11.0 →
   2.12.0 (majors unchanged).
-- CI Java matrix 17/21 → 17/21/25; acceptance emulator API 35 → 37.
+- CI Java matrix 17/21 → 17/21/25; acceptance emulator API 35 → 36
+  (compileSdk 37; API 37.0 AVDs do not boot on GHA macos-15-intel).
 
 ### Added
 - Unit tests that drive public flag evaluation from mocked `evaluated-signed`

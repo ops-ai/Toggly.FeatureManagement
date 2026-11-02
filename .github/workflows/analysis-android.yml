@@ -145,15 +145,14 @@ jobs:
           python -m coverage report --omit='tool/test_*.py' --fail-under=80
           python -m coverage xml --omit='tool/test_*.py' -o coverage.xml
 
-      - name: Measure public acceptance Activity coverage on Android API 37
+      - name: Measure public acceptance Activity coverage on Android API 36
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          # SDK packages are published as android-37.0 (not android-37).
-          # Quote so YAML does not coerce 37.0 → number 37.
-          api-level: "37.0"
-          # default image stayed offline for the full 600s boot window on
-          # macos-15-intel; aosp_atd is the CI-oriented system image.
-          target: aosp_atd
+          # compileSdk/targetSdk stay at 37. API 37.0 AVDs (default and
+          # aosp_atd) never reach boot_completed on macos-15-intel GHA runners
+          # (device offline for the full 600s window). API 36 is the Play
+          # target floor and boots reliably here.
+          api-level: 36
           arch: x86_64
           disable-animations: true
           working-directory: Toggly.FeatureManagement.Android/acceptance/public-telemetry-host
