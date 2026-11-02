@@ -20,4 +20,7 @@ group :development, :test do
   gem "simplecov", "~> 1.3", require: false
   gem "sqlite3", "~> 2.10"
   gem "webmock", "~> 3.34"
+  # json 3.x rejects ActiveSupport's quirks_mode kwarg (still used by Rails < 8.1).
+  # Keep the 2.x line so the Rails 7.x / 8.0 matrix can call Hash#to_json.
+  gem "json", "~> 2.0"
 end
