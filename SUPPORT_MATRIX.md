@@ -11,7 +11,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Nuxt | `^3 \|\| ^4` | 3 + 4 fixtures | 4.5.x | Maintain |
 | Astro | `^5 \|\| ^6 \|\| ^7` | 5 / 6 / 7 (OPS-1179) | 7.3.x | Maintain |
 | NestJS | `^10 \|\| ^11 \|\| ^12` | release matrix 10, 11, 12 | 12.1.x | Wave 2 |
-| React Router | `^7 \|\| ^8` | 7 + 8 hosts | 8.4.x | Maintain / prove 8 |
+| React Router | `^7 \|\| ^8` | 7 + 8 hosts | 8.5.x | Maintain |
 | Fastify | `^4 \|\| ^5` | 4 + 5 | 5.12.x | Maintain |
 | Hono | `^4` | 4.x | 4.13.x | No major gap |
 | Gatsby | `^5` | 5.x | 5.16.x | No Gatsby 6 |
