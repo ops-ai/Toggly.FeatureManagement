@@ -474,6 +474,24 @@ test('selects system Chrome before packed Client-Core tests', () => {
   );
 });
 
+test('selects system Chrome before packed JavaScript browser host', () => {
+  assert.match(
+    workflow,
+    /- name: Select system Chrome for packed JavaScript host\s+if: matrix\.sdk == 'JavaScript'/,
+  );
+  assert.match(workflow, /CHROME_BIN=\/usr\/bin\/google-chrome/);
+});
+
+test('pins Vue, Svelte, and Astro unit rows off Node 26 jsdom localStorage gap', () => {
+  for (const sdk of ['Vue', 'Svelte', 'Astro']) {
+    const matched = selectAnalysis(sdk).testMatrix.include.filter((row) => row.sdk === sdk);
+    assert.ok(matched.length >= 1, `${sdk} must appear in its filtered matrix`);
+    for (const row of matched) {
+      assert.equal(row['node-version'], '24.x', `${sdk} unit row must pin Node 24.x`);
+    }
+  }
+});
+
 
 test('classifies the JavaScript packed browser harness as test code in both scanners', () => {
   const harness = 'Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs';
