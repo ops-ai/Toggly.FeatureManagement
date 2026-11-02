@@ -151,6 +151,9 @@ jobs:
           # SDK packages are published as android-37.0 (not android-37).
           # Quote so YAML does not coerce 37.0 → number 37.
           api-level: "37.0"
+          # default image stayed offline for the full 600s boot window on
+          # macos-15-intel; aosp_atd is the CI-oriented system image.
+          target: aosp_atd
           arch: x86_64
           disable-animations: true
           working-directory: Toggly.FeatureManagement.Android/acceptance/public-telemetry-host
