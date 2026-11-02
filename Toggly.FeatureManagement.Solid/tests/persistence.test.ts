@@ -524,30 +524,36 @@ describe('restored key and envelope validation', () => {
   });
 
   it('accepts constrained public keys and honors expiry and maximum signature age', async () => {
-    const now = Math.floor(Date.now() / 1000);
-    const keys = { keys: [{ ...jwks.keys[0], use: 'sig', key_ops: ['verify'], exp: now + 1000 }] };
-    expect((await verifyEnvelope(envelope({ on: true }), keys, {})).definitions).toEqual({
-      on: true,
-    });
-    await expect(
-      verifyEnvelope(envelope({ on: true }, 'der', now - 120), keys, {
-        maxSignatureAgeSeconds: 60,
-      }),
-    ).rejects.toThrow('maxSignatureAgeSeconds');
-    // Stay well beyond the +60s skew window so wall-clock delay between capturing
-    // `now` and verifyEnvelope's Date.now() cannot make a future stamp look fresh.
-    await expect(verifyEnvelope(envelope({ on: true }, 'der', now + 120), keys, {})).rejects.toThrow(
-      'timestamp',
-    );
-    await expect(
-      verifyEnvelope(envelope({ on: true }, 'der', now), keys, {}, now + 1),
-    ).rejects.toThrow('timestamp');
-    await expect(
-      verifyEnvelope(envelope({ malformed: { rules: [{ property: 'x' }] } }), keys, {}),
-    ).rejects.toThrow('Invalid evaluated');
-    await expect(verifyEnvelope(envelope({ on: true }), { keys: [] }, {})).rejects.toThrow(
-      'Missing',
-    );
+    // Freeze Date so the test and verifyEnvelope share one clock; keep the
+    // future-stamp assertion at skew window + 1s (now + 61) without wall-clock races.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-15T12:00:00.000Z'));
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      const keys = { keys: [{ ...jwks.keys[0], use: 'sig', key_ops: ['verify'], exp: now + 1000 }] };
+      expect((await verifyEnvelope(envelope({ on: true }), keys, {})).definitions).toEqual({
+        on: true,
+      });
+      await expect(
+        verifyEnvelope(envelope({ on: true }, 'der', now - 120), keys, {
+          maxSignatureAgeSeconds: 60,
+        }),
+      ).rejects.toThrow('maxSignatureAgeSeconds');
+      await expect(
+        verifyEnvelope(envelope({ on: true }, 'der', now + 61), keys, {}),
+      ).rejects.toThrow('timestamp');
+      await expect(
+        verifyEnvelope(envelope({ on: true }, 'der', now), keys, {}, now + 1),
+      ).rejects.toThrow('timestamp');
+      await expect(
+        verifyEnvelope(envelope({ malformed: { rules: [{ property: 'x' }] } }), keys, {}),
+      ).rejects.toThrow('Invalid evaluated');
+      await expect(verifyEnvelope(envelope({ on: true }), { keys: [] }, {})).rejects.toThrow(
+        'Missing',
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('retains newer active state when an older signed remote envelope arrives', async () => {
