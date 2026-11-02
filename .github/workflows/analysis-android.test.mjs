@@ -254,7 +254,7 @@ test('preserves Android Java matrix, Gradle checks, native telemetry coverage an
   const collector = step(coverage, 'Test the public acceptance collector with coverage');
   for (const command of ['coverage==7.10.7', '--source=tool -m unittest discover', "--omit='tool/test_*.py' --fail-under=80", "--omit='tool/test_*.py' -o coverage.xml"]) assert.ok(collector.includes(command));
   const native = step(coverage, 'Measure public acceptance Activity coverage on Android API 37');
-  assert.match(native, /api-level: 37\.0/);
+  assert.match(native, /api-level: "37\.0"/);
   assert.match(native, /script: bash tool\/run_android_coverage.sh/);
   const artifact = step(coverage, 'Upload coverage artifact');
   for (const path of ['name: android-coverage', '**/build/reports/kover/report.xml', 'app/build/reports/coverage/androidTest/debug/connected/report.xml', 'app/build/reports/androidTests/connected/device-diagnostics.txt', 'acceptance/public-telemetry-host/coverage.xml']) assert.ok(artifact.includes(path));
