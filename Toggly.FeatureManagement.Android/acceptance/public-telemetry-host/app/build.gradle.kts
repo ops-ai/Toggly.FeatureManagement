@@ -37,6 +37,10 @@ dependencies {
     implementation(libs.toggly.views)
     implementation(libs.toggly.room)
     implementation(libs.toggly.datastore)
+    // Published AARs still declare OkHttp 4; pin 5.x into the app APK so
+    // androidTest mockwebserver 5 resolves OkHttp 5 internals at runtime.
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.material3)
@@ -52,4 +56,15 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(platform(libs.androidx.compose.bom))
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+
+configurations.configureEach {
+    resolutionStrategy {
+        force(
+            "com.squareup.okhttp3:okhttp:${libs.versions.okhttp.get()}",
+            "com.squareup.okhttp3:logging-interceptor:${libs.versions.okhttp.get()}",
+            "com.squareup.okhttp3:mockwebserver:${libs.versions.mockwebserver.get()}",
+            "com.squareup.okhttp3:mockwebserver3:${libs.versions.mockwebserver.get()}",
+        )
+    }
 }
