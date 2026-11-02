@@ -11,6 +11,9 @@
   (same API lineage; live-update behavior unchanged).
 - Bump `google.golang.org/grpc` to 1.85.0 and refresh other direct/indirect
   dependencies to current stable releases (`go-redis` 9.23, `golang.org/x/*`).
+- User-Agent and live-update `sdkVersion` report `toggly-go/0.13.3`.
+- Parse ES256 JWKs with `ecdsa.ParseUncompressedPublicKey` (Go 1.26
+  deprecates composing `ecdsa.PublicKey` via raw `X`/`Y` fields).
 
 ### Added
 - Golden filter-parity fixture tests loading `docs/filter-parity/fixtures/`
