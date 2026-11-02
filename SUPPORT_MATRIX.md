@@ -14,7 +14,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | React Router | `^7 \|\| ^8` | 7 + 8 hosts | 8.4.x | Maintain / prove 8 |
 | Fastify | `^4 \|\| ^5` | 4 + 5 | 5.12.x | Maintain |
 | Hono | `^4` | 4.x | 4.13.x | No major gap |
-| Gatsby | `^5` | 5.x | 5.16.x | No Gatsby 6 |
+| Gatsby | `^5` (+ React `^18 \|\| ^19`) | Gatsby 5.16.1 × React 18.3.1 / 19.3.1; Node 22/24/26 | 5.16.x | No Gatsby 6 |
 | Docusaurus | `^3` | 3.x | 3.10.x | No Docusaurus 4 |
 | Angular | `>=15` | workspace hosts | 22.x | Prove latest under floor |
 | Electron | `>=28` | hosts | 44.x | Prove latest under floor |

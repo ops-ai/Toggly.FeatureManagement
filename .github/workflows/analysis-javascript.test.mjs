@@ -108,6 +108,7 @@ test('all Sonar scans measure the complete Client Core and Docusaurus executable
       }
     }
     assert.ok(globs('exclusions').includes('toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/test-setup.ts'));
+    assert.ok(globs('exclusions').includes('Toggly.FeatureManagement.Gatsby/src/__tests__/setup-jsdom-storage.ts'));
     assert.ok(globs('coverage.exclusions').includes('toggly-docusaurus-edge-sdk/cloudflare/worker/**'));
   }
 });
@@ -419,25 +420,54 @@ test('Gatsby packed host restores segments dist and isolates gatsby-worker diagn
   assert.match(diagnostics, /GATSBY_WORKER_ID/);
 });
 
-test('runs the current Gatsby packed host on Node 24', () => {
+test('runs Gatsby unit matrix on Node 22/24/26 and packed hosts for React 18/19', () => {
   assert.match(workflow, /'Toggly\.FeatureManagement\.Gatsby\/\*\*'/);
-  for (const sdks of ['all', 'Gatsby']) {
-    assert.deepEqual(selectAnalysis(sdks).testMatrix.include.filter(row => row.sdk === 'Gatsby'), [{
+  const gatsbyRows = [
+    {
       sdk: 'Gatsby', path: 'Toggly.FeatureManagement.Gatsby',
-      'test-cmd': 'npm run test:coverage && node tests/packed-host.mjs',
+      'test-cmd': 'npm run test:coverage',
+      'node-version': '22.x', 'has-lint': false, 'skip-coverage-upload': true,
+    },
+    {
+      sdk: 'Gatsby', path: 'Toggly.FeatureManagement.Gatsby',
+      'test-cmd': 'npm run test:coverage',
       'node-version': '24.x', 'has-lint': false,
-    }]);
+    },
+    {
+      sdk: 'Gatsby', path: 'Toggly.FeatureManagement.Gatsby',
+      'test-cmd': 'npm run test:coverage',
+      'node-version': '26.x', 'has-lint': false, 'skip-coverage-upload': true,
+    },
+  ];
+  for (const sdks of ['all', 'Gatsby']) {
+    assert.deepEqual(
+      selectAnalysis(sdks).testMatrix.include.filter((row) => row.sdk === 'Gatsby'),
+      gatsbyRows,
+    );
     assertRequiredHost(sdks, 'test');
+    assertRequiredHost(sdks, 'test-gatsby-hosts');
   }
   assert.match(prepare, /test_matrix: \$\{\{ steps\.filter\.outputs\.test_matrix \}\}/);
+  assert.match(prepare, /run_test_gatsby_hosts: \$\{\{ steps\.filter\.outputs\.run_test_gatsby_hosts \}\}/);
   const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   assert.match(testJob, /matrix: \$\{\{ fromJson\(needs\.prepare\.outputs\.test_matrix\) \}\}/);
   assert.match(testJob, /node-version: \$\{\{ matrix\.node-version \|\| 'lts\/\*' \}\}/);
   assert.match(testJob, /run: \$\{\{ matrix\.test-cmd \}\}/);
+  assert.match(testJob, /matrix\['skip-coverage-upload'\] != true/);
   const install = testJob.match(/- name: Install locked standalone package dependencies\n[\s\S]*?(?=\n\s+- name:)/)?.[0] ?? '';
   assert.match(install, /if: matrix\.sdk == 'Gatsby' \|\| matrix\.sdk == 'Client-Core'/);
   assert.match(install, /uses: \.\/\.github\/actions\/install-local-client-telemetry/);
   assert.doesNotMatch(install, /continue-on-error/);
+  const gatsbyHosts = workflow.match(/\n  test-gatsby-hosts:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  assert.match(gatsbyHosts, /react-major: \['18', '19'\]/);
+  assert.match(gatsbyHosts, /GATSBY_REACT_MAJOR: \$\{\{ matrix\.react-major \}\}/);
+  assert.match(gatsbyHosts, /run: node tests\/packed-host\.mjs/);
+  const packedHost = readFileSync(
+    new URL('../../Toggly.FeatureManagement.Gatsby/tests/packed-host.mjs', import.meta.url),
+    'utf8',
+  );
+  assert.match(packedHost, /GATSBY_REACT_MAJOR === '19'/);
+  assert.match(packedHost, /react: '19\.3\.1'/);
 });
 
 test('runs Vue packed browser telemetry checks with an explicit Chrome executable', () => {
@@ -474,6 +504,13 @@ test('selects system Chrome before packed Client-Core tests', () => {
   );
 });
 
+test('selects system Chrome before packed JavaScript browser host', () => {
+  assert.match(
+    workflow,
+    /- name: Select system Chrome for packed JavaScript host\s+if: matrix\.sdk == 'JavaScript'/,
+  );
+  assert.match(workflow, /CHROME_BIN=\/usr\/bin\/google-chrome/);
+});
 
 test('classifies the JavaScript packed browser harness as test code in both scanners', () => {
   const harness = 'Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs';

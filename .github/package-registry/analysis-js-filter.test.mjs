@@ -9,8 +9,11 @@ test('all includes default required jobs and full matrix', () => {
   assert.ok(r.requiredJobs.includes('test'));
   assert.ok(r.requiredJobs.includes('solidstart-host'));
   assert.ok(r.requiredJobs.includes('test-astro-hosts'));
+  assert.ok(r.requiredJobs.includes('test-gatsby-hosts'));
   assert.equal(r.runTestAstroHosts, true);
+  assert.equal(r.runTestGatsbyHosts, true);
   assert.equal(r.needSharedDeps, true);
+  assert.equal(r.testMatrix.filter((row) => row.sdk === 'Gatsby').length, 3);
 });
 
 test('SolidJS-only skips shared deps artifact', () => {
@@ -22,15 +25,34 @@ test('SolidJS-only skips shared deps artifact', () => {
 test('Gatsby-only restores shared declarations for its linked Segments dependency', () => {
   const result = filterAnalysisJs('Gatsby');
   assert.equal(result.needSharedDeps, true);
-  assert.deepEqual(result.testMatrix, [{
-    sdk: 'Gatsby',
-    path: 'Toggly.FeatureManagement.Gatsby',
-    'test-cmd': 'npm run test:coverage && node tests/packed-host.mjs',
-    'node-version': '24.x',
-    'has-lint': false,
-  }]);
-  assert.equal(result.requiredJobs, 'sonar,dependency-check,test');
+  assert.deepEqual(result.testMatrix, [
+    {
+      sdk: 'Gatsby',
+      path: 'Toggly.FeatureManagement.Gatsby',
+      'test-cmd': 'npm run test:coverage',
+      'node-version': '22.x',
+      'has-lint': false,
+      'skip-coverage-upload': true,
+    },
+    {
+      sdk: 'Gatsby',
+      path: 'Toggly.FeatureManagement.Gatsby',
+      'test-cmd': 'npm run test:coverage',
+      'node-version': '24.x',
+      'has-lint': false,
+    },
+    {
+      sdk: 'Gatsby',
+      path: 'Toggly.FeatureManagement.Gatsby',
+      'test-cmd': 'npm run test:coverage',
+      'node-version': '26.x',
+      'has-lint': false,
+      'skip-coverage-upload': true,
+    },
+  ]);
+  assert.equal(result.requiredJobs, 'sonar,dependency-check,test,test-gatsby-hosts');
   assert.equal(result.runTest, true);
+  assert.equal(result.runTestGatsbyHosts, true);
   assert.equal(result.runSolidstartHost, false);
   assert.equal(result.runTestCurrentBrowserHosts, false);
   assert.equal(result.runTestDocusaurusHost, false);
@@ -40,9 +62,17 @@ test('Gatsby-only restores shared declarations for its linked Segments dependenc
 test('Gatsby mixed with standalone SDKs still requires shared declarations', () => {
   const result = filterAnalysisJs('Client-Core,Gatsby,SolidJS');
   assert.equal(result.needSharedDeps, true);
-  assert.deepEqual(result.testMatrix.map(({ sdk }) => sdk), ['Client-Core', 'SolidJS', 'Gatsby']);
-  assert.equal(result.requiredJobs, 'sonar,dependency-check,test,solidstart-host');
+  assert.deepEqual(
+    [...new Set(result.testMatrix.map(({ sdk }) => sdk))],
+    ['Client-Core', 'SolidJS', 'Gatsby'],
+  );
+  assert.equal(result.testMatrix.filter((row) => row.sdk === 'Gatsby').length, 3);
+  const jobs = new Set(result.requiredJobs.split(','));
+  assert.ok(jobs.has('test'));
+  assert.ok(jobs.has('solidstart-host'));
+  assert.ok(jobs.has('test-gatsby-hosts'));
   assert.equal(result.runSolidstartHost, true);
+  assert.equal(result.runTestGatsbyHosts, true);
   assert.equal(result.runTestCurrentBrowserHosts, false);
 });
 
@@ -57,10 +87,13 @@ test('standalone SDKs without Gatsby do not require shared artifacts', () => {
 
 test('Vue filter limits matrix and requires browser hosts', () => {
   const r = filterAnalysisJs('Vue');
-  assert.deepEqual(
-    r.testMatrix.map((x) => x.sdk),
-    ['Vue'],
-  );
+  assert.deepEqual(r.testMatrix, [{
+    sdk: 'Vue',
+    path: 'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly',
+    'test-cmd': 'npm test -- --coverage && npm run test:host',
+    'node-version': '24.x',
+    'has-lint': false,
+  }]);
   assert.equal(r.runTest, true);
   assert.equal(r.runTestCurrentBrowserHosts, true);
   assert.equal(r.runSolidstartHost, false);
@@ -68,6 +101,30 @@ test('Vue filter limits matrix and requires browser hosts', () => {
   assert.ok(r.requiredJobs.split(',').includes('test'));
   assert.ok(r.requiredJobs.split(',').includes('test-current-browser-hosts'));
   assert.ok(!r.requiredJobs.split(',').includes('solidstart-host'));
+});
+
+test('Svelte unit matrix pins Node 24.x (hosts cover 22/24/26)', () => {
+  const r = filterAnalysisJs('Svelte');
+  assert.deepEqual(r.testMatrix, [{
+    sdk: 'Svelte',
+    path: 'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly',
+    'test-cmd': 'npx vitest run --coverage && npm run test:host',
+    'node-version': '24.x',
+    'has-lint': false,
+  }]);
+  assert.equal(r.runTestCurrentBrowserHosts, true);
+});
+
+test('Astro unit matrix pins Node 24.x (packed hosts cover 5/6/7)', () => {
+  const r = filterAnalysisJs('Astro');
+  assert.deepEqual(r.testMatrix, [{
+    sdk: 'Astro',
+    path: 'Toggly.FeatureManagement.Astro',
+    'test-cmd': 'npm test -- --coverage',
+    'node-version': '24.x',
+    'has-lint': false,
+  }]);
+  assert.equal(r.runTestAstroHosts, true);
 });
 
 test('SolidJS requires solidstart-host', () => {
@@ -129,7 +186,7 @@ test('Local Gates runs its coverage and packed consumer without shared dependenc
   assert.deepEqual(result.testMatrix, [{
     sdk: 'Local-Gates',
     path: 'toggly-local-gates',
-    'test-cmd': 'npm test',
+    'test-cmd': 'npm run test:coverage',
     'has-lint': false,
   }]);
   assert.equal(result.needSharedDeps, false);

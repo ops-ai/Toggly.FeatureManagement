@@ -27,6 +27,8 @@ A comprehensive Gatsby plugin for [Toggly](https://toggly.io) feature flags with
 npm install @ops-ai/gatsby-feature-flags-toggly
 ```
 
+Requires **Node.js 22+**, **Gatsby 5**, and **React 18 or 19** (matching `react` / `react-dom`).
+
 ## Quick Start
 
 ### 1. Configure the Plugin
