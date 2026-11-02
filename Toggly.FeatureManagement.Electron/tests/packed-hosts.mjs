@@ -400,13 +400,16 @@ try {
     const env = { ...process.env, npm_config_cache: join(hostDirectory, 'npm-cache'), electron_config_cache: join(hostDirectory, 'electron-cache') }
     await run('npm', ['install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund'], hostDirectory, { env })
     await run('npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund'], hostDirectory, { env })
-    // Electron 28's install.js exits before extract finishes when invoked with a
-    // bare Node 26 process (path.txt missing, dist incomplete). npm's lifecycle
-    // runner keeps the install alive; rebuild is the supported way to run that
-    // script after --ignore-scripts.
-    await run('npm', ['rebuild', 'electron', '--foreground-scripts'], hostDirectory, { env })
+    // Electron 28's bundled extract-zip does not finish under Node 26 (current
+    // lts/*). install-electron-binary.mjs downloads then uses unzip(1).
+    await run(
+      process.execPath,
+      [fileURLToPath(new URL('./install-electron-binary.mjs', import.meta.url))],
+      hostDirectory,
+      { env },
+    )
     const electronBinary = realpathSync(createRequire(join(hostDirectory, 'package.json'))('electron'))
-    assert.ok(existsSync(electronBinary), `Electron ${row.electron} binary missing after rebuild`)
+    assert.ok(existsSync(electronBinary), `Electron ${row.electron} binary missing after install`)
     await run('npm', ['ls', '--all'], hostDirectory, { env })
     const reporter = JSON.parse(readFileSync(join(hostDirectory, 'node_modules/@ops-ai/toggly-client-telemetry/package.json'), 'utf8'))
     const lock = JSON.parse(readFileSync(join(hostDirectory, 'package-lock.json'), 'utf8'))
