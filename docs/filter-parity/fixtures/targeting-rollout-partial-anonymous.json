@@ -1,6 +1,6 @@
 {
   "id": "targeting-rollout-partial-anonymous",
-  "description": "Targeting partial default rollout fails closed without identity",
+  "description": "Targeting partial default rollout fails closed without identity; node-core may randomly bucket after minting an anonymous UUID",
   "featureKey": "parity-targeting-rollout-partial",
   "requirementType": "Any",
   "filters": [
@@ -12,5 +12,10 @@
     }
   ],
   "context": {},
-  "expected": false
+  "expected": false,
+  "sdkExpectations": {
+    "node-core": {
+      "allowedOutcomes": [true, false]
+    }
+  }
 }
