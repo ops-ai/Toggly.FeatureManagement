@@ -1,6 +1,6 @@
 # .NET client SDK
 
-Use `Toggly.FeatureManagement.Client` in distributed .NET applications with a **frontend App Key**. The portable core targets .NET 8 and has no ASP.NET Core or Generic Host dependency. `Toggly.FeatureManagement.Client.Desktop` adds native ES256 verification and filesystem snapshots for console and desktop hosts.
+Use `Toggly.FeatureManagement.Client` in distributed .NET applications with a **frontend App Key**. The portable core and Desktop package multi-target `net7.0`–`net11.0` (RC) and have no ASP.NET Core or Generic Host dependency. `Toggly.FeatureManagement.Client.Desktop` adds native ES256 verification and filesystem snapshots for console and desktop hosts.
 
 Use the [trusted .NET server SDK](https://docs.toggly.io/sdks/dotnet) for backend definitions, authenticated targeting, middleware, metrics and server-side enforcement. This client fetches evaluated-signed booleans and EntityGates. Client-controlled identities and feature gates do not authorize access to protected resources.
 
@@ -93,7 +93,7 @@ The core constructor accepts `TogglyClientOptions`, a caller-owned `HttpClient`,
 
 | Surface | Support |
 | --- | --- |
-| Console and desktop .NET 8+ | Native desktop package |
+| Console and desktop .NET 7+ | Native desktop package |
 | ASP.NET / Generic Host required | No |
 | Boolean, all/any/negate, defaults | Yes |
 | Identity/groups/claims and EntityGate | Yes |

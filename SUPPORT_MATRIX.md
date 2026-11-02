@@ -21,6 +21,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Svelte | `^4 \|\| ^5` | 4 + 5 | 5.x | Maintain |
 | SvelteKit | kit `^2 \|\| ^3` | 2.x, 3.1.0 packed host | 3.1.x | Maintain |
 | .NET core family | netstandard2.1…net9 + **net10** | multi-TFM build | net10 | Wave 2 |
+| .NET Client / Desktop | net7–net10 + **net11** (RC) | per-TFM tests (net11 allow-failure) | net10 (+ net11 RC) | net6 / netstandard2.1 omitted (BCL shims) |
 | .NET Mongo/Dapper/EF | includes net10 | net8/net10 consumers | net10 | Maintain |
 | Java Spring | Boot 3.5 + Boot 4.1 / Java 17 | Boot 3 + `toggly-spring-boot4-starter` tests | Boot 4.1 | Dual starter artifacts |
 | Java Redis | Jedis 5 + Jedis 8 | dual artifacts | Jedis 8 | No Lettuce 7 |

@@ -57,6 +57,12 @@ jobs:
             9.0.x
             10.0.x
 
+      - name: Setup .NET 11 RC (Client / Desktop preview TFM)
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
+
       - name: Setup Node.js for shared package governance
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -569,6 +575,12 @@ jobs:
             9.0.x
             10.0.x
 
+      - name: Setup .NET 11 RC (Client / Desktop preview TFM)
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
+
       - name: Setup Node.js for shared package governance
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -651,6 +663,27 @@ jobs:
           TOGGLY_SMOKE_APP_KEY_BACKEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_BACKEND }}
         run: dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.SmokeTests/Toggly.FeatureManagement.SmokeTests.csproj -c Release --logger "trx;LogFileName=smoke-test-results.trx" --blame-hang-timeout 90s --blame-hang-dump-type none
 
+  client-net11-preview:
+    name: Client net11.0 preview (allow failure)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
+      - name: Test Client / Desktop on net11.0 RC
+        run: |
+          dotnet test Toggly.FeatureManagement.Client/tests/Toggly.FeatureManagement.Client.Tests \
+            -c Release -p:IncludeNet11=true --framework net11.0 \
+            --logger "trx;LogFileName=client-net11-test-results.trx"
+
   blazor-runtime:
     name: Blazor .NET runtime ${{ matrix.framework }}
     runs-on: ubuntu-latest
@@ -669,6 +702,10 @@ jobs:
             8.0.x
             10.0.x
             ${{ matrix.sdk }}
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'

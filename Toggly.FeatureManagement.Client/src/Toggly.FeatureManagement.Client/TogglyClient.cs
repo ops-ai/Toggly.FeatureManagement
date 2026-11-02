@@ -473,7 +473,7 @@ public sealed partial class TogglyClient : IAsyncDisposable, IFrontendTelemetry,
         }
         if (telemetry is not null)
             await telemetry.DisposeAsync().ConfigureAwait(false);
-        await lifetime.CancelAsync().ConfigureAwait(false);
+        await Compatibility.CancelAsync(lifetime).ConfigureAwait(false);
         await Task.WhenAll(pollTask ?? Task.CompletedTask, liveTask ?? Task.CompletedTask).ConfigureAwait(false);
         // The lifetime token is already cancelled. Drain any caller-owned refresh that is still
         // unwinding so disposal cannot return while transport/store callbacks remain active.
