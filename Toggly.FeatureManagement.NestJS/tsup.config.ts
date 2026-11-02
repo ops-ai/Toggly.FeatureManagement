@@ -5,6 +5,6 @@ export default defineConfig({
   dts: true,
   clean: true,
   sourcemap: true,
-  target: 'node20',
+  target: 'node22',
   external: ['@nestjs/common', '@nestjs/core', '@ops-ai/toggly-node-core'],
 });

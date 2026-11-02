@@ -17,15 +17,17 @@ describe('packed consumer npm CLI validation', () => {
   it('declares only Node ranges that can load Nest 12 from CommonJS', () => {
     const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
-    expect(manifest.engines.node).toBe('^20.19.0 || >=22.12.0');
+    // Owner policy 2026-11-01: drop EOL Node 18/20; keep Nest 12's 22.12 floor.
+    expect(manifest.engines.node).toBe('>=22.12.0');
 
-    const supportsNest12CommonJs = (major: number, minor: number) =>
-      (major === 20 && minor >= 19) || major > 22 || (major === 22 && minor >= 12);
+    const supportsDeclaredFloor = (major: number, minor: number) =>
+      major > 22 || (major === 22 && minor >= 12);
 
-    expect(supportsNest12CommonJs(20, 18)).toBe(false);
-    expect(supportsNest12CommonJs(20, 19)).toBe(true);
-    expect(supportsNest12CommonJs(22, 11)).toBe(false);
-    expect(supportsNest12CommonJs(22, 12)).toBe(true);
+    expect(supportsDeclaredFloor(20, 19)).toBe(false);
+    expect(supportsDeclaredFloor(22, 11)).toBe(false);
+    expect(supportsDeclaredFloor(22, 12)).toBe(true);
+    expect(supportsDeclaredFloor(24, 0)).toBe(true);
+    expect(supportsDeclaredFloor(26, 0)).toBe(true);
   });
 
   it('rejects a relative npm CLI path before invoking a package manager', () => {

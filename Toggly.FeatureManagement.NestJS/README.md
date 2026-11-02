@@ -1,6 +1,6 @@
 # Toggly for NestJS
 
-HTTP integration for NestJS 10, 11, and 12 on Node ^20.19.0 or >=22.12.0. `@ops-ai/toggly-nestjs` wraps `@ops-ai/toggly-node-core` 0.11.0+, sharing its evaluator, signed definitions, snapshots, streaming and telemetry.
+HTTP integration for NestJS 10, 11, and 12 on Node >=22.12.0. `@ops-ai/toggly-nestjs` wraps `@ops-ai/toggly-node-core` 0.11.0+, sharing its evaluator, signed definitions, snapshots, streaming and telemetry.
 
 ## Supported host majors
 

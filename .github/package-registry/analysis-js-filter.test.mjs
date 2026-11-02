@@ -57,10 +57,13 @@ test('standalone SDKs without Gatsby do not require shared artifacts', () => {
 
 test('Vue filter limits matrix and requires browser hosts', () => {
   const r = filterAnalysisJs('Vue');
-  assert.deepEqual(
-    r.testMatrix.map((x) => x.sdk),
-    ['Vue'],
-  );
+  assert.deepEqual(r.testMatrix, [{
+    sdk: 'Vue',
+    path: 'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly',
+    'test-cmd': 'npm test -- --coverage && npm run test:host',
+    'node-version': '24.x',
+    'has-lint': false,
+  }]);
   assert.equal(r.runTest, true);
   assert.equal(r.runTestCurrentBrowserHosts, true);
   assert.equal(r.runSolidstartHost, false);
