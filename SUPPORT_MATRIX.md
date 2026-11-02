@@ -15,7 +15,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Fastify | `^4 \|\| ^5` | 4 + 5 | 5.12.x | Maintain |
 | Hono | `^4` | 4.x | 4.13.x | No major gap |
 | Gatsby | `^5` | 5.x | 5.16.x | No Gatsby 6 |
-| Docusaurus | `^3` | 3.x | 3.10.x | No Docusaurus 4 |
+| Docusaurus | `^3` + React `^18 \|\| ^19` | Docusaurus 3.10.2 × React 18.3.1 + 19.3.1; Node 22/24/26; Worker workerd + Pages Function | 3.10.2 / React 19.3.1 | No Docusaurus 4; Worker `compatibility_date` 2026-11-02 |
 | Angular | `>=15` | workspace hosts | 22.x | Prove latest under floor |
 | Electron | `>=28` | hosts | 44.x | Prove latest under floor |
 | Svelte | `^4 \|\| ^5` | 4 + 5 | 5.x | Maintain |
@@ -24,7 +24,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | .NET Mongo/Dapper/EF | includes net10 | net8/net10 consumers | net10 | Maintain |
 | Java Spring | Boot 3.5 + Boot 4.1 / Java 17 | Boot 3 + `toggly-spring-boot4-starter` tests | Boot 4.1 | Dual starter artifacts |
 | Java Redis | Jedis 5 + Jedis 8 | dual artifacts | Jedis 8 | No Lettuce 7 |
-| Android | AGP 8.7 / Kotlin 2.0 | Java 17+21 | AGP 9 / Kotlin 2.2+ | Wave 3 dual line |
+| Android | AGP 9.5 / Kotlin 2.4 / compileSdk 37 / minSdk 24 | Java 17+21+25; unit tests + API 36 emulator | AGP 9.5.0 / Kotlin 2.4.21 | Wave 3; AVD 37 blocked on GHA macos-intel |
 | Flutter | Dart `>=2.18.2 <4` | Flutter **3.32.0** (Dart 3.8) + stable | Flutter 3.47.x / Dart 3.13 | Declared Dart 2.18.2 unproven under `flutter_lints ^6` (needs Dart ^3.8); `equatable` `^3.0.0` (requires Dart ≥3.0 to resolve) |
 | iOS | iOS 14 / macOS 11 | Xcode 16.x matrix | Xcode 16.4 | Keep floor |
 | Rust axum | axum 0.7 + axum08 | dual crates | 0.8 | `toggly-axum08` 0.1.1+ accepts workspace `toggly` range |

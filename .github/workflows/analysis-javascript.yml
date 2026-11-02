@@ -332,6 +332,14 @@ jobs:
           test -x /usr/bin/google-chrome
           echo "CHROME_BIN=/usr/bin/google-chrome" >> "$GITHUB_ENV"
 
+      # Vanilla JS packed host: use system Chrome so Playwright skips CDN download
+      # (Node 26 CI hit ETIMEDOUT installing Chromium for Testing).
+      - name: Select system Chrome for packed JavaScript host
+        if: matrix.sdk == 'JavaScript'
+        run: |
+          test -x /usr/bin/google-chrome
+          echo "CHROME_BIN=/usr/bin/google-chrome" >> "$GITHUB_ENV"
+
       - name: Run tests with coverage
         working-directory: ${{ matrix.path }}
         run: ${{ matrix.test-cmd }}
@@ -384,11 +392,31 @@ jobs:
           if-no-files-found: error
 
   test-docusaurus-host:
-    name: Current Docusaurus packed production host (Node 24)
+    name: Docusaurus ${{ matrix.docusaurus }} / React ${{ matrix.react }} (Node ${{ matrix.node-version }})
     needs: [prepare]
     if: needs.prepare.outputs.run_test_docusaurus_host == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node-version: '22.x'
+            docusaurus: '3.10.2'
+            react: '19.3.1'
+            upload-coverage: false
+          - node-version: '24.x'
+            docusaurus: '3.10.2'
+            react: '19.3.1'
+            upload-coverage: true
+          - node-version: '26.x'
+            docusaurus: '3.10.2'
+            react: '19.3.1'
+            upload-coverage: false
+          - node-version: '24.x'
+            docusaurus: '3.10.2'
+            react: '18.3.1'
+            upload-coverage: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -398,11 +426,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '24.x'
+          node-version: ${{ matrix.node-version }}
           cache: npm
           cache-dependency-path: |
             toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/package-lock.json
             toggly-docusaurus-edge-sdk/cloudflare/pages-function/package-lock.json
+            toggly-docusaurus-edge-sdk/cloudflare/worker/package-lock.json
       - name: Install locked plugin dependencies
         working-directory: toggly-docusaurus-edge-sdk/libs/docusaurus-plugin
         run: npm ci
@@ -410,11 +439,13 @@ jobs:
         working-directory: toggly-docusaurus-edge-sdk/libs/docusaurus-plugin
         run: npm run typecheck && npm run test:coverage
       - name: Label Docusaurus plugin coverage artifact
+        if: matrix.upload-coverage
         working-directory: toggly-docusaurus-edge-sdk/libs/docusaurus-plugin
         run: |
           test -s coverage/lcov.info
           printf '%s\n' 'coverage-Docusaurus' > coverage/artifact-name.txt
       - name: Upload Docusaurus plugin coverage artifact
+        if: matrix.upload-coverage && matrix.node-version == '24.x' && matrix.react == '19.3.1'
         uses: actions/upload-artifact@v7
         with:
           name: coverage-Docusaurus
@@ -428,20 +459,30 @@ jobs:
         working-directory: toggly-docusaurus-edge-sdk/cloudflare/pages-function
         run: npm run typecheck && npm run lint && npm run test:coverage
       - name: Label Pages Function coverage artifact
+        if: matrix.upload-coverage
         working-directory: toggly-docusaurus-edge-sdk/cloudflare/pages-function
         run: |
           test -s coverage/lcov.info
           printf '%s\n' 'coverage-Docusaurus-Pages' > coverage/artifact-name.txt
       - name: Upload Pages Function coverage artifact
+        if: matrix.upload-coverage && matrix.node-version == '24.x' && matrix.react == '19.3.1'
         uses: actions/upload-artifact@v7
         with:
           name: coverage-Docusaurus-Pages
           path: toggly-docusaurus-edge-sdk/cloudflare/pages-function/coverage/
           retention-days: 7
           if-no-files-found: error
+      - name: Install locked Worker dependencies
+        working-directory: toggly-docusaurus-edge-sdk/cloudflare/worker
+        run: npm ci
+      - name: Verify Worker types and Node + workerd tests
+        working-directory: toggly-docusaurus-edge-sdk/cloudflare/worker
+        run: npm run typecheck && npm test
       - name: Verify packed Docusaurus production and browser gates
         env:
           CHROME_BIN: /usr/bin/google-chrome
+          TOGGLY_DOCUSAURUS_VERSION: ${{ matrix.docusaurus }}
+          TOGGLY_DOCUSAURUS_REACT: ${{ matrix.react }}
         run: node tests/docusaurus-consumer-fixtures/packed-host.mjs
 
   test-astro-hosts:
