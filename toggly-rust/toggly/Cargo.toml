@@ -15,7 +15,8 @@ readme = "../README.md"
 
 [features]
 default = ["rustls-tls"]
-rustls-tls = ["reqwest/rustls-tls"]
+# Keep the public Cargo feature name; reqwest 0.13 renamed rustls-tls → rustls.
+rustls-tls = ["reqwest/rustls"]
 native-tls = ["reqwest/native-tls"]
 # Local Prometheus / `metrics` crate integration — not Toggly gRPC export.
 metrics = ["dep:metrics", "dep:prometheus"]

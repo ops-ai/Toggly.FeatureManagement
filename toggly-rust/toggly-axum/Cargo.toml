@@ -20,7 +20,7 @@ tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
-tower = "0.4"
+tower = { workspace = true }
 tower-layer = "0.3"
 tower-service = "0.3"
 http = "1.0"
@@ -31,6 +31,7 @@ futures-util = "0.3"
 
 [dev-dependencies]
 tokio-test = { workspace = true }
-# Latest axum-test that still targets axum 0.7 (17+ requires axum 0.8).
-axum-test = "16.4"
+# axum-test 17+ targets axum 0.8 (16.x was the last 0.7 line).
+axum-test = "17.3"
+tower = { workspace = true, features = ["util"] }
 wiremock = { workspace = true }

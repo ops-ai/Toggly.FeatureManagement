@@ -253,9 +253,9 @@ updates:
       # rand 0.9/0.10 remove OsRng and rename Rng traits — migrate intentionally.
       - dependency-name: rand
         update-types: ["version-update:semver-major"]
-      # toggly-axum is 0.7; toggly-axum08 already covers 0.8 (#517).
+      # toggly-axum targets axum 0.8; leave majors above that for intentional bumps.
       - dependency-name: axum
-        versions: [">=0.8.0"]
+        versions: [">=0.9.0"]
 
   - package-ecosystem: gradle
     directories:

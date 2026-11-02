@@ -1,69 +1,83 @@
 use axum::{
+    body::{to_bytes, Body},
     extract::{Extension, State},
-    http::{header::HeaderName, HeaderValue, StatusCode},
+    http::{Request, StatusCode},
     routing::get,
     Router,
 };
-use axum_test::TestServer;
 use std::sync::Arc;
 use toggly::{EvalContext, TogglyClient, TogglyConfig};
-use toggly_axum::{Feature, TogglyExtractor, TogglyLayer, TogglyState};
+use toggly_axum::{Feature, FeatureEnabled, TogglyExtractor, TogglyLayer, TogglyState};
+use tower::ServiceExt;
 use wiremock::matchers::{method, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-async fn client_with_definitions(
-    server: &MockServer,
-    definitions: serde_json::Value,
-) -> TogglyClient {
+async fn client_with_definitions(server: &MockServer) -> Arc<TogglyClient> {
     Mock::given(method("GET"))
         .and(path_regex(r"^/definitions/"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(definitions))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            {"featureKey": "on", "filters": [{"name": "AlwaysOn"}]},
+            {"featureKey": "off", "filters": []},
+            {"featureKey": "targeted", "filters": [{
+                "name": "Targeting", "parameters": {"Audience": ["alice", "custom"]}
+            }]}
+        ])))
         .mount(server)
         .await;
 
-    TogglyClient::new(
-        TogglyConfig::builder()
-            .app_key("test-app")
-            .environment("Production")
-            .definitions_url(format!("{}/", server.uri()))
-            .use_signed_definitions(false)
-            .disable_background_refresh(true)
-            .enable_live_updates(false)
-            .enable_usage_tracking(false)
-            .enable_metrics(false)
-            .disable_entity_context_registration(true)
-            .build(),
+    Arc::new(
+        TogglyClient::new(
+            TogglyConfig::builder()
+                .app_key("test-app")
+                .environment("Production")
+                .definitions_url(format!("{}/", server.uri()))
+                .use_signed_definitions(false)
+                .disable_background_refresh(true)
+                .enable_live_updates(false)
+                .enable_usage_tracking(false)
+                .enable_metrics(false)
+                .disable_entity_context_registration(true)
+                .build(),
+        )
+        .await
+        .expect("client"),
     )
-    .await
-    .expect("client")
 }
 
-fn definitions(enabled: bool) -> serde_json::Value {
-    serde_json::json!([{
-        "featureKey": "beta",
-        "filters": if enabled {
-            serde_json::json!([{"name": "AlwaysOn"}])
-        } else {
-            serde_json::json!([])
-        }
-    }])
+async fn send(app: Router, path: &str, headers: &[(&str, &str)]) -> (StatusCode, String) {
+    let mut request = Request::builder().uri(path);
+    for (name, value) in headers {
+        request = request.header(*name, *value);
+    }
+    let response = app
+        .oneshot(request.body(Body::empty()).expect("request"))
+        .await
+        .expect("router response");
+    let status = response.status();
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    (
+        status,
+        String::from_utf8(body.to_vec()).expect("UTF-8 body"),
+    )
 }
 
 async fn feature_handler(feature: Feature) -> String {
     format!(
         "{}:{}:{}:{}",
         feature.context().identity.as_deref().unwrap_or("anonymous"),
-        feature.is_enabled("beta").await,
-        feature.is_disabled("missing").await,
+        feature.is_enabled("targeted").await,
+        feature.is_disabled("off").await,
         feature.client().config().app_key
     )
 }
 
 async fn client_handler(client: TogglyExtractor) -> &'static str {
     if client
-        .is_enabled("beta", EvalContext::default())
+        .is_enabled("on", EvalContext::default())
         .await
-        .unwrap()
+        .expect("feature evaluation")
     {
         "enabled"
     } else {
@@ -72,7 +86,7 @@ async fn client_handler(client: TogglyExtractor) -> &'static str {
 }
 
 async fn state_handler(State(state): State<TogglyState>) -> &'static str {
-    if state.is_enabled("beta").await && state.is_disabled("missing").await {
+    if state.is_enabled("on").await && state.is_disabled("off").await {
         "state-ok"
     } else {
         "state-failed"
@@ -80,160 +94,183 @@ async fn state_handler(State(state): State<TogglyState>) -> &'static str {
 }
 
 #[tokio::test]
-async fn feature_and_client_extractors_use_request_extensions_and_identity_headers() {
+async fn extractors_use_extensions_and_identity_precedence() {
     let definitions_server = MockServer::start().await;
-    let client = Arc::new(client_with_definitions(&definitions_server, definitions(true)).await);
+    let client = client_with_definitions(&definitions_server).await;
     let app = Router::new()
         .route("/feature", get(feature_handler))
         .route("/client", get(client_handler))
         .layer(Extension(Arc::clone(&client)));
-    let server = TestServer::new(app).expect("test server");
 
-    let feature_response = server
-        .get("/feature")
-        .add_header(
-            HeaderName::from_static("x-user-id"),
-            HeaderValue::from_static("alice"),
+    assert_eq!(
+        send(
+            app.clone(),
+            "/feature",
+            &[("x-user-id", "alice"), ("x-identity", "other")]
         )
-        .await;
-    feature_response.assert_status_ok();
-    assert_eq!(feature_response.text(), "alice:true:true:test-app");
-
-    let client_response = server.get("/client").await;
-    client_response.assert_status_ok();
-    assert_eq!(client_response.text(), "enabled");
-
-    let fallback_identity = server
-        .get("/feature")
-        .add_header(
-            HeaderName::from_static("x-identity"),
-            HeaderValue::from_static("fallback-user"),
-        )
-        .await;
-    fallback_identity.assert_status_ok();
-    assert_eq!(fallback_identity.text(), "fallback-user:true:true:test-app");
+        .await,
+        (StatusCode::OK, "alice:true:true:test-app".to_string())
+    );
+    assert_eq!(
+        send(app.clone(), "/feature", &[("x-identity", "custom")]).await,
+        (StatusCode::OK, "custom:true:true:test-app".to_string())
+    );
+    assert_eq!(
+        send(app.clone(), "/feature", &[]).await,
+        (StatusCode::OK, "anonymous:false:true:test-app".to_string())
+    );
+    assert_eq!(
+        send(app, "/client", &[]).await,
+        (StatusCode::OK, "enabled".to_string())
+    );
     client.close().await;
 }
 
 #[tokio::test]
-async fn missing_client_allows_the_request_through_and_extractors_reject_without_it() {
+async fn middleware_checks_enabled_disabled_negated_and_targeted_features() {
+    let definitions_server = MockServer::start().await;
+    let client = client_with_definitions(&definitions_server).await;
+    let app = Router::new()
+        .route(
+            "/on",
+            get(|| async { "on" }).layer(TogglyLayer::require("on")),
+        )
+        .route(
+            "/off",
+            get(|| async { "off" }).layer(TogglyLayer::require("off")),
+        )
+        .route(
+            "/deny",
+            get(|| async { "deny" }).layer(TogglyLayer::deny("on")),
+        )
+        .route(
+            "/negate",
+            get(|| async { "negate" }).layer(TogglyLayer::require("on").negate()),
+        )
+        .route(
+            "/targeted",
+            get(|| async { "targeted" }).layer(TogglyLayer::require("targeted")),
+        )
+        .route(
+            "/custom",
+            get(|| async { "custom" })
+                .layer(TogglyLayer::require("targeted").identity_header("x-account-id")),
+        )
+        .layer(Extension(Arc::clone(&client)));
+
+    assert_eq!(send(app.clone(), "/on", &[]).await.0, StatusCode::OK);
+    assert_eq!(
+        send(app.clone(), "/off", &[]).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        send(app.clone(), "/deny", &[]).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        send(app.clone(), "/negate", &[]).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        send(app.clone(), "/targeted", &[("x-user-id", "alice")])
+            .await
+            .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        send(app.clone(), "/targeted", &[("x-identity", "custom")])
+            .await
+            .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        send(app.clone(), "/targeted", &[("x-user-id", "other")])
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        send(app.clone(), "/custom", &[("x-account-id", "custom")])
+            .await
+            .0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        send(
+            app,
+            "/custom",
+            &[("x-account-id", "other"), ("x-user-id", "alice")]
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    client.close().await;
+}
+
+#[tokio::test]
+async fn missing_client_passes_middleware_but_rejects_extractors() {
     let app = Router::new()
         .route(
             "/gated",
-            get(|| async { "allowed" }).layer(TogglyLayer::require("beta")),
+            get(|| async { "allowed" }).layer(TogglyLayer::require("on")),
         )
         .route("/feature", get(feature_handler))
         .route("/client", get(client_handler));
-    let server = TestServer::new(app).expect("test server");
 
-    let allowed = server.get("/gated").await;
-    allowed.assert_status_ok();
-    assert_eq!(allowed.text(), "allowed");
-    server
-        .get("/feature")
-        .await
-        .assert_status(StatusCode::INTERNAL_SERVER_ERROR);
-    server
-        .get("/client")
-        .await
-        .assert_status(StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(
+        send(app.clone(), "/gated", &[]).await,
+        (StatusCode::OK, "allowed".to_string())
+    );
+    assert_eq!(
+        send(app.clone(), "/feature", &[]).await.0,
+        StatusCode::INTERNAL_SERVER_ERROR
+    );
+    assert_eq!(
+        send(app, "/client", &[]).await.0,
+        StatusCode::INTERNAL_SERVER_ERROR
+    );
 }
 
 #[tokio::test]
-async fn middleware_allows_and_denies_requests_for_enabled_and_disabled_features() {
-    let enabled_server = MockServer::start().await;
-    let enabled_client =
-        Arc::new(client_with_definitions(&enabled_server, definitions(true)).await);
-    let enabled_app = Router::new()
-        .route(
-            "/require",
-            get(|| async { "required" }).layer(TogglyLayer::require("beta")),
-        )
-        .route(
-            "/deny",
-            get(|| async { "denied" }).layer(TogglyLayer::deny("beta")),
-        )
-        .layer(Extension(Arc::clone(&enabled_client)));
-    let enabled = TestServer::new(enabled_app).expect("test server");
-    enabled.get("/require").await.assert_status_ok();
-    enabled.get("/deny").await.assert_status_not_found();
-    let negated_app = Router::new()
-        .route(
-            "/negated",
-            get(|| async { "negated" }).layer(TogglyLayer::require("beta").negate()),
-        )
-        .layer(Extension(Arc::clone(&enabled_client)));
-    TestServer::new(negated_app)
-        .expect("test server")
-        .get("/negated")
-        .await
-        .assert_status_not_found();
-    enabled_client.close().await;
-
-    let disabled_server = MockServer::start().await;
-    let disabled_client =
-        Arc::new(client_with_definitions(&disabled_server, definitions(false)).await);
-    let disabled_app = Router::new()
-        .route(
-            "/require",
-            get(|| async { "required" }).layer(TogglyLayer::require("beta")),
-        )
-        .route(
-            "/deny",
-            get(|| async { "denied" }).layer(TogglyLayer::deny("beta")),
-        )
-        .layer(Extension(Arc::clone(&disabled_client)));
-    let disabled = TestServer::new(disabled_app).expect("test server");
-    disabled.get("/require").await.assert_status_not_found();
-    disabled.get("/deny").await.assert_status_ok();
-    disabled_client.close().await;
-}
-
-#[tokio::test]
-async fn custom_identity_header_and_state_wrapper_evaluate_features() {
+async fn state_wrapper_supports_owned_and_shared_clients() {
     let definitions_server = MockServer::start().await;
-    let client = client_with_definitions(&definitions_server, definitions(true)).await;
-    let client = Arc::new(client);
-
-    let header_app = Router::new()
-        .route(
-            "/gated",
-            get(|| async { "custom-header" })
-                .layer(TogglyLayer::require("beta").identity_header("x-account-id")),
-        )
-        .layer(Extension(Arc::clone(&client)));
-    let header_server = TestServer::new(header_app).expect("test server");
-    header_server
-        .get("/gated")
-        .add_header(
-            HeaderName::from_static("x-account-id"),
-            HeaderValue::from_static("account-42"),
-        )
-        .await
-        .assert_status_ok();
-
+    let client = client_with_definitions(&definitions_server).await;
     let state = TogglyState::from_arc(Arc::clone(&client));
     assert!(Arc::ptr_eq(&client, &state.client_arc()));
     assert_eq!(state.client().config().app_key, "test-app");
+    assert_eq!(state.config().app_key, "test-app");
     assert!(
         state
-            .is_enabled_with_context("beta", EvalContext::with_identity("alice"))
+            .is_enabled_with_context("targeted", EvalContext::with_identity("alice"))
+            .await
+    );
+    assert!(
+        !state
+            .is_enabled_with_context("targeted", EvalContext::default())
             .await
     );
 
-    let state_server = TestServer::new(
-        Router::new()
-            .route("/state", get(state_handler))
-            .with_state(state),
-    )
-    .expect("test server");
-    let response = state_server.get("/state").await;
-    response.assert_status_ok();
-    assert_eq!(response.text(), "state-ok");
+    let app = Router::new()
+        .route("/state", get(state_handler))
+        .with_state(state);
+    assert_eq!(
+        send(app, "/state", &[]).await,
+        (StatusCode::OK, "state-ok".to_string())
+    );
     client.close().await;
 
-    let owned_client = client_with_definitions(&definitions_server, definitions(true)).await;
+    let owned_client = client_with_definitions(&definitions_server).await;
+    let owned_client = Arc::try_unwrap(owned_client).unwrap_or_else(|_| panic!("sole owner"));
     let owned_state = TogglyState::new(owned_client);
-    assert_eq!(owned_state.config().app_key, "test-app");
+    assert_eq!(owned_state.client().config().app_key, "test-app");
     owned_state.client().close().await;
+}
+
+#[test]
+fn feature_enabled_exposes_checked_key() {
+    let feature = FeatureEnabled {
+        feature_key: "on".to_string(),
+    };
+    assert_eq!(feature.feature_key(), "on");
 }

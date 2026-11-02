@@ -52,44 +52,43 @@
   serde decode failure — never a wrong-typed value. Untyped
   `get_variant_value` is unchanged [OPS-1365].
 
-## Unreleased
+## 0.12.0
+
+### Breaking
+
+- **`reqwest` 0.12 → 0.13.** `Error::Http(reqwest::Error)` and
+  `From<reqwest::Error>` expose `reqwest` types in the public API, so this is
+  a semver-major bump for `toggly` (and workspace adapters sharing
+  `0.12.0`). The public Cargo feature name `rustls-tls` is unchanged; it now
+  enables reqwest's renamed `rustls` feature.
+- **`toggly-axum` now targets axum 0.8** (was 0.7). Middleware / extractor
+  public API is unchanged aside from the axum major. The temporary
+  `toggly-axum08` crate is retired from the workspace (migrate imports from
+  `toggly_axum08` → `toggly_axum`).
+- **`actix-web` floor raised to `>=4.7, <5`** (`GuardContext::app_data` is
+  required by `FeatureGuard`). CI proves 4.7.0 and latest 4.18.1.
 
 ### Changed
 
-- Dependency maintenance (floors unchanged unless noted):
+- Dependency maintenance:
   - `dashmap` 5.5 → 6
   - `tonic` 0.12 → 0.14 with `prost`/`prost-types` 0.13 → 0.14, plus
     `tonic-prost` / `tonic-prost-build` (tonic 0.14 prost split); TLS features
     now `tls-ring` + `tls-native-roots`
-  - workspace / `toggly-axum08` `tower` 0.4 → 0.5 (`toggly-axum` stays on 0.4
-    for axum 0.7)
+  - workspace `tower` 0.4 → 0.5
   - `tokio-tungstenite` 0.24 → 0.30
-  - `actix-web` cap `>=4.4,<4.16` → `>=4.4,<5` (latest 4.18.x); CI proves
-    effective compile floor 4.7.0 and latest 4.18.1
-  - `toggly-axum` dev-dep `axum-test` 14 → 16.4 (latest still on axum 0.7;
-    17+ needs axum 0.8)
-- `reqwest` stays on 0.12: `Error::Http(reqwest::Error)` leaks into the public
-  API (owner decision to bump or wrap).
-- **Known failure:** `toggly-actix` `FeatureGuard` does not compile on
-  actix-web 4.4–4.6 (`GuardContext::app_data` landed in 4.7.0). Declared
-  floor left at 4.4 per support policy; owner may raise to `>=4.7`.
+  - `toggly-axum` dev-dep `axum-test` 14 → 17.3 (axum 0.8 line)
 - MSRV raised to **Rust 1.89** so the workspace resolves current
   `actix-server` releases (`2.10+` requires rustc 1.89).
 
 ### Fixed
 
 - Commit the workspace `Cargo.lock` so SonarCloud security analysis sees pinned
-  dependency versions (clears `text:S8570` on member `Cargo.toml` files that
-  blocked the develop quality gate after `toggly-axum08` 0.1.1).
+  dependency versions (clears `text:S8570` on member `Cargo.toml` files).
 - Align Rust Sonar scans with Java/JS: suppress `rust:S4790` only on
   `jwks.rs` where SHA-1 is required for ES256 JWK `kid` validation
   (`hex(sha1(x||y)) + "ES256"`), so `new_security_rating` can pass without
   changing the wire protocol.
-
-### Added
-- `toggly-axum08` 0.2.0, a separate Axum 0.8 adapter. `toggly-axum` remains
-  the Axum 0.7 adapter, so existing applications keep their dependency types
-  and imports.
 
 ## 0.8.0
 
