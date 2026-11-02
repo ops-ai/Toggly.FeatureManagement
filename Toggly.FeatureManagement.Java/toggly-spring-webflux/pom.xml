@@ -17,7 +17,7 @@
 
     <properties>
         <spring.version>6.2.19</spring.version>
-        <reactor.version>3.8.7</reactor.version>
+        <reactor.version>3.8.8</reactor.version>
     </properties>
 
     <dependencies>
