@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Compatibility
+- Declare Python 3.15 support and exercise it in CI alongside retained 3.8–3.14
+  coverage. Declared floor remains `requires-python >=3.8`.
+- Document telemetry extras against current grpcio/protobuf lines: Python 3.8
+  stays on `grpcio>=1.62,<1.71`, Python 3.9 on `grpcio>=1.80,<1.81`, and
+  Python ≥3.10 resolves to current grpcio (verified with 1.85.1). Open
+  `protobuf>=4.25.0` continues to include protobuf 7.x (verified with 7.36.2).
+
+### Known failures
+- Filter-parity fixture `targeting-rollout-100-anonymous` is marked `xfail`:
+  Python Targeting default rollout still requires `context.identity`, while the
+  shared fixture expects enablement for anonymous callers at 100%
+  `DefaultRolloutPercentage`. Evaluation behavior intentionally unchanged.
+
 ## 1.3.0 - 2026-10-12
 
 ### Added

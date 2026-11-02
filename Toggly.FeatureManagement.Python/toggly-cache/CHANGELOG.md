@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Compatibility
+- Declare Python 3.15 support and add it to the cache CI matrix. Declared
+  floor remains Python 3.8+ with optional `redis>=4` / `pymemcache>=4`.
+
 ## 0.1.2 - 2026-09-12
 
 ### Changed

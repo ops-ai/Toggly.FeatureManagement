@@ -116,7 +116,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -135,6 +135,7 @@ jobs:
         run: |
           cd toggly
           pip install -e ".[dev]"
+          python -c "import grpc, google.protobuf as pb; print(f'grpcio={grpc.__version__} protobuf={pb.__version__}')"
 
       - name: Run tests
         run: |
@@ -158,28 +159,34 @@ jobs:
         python-version: ["3.10", "3.11", "3.12"]
         django-version: ["4.2.*", "5.0.*", "5.1.*"]
         include:
+          # Declared floor: Django 4.2 on the oldest supported Python.
+          - python-version: "3.8"
+            django-version: "4.2.*"
+          - python-version: "3.9"
+            django-version: "4.2.*"
+          # Django 5.2 LTS + 6.0 + latest 6.x on every Python each supports.
           - python-version: "3.10"
-            django-version: "5.2.17"
+            django-version: "5.2.18"
           - python-version: "3.11"
-            django-version: "5.2.17"
+            django-version: "5.2.18"
           - python-version: "3.12"
-            django-version: "5.2.17"
+            django-version: "5.2.18"
           - python-version: "3.12"
-            django-version: "6.0.8"
+            django-version: "6.0.9"
           - python-version: "3.12"
-            django-version: "6.1.1"
+            django-version: "6.1.2"
           - python-version: "3.13"
-            django-version: "5.2.17"
+            django-version: "5.2.18"
           - python-version: "3.13"
-            django-version: "6.0.8"
+            django-version: "6.0.9"
           - python-version: "3.13"
-            django-version: "6.1.1"
+            django-version: "6.1.2"
           - python-version: "3.14"
-            django-version: "5.2.17"
+            django-version: "5.2.18"
           - python-version: "3.14"
-            django-version: "6.0.8"
+            django-version: "6.0.9"
           - python-version: "3.14"
-            django-version: "6.1.1"
+            django-version: "6.1.2"
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -220,7 +227,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -260,7 +267,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -300,7 +307,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -351,13 +358,13 @@ jobs:
             django-version: "5.1.*"
             frameworks: "core,django"
           - python-version: "3.12"
-            django-version: "5.2.17"
+            django-version: "5.2.18"
             frameworks: "core,django"
           - python-version: "3.12"
-            django-version: "6.0.8"
+            django-version: "6.0.9"
             frameworks: "core,django"
           - python-version: "3.14"
-            django-version: "6.1.1"
+            django-version: "6.1.2"
             frameworks: "all"
     defaults:
       run:
@@ -788,7 +795,7 @@ jobs:
             echo "- toggly-cache"
             echo ""
             echo "### Python Versions Tested"
-            echo "- 3.8, 3.9, 3.10, 3.11, 3.12, 3.13, 3.14"
+            echo "- 3.8, 3.9, 3.10, 3.11, 3.12, 3.13, 3.14, 3.15"
             echo ""
             echo "Check SonarCloud for detailed results: https://sonarcloud.io/project/overview?id=toggly-sdks-python"
           } >> "$GITHUB_STEP_SUMMARY"
