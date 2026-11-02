@@ -1,13 +1,20 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## Unreleased
+
+### Changed
+- `engines.node` floor raised from `>=18` to `>=22` (Node 18 and 20 are EOL).
+- CI unit matrix exercises Node 22, 24, and 26; packed native hosts prove Electron 28.3.3 (floor) and Electron 45.2.1 (latest).
+- Bump `ws` to `^8.22.1` and refresh TypeScript / Vitest / tsup / `@types/*` / Electron dev dependencies within supported majors.
+
 ## 1.4.0
 
 2026-10-11
 
 ### Added
 - `use()` for timed feature usage scopes (attempt, duration, errors) via `@ops-ai/toggly-client-telemetry` [OPS-1758].
-
-# Changelog
-
-All notable changes to this project will be documented in this file.
 
 ## [1.3.0] - 2026-10-04
 

@@ -17,7 +17,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Gatsby | `^5` | 5.x | 5.16.x | No Gatsby 6 |
 | Docusaurus | `^3` | 3.x | 3.10.x | No Docusaurus 4 |
 | Angular | `>=15` | workspace hosts | 22.x | Prove latest under floor |
-| Electron | `>=28` | hosts | 44.x | Prove latest under floor |
+| Electron | `>=28` | 28.3.3 + 45.2.1 packed hosts (Node 22/24/26 unit) | 45.2.1 | Maintain |
 | Svelte | `^4 \|\| ^5` | 4 + 5 | 5.x | Maintain |
 | SvelteKit | kit `^2 \|\| ^3` | 2.x, 3.1.0 packed host | 3.1.x | Maintain |
 | .NET core family | netstandard2.1…net9 + **net10** | multi-TFM build | net10 | Wave 2 |
