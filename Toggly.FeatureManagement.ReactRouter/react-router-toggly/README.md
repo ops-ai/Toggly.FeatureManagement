@@ -64,7 +64,7 @@ npm install @ops-ai/react-router-toggly react-router react react-dom
 ```
 
 Peers: `react-router ^7 || ^8`, `react` / `react-dom ^18 || ^19`. Optional:
-`@react-router/node`. Requires Node `>=18`.
+`@react-router/node`. Requires Node `>=22`.
 
 ## Quick start
 

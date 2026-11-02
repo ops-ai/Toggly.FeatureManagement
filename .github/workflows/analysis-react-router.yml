@@ -47,7 +47,7 @@ jobs:
         uses: ./.github/actions/build-shared-js-deps
         with:
           packages: signed-defs,eval,hooks-types,local-gates,segments
-          node-version: '20.x'
+          node-version: '22.x'
 
       - name: Upload shared package dist artifacts
         uses: ./.github/actions/upload-shared-js-deps
@@ -59,7 +59,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [18.x, 20.x, 22.x]
+        node-version: [22.x, 24.x, 26.x]
 
     steps:
       - name: Checkout code
@@ -78,7 +78,7 @@ jobs:
         uses: ./.github/actions/download-shared-js-deps
 
       - name: Verify React Router analysis workflow contract
-        if: ${{ matrix.node-version == '20.x' }}
+        if: ${{ matrix.node-version == '22.x' }}
         run: node --test .github/workflows/analysis-react-router.test.mjs
 
       - name: Install dependencies with local client-telemetry
@@ -98,8 +98,8 @@ jobs:
         working-directory: ${{ env.SDK_ROOT }}/${{ env.PKG }}
         run: npm run test:coverage
 
-      - name: Upload coverage (Node 20 only)
-        if: matrix.node-version == '20.x'
+      - name: Upload coverage (Node 22 only)
+        if: matrix.node-version == '22.x'
         uses: actions/upload-artifact@v7
         with:
           name: coverage-react-router
@@ -117,9 +117,9 @@ jobs:
       matrix:
         include:
           - host: router7-react18
-            node-version: '20'
+            node-version: '24'
           - host: router8-react19
-            node-version: '22'
+            node-version: '24'
 
     steps:
       - name: Checkout code
@@ -162,7 +162,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '20.x'
+          node-version: '22.x'
 
       - name: Restore shared JS deps
         if: needs.build-shared-js-deps.result == 'success'
@@ -359,9 +359,9 @@ jobs:
             echo "- @ops-ai/react-router-toggly"
             echo ""
             echo "### Node.js Versions Tested"
-            echo "- 18.x, 20.x, 22.x"
+            echo "- 22.x, 24.x, 26.x"
             echo ""
             echo "### Packed Hosts"
-            echo "- router7-react18 (Node 20)"
-            echo "- router8-react19 (Node 22)"
+            echo "- router7-react18 (Node 24)"
+            echo "- router8-react19 (Node 24)"
           } >> "$GITHUB_STEP_SUMMARY"
