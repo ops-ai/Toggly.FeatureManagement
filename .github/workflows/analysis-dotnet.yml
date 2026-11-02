@@ -659,6 +659,8 @@ jobs:
         include:
           - sdk: '8.0.x'
             framework: net8.0
+          - sdk: '9.0.x'
+            framework: net9.0
           - sdk: '10.0.x'
             framework: net10.0
     steps:
@@ -667,7 +669,9 @@ jobs:
         with:
           dotnet-version: |
             8.0.x
+            9.0.x
             10.0.x
+            11.0.100-rc.3.26522.148
             ${{ matrix.sdk }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -678,6 +682,7 @@ jobs:
       - run: |
           # Package internal dependencies from the same source/version before the isolated consumer restore.
           # Core enables GeneratePackageOnBuild, so pack alone does not build its other target frameworks.
+          # Pack includes net11.0 (RC Components packages); stable CI matrix still proves net8/9/10.
           dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement -c Release -p:GeneratePackageOnBuild=false -p:ContinuousIntegrationBuild=true
           dotnet pack Toggly.FeatureManagement.NET/Toggly.FeatureManagement -c Release --no-build -p:ContinuousIntegrationBuild=true -o blazor-pack
           dotnet pack Toggly.FeatureManagement.Client/src/Toggly.FeatureManagement.Client -c Release -p:ContinuousIntegrationBuild=true -o blazor-pack
@@ -705,6 +710,27 @@ jobs:
             TestResults/blazor
             blazor-pack
             Toggly.FeatureManagement.Blazor/coverage/
+
+  # .NET 11 RC: preview SDK + RC Components packages. Allow failure until GA.
+  blazor-runtime-net11-preview:
+    name: Blazor .NET 11 RC (allow-failure)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+            11.0.100-rc.3.26522.148
+      - run: dotnet test Toggly.FeatureManagement.Blazor/tests/Toggly.FeatureManagement.Blazor.Tests -c Release -p:TestFramework=net11.0 --collect:"XPlat Code Coverage" --settings Toggly.FeatureManagement.Blazor/coverage.runsettings --results-directory TestResults/blazor-net11
+      - run: python3 Toggly.FeatureManagement.Blazor/check-coverage.py TestResults/blazor-net11
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: blazor-net11-preview
+          path: TestResults/blazor-net11
 
   summary:
     name: Analysis Summary
