@@ -31,5 +31,6 @@ futures-util = "0.3"
 
 [dev-dependencies]
 tokio-test = { workspace = true }
-axum-test = "14.0"
+# Latest axum-test that still targets axum 0.7 (17+ requires axum 0.8).
+axum-test = "16.4"
 wiremock = { workspace = true }

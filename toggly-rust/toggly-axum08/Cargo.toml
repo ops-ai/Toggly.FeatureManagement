@@ -20,7 +20,7 @@ tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
-tower = "0.4"
+tower = "0.5"
 tower-layer = "0.3"
 tower-service = "0.3"
 http = "1.0"
@@ -31,5 +31,5 @@ futures-util = "0.3"
 
 [dev-dependencies]
 tokio-test = { workspace = true }
-tower05 = { package = "tower", version = "0.5", features = ["util"] }
+tower = { version = "0.5", features = ["util"] }
 wiremock = { workspace = true }

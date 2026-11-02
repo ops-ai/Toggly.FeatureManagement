@@ -20,13 +20,14 @@ native-tls = ["reqwest/native-tls"]
 # Local Prometheus / `metrics` crate integration — not Toggly gRPC export.
 metrics = ["dep:metrics", "dep:prometheus"]
 # Batched Usage.SendStats + Metrics.SendMetrics via tonic/prost.
-# Also gates build-dep tonic-build so feature-off stays free of prost tooling.
+# Also gates build-dep tonic-prost-build so feature-off stays free of prost tooling.
 telemetry = [
     "dep:tonic",
+    "dep:tonic-prost",
     "dep:prost",
     "dep:prost-types",
     "dep:tower",
-    "dep:tonic-build",
+    "dep:tonic-prost-build",
     "dep:protoc-bin-vendored",
 ]
 
@@ -47,6 +48,7 @@ prometheus = { workspace = true, optional = true }
 
 # Optional Toggly usage / business-metrics gRPC export
 tonic = { workspace = true, optional = true }
+tonic-prost = { workspace = true, optional = true }
 prost = { workspace = true, optional = true }
 prost-types = { workspace = true, optional = true }
 tower = { workspace = true, optional = true }
@@ -70,7 +72,7 @@ futures-util = { workspace = true }
 url = "2.5"
 
 [build-dependencies]
-tonic-build = { version = "0.12", optional = true }
+tonic-prost-build = { version = "0.14", optional = true }
 # Bundled protoc so CI / crates.io consumers do not need a system install.
 protoc-bin-vendored = { version = "3", optional = true }
 

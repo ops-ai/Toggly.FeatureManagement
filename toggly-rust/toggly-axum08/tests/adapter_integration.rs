@@ -8,7 +8,7 @@ use axum::{
 use std::sync::Arc;
 use toggly::{EvalContext, TogglyClient, TogglyConfig};
 use toggly_axum08::{Feature, FeatureEnabled, TogglyExtractor, TogglyLayer, TogglyState};
-use tower05::ServiceExt;
+use tower::ServiceExt;
 use wiremock::matchers::{method, path_regex};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
