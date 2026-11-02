@@ -25,6 +25,46 @@ const selectedFamilies = families(inventory).filter((family) =>
 );
 const run = (binary, args) =>
   execFileSync(binary, args, { cwd: repoRoot, stdio: "inherit" });
+/** Resolve inventory `testProject` (directory or file) to a concrete .csproj path. */
+const resolveTestProjectFile = (testProject) => {
+  const absolute = path.join(repoRoot, testProject);
+  if (fs.existsSync(absolute) && fs.statSync(absolute).isFile()) {
+    return testProject;
+  }
+  if (fs.existsSync(absolute) && fs.statSync(absolute).isDirectory()) {
+    const matches = fs
+      .readdirSync(absolute)
+      .filter((name) => name.endsWith(".csproj"))
+      .sort();
+    if (matches.length === 1) {
+      return path.join(testProject, matches[0]);
+    }
+    const preferred = `${path.basename(testProject)}.csproj`;
+    if (matches.includes(preferred)) {
+      return path.join(testProject, preferred);
+    }
+  }
+  throw new Error(`Unable to resolve test project file for ${testProject}`);
+};
+/** Unconditional TargetFramework(s) from a csproj (ignores Condition-gated extras like net11). */
+const readTestFrameworks = (projectPath) => {
+  const xml = fs.readFileSync(path.join(repoRoot, projectPath), "utf8");
+  const multi = [
+    ...xml.matchAll(
+      /<TargetFrameworks(?![^>]*Condition)[^>]*>([^<]+)<\/TargetFrameworks>/g,
+    ),
+  ].map((match) => match[1].trim());
+  if (multi.length > 0) {
+    return multi[0]
+      .split(";")
+      .map((value) => value.trim())
+      .filter(Boolean);
+  }
+  const single = xml.match(
+    /<TargetFramework(?![^>]*Condition)[^>]*>([^<]+)<\/TargetFramework>/,
+  );
+  return single ? [single[1].trim()] : [];
+};
 if (command === "validate") {
   console.log(`Validated ${packages.length} NuGet projects.`);
 } else if (command === "version") {
@@ -73,17 +113,32 @@ if (command === "validate") {
     }
 
     const results = `TestResults/${family.name}`;
-    run("dotnet", [
-      "test",
-      family.testProject,
-      "-c",
-      "Release",
-      "--collect:XPlat Code Coverage",
-      "--settings",
-      family.coverageSettings,
-      "--results-directory",
-      results,
-    ]);
+    const frameworks = readTestFrameworks(
+      resolveTestProjectFile(family.testProject),
+    ).filter(
+      (framework) =>
+        /^(netstandard|netcoreapp|net)\d/.test(framework) &&
+        !framework.includes("$("),
+    );
+    const targets = frameworks.length > 0 ? frameworks : [null];
+    // Sequential per TFM keeps timing-sensitive live-update tests stable under CI load.
+    for (const framework of targets) {
+      const args = [
+        "test",
+        family.testProject,
+        "-c",
+        "Release",
+        "--collect:XPlat Code Coverage",
+        "--settings",
+        family.coverageSettings,
+        "--results-directory",
+        results,
+      ];
+      if (framework) {
+        args.push("--framework", framework);
+      }
+      run("dotnet", args);
+    }
     run("python3", [family.coverageCheck, results]);
     if (family.browserTests) {
       run("bash", [family.browserTests]);
