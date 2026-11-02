@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixed
+- **Behavior:** Targeting default rollout of **100%** now enables for anonymous
+  (no identity) callers, matching `toggly-eval` and
+  `targeting-rollout-100-anonymous`. Partial rollouts remain fail-closed without
+  identity; 0% stays off (approved by Alexandru, 2026-11-01).
+
 ### Compatibility
 - Declare Python 3.15 support and exercise it in CI alongside retained 3.8–3.14
   coverage. Declared floor remains `requires-python >=3.8`.
@@ -12,12 +18,6 @@
 - Keep Python 3.8/3.9 floor CI jobs on `ubuntu-24.04` because
   `ubuntu-latest` (26.04) has no `actions/setup-python` builds for those
   versions; newer Python legs remain on `ubuntu-latest`.
-
-### Known failures
-- Filter-parity fixture `targeting-rollout-100-anonymous` is marked `xfail`:
-  Python Targeting default rollout still requires `context.identity`, while the
-  shared fixture expects enablement for anonymous callers at 100%
-  `DefaultRolloutPercentage`. Evaluation behavior intentionally unchanged.
 
 ## 1.3.0 - 2026-10-12
 

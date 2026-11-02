@@ -28,18 +28,6 @@ REQUIRED_IDS = {
     "unknown-filter-fail-closed",
 }
 
-# KNOWN FAILURE (owner decision): shared fixture expects Targeting
-# Audience.DefaultRolloutPercentage=100 to enable with an empty context, but
-# Python TargetingEvaluator only applies default rollout when context.identity
-# is set (returns False for anonymous). Do not change evaluation to match —
-# report and keep the public behavior until the owner chooses fixture vs SDK.
-KNOWN_FAILURE_FIXTURE_IDS = {
-    "targeting-rollout-100-anonymous": (
-        "Python Targeting default rollout requires identity; fixture expects "
-        "anonymous enable at 100% DefaultRolloutPercentage"
-    ),
-}
-
 
 def _resolve_fixtures_dir() -> Path | None:
     """Resolve fixtures from the FeatureManagement repo root."""
@@ -106,9 +94,6 @@ def test_loads_required_wave1_cases() -> None:
 @pytest.mark.parametrize("fixture_id,root", _load_fixtures(), ids=lambda p: p[0] if isinstance(p, tuple) else str(p))
 def test_golden_fixture(fixture_id: str, root: dict[str, Any]) -> None:
     """Assert Python eval matches each shared golden fixture."""
-    if fixture_id in KNOWN_FAILURE_FIXTURE_IDS:
-        pytest.xfail(KNOWN_FAILURE_FIXTURE_IDS[fixture_id])
-
     engine = EvaluationEngine()
     definition = _to_definition(root)
     context = _to_context(root)
