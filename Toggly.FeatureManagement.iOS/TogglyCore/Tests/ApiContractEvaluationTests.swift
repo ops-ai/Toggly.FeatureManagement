@@ -116,11 +116,16 @@ final class ApiContractEvaluationTests: XCTestCase {
         XCTAssertEqual(items.first(where: { $0.name == "g" })?.value, "beta")
         XCTAssertEqual(items.first(where: { $0.name == "claim.plan" })?.value, "pro")
 
-        XCTAssertTrue(await service.isFeatureOn("NewCheckout"))
-        XCTAssertTrue(await service.isEnabled("NewCheckout"))
-        XCTAssertFalse(await service.isFeatureOn("LegacyBanner"))
-        XCTAssertTrue(await service.isFeatureOff("LegacyBanner"))
-        XCTAssertFalse(await service.isEnabled("missing-feature"))
+        let checkoutOn = await service.isFeatureOn("NewCheckout")
+        let checkoutEnabled = await service.isEnabled("NewCheckout")
+        let bannerOn = await service.isFeatureOn("LegacyBanner")
+        let bannerOff = await service.isFeatureOff("LegacyBanner")
+        let missing = await service.isEnabled("missing-feature")
+        XCTAssertTrue(checkoutOn)
+        XCTAssertTrue(checkoutEnabled)
+        XCTAssertFalse(bannerOn)
+        XCTAssertTrue(bannerOff)
+        XCTAssertFalse(missing)
 
         let allGate = await service.evaluateFeatureGate(
             featureKeys: ["NewCheckout", "LegacyBanner"],
@@ -140,15 +145,18 @@ final class ApiContractEvaluationTests: XCTestCase {
         let service = makeService(responseBody: mixedDefinitionsPayload)
         await service.initialize()
 
-        XCTAssertFalse(await service.isEnabled("ColorGated"))
-        XCTAssertFalse(await service.isEnabled(
+        let withoutContext = await service.isEnabled("ColorGated")
+        let blueContext = await service.isEnabled(
             "ColorGated",
             context: TogglyEntityContext(kind: "Order", key: "1", attributes: ["Color": "blue"])
-        ))
-        XCTAssertTrue(await service.isEnabled(
+        )
+        let redContext = await service.isEnabled(
             "ColorGated",
             context: TogglyEntityContext(kind: "Order", key: "1", attributes: ["Color": "red"])
-        ))
+        )
+        XCTAssertFalse(withoutContext)
+        XCTAssertFalse(blueContext)
+        XCTAssertTrue(redContext)
 
         await service.dispose()
     }
@@ -157,13 +165,16 @@ final class ApiContractEvaluationTests: XCTestCase {
         let service = makeService(responseBody: mixedDefinitionsPayload)
         let first = await service.initialize()
         XCTAssertEqual(first.status, .fetched)
-        XCTAssertTrue(await service.isFeatureOn("NewCheckout"))
+        let beforeRefresh = await service.isFeatureOn("NewCheckout")
+        XCTAssertTrue(beforeRefresh)
 
         ApiContractURLProtocol.statusCode = 304
         ApiContractURLProtocol.responseBody = ""
         await service.refresh()
-        XCTAssertTrue(await service.isFeatureOn("NewCheckout"))
-        XCTAssertFalse(await service.isFeatureOn("LegacyBanner"))
+        let afterRefreshOn = await service.isFeatureOn("NewCheckout")
+        let afterRefreshOff = await service.isFeatureOn("LegacyBanner")
+        XCTAssertTrue(afterRefreshOn)
+        XCTAssertFalse(afterRefreshOff)
 
         await service.dispose()
     }
@@ -173,8 +184,10 @@ final class ApiContractEvaluationTests: XCTestCase {
         let service = makeService(responseBody: "{}")
         let response = await service.initialize()
         XCTAssertEqual(response.status, .defaults)
-        XCTAssertFalse(await service.isFeatureOn("NewCheckout"))
-        XCTAssertFalse(await service.isFeatureOn("LegacyBanner"))
+        let checkoutOn = await service.isFeatureOn("NewCheckout")
+        let bannerOn = await service.isFeatureOn("LegacyBanner")
+        XCTAssertFalse(checkoutOn)
+        XCTAssertFalse(bannerOn)
         await service.dispose()
     }
 }
