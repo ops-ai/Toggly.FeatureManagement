@@ -135,8 +135,31 @@ jobs:
       - name: Prove Nest ${{ matrix.nest }} latest release
         run: |
           node -e "
+            const { existsSync, readFileSync } = require('node:fs');
+            const { dirname, join } = require('node:path');
+            // Nest 12 exports reject require('@nestjs/common/package.json')
+            // (Node resolves it as package.json.js). Walk from the entry instead.
+            let dir = dirname(require.resolve('@nestjs/common'));
+            let version;
+            for (;;) {
+              const manifest = join(dir, 'package.json');
+              if (existsSync(manifest)) {
+                try {
+                  const metadata = JSON.parse(readFileSync(manifest, 'utf8'));
+                  if (metadata.name === '@nestjs/common' && typeof metadata.version === 'string') {
+                    version = metadata.version;
+                    break;
+                  }
+                } catch {}
+              }
+              const parent = dirname(dir);
+              if (parent === dir) {
+                console.error('Unable to resolve @nestjs/common package.json');
+                process.exit(1);
+              }
+              dir = parent;
+            }
             const expected = String(${{ matrix.nest }});
-            const version = require('@nestjs/common/package.json').version;
             console.log('Installed @nestjs/common@' + version);
             if (!version.startsWith(expected + '.')) {
               console.error('Expected Nest ' + expected + '.x, got ' + version);
