@@ -1,5 +1,9 @@
-import { v4 as uuidv4 } from 'uuid';
 import * as clientTelemetry from '@ops-ai/toggly-client-telemetry';
+
+/** UUID v4 identity for anonymous clients (Node 22+ / modern browsers). */
+function newAnonymousIdentity(): string {
+  return globalThis.crypto.randomUUID();
+}
 import {
   createTelemetryReporter,
   runFeatureUsageScope,
@@ -353,7 +357,7 @@ export class Toggly {
     if (config.identity !== undefined) {
       Toggly.identity = config.identity;
     } else if (!Toggly.identity) {
-      Toggly.identity = uuidv4();
+      Toggly.identity = newAnonymousIdentity();
     }
 
     if (Toggly._config.localGates) {

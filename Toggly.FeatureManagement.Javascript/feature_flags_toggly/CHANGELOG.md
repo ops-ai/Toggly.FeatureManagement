@@ -1,3 +1,22 @@
+## Unreleased
+
+### Changed
+- Replace `uuid` (^9) with `globalThis.crypto.randomUUID()` for anonymous
+  identity minting (same UUID v4 format; available on Node 22+ and modern
+  browsers). Drop `@types/uuid`.
+- Bump runtime deps: `rxjs` ^7.5.7 → ^7.8.2, and `@ops-ai/toggly-*` packages to
+  current stable minors.
+- Bump dev tooling to current stable (Jest 30, TypeScript 5.9, webpack-cli 7,
+  webpack 5.112, ts-jest 29.4, ws 8.22, `@types/node` 24, etc.).
+- CI (`analysis-javascript.yml` / `analysis-js-filter.mjs`) now runs the vanilla
+  JavaScript SDK test + packed browser host matrix on Node **22.x**, **24.x**,
+  and **26.x** (coverage artifact from 22.x).
+
+### Added
+- API-contract evaluation specs exercising public `isFeatureOn` /
+  `evaluateFeatureGate` / variant APIs against mocked `evaluated-signed` and
+  `evaluated-variants-signed` payloads (wrapped `defs` and flat map shapes).
+
 ## 1.10.3
 
 2026-10-12

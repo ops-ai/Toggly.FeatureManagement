@@ -487,6 +487,26 @@ test('classifies the JavaScript packed browser harness as test code in both scan
   }
 });
 
+test('runs the vanilla JavaScript SDK on Node 22/24/26 and uploads coverage from 22.x', () => {
+  for (const sdks of ['all', 'JavaScript']) {
+    assert.deepEqual(
+      selectAnalysis(sdks).testMatrix.include.filter((row) => row.sdk === 'JavaScript'),
+      ['22.x', '24.x', '26.x'].map((nodeVersion) => ({
+        sdk: 'JavaScript',
+        path: 'Toggly.FeatureManagement.Javascript/feature_flags_toggly',
+        'test-cmd': 'npm test -- --coverage && npm run test:browser-host',
+        'node-version': nodeVersion,
+        'has-lint': false,
+      })),
+    );
+  }
+  const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  assert.match(
+    testJob,
+    /matrix\.sdk != 'Docusaurus' && \(matrix\.sdk != 'JavaScript' \|\| matrix\.node-version == '22\.x'\)/,
+  );
+});
+
 test('uses one aggregate Sonar project and requires the full coverage bundle', () => {
   assert.equal(aggregateSonarConfig().projectKey, 'toggly-sdks-javascript');
   assert.ok(REQUIRED_COVERAGE_SDKS.includes('React'));

@@ -1,10 +1,6 @@
 import { Toggly } from '../lib/toggly';
 import { FeatureRequirement, StorageKeys } from '../lib/models';
-
-// Mock uuid
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'mock-uuid-edge'),
-}));
+import { mockAnonymousIdentity } from './mock-identity';
 
 const mockFetch = jest.fn();
 (global as any).fetch = mockFetch;
@@ -14,6 +10,7 @@ const fetchInitMatcher = expect.objectContaining({ headers: expect.any(Object) }
 describe('Edge Cases & Error Handling', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAnonymousIdentity('mock-uuid-edge');
     localStorage.clear();
     Toggly.cancelRefreshInterval();
     mockFetch.mockReset();

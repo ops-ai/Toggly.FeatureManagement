@@ -403,11 +403,11 @@ test.each([false, true])('keeps active token authority through partial context c
   await init({ baseURI: 'https://definitions.invalid/base?i=retired&u=legacy&userId=legacy&g=old&claim.old=kept&keep=one&keep=two', instanceId: 'current', identity: 'alice', enableVariants });
   SDK.recordUsage('Current');
   await SDK.setContext({ identity: 'bob', groups: ['team'] });
-  expect(definitions().at(-1)!.url.searchParams.get('i')).toBe('current');
+  expect(definitions()[definitions().length - 1]!.url.searchParams.get('i')).toBe('current');
   SDK.instanceId = 'next'; await SDK.refresh(); SDK.recordUsage('Next');
   SDK.instanceId = ''; await SDK.refresh(); SDK.recordUsage('Cleared');
   expect(definitions().map(r => r.url.searchParams.get('i'))).toEqual(['current', 'current', 'next', null]);
-  const query = definitions().at(-1)!.url.searchParams;
+  const query = definitions()[definitions().length - 1]!.url.searchParams;
   expect(query.get(enableVariants ? 'userId' : 'u')).toBe('bob');
   expect(query.getAll('keep')).toEqual(['one', 'two']);
   expect(query.get('claim.old')).toBe('kept');

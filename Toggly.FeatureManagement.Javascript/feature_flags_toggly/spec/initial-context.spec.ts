@@ -1,7 +1,7 @@
 import { Toggly } from '../lib/toggly';
 import { StorageKeys, TogglyConfig } from '../lib/models';
+import { mockAnonymousIdentity } from './mock-identity';
 
-jest.mock('uuid', () => ({ v4: () => 'generated-user' }));
 const fetchMock = jest.fn();
 const defaults = { appKey: 'initial-context', featureFlagsRefreshInterval: 0, enableLiveUpdates: false };
 const context: { identity: string; groups: string[]; claims: Record<string, string> } = { identity: 'user&123?#', groups: ['beta', 'team a&b'], claims: { plan: 'pro&plus', 'role?#': 'reader/admin' } };
@@ -14,6 +14,7 @@ function assertContext(url: string, expected = context, variants = false) {
 }
 
 beforeEach(() => {
+  mockAnonymousIdentity('generated-user');
   localStorage.clear();
   Toggly.cancelRefreshInterval();
   Toggly.removeHook('delayed');
