@@ -84,16 +84,18 @@ jobs:
           echo "| Version | ${{ steps.release.outputs.version }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Reason | ${{ steps.release.outputs.reason }} |" >> "$GITHUB_STEP_SUMMARY"
 
-  # Compat matrix across supported @nestjs major versions. This is unique to
-  # this SDK and not covered by analysis-javascript.yml, so it is kept as an
-  # additional required gate alongside the reusable analysis workflow.
+  # Compat matrix across supported @nestjs major versions and Node lines.
+  # Declared floor is Node 22.12.0; also exercise current LTS (24) and latest (26).
+  # Each Nest major installs its latest release (@10 / @11 / @12). Unique to this
+  # SDK and not covered by analysis-javascript.yml — kept as a required gate.
   compat-test:
     needs: resolve
     if: needs.resolve.outputs.action == 'publish'
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        node: ['20.19.0', '22.12.0', 24]
+        node: ['22.12.0', 24, 26]
         nest: [10, 11, 12]
     defaults:
       run:
@@ -130,6 +132,17 @@ jobs:
           fi
       - name: Install host compatibility version
         run: npm install --no-save --package-lock=false @nestjs/common@${{ matrix.nest }} @nestjs/core@${{ matrix.nest }} @nestjs/testing@${{ matrix.nest }} @nestjs/platform-express@${{ matrix.nest }}
+      - name: Prove Nest ${{ matrix.nest }} latest release
+        run: |
+          node -e "
+            const expected = String(${{ matrix.nest }});
+            const version = require('@nestjs/common/package.json').version;
+            console.log('Installed @nestjs/common@' + version);
+            if (!version.startsWith(expected + '.')) {
+              console.error('Expected Nest ' + expected + '.x, got ' + version);
+              process.exit(1);
+            }
+          "
       - run: npm run typecheck && npm run build && npm run test:coverage && npm run test:packed
 
   gates:

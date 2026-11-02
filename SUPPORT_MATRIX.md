@@ -10,7 +10,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Next (`@ops-ai/nextjs-toggly-*`) | `next >=14` | 14.2.35, 15.5.25, 16.3.6 (webpack+turbopack) | 16.3.6 | Wave 1 done |
 | Nuxt | `^3 \|\| ^4` | 3 + 4 fixtures | 4.5.x | Maintain |
 | Astro | `^5 \|\| ^6 \|\| ^7` | 5 / 6 / 7 (OPS-1179) | 7.3.x | Maintain |
-| NestJS | `^10 \|\| ^11 \|\| ^12` | release matrix 10, 11, 12 | 12.1.x | Wave 2 |
+| NestJS | `^10 \|\| ^11 \|\| ^12` | release matrix Nest 10.4.22 / 11.2.8 / 12.3.2 × Node 22.12.0 / 24 / 26 | 12.3.x | Maintain |
 | React Router | `^7 \|\| ^8` | 7 + 8 hosts | 8.4.x | Maintain / prove 8 |
 | Fastify | `^4 \|\| ^5` | 4 + 5 | 5.12.x | Maintain |
 | Hono | `^4` | 4.x | 4.13.x | No major gap |
