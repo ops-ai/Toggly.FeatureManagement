@@ -275,55 +275,32 @@ updates:
           - minor
           - patch
     ignore:
-      # Android toolchain floor: AGP 8.7 / Gradle 8.10 / Kotlin 2.0 (OPS-872).
-      # Kotlin 2.1+, AGP 8.13+/9, Gradle 9, and maven-publish 0.31+ are
-      # deliberate upgrades. 0.34 already removed SonatypeHost.CENTRAL_PORTAL
-      # (OPS-1011).
+      # Android current line: AGP 9.5 / Gradle 9.6 / Kotlin 2.4 / compileSdk 37.
+      # Major toolchain jumps stay deliberate. maven-publish 0.31+ removed
+      # SonatypeHost.CENTRAL_PORTAL (OPS-1011) — migrate intentionally.
       - dependency-name: "com.android.application"
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+        update-types: ["version-update:semver-major"]
       - dependency-name: "com.android.library"
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+        update-types: ["version-update:semver-major"]
       - dependency-name: "org.jetbrains.kotlin.*"
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+        update-types: ["version-update:semver-major"]
       - dependency-name: "com.google.devtools.ksp"
-        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+        update-types: ["version-update:semver-major"]
       - dependency-name: "com.vanniktech.maven.publish"
         versions: [">=0.31.0"]
-      # Compose BOM 2026.09.00 ships Compose 1.12, which requires AGP 9.1.
-      - dependency-name: "androidx.compose:compose-bom"
-        versions: [">=2026.01.00"]
-      # androidx.core 1.19+ requires AGP 9.1 / compileSdk 37
-      - dependency-name: "androidx.core:core-ktx"
-        versions: [">=1.19.0"]
-      - dependency-name: "androidx.core:core"
-        versions: [">=1.19.0"]
-      # kotlinx-coroutines 1.11+ ships Kotlin 2.2 metadata
-      - dependency-name: "org.jetbrains.kotlinx:kotlinx-coroutines-*"
-        versions: [">=1.11.0"]
-      - dependency-name: "org.jetbrains.kotlinx:kotlinx-serialization-*"
-        versions: [">=1.8.0"]
-      # mockk 1.14 / Hilt 2.60 / Room 2.8 pull Kotlin 2.2 metadata while the
-      # SDK compiles with Kotlin 2.0 (#519). AGP 9 dual line only (OPS-1563).
-      - dependency-name: "io.mockk:mockk"
-        versions: [">=1.14.0"]
-      - dependency-name: "io.mockk:mockk-android"
-        versions: [">=1.14.0"]
-      # Gradle 9 pairs with AGP 9; keep wrapper on 8.x with AGP 8.7 (TOOLCHAIN.md).
       - dependency-name: "gradle"
         update-types: ["version-update:semver-major"]
       - dependency-name: "gradle-wrapper"
         update-types: ["version-update:semver-major"]
-      # OkHttp 5 / mockwebserver 5: migrate acceptance hosts intentionally.
+      # OkHttp 5 / Retrofit 3: owner decision to stay on 4.x / 2.x.
       - dependency-name: "com.squareup.okhttp3:okhttp"
         update-types: ["version-update:semver-major"]
       - dependency-name: "com.squareup.okhttp3:mockwebserver"
         update-types: ["version-update:semver-major"]
-      - dependency-name: "com.google.dagger:hilt-android"
-        versions: [">=2.54.0"]
-      - dependency-name: "com.google.dagger.hilt.android"
-        versions: [">=2.54.0"]
-      - dependency-name: "androidx.room:*"
-        versions: [">=2.7.0"]
+      - dependency-name: "com.squareup.retrofit2:retrofit"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "com.squareup.retrofit2:converter-kotlinx-serialization"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: swift
     directory: "/Toggly.FeatureManagement.iOS"
