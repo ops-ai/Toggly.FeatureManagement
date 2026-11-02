@@ -492,6 +492,13 @@ test('selects system Chrome before packed Client-Core tests', () => {
   );
 });
 
+test('selects system Chrome before packed JavaScript browser host', () => {
+  assert.match(
+    workflow,
+    /- name: Select system Chrome for packed JavaScript host\s+if: matrix\.sdk == 'JavaScript'/,
+  );
+  assert.match(workflow, /CHROME_BIN=\/usr\/bin\/google-chrome/);
+});
 
 test('classifies the JavaScript packed browser harness as test code in both scanners', () => {
   const harness = 'Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs';

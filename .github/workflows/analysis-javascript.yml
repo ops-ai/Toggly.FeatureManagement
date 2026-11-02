@@ -332,6 +332,14 @@ jobs:
           test -x /usr/bin/google-chrome
           echo "CHROME_BIN=/usr/bin/google-chrome" >> "$GITHUB_ENV"
 
+      # Vanilla JS packed host: use system Chrome so Playwright skips CDN download
+      # (Node 26 CI hit ETIMEDOUT installing Chromium for Testing).
+      - name: Select system Chrome for packed JavaScript host
+        if: matrix.sdk == 'JavaScript'
+        run: |
+          test -x /usr/bin/google-chrome
+          echo "CHROME_BIN=/usr/bin/google-chrome" >> "$GITHUB_ENV"
+
       - name: Run tests with coverage
         working-directory: ${{ matrix.path }}
         run: ${{ matrix.test-cmd }}
