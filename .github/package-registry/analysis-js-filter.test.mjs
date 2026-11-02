@@ -57,10 +57,13 @@ test('standalone SDKs without Gatsby do not require shared artifacts', () => {
 
 test('Vue filter limits matrix and requires browser hosts', () => {
   const r = filterAnalysisJs('Vue');
-  assert.deepEqual(
-    r.testMatrix.map((x) => x.sdk),
-    ['Vue'],
-  );
+  assert.deepEqual(r.testMatrix, [{
+    sdk: 'Vue',
+    path: 'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly',
+    'test-cmd': 'npm test -- --coverage && npm run test:host',
+    'node-version': '24.x',
+    'has-lint': false,
+  }]);
   assert.equal(r.runTest, true);
   assert.equal(r.runTestCurrentBrowserHosts, true);
   assert.equal(r.runSolidstartHost, false);
@@ -143,14 +146,15 @@ test('Evaluator with a shared-dependency SDK still builds shared artifacts', () 
   assert.deepEqual(result.testMatrix.map(({ sdk }) => sdk), ['Evaluator', 'Vue']);
 });
 
-test('JavaScript requires coverage and the packed browser telemetry host', () => {
+test('JavaScript requires coverage and the packed browser telemetry host on Node 22/24/26', () => {
   const result = filterAnalysisJs('JavaScript');
-  assert.deepEqual(result.testMatrix, [{
+  assert.deepEqual(result.testMatrix, ['22.x', '24.x', '26.x'].map((nodeVersion) => ({
     sdk: 'JavaScript',
     path: 'Toggly.FeatureManagement.Javascript/feature_flags_toggly',
     'test-cmd': 'npm test -- --coverage && npm run test:browser-host',
+    'node-version': nodeVersion,
     'has-lint': false,
-  }]);
+  })));
   assert.ok(result.requiredJobs.split(',').includes('test'));
 });
 

@@ -6,7 +6,10 @@
       "DOM"
     ],
     "rootDir": "./",
-    "sourceMap": true
+    "sourceMap": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
   },
   "exclude": [
     "node_modules",

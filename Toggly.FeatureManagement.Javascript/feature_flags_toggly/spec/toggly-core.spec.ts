@@ -7,6 +7,7 @@ import {
 } from '../lib/models';
 import type { Hook } from '@ops-ai/toggly-hooks-types';
 import { evaluationContextCacheKey } from '@ops-ai/toggly-hooks-types';
+import { mockAnonymousIdentity } from './mock-identity';
 
 const DEFAULT_TEST_IDENTITY = 'mock-uuid-1234';
 
@@ -35,11 +36,6 @@ function variantsCacheKeyForContext(
   );
 }
 
-// Mock uuid to return predictable values
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'mock-uuid-1234'),
-}));
-
 // Mock fetch
 const mockFetch = jest.fn();
 (global as any).fetch = mockFetch;
@@ -52,6 +48,7 @@ function waitForHooks(ms = 100): Promise<void> {
 describe('Toggly Core', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAnonymousIdentity(DEFAULT_TEST_IDENTITY);
     localStorage.clear();
     Toggly.cancelRefreshInterval();
     mockFetch.mockReset();

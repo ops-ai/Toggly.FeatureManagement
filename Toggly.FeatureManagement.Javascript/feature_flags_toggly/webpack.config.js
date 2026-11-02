@@ -21,7 +21,11 @@ module.exports = {
     rules: [
       {
         test: /\.tsx?$/,
-        loader: "ts-loader"
+        loader: "ts-loader",
+        options: {
+          // Bundle only lib entry graph; do not typecheck Jest specs under webpack.
+          onlyCompileBundledFiles: true,
+        },
       }
     ]
   }

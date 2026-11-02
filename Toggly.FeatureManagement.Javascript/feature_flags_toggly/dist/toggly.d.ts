@@ -1,3 +1,5 @@
+import { type FeatureUsageScope } from '@ops-ai/toggly-client-telemetry';
+export type { FeatureUsageScope } from '@ops-ai/toggly-client-telemetry';
 import { FeatureRequirement, TogglyConfig, VariantResult, EvaluatedVariantDef } from './models';
 import { type Hook, type TogglyEvaluationContext, type EvaluatedDefinitions, type TogglyEntityContext } from '@ops-ai/toggly-hooks-types';
 import { type LocalGate } from '@ops-ai/toggly-local-gates';
@@ -22,6 +24,7 @@ export declare class Toggly {
     private static _telemetry;
     private static _retiredTelemetry;
     private static _detachTelemetry;
+    private static _detachSystemMetrics;
     static _ws: WebSocket | null;
     static _wsConnected: boolean;
     static _wsReconnectTimer: any;
@@ -61,6 +64,7 @@ export declare class Toggly {
     private static stopTelemetry;
     private static captureEvaluation;
     static recordUsage(featureKey: string, variant?: string): void;
+    static use<T>(featureKey: string, fn: (scope: FeatureUsageScope) => Promise<T>, variant?: string): Promise<T>;
     static recordView(featureKey: string, variant?: string): void;
     static incrementCounter(metricKey: string, value?: number): void;
     static setGauge(metricKey: string, value: number): void;
