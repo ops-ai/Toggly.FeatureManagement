@@ -15,7 +15,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Fastify | `^4 \|\| ^5` | 4 + 5 | 5.12.x | Maintain |
 | Hono | `^4` | 4.x | 4.13.x | No major gap |
 | Gatsby | `^5` | 5.x | 5.16.x | No Gatsby 6 |
-| Docusaurus | `^3` | 3.x | 3.10.x | No Docusaurus 4 |
+| Docusaurus | `^3` + React `^18 \|\| ^19` | Docusaurus 3.10.2 × React 18.3.1 + 19.3.1; Node 22/24/26; Worker workerd + Pages Function | 3.10.2 / React 19.3.1 | No Docusaurus 4; Worker `compatibility_date` 2026-11-02 |
 | Angular | `>=15` | workspace hosts | 22.x | Prove latest under floor |
 | Electron | `>=28` | hosts | 44.x | Prove latest under floor |
 | Svelte | `^4 \|\| ^5` | 4 + 5 | 5.x | Maintain |
