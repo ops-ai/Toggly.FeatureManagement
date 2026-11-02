@@ -40,15 +40,18 @@ public class VariantAllocatorCorpusTests
         document.RootElement.GetArrayLength().Should().BeGreaterThan(0);
     }
 
-    public static IEnumerable<object[]> CorpusCases()
+    public static TheoryData<string, string> CorpusCases()
     {
+        var data = new TheoryData<string, string>();
         var path = SharedFixturePaths.ResolveVariantAllocatorCorpusPath();
         using var document = JsonDocument.Parse(File.ReadAllText(path));
         foreach (var caseNode in document.RootElement.EnumerateArray())
         {
             var id = caseNode.GetProperty("id").GetString() ?? "unknown";
-            yield return new object[] { id, caseNode.GetRawText() };
+            data.Add(id, caseNode.GetRawText());
         }
+
+        return data;
     }
 
     [Theory]
@@ -326,15 +329,15 @@ public class VariantAllocatorCorpusTests
         return obj;
     }
 
-    private static JsonNode InferScalarNode(string value)
+    private static JsonValue InferScalarNode(string value)
     {
         if (bool.TryParse(value, out var b))
-            return JsonValue.Create(b);
+            return JsonValue.Create(b)!;
         if (long.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var l))
-            return JsonValue.Create(l);
+            return JsonValue.Create(l)!;
         if (double.TryParse(value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d))
-            return JsonValue.Create(d);
-        return JsonValue.Create(value);
+            return JsonValue.Create(d)!;
+        return JsonValue.Create(value)!;
     }
 
     private sealed class SingleFeatureDefinitionProvider : IFeatureDefinitionProvider

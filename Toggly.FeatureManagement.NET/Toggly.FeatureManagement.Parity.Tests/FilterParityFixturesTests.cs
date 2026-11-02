@@ -58,15 +58,18 @@ public class FilterParityFixturesTests
             "Production IgnoreMissingFeatureFilters=false throws on unknown filters; shared contract expects fail-closed false.",
     };
 
-    public static IEnumerable<object[]> FixtureCases()
+    public static TheoryData<string, string> FixtureCases()
     {
+        var data = new TheoryData<string, string>();
         var dir = SharedFixturePaths.ResolveFilterParityFixturesDir();
         foreach (var path in Directory.EnumerateFiles(dir, "*.json").OrderBy(p => p, StringComparer.Ordinal))
         {
             using var document = JsonDocument.Parse(File.ReadAllText(path));
             var id = document.RootElement.GetProperty("id").GetString() ?? Path.GetFileNameWithoutExtension(path);
-            yield return new object[] { id, path };
+            data.Add(id, path);
         }
+
+        return data;
     }
 
     [Fact]
@@ -165,9 +168,22 @@ public class FilterParityFixturesTests
 
             var httpContext = new DefaultHttpContext();
             if (!string.IsNullOrEmpty(userAgent))
+            {
+#if NET6_0_OR_GREATER
+                httpContext.Request.Headers.UserAgent = userAgent;
+#else
                 httpContext.Request.Headers["User-Agent"] = userAgent;
+#endif
+            }
+
             if (!string.IsNullOrEmpty(acceptLanguage))
+            {
+#if NET6_0_OR_GREATER
+                httpContext.Request.Headers.AcceptLanguage = acceptLanguage;
+#else
                 httpContext.Request.Headers["Accept-Language"] = acceptLanguage;
+#endif
+            }
 
             // CountryFilter reads CDN headers only. Map EvalContext.request.country the same way
             // other SDKs treat an already-resolved request.country (synthesize CF-IPCountry).
