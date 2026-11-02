@@ -87,10 +87,13 @@ test('standalone SDKs without Gatsby do not require shared artifacts', () => {
 
 test('Vue filter limits matrix and requires browser hosts', () => {
   const r = filterAnalysisJs('Vue');
-  assert.deepEqual(
-    r.testMatrix.map((x) => x.sdk),
-    ['Vue'],
-  );
+  assert.deepEqual(r.testMatrix, [{
+    sdk: 'Vue',
+    path: 'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly',
+    'test-cmd': 'npm test -- --coverage && npm run test:host',
+    'node-version': '24.x',
+    'has-lint': false,
+  }]);
   assert.equal(r.runTest, true);
   assert.equal(r.runTestCurrentBrowserHosts, true);
   assert.equal(r.runSolidstartHost, false);
@@ -98,6 +101,30 @@ test('Vue filter limits matrix and requires browser hosts', () => {
   assert.ok(r.requiredJobs.split(',').includes('test'));
   assert.ok(r.requiredJobs.split(',').includes('test-current-browser-hosts'));
   assert.ok(!r.requiredJobs.split(',').includes('solidstart-host'));
+});
+
+test('Svelte unit matrix pins Node 24.x (hosts cover 22/24/26)', () => {
+  const r = filterAnalysisJs('Svelte');
+  assert.deepEqual(r.testMatrix, [{
+    sdk: 'Svelte',
+    path: 'Toggly.FeatureManagement.Svelte/svelte-feature-flags-toggly',
+    'test-cmd': 'npx vitest run --coverage && npm run test:host',
+    'node-version': '24.x',
+    'has-lint': false,
+  }]);
+  assert.equal(r.runTestCurrentBrowserHosts, true);
+});
+
+test('Astro unit matrix pins Node 24.x (packed hosts cover 5/6/7)', () => {
+  const r = filterAnalysisJs('Astro');
+  assert.deepEqual(r.testMatrix, [{
+    sdk: 'Astro',
+    path: 'Toggly.FeatureManagement.Astro',
+    'test-cmd': 'npm test -- --coverage',
+    'node-version': '24.x',
+    'has-lint': false,
+  }]);
+  assert.equal(r.runTestAstroHosts, true);
 });
 
 test('SolidJS requires solidstart-host', () => {

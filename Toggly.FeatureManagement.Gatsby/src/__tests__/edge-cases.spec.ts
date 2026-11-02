@@ -2,12 +2,33 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 type StoreModule = typeof import('../client/store.js');
 
+/** Prevent real WebSocket/undici work during jsdom unit tests (Node 22+). */
+class MockWebSocket {
+  static CONNECTING = 0;
+  static OPEN = 1;
+  static CLOSING = 2;
+  static CLOSED = 3;
+  onopen: (() => void) | null = null;
+  onmessage: ((event: { data: unknown }) => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: ((error: unknown) => void) | null = null;
+  readyState = MockWebSocket.CONNECTING;
+  url: string;
+  constructor(url: string) {
+    this.url = url;
+  }
+  close() {
+    this.readyState = MockWebSocket.CLOSED;
+  }
+}
+
 describe('Edge Cases & Error Handling', () => {
   let store: StoreModule;
 
   beforeEach(async () => {
     vi.resetModules();
     vi.restoreAllMocks();
+    vi.stubGlobal('WebSocket', MockWebSocket);
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
     store = await import('../client/store.js');
@@ -15,6 +36,7 @@ describe('Edge Cases & Error Handling', () => {
 
   afterEach(() => {
     store.disposeTogglyClient();
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -30,6 +52,8 @@ describe('Edge Cases & Error Handling', () => {
       await store.initTogglyClient({
         appKey: 'bad-key',
         flagDefaults: { F1: true },
+        enableLiveUpdates: false,
+        featureFlagsRefreshInterval: 0,
       });
 
       expect(store.$flags.get()).toBeTruthy();
@@ -44,6 +68,8 @@ describe('Edge Cases & Error Handling', () => {
       await store.initTogglyClient({
         appKey: 'test-key',
         flagDefaults: { F1: true },
+        enableLiveUpdates: false,
+        featureFlagsRefreshInterval: 0,
       });
 
       expect(store.$flags.get()).toEqual({ F1: true });
@@ -58,6 +84,8 @@ describe('Edge Cases & Error Handling', () => {
       await store.initTogglyClient({
         appKey: 'test-key',
         flagDefaults: { F1: true },
+        enableLiveUpdates: false,
+        featureFlagsRefreshInterval: 0,
       });
 
       expect(store.$flags.get()).toEqual({ F1: true });
@@ -75,6 +103,8 @@ describe('Edge Cases & Error Handling', () => {
       await store.initTogglyClient({
         appKey: 'test-key',
         flagDefaults: { F1: true },
+        enableLiveUpdates: false,
+        featureFlagsRefreshInterval: 0,
       });
 
       expect(store.$flags.get()).toBeTruthy();
@@ -90,6 +120,8 @@ describe('Edge Cases & Error Handling', () => {
       await store.initTogglyClient({
         appKey: 'test-key',
         flagDefaults: { F1: true },
+        enableLiveUpdates: false,
+        featureFlagsRefreshInterval: 0,
       });
 
       expect(store.$isReady.get()).toBe(true);
@@ -104,6 +136,8 @@ describe('Edge Cases & Error Handling', () => {
       await store.initTogglyClient({
         appKey: 'test-key',
         flagDefaults: { F1: true },
+        enableLiveUpdates: false,
+        featureFlagsRefreshInterval: 0,
       });
 
       expect(store.$isReady.get()).toBe(true);
@@ -123,6 +157,8 @@ describe('Edge Cases & Error Handling', () => {
           'lowercase': false,
           '🚀emoji': true,
         },
+        enableLiveUpdates: false,
+        featureFlagsRefreshInterval: 0,
       });
     });
 
@@ -160,6 +196,8 @@ describe('Edge Cases & Error Handling', () => {
       vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('no net'));
       await store.initTogglyClient({
         flagDefaults: { F1: true, F2: false, F3: true },
+        enableLiveUpdates: false,
+        featureFlagsRefreshInterval: 0,
       });
     });
 
@@ -192,14 +230,27 @@ describe('Edge Cases & Error Handling', () => {
   describe('Configuration Edge Cases', () => {
     it('should handle no appKey and no defaults', async () => {
       vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('no net'));
-      await store.initTogglyClient({});
+      await store.initTogglyClient({
+        enableLiveUpdates: false,
+        featureFlagsRefreshInterval: 0,
+      });
       expect(store.$isReady.get()).toBe(true);
     });
 
     it('should deduplicate repeated initialization of the same owner', async () => {
       vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('no net'));
-      await store.initTogglyClient({ appKey: '', flagDefaults: { F1: true } });
-      await store.initTogglyClient({ appKey: '', flagDefaults: { F2: true } });
+      await store.initTogglyClient({
+        appKey: '',
+        flagDefaults: { F1: true },
+        enableLiveUpdates: false,
+        featureFlagsRefreshInterval: 0,
+      });
+      await store.initTogglyClient({
+        appKey: '',
+        flagDefaults: { F2: true },
+        enableLiveUpdates: false,
+        featureFlagsRefreshInterval: 0,
+      });
       expect(store.$flags.get()).toEqual({ F1: true });
       expect(globalThis.fetch).not.toHaveBeenCalled();
     });
@@ -253,7 +304,11 @@ describe('Edge Cases & Error Handling', () => {
 
     it('should handle adding and removing hooks after init', async () => {
       vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('no net'));
-      await store.initTogglyClient({ flagDefaults: { F1: true } });
+      await store.initTogglyClient({
+        flagDefaults: { F1: true },
+        enableLiveUpdates: false,
+        featureFlagsRefreshInterval: 0,
+      });
 
       store.addHook(createTestHook('dynamic-hook') as any);
       expect(store.removeHook('dynamic-hook')).toBe(true);
@@ -272,6 +327,7 @@ describe('Edge Cases & Error Handling', () => {
 
       await store.initTogglyClient({
         appKey: 'test-key',
+        enableLiveUpdates: false,
         featureFlagsRefreshInterval: 5000,
       });
 
