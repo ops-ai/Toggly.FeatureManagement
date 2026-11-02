@@ -9,6 +9,9 @@
   stays on `grpcio>=1.62,<1.71`, Python 3.9 on `grpcio>=1.80,<1.81`, and
   Python ≥3.10 resolves to current grpcio (verified with 1.85.1). Open
   `protobuf>=4.25.0` continues to include protobuf 7.x (verified with 7.36.2).
+- Keep Python 3.8/3.9 floor CI jobs on `ubuntu-24.04` because
+  `ubuntu-latest` (26.04) has no `actions/setup-python` builds for those
+  versions; newer Python legs remain on `ubuntu-latest`.
 
 ### Known failures
 - Filter-parity fixture `targeting-rollout-100-anonymous` is marked `xfail`:
