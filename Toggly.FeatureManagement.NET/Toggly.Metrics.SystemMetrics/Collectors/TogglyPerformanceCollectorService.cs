@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Diagnostics.Tracing;
 using System.Threading;
 using System.Threading.Tasks;
@@ -16,22 +16,43 @@ namespace Toggly.Metrics.SystemMetrics.Collectors
     {
         private readonly IMetricsRegistryService _metricsRegistryService;
         private readonly Dictionary<string, Dictionary<string, string>> _eventSources;
+        private readonly ILogger? _logger;
         private Guid? taskId;
         private readonly List<EventSource> preConstructorEvents = new List<EventSource>();
         private readonly bool constructed;
         private readonly object _lock = new object();
 
-        private readonly Dictionary<string, double> currentValues = new Dictionary<string, double>();
+        /// <summary>
+        /// Pending counter samples keyed by configured metric name.
+        /// Stored as a list so a null/unnamed sample can be recorded and skipped without
+        /// throwing <see cref="ArgumentNullException"/> from <see cref="Dictionary{TKey,TValue}"/>.
+        /// </summary>
+        private readonly List<(string? MetricName, double Value)> currentValues = new List<(string?, double)>();
 
         /// <summary>
         /// Initializes a collector for the configured runtime event sources.
         /// </summary>
         /// <param name="eventSources">Event sources and their counter-to-metric mappings.</param>
         /// <param name="metricsRegistryService">Registry used to publish collected observations.</param>
-        public TogglyPerformanceCollectorService(Dictionary<string, Dictionary<string, string>> eventSources, IMetricsRegistryService metricsRegistryService) : base()
+        public TogglyPerformanceCollectorService(Dictionary<string, Dictionary<string, string>> eventSources, IMetricsRegistryService metricsRegistryService)
+            : this(eventSources, metricsRegistryService, loggerFactory: null)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a collector for the configured runtime event sources.
+        /// </summary>
+        /// <param name="eventSources">Event sources and their counter-to-metric mappings.</param>
+        /// <param name="metricsRegistryService">Registry used to publish collected observations.</param>
+        /// <param name="loggerFactory">Optional logger factory for Debug diagnostics.</param>
+        public TogglyPerformanceCollectorService(
+            Dictionary<string, Dictionary<string, string>> eventSources,
+            IMetricsRegistryService metricsRegistryService,
+            ILoggerFactory? loggerFactory) : base()
         {
             _eventSources = eventSources;
             _metricsRegistryService = metricsRegistryService;
+            _logger = loggerFactory?.CreateLogger<TogglyPerformanceCollectorService>();
 
             constructed = true;
             preConstructorEvents.ForEach(OnEventSourceCreated);
@@ -62,7 +83,7 @@ namespace Toggly.Metrics.SystemMetrics.Collectors
                 return;
             }
 
-            if (!_eventSources.ContainsKey(eventSource.Name))
+            if (string.IsNullOrEmpty(eventSource.Name) || !_eventSources.ContainsKey(eventSource.Name))
             {
                 return;
             }
@@ -79,37 +100,76 @@ namespace Toggly.Metrics.SystemMetrics.Collectors
             if (eventData.EventName != "EventCounters" || eventData.Payload is null)
                 return;
 
+            var eventSourceName = eventData.EventSource?.Name;
+            if (string.IsNullOrEmpty(eventSourceName) ||
+                !_eventSources.TryGetValue(eventSourceName, out var sourceMetrics))
+            {
+                return;
+            }
+
             foreach (var payload in eventData.Payload)
             {
                 if (payload is IDictionary<string, object> eventPayload)
                 {
                     var (counterName, counterValue) = GetRelevantMetric(eventPayload);
 
-                    if (_eventSources.TryGetValue(eventData.EventSource.Name, out var sourceMetrics) &&
-                        sourceMetrics.TryGetValue(counterName, out var metricName))
+                    if (string.IsNullOrEmpty(counterName))
                     {
-                        lock (_lock)
-                        {
-                            currentValues[metricName] = counterValue;
-                        }
+                        _logger?.LogDebug("Skipping performance counter event without a counter name from source {EventSource}", eventSourceName);
+                        continue;
+                    }
+
+                    if (!sourceMetrics.TryGetValue(counterName, out var metricName))
+                        continue;
+
+                    if (string.IsNullOrEmpty(metricName))
+                    {
+                        _logger?.LogDebug(
+                            "Skipping performance counter {CounterName} from source {EventSource} because the configured metric name is null or empty",
+                            counterName,
+                            eventSourceName);
+                        continue;
+                    }
+
+                    lock (_lock)
+                    {
+                        UpsertCurrentValue(metricName, counterValue);
                     }
                 }
             }
         }
 
-        private static (string counterName, double counterValue) GetRelevantMetric(IDictionary<string, object> eventPayload)
+        private void UpsertCurrentValue(string metricName, double counterValue)
         {
-            var counterName = string.Empty;
+            for (var i = 0; i < currentValues.Count; i++)
+            {
+                if (string.Equals(currentValues[i].MetricName, metricName, StringComparison.Ordinal))
+                {
+                    currentValues[i] = (metricName, counterValue);
+                    return;
+                }
+            }
+
+            currentValues.Add((metricName, counterValue));
+        }
+
+        private static (string? counterName, double counterValue) GetRelevantMetric(IDictionary<string, object> eventPayload)
+        {
+            string? counterName = null;
             var counterValue = 0d;
 
-            if (eventPayload.TryGetValue("Name", out object displayValue))
+            if (eventPayload.TryGetValue("Name", out var displayValue) && displayValue != null)
             {
                 counterName = displayValue.ToString();
             }
-            if (eventPayload.TryGetValue("Mean", out object value) ||
-                eventPayload.TryGetValue("Increment", out value))
+            if ((eventPayload.TryGetValue("Mean", out var value) ||
+                eventPayload.TryGetValue("Increment", out value)) &&
+                value != null)
             {
-                counterValue = value is double ? (double)value : double.Parse(value.ToString());
+                if (value is double doubleValue)
+                    counterValue = doubleValue;
+                else if (value.ToString() is { Length: > 0 } raw)
+                    counterValue = double.Parse(raw);
             }
 
             return (counterName, counterValue);
@@ -130,11 +190,30 @@ namespace Toggly.Metrics.SystemMetrics.Collectors
             lock (_lock)
             {
                 foreach (var d in currentValues)
-                    observations.Add(d.Key, (DateTime.UtcNow, d.Value));
+                {
+                    if (string.IsNullOrEmpty(d.MetricName))
+                    {
+                        _logger?.LogDebug("Skipping performance observation entry without a metric key");
+                        continue;
+                    }
+
+                    observations[d.MetricName] = (DateTime.UtcNow, d.Value);
+                }
 
                 currentValues.Clear();
             }
             return Task.FromResult(observations);
+        }
+
+        /// <summary>
+        /// Test helper: injects a raw sample, including null metric names, to reproduce null-key handling.
+        /// </summary>
+        internal void AddObservationSampleForTests(string? metricName, double value)
+        {
+            lock (_lock)
+            {
+                currentValues.Add((metricName, value));
+            }
         }
     }
 }

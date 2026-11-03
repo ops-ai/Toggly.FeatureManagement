@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Moq;
 using System.Collections.Concurrent;
 using System.Diagnostics.Tracing;
@@ -258,6 +259,57 @@ public class TogglyPerformanceCollectorServiceTests
         // Assert
         result.Should().NotBeNull();
         result.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetObservations_WithNullMetricKey_SkipsBadEntryAndKeepsValidObservations()
+    {
+        // Reproduce QWORKYKENNECT-ADMIN-GH / WEB-H3: a null metric name must not throw
+        // ArgumentNullException('key') or drop sibling observations.
+        var loggerFactory = new Mock<ILoggerFactory>();
+        var logger = new Mock<ILogger>();
+        loggerFactory.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(logger.Object);
+        using var service = new TogglyPerformanceCollectorService(_eventSources, _metricsRegistryServiceMock.Object, loggerFactory.Object);
+
+        service.AddObservationSampleForTests(null, 1.0);
+        service.AddObservationSampleForTests("cpu_usage_percentage", 42.0);
+        service.AddObservationSampleForTests(string.Empty, 2.0);
+
+        var result = await service.GetObservations();
+
+        result.Should().ContainSingle();
+        result.Should().ContainKey("cpu_usage_percentage");
+        result["cpu_usage_percentage"].Item2.Should().Be(42.0);
+        logger.Verify(
+            x => x.Log(
+                LogLevel.Debug,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("without a metric key")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task EventCounterCallback_WithNullMappedMetricName_DoesNotThrowAndKeepsValidMetrics()
+    {
+        var eventSources = new Dictionary<string, Dictionary<string, string>>
+        {
+            [TestMetricEventSource.EventSourceName] = new Dictionary<string, string>
+            {
+                ["requests"] = "request_count",
+                ["unnamed"] = null!
+            }
+        };
+        using var service = new TestablePerformanceCollectorService(eventSources, _metricsRegistryServiceMock.Object);
+
+        service.PublishCounter(CreateCounterEvent("unnamed"));
+        service.PublishCounter(CreateCounterEvent("requests"));
+
+        var observations = await service.GetObservations();
+        observations.Should().ContainSingle();
+        observations.Should().ContainKey("request_count");
+        observations["request_count"].Item2.Should().Be(42);
     }
 
     [Fact]

@@ -61,6 +61,15 @@ namespace Toggly.FeatureManagement
         private volatile bool _disposed = false;
         private volatile bool _shuttingDown = false;
 
+        /// <summary>
+        /// Caps pending observation samples retained across failed sends to keep memory bounded.
+        /// </summary>
+        private const int MaxPendingObservations = 10000;
+
+        private readonly GrpcTransientError.BackoffState _transientBackoff = new GrpcTransientError.BackoffState();
+
+        private static readonly TimeSpan DefaultSendInterval = TimeSpan.FromMinutes(1);
+
         public TogglyMetricsService(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider, IFeatureDefinitionProvider featureDefinitionProvider, IFeatureManager featureManager, Metrics.MetricsClient metricsClient)
         {
             _appKey = togglySettings.Value.AppKey;
@@ -74,7 +83,7 @@ namespace Toggly.FeatureManagement
 
             _logger = loggerFactory.CreateLogger<TogglyMetricsService>();
 
-            _timer = new Timer(TimerCallback, null, new TimeSpan(0, 1, 0), new TimeSpan(0, 1, 0));
+            _timer = new Timer(TimerCallback, null, DefaultSendInterval, DefaultSendInterval);
             applicationLifetime.ApplicationStopping.Register(OnApplicationStopping);
 
             // Same shape as usage + definitions for platform SdkUserAgentParser.
@@ -233,26 +242,66 @@ namespace Toggly.FeatureManagement
                     TryLog(LogLevel.Warning, "Metric count did not match. Possible data integrity issues");
 
                 _lastSend = DateTime.UtcNow;
+                ResetTransientBackoff();
+            }
+            catch (RpcException ex) when (GrpcTransientError.IsTransient(ex, _shuttingDown))
+            {
+                _lastError = ex.Message;
+                _lastErrorTime = DateTime.UtcNow;
+                RestoreDrainedMetrics(drainedStats, drainedCounters, drainedObservations);
+                ApplyTransientBackoff(ex, suppressLogging, "Transient error sending metrics to toggly");
             }
             catch (Exception ex)
             {
                 if (!suppressLogging) TryLog(LogLevel.Error, ex, "Error sending metrics to toggly");
                 _lastError = ex.Message;
                 _lastErrorTime = DateTime.UtcNow;
-
-                foreach (var (key, value) in drainedStats)
-                    _stats.AddOrUpdate(key, value, (_, existing) => existing + value);
-
-                foreach (var (key, value) in drainedCounters)
-                    _counters.AddOrUpdate(key, value, (_, existing) => existing + value);
-
-                foreach (var observation in drainedObservations)
-                    _observations.Add(observation);
+                RestoreDrainedMetrics(drainedStats, drainedCounters, drainedObservations);
             }
             finally
             {
                 _sendMetricsSemaphore.Release();
             }
+        }
+
+        private void RestoreDrainedMetrics(
+            List<((string MetricKey, string? FeatureKey, string Variant) Key, double Value)> drainedStats,
+            List<((string MetricKey, string? FeatureKey, string Variant) Key, double Value)> drainedCounters,
+            List<(DateTime Date, string MetricKey, string? FeatureKey, string Variant, double Value)> drainedObservations)
+        {
+            foreach (var (key, value) in drainedStats)
+                _stats.AddOrUpdate(key, value, (_, existing) => existing + value);
+
+            foreach (var (key, value) in drainedCounters)
+                _counters.AddOrUpdate(key, value, (_, existing) => existing + value);
+
+            foreach (var observation in drainedObservations)
+            {
+                if (_observations.Count >= MaxPendingObservations)
+                {
+                    TryLog(LogLevel.Debug, "Pending metrics observations cap ({Cap}) reached; dropping restored observation {MetricKey}", MaxPendingObservations, observation.MetricKey);
+                    break;
+                }
+
+                _observations.Add(observation);
+            }
+        }
+
+        private void ApplyTransientBackoff(RpcException ex, bool suppressLogging, string message)
+        {
+            var (shouldLog, delay) = _transientBackoff.RecordFailure();
+            if (!suppressLogging && shouldLog)
+                TryLog(LogLevel.Warning, ex, message);
+
+            if (!_shuttingDown && !_disposed)
+                _timer.Change(delay, DefaultSendInterval);
+        }
+
+        private void ResetTransientBackoff()
+        {
+            _transientBackoff.Reset();
+            if (!_shuttingDown && !_disposed)
+                _timer.Change(DefaultSendInterval, DefaultSendInterval);
         }
 
         private void DrainMeasurements(
@@ -417,6 +466,12 @@ namespace Toggly.FeatureManagement
         
         private void IncrementMeasurement(string metricKey, string? featureKey, double value, string variant)
         {
+            if (string.IsNullOrEmpty(metricKey))
+            {
+                TryLog(LogLevel.Debug, "Skipping measurement without a metric key");
+                return;
+            }
+
             // Use AddOrUpdate with lambda for atomic increment - prevents race condition with SendMetrics
             _stats.AddOrUpdate(
                 (metricKey, featureKey, variant),
@@ -462,6 +517,18 @@ namespace Toggly.FeatureManagement
         
         private void StoreObservationInstance(DateTime date, string metricKey, string? featureKey, double value, string variant)
         {
+            if (string.IsNullOrEmpty(metricKey))
+            {
+                TryLog(LogLevel.Debug, "Skipping observation without a metric key");
+                return;
+            }
+
+            if (_observations.Count >= MaxPendingObservations)
+            {
+                TryLog(LogLevel.Debug, "Pending metrics observations cap ({Cap}) reached; dropping observation {MetricKey}", MaxPendingObservations, metricKey);
+                return;
+            }
+
             _observations.Add((date, metricKey, featureKey, variant, value));
         }
 
@@ -505,6 +572,12 @@ namespace Toggly.FeatureManagement
         
         private void IncrementMetricCounter(string metricKey, string? featureKey, double value, string variant)
         {
+            if (string.IsNullOrEmpty(metricKey))
+            {
+                TryLog(LogLevel.Debug, "Skipping counter without a metric key");
+                return;
+            }
+
             // Use AddOrUpdate with lambda for atomic increment - prevents race condition with SendMetrics
             _counters.AddOrUpdate(
                 (metricKey, featureKey, variant),

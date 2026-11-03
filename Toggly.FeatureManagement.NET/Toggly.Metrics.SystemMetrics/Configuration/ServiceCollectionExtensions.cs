@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using System.Collections.Generic;
 using Toggly.Metrics.SystemMetrics.Collectors;
 
@@ -49,7 +50,10 @@ namespace Toggly.FeatureManagement.Web.Configuration
         /// <param name="eventSources">Event sources and their counter-to-metric mappings.</param>
         public static void AddPerformanceMetrics(this IServiceCollection services, Dictionary<string, Dictionary<string, string>> eventSources)
         {
-            services.AddHostedService(t => new TogglyPerformanceCollectorService(eventSources, t.GetRequiredService<IMetricsRegistryService>()));
+            services.AddHostedService(t => new TogglyPerformanceCollectorService(
+                eventSources,
+                t.GetRequiredService<IMetricsRegistryService>(),
+                t.GetService<ILoggerFactory>()));
         }
     }
 }

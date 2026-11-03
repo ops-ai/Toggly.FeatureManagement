@@ -1857,6 +1857,106 @@ public class TogglyMetricsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task SendMetrics_TransientRpcFailure_LogsWarningAndRetainsMetrics()
+    {
+        var logger = new Mock<ILogger>();
+        _loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(logger.Object);
+        var packets = CapturePackets(new RpcException(new Status(StatusCode.DeadlineExceeded, "deadline")));
+        _service = CreateService();
+        await _service.MeasureAsync("transient-metric", 3);
+
+        await SendPendingMetricsAsync();
+
+        _service.GetDebugInfo().LastSend.Should().BeNull();
+        _service.GetDebugInfo().LastError.Should().Contain("deadline");
+        logger.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("Transient error sending metrics")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+        logger.Verify(
+            x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Never);
+
+        await SendPendingMetricsAsync();
+        packets.Should().HaveCount(2);
+        packets[1].Stats.Should().ContainSingle().Which.Metric.Should().Be("transient-metric");
+        packets[1].Stats[0].VariantValues["enabled"].Should().Be(3);
+    }
+
+    [Fact]
+    public async Task SendMetrics_NonTransientRpcFailure_LogsErrorAndRetainsMetrics()
+    {
+        var logger = new Mock<ILogger>();
+        _loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(logger.Object);
+        var packets = CapturePackets(new RpcException(new Status(StatusCode.PermissionDenied, "denied")));
+        _service = CreateService();
+        await _service.MeasureAsync("denied-metric", 9);
+
+        await SendPendingMetricsAsync();
+
+        logger.Verify(
+            x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("Error sending metrics to toggly")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+        logger.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("Transient error sending metrics")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Never);
+
+        await SendPendingMetricsAsync();
+        packets.Should().HaveCount(2);
+        packets[1].Stats.Should().ContainSingle().Which.Metric.Should().Be("denied-metric");
+    }
+
+    [Fact]
+    public async Task SendMetrics_RepeatedTransientFailures_BackoffSuppressesDuplicateWarnings()
+    {
+        var logger = new Mock<ILogger>();
+        _loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(logger.Object);
+        _metricsClientMock.Setup(x => x.SendMetricsAsync(
+            It.IsAny<MetricStat>(), It.IsAny<Metadata>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .Returns<MetricStat, Metadata, DateTime?, CancellationToken>((packet, _, _, _) =>
+            {
+                var result = Task.FromException<MetricResult>(
+                    new RpcException(new Status(StatusCode.Unavailable, "502 Bad Gateway")));
+                return new AsyncUnaryCall<MetricResult>(result, Task.FromResult(new Metadata()),
+                    () => new Status(StatusCode.Unavailable, "502 Bad Gateway"), () => new Metadata(), () => { });
+            });
+        _service = CreateService();
+        await _service.MeasureAsync("backoff-metric", 1);
+
+        await SendPendingMetricsAsync();
+        await _service.MeasureAsync("backoff-metric", 1);
+        await SendPendingMetricsAsync();
+
+        logger.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("Transient error sending metrics")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task SendMetrics_InvalidObservationTime_SkipsPoisonObservationAndSendsDrainedPacket()
     {
         _metricsRegistryServiceMock.SetupSequence(x => x.GetObservationValuesAsync())
