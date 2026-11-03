@@ -39,7 +39,7 @@ done
 for fixture in redis-jedis5 redis-jedis8; do
   expected_version="5.1.5"
   if [[ "${fixture}" == "redis-jedis8" ]]; then
-    expected_version="8.0.1"
+    expected_version="8.0.2"
   fi
   tree_file="$(mktemp)"
   mvn -q -Dmaven.repo.local="${MAVEN_REPO_LOCAL}" \

@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Changed
+- `toggly-cache-redis-jedis8` and its packed host fixture resolve Jedis **8.0.2**
+  (was 8.0.1); host-fixture dependency assertion updated to match.
 - Protobuf runtime/codegen **4.36.2** (was 3.25.x); JUnit Jupiter **6.1.3**.
 - Spring Boot **4** starter tracks **4.1.2**; Boot **3** starter remains on **3.5.16**.
 - Spring MVC / WebFlux keep a Spring Framework **6.2.19** compile baseline and are
