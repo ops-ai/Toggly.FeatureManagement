@@ -586,8 +586,8 @@ jobs:
 
             ### Requirements
 
-            - Dart SDK >=2.18.2 <4.0.0
-            - Flutter >=1.17.0
+            - Dart SDK >=3.0.0 <4.0.0
+            - Flutter >=3.10.0
 
             ### Links
 

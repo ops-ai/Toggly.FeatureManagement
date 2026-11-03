@@ -109,9 +109,8 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-  # Declared Dart floor remains >=2.18.2 (Flutter ~3.3.x). flutter_lints ^6
-  # requires Dart ^3.8.0, so the oldest resolvable/testable toolchain is
-  # Flutter 3.32.0. Do not raise the declared floor without an owner decision.
+  # Declared floor is Dart >=3.0.0 / Flutter >=3.10.0 (Dart 2 dropped).
+  # Floor CI pins Flutter 3.10.0 to match the declared package floor.
   analyze-sdk-floor:
     name: SDK floor probe (Flutter ${{ matrix.flutter-version }})
     runs-on: ubuntu-latest
@@ -119,7 +118,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        flutter-version: ['3.32.0']
+        flutter-version: ['3.10.0']
     defaults:
       run:
         working-directory: Toggly.FeatureManagement.Flutter/toggly
