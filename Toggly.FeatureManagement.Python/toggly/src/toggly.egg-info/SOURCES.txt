@@ -17,6 +17,7 @@ src/toggly/http.py
 src/toggly/models.py
 src/toggly/providers.py
 src/toggly/py.typed
+src/toggly/segments.py
 src/toggly/variant_value.py
 src/toggly/variants.py
 src/toggly/version.py
@@ -30,7 +31,9 @@ src/toggly/telemetry/client_api.py
 src/toggly/telemetry/grpc_clients.py
 src/toggly/telemetry/metrics_batcher.py
 src/toggly/telemetry/runtime.py
+src/toggly/telemetry/system_metrics.py
 src/toggly/telemetry/usage_batcher.py
+src/toggly/telemetry/usage_scope.py
 src/toggly/telemetry/pb/__init__.py
 src/toggly/telemetry/pb/metrics_pb2.py
 src/toggly/telemetry/pb/metrics_pb2_grpc.py
@@ -48,5 +51,6 @@ tests/test_filter_parity_fixtures.py
 tests/test_http.py
 tests/test_models.py
 tests/test_providers.py
+tests/test_segments.py
 tests/test_smoke.py
 tests/test_variant_allocator_corpus.py
