@@ -132,7 +132,7 @@ test('Local Gates runs its coverage and packed consumer without shared dependenc
   assert.deepEqual(result.testMatrix, [{
     sdk: 'Local-Gates',
     path: 'toggly-local-gates',
-    'test-cmd': 'npm test',
+    'test-cmd': 'npm run test:coverage',
     'has-lint': false,
   }]);
   assert.equal(result.needSharedDeps, false);
@@ -146,14 +146,15 @@ test('Evaluator with a shared-dependency SDK still builds shared artifacts', () 
   assert.deepEqual(result.testMatrix.map(({ sdk }) => sdk), ['Evaluator', 'Vue']);
 });
 
-test('JavaScript requires coverage and the packed browser telemetry host', () => {
+test('JavaScript requires coverage and the packed browser telemetry host on Node 22/24/26', () => {
   const result = filterAnalysisJs('JavaScript');
-  assert.deepEqual(result.testMatrix, [{
+  assert.deepEqual(result.testMatrix, ['22.x', '24.x', '26.x'].map((nodeVersion) => ({
     sdk: 'JavaScript',
     path: 'Toggly.FeatureManagement.Javascript/feature_flags_toggly',
     'test-cmd': 'npm test -- --coverage && npm run test:browser-host',
+    'node-version': nodeVersion,
     'has-lint': false,
-  }]);
+  })));
   assert.ok(result.requiredJobs.split(',').includes('test'));
 });
 

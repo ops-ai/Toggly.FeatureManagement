@@ -326,12 +326,17 @@ test('classifies CJS files under tests as test code in both Sonar scans', () => 
   }
 });
 
-test('runs the Fastify 4 and 5 packed-host fixture on its valid Node 20 row', () => {
-  const packedHostStep = workflow.match(/- name: Run packed host compatibility fixture\n\s+if: ([^\n]+)/)?.[1];
+test('runs Express, Fastify, and Hono packed-host fixtures on every Node server matrix row', () => {
+  const nodeJob = workflow.match(/\n  test-node-server:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  assert.match(nodeJob, /node-version: \['22\.x', '24\.x', '26\.x'\]/);
+  assert.doesNotMatch(nodeJob, /'18\.x'|'20\.x'/);
 
+  const packedHostStep = workflow.match(/- name: Run packed host compatibility fixture\n\s+if: ([^\n]+)/)?.[1];
   assert.ok(packedHostStep, 'the packed-host fixture must keep an explicit matrix guard');
+  assert.match(packedHostStep, /matrix\.config\.package == 'Express'/);
   assert.match(packedHostStep, /matrix\.config\.package == 'Fastify'/);
-  assert.match(packedHostStep, /matrix\.node-version == '20\.x'/);
+  assert.match(packedHostStep, /matrix\.config\.package == 'Hono'/);
+  assert.doesNotMatch(packedHostStep, /matrix\.node-version == '20\.x'/);
 });
 
 test('requires the packed Docusaurus production host across Node 22/24/26 and React 18/19', () => {
@@ -510,6 +515,26 @@ test('classifies the JavaScript packed browser harness as test code in both scan
   for (const [, value] of workflow.matchAll(/-Dsonar\.coverage\.exclusions=([^\n]+)/g)) {
     assert.ok(!value.includes('Toggly.FeatureManagement.Javascript'));
   }
+});
+
+test('runs the vanilla JavaScript SDK on Node 22/24/26 and uploads coverage from 22.x', () => {
+  for (const sdks of ['all', 'JavaScript']) {
+    assert.deepEqual(
+      selectAnalysis(sdks).testMatrix.include.filter((row) => row.sdk === 'JavaScript'),
+      ['22.x', '24.x', '26.x'].map((nodeVersion) => ({
+        sdk: 'JavaScript',
+        path: 'Toggly.FeatureManagement.Javascript/feature_flags_toggly',
+        'test-cmd': 'npm test -- --coverage && npm run test:browser-host',
+        'node-version': nodeVersion,
+        'has-lint': false,
+      })),
+    );
+  }
+  const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  assert.match(
+    testJob,
+    /matrix\.sdk != 'Docusaurus' && \(matrix\.sdk != 'JavaScript' \|\| matrix\.node-version == '22\.x'\)/,
+  );
 });
 
 test('uses one aggregate Sonar project and requires the full coverage bundle', () => {
