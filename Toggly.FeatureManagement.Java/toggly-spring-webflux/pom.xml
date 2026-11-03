@@ -19,7 +19,7 @@
         <!-- Overridable for CI matrix (6.2.x baseline + 7.0.x proof) -->
         <spring.version>6.2.19</spring.version>
         <toggly.spring-security.version>6.5.11</toggly.spring-security.version>
-        <reactor.version>3.8.7</reactor.version>
+        <reactor.version>3.8.8</reactor.version>
     </properties>
 
     <dependencies>
