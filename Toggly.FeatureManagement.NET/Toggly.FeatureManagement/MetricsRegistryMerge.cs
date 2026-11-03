@@ -20,7 +20,8 @@ namespace Toggly.FeatureManagement
         {
             if (entries == null)
             {
-                logger.LogDebug("Skipping {MetricKind} handler that returned null results", metricKind);
+                if (logger.IsEnabled(LogLevel.Debug))
+                    logger.LogDebug("Skipping {MetricKind} handler that returned null results", metricKind);
                 return;
             }
 
@@ -28,7 +29,8 @@ namespace Toggly.FeatureManagement
             {
                 if (string.IsNullOrEmpty(entry.Key))
                 {
-                    logger.LogDebug("Skipping {MetricKind} entry without a metric key", metricKind);
+                    if (logger.IsEnabled(LogLevel.Debug))
+                        logger.LogDebug("Skipping {MetricKind} entry without a metric key", metricKind);
                     continue;
                 }
 

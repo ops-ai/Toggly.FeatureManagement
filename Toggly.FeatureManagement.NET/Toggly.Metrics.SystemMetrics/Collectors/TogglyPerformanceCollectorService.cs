@@ -108,34 +108,45 @@ namespace Toggly.Metrics.SystemMetrics.Collectors
             }
 
             foreach (var payload in eventData.Payload)
+                TryRecordCounter(payload, eventSourceName, sourceMetrics);
+        }
+
+        private void TryRecordCounter(
+            object? payload,
+            string eventSourceName,
+            Dictionary<string, string> sourceMetrics)
+        {
+            if (!(payload is IDictionary<string, object> eventPayload))
+                return;
+
+            var (counterName, counterValue) = GetRelevantMetric(eventPayload);
+
+            if (string.IsNullOrEmpty(counterName))
             {
-                if (payload is IDictionary<string, object> eventPayload)
+                if (_logger != null && _logger.IsEnabled(LogLevel.Debug))
+                    _logger.LogDebug("Skipping performance counter event without a counter name from source {EventSource}", eventSourceName);
+                return;
+            }
+
+            if (!sourceMetrics.TryGetValue(counterName, out var metricName))
+                return;
+
+            if (string.IsNullOrEmpty(metricName))
+            {
+                if (_logger != null && _logger.IsEnabled(LogLevel.Debug))
                 {
-                    var (counterName, counterValue) = GetRelevantMetric(eventPayload);
-
-                    if (string.IsNullOrEmpty(counterName))
-                    {
-                        _logger?.LogDebug("Skipping performance counter event without a counter name from source {EventSource}", eventSourceName);
-                        continue;
-                    }
-
-                    if (!sourceMetrics.TryGetValue(counterName, out var metricName))
-                        continue;
-
-                    if (string.IsNullOrEmpty(metricName))
-                    {
-                        _logger?.LogDebug(
-                            "Skipping performance counter {CounterName} from source {EventSource} because the configured metric name is null or empty",
-                            counterName,
-                            eventSourceName);
-                        continue;
-                    }
-
-                    lock (_lock)
-                    {
-                        UpsertCurrentValue(metricName, counterValue);
-                    }
+                    _logger.LogDebug(
+                        "Skipping performance counter {CounterName} from source {EventSource} because the configured metric name is null or empty",
+                        counterName,
+                        eventSourceName);
                 }
+
+                return;
+            }
+
+            lock (_lock)
+            {
+                UpsertCurrentValue(metricName, counterValue);
             }
         }
 

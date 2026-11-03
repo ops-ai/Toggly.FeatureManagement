@@ -18,7 +18,11 @@ namespace Toggly.FeatureManagement
         /// </summary>
         public static bool IsTransient(RpcException exception, bool shuttingDown)
         {
+#if NET6_0_OR_GREATER
+            ArgumentNullException.ThrowIfNull(exception);
+#else
             if (exception == null) throw new ArgumentNullException(nameof(exception));
+#endif
 
             return exception.StatusCode switch
             {

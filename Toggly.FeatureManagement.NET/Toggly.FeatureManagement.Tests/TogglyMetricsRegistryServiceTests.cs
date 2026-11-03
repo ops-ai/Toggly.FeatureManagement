@@ -307,6 +307,7 @@ public class TogglyMetricsRegistryServiceTests
         // Reproduce the production ArgumentNullException('key') path: a null observation name
         // must not abort aggregation of the remaining entries from the same handler.
         var logger = new Mock<ILogger>();
+        logger.Setup(x => x.IsEnabled(LogLevel.Debug)).Returns(true);
         var now = DateTime.UtcNow;
         var results = new Dictionary<string, (DateTime, double)>();
         var entries = new List<KeyValuePair<string, (DateTime, double)>>
@@ -338,11 +339,20 @@ public class TogglyMetricsRegistryServiceTests
     public void Merge_WithNullHandlerResults_DoesNotThrow()
     {
         var logger = new Mock<ILogger>();
+        logger.Setup(x => x.IsEnabled(LogLevel.Debug)).Returns(true);
         var results = new Dictionary<string, double> { ["existing"] = 1 };
 
         MetricsRegistryMerge.Merge(results, null, logger.Object, "measurement");
 
         results.Should().ContainKey("existing");
+        logger.Verify(
+            x => x.Log(
+                LogLevel.Debug,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("returned null results")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
     }
 
     #endregion
