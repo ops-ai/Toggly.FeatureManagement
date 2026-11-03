@@ -168,8 +168,12 @@ namespace Toggly.Metrics.SystemMetrics.Collectors
             {
                 if (value is double doubleValue)
                     counterValue = doubleValue;
-                else if (value.ToString() is { Length: > 0 } raw)
-                    counterValue = double.Parse(raw);
+                else
+                {
+                    var raw = value.ToString();
+                    if (!string.IsNullOrEmpty(raw))
+                        counterValue = double.Parse(raw);
+                }
             }
 
             return (counterName, counterValue);
