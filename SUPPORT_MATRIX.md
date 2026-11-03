@@ -27,7 +27,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Java Spring | Boot 3.5 + Boot 4.1 / Spring 6.2+7 / Java 17 | Boot 3.5.16 + Boot 4.1.2 starters; Spring 6.2.19 + 7.0.10 (Security 6.5.11 / 7.1.2) MVC/WebFlux CI + `webflux` / `webflux-spring7` hosts; JDK 17/21/25 | Boot 4.1 / Spring 7.0 | Dual Boot starters; single MVC/WebFlux artifacts (provided Spring) |
 | Java Redis | Jedis 5 + Jedis 8 | dual artifacts | Jedis 8 | No Lettuce 7 |
 | Android | AGP 9.5 / Kotlin 2.4 / compileSdk 37 / minSdk 24 | Java 17+21+25; unit tests + API 36 emulator | AGP 9.5.0 / Kotlin 2.4.21 | Wave 3; AVD 37 blocked on GHA macos-intel |
-| Flutter | Dart `>=2.18.2 <4` | Flutter stable (Dart 3) | Dart 3 | Keep floor; equatable 3 deferred |
+| Flutter | Dart `>=3.4.0 <4` / Flutter `>=3.22.0` | Flutter **3.22.0** (Dart 3.4) + stable | Flutter 3.47.x / Dart 3.13 | Dart 2 dropped; floor set by `crypto` ^3.0.6 (Dart ≥3.4) + `equatable` ^3 |
 | iOS | iOS 14 / macOS 11 | Xcode 16.x matrix | Xcode 16.4 | Keep floor |
 | Rust axum | axum 0.7 + axum08 | dual crates | 0.8 | `toggly-axum08` 0.1.1+ accepts workspace `toggly` range |
 | Go | Go 1.25; grpc 1.80 | CI | newer grpc | Coordinated bump only |
