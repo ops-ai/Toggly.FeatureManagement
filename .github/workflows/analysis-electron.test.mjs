@@ -131,7 +131,12 @@ test('the actual summary verifier rejects missing, failed, cancelled or unexpect
   const required = splitJobList(summary.match(/required-jobs: (.+)/)[1]);
   const allow = splitJobList(evaluate(expression(summary, 'allow-skipped')));
   for (const result of ['success', 'failure', 'cancelled', 'skipped', undefined]) {
-    const needs = { test: { result: 'success' }, sonar: { result }, 'dependency-check': { result: 'success' } };
+    const needs = {
+      test: { result: 'success' },
+      'packed-host': { result: 'success' },
+      sonar: { result },
+      'dependency-check': { result: 'success' },
+    };
     assert.deepEqual(failedRequiredJobs(needs, required, allow), result === 'success' ? [] : ['sonar']);
     const execution = spawnSync(process.execPath, [verifierPath], {
       env: { ...process.env, NEEDS_JSON: JSON.stringify(needs), REQUIRED_JOBS: required.join(','), ALLOW_SKIPPED: allow.join(',') },
@@ -149,7 +154,12 @@ test('intentional reporting skips cannot hide failed scans or missing tests', ()
     { github: { event_name: 'pull_request', event: { pull_request: { head: { repo: { fork: true } } } } } },
   ]) {
     const allow = splitJobList(evaluate(expression(summary, 'allow-skipped'), context));
-    const needs = { test: { result: 'success' }, sonar: { result: 'skipped' }, 'dependency-check': { result: 'skipped' } };
+    const needs = {
+      test: { result: 'success' },
+      'packed-host': { result: 'success' },
+      sonar: { result: 'skipped' },
+      'dependency-check': { result: 'skipped' },
+    };
     assert.deepEqual(failedRequiredJobs(needs, required, allow), []);
     needs.sonar.result = 'failure';
     assert.deepEqual(failedRequiredJobs(needs, required, allow), ['sonar']);
@@ -173,9 +183,14 @@ test('summary discloses fork and opt-out skips and preserves failed-job results'
       const context = {
         inputs: { run_reporting: input },
         github: { event_name: 'pull_request', event: { pull_request: { head: { repo: { fork } } } } },
-        needs: { test: { result: 'success' }, sonar: { result: 'failure' }, 'dependency-check': { result: 'success' } },
+        needs: {
+          test: { result: 'success' },
+          'packed-host': { result: 'success' },
+          sonar: { result: 'failure' },
+          'dependency-check': { result: 'success' },
+        },
       };
-      const env = Object.fromEntries(['FORK_PR', 'RUN_REPORTING', 'TEST_RESULT', 'SONAR_RESULT', 'DEPENDENCY_CHECK_RESULT']
+      const env = Object.fromEntries(['FORK_PR', 'RUN_REPORTING', 'TEST_RESULT', 'PACKED_HOST_RESULT', 'SONAR_RESULT', 'DEPENDENCY_CHECK_RESULT']
         .map(key => [key, String(evaluate(expression(report, key), context))]));
       const result = spawnSync('bash', ['-e', '-c', runScript(report)], {
         env: { GITHUB_STEP_SUMMARY: path, ...env },
@@ -192,12 +207,26 @@ test('summary discloses fork and opt-out skips and preserves failed-job results'
   }
 });
 
-test('Electron workflow runs its contract checks and keeps the existing host and coverage gates', () => {
+test('Electron workflow runs Node 22/24/26 coverage and packed Electron 28/45 hosts', () => {
   const tests = job('test');
+  assert.match(tests, /node-version: \[22\.x, 24\.x, 26\.x\]/);
   assert.match(step(tests, 'Verify Electron analysis workflow contract'), /run: node --test \.github\/workflows\/analysis-electron\.test\.mjs/);
+  assert.match(step(tests, 'Verify Electron analysis workflow contract'), /matrix\.node-version == '22\.x'/);
   assert.match(workflow.split('permissions:')[0], /'\.github\/workflows\/analysis-electron\.test\.mjs'/);
   assert.match(step(tests, 'Run tests with coverage'), /xvfb-run.*npm run test:coverage/);
-  assert.match(step(tests, 'Run packed Electron floor and current hosts'), /xvfb-run.*npm run test:hosts/);
+  assert.match(step(tests, 'Upload coverage artifact'), /matrix\.node-version == '22\.x'/);
+
+  const hosts = job('packed-host');
+  assert.match(hosts, /host: electron28-retained-floor\n\s+node-version: '24'/);
+  assert.match(hosts, /host: electron45-current\n\s+node-version: '24'/);
+  assert.match(step(hosts, 'Run packed Electron host'), /xvfb-run.*npm run test:hosts/);
+  assert.match(step(hosts, 'Run packed Electron host'), /HOST: \$\{\{ matrix\.host \}\}/);
+
+  const summary = job('summary');
+  assert.match(summary, /required-jobs: test,packed-host,sonar,dependency-check/);
+  assert.match(step(summary, 'Check test results'), /Packed hosts: \$\{PACKED_HOST_RESULT\}/);
+  assert.match(step(summary, 'Check test results'), /Node: 22\.x, 24\.x, 26\.x/);
+  assert.match(step(summary, 'Check test results'), /28\.3\.3 \(floor\), 45\.2\.1 \(latest\)/);
 });
 
 // Sonar resolves report paths from projectBaseDir. Electron sits one directory

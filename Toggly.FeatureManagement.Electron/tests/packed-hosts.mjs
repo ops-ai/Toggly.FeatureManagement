@@ -20,7 +20,7 @@ const sdkDirectory = dirname(packageDirectory)
 const workspace = mkdtempSync(join(tmpdir(), 'toggly-electron-packed-hosts-'))
 const rows = [
   { name: 'electron28-retained-floor', electron: '28.3.3' },
-  { name: 'electron44-current', electron: '44.3.0' },
+  { name: 'electron45-current', electron: '45.2.1' },
 ]
 
 
