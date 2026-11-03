@@ -215,53 +215,79 @@ namespace Toggly.FeatureManagement
                     return;
                 }
 
-                if (!suppressLogging) TryLog(LogLevel.Trace, "Sending metrics");
-                var currentTime = DateTime.UtcNow;
-
-                
-                var dataPacket = new MetricStat
-                {
-                    AppKey = _appKey,
-                    Environment = _environment,
-                    Time = Timestamp.FromDateTime(currentTime),
-                    InstanceName = appInstanceName
-                };
-
-                DrainMeasurements(dataPacket, drainedStats);
-                DrainCounters(dataPacket, drainedCounters);
-                DrainObservations(dataPacket, drainedObservations);
-
-                var grpcMetadata = new Metadata
-                {
-                    { "UA", userAgent }
-                };
-
-                var result = await _metricsClient.SendMetricsAsync(dataPacket, grpcMetadata, DateTime.UtcNow.AddSeconds(180)).ConfigureAwait(false);
-
-                if (result.Count != dataPacket.Stats.Count && !suppressLogging)
-                    TryLog(LogLevel.Warning, "Metric count did not match. Possible data integrity issues");
-
-                _lastSend = DateTime.UtcNow;
+                await TransmitMetricsAsync(drainedStats, drainedCounters, drainedObservations, suppressLogging).ConfigureAwait(false);
                 ResetTransientBackoff();
             }
             catch (RpcException ex) when (GrpcTransientError.IsTransient(ex, _shuttingDown))
             {
-                _lastError = ex.Message;
-                _lastErrorTime = DateTime.UtcNow;
-                RestoreDrainedMetrics(drainedStats, drainedCounters, drainedObservations);
-                ApplyTransientBackoff(ex, suppressLogging, "Transient error sending metrics to toggly");
+                HandleTransientSendFailure(ex, drainedStats, drainedCounters, drainedObservations, suppressLogging);
             }
             catch (Exception ex)
             {
-                if (!suppressLogging) TryLog(LogLevel.Error, ex, "Error sending metrics to toggly");
-                _lastError = ex.Message;
-                _lastErrorTime = DateTime.UtcNow;
-                RestoreDrainedMetrics(drainedStats, drainedCounters, drainedObservations);
+                HandleSendFailure(ex, drainedStats, drainedCounters, drainedObservations, suppressLogging);
             }
             finally
             {
                 _sendMetricsSemaphore.Release();
             }
+        }
+
+        private async Task TransmitMetricsAsync(
+            List<((string MetricKey, string? FeatureKey, string Variant) Key, double Value)> drainedStats,
+            List<((string MetricKey, string? FeatureKey, string Variant) Key, double Value)> drainedCounters,
+            List<(DateTime Date, string MetricKey, string? FeatureKey, string Variant, double Value)> drainedObservations,
+            bool suppressLogging)
+        {
+            if (!suppressLogging) TryLog(LogLevel.Trace, "Sending metrics");
+            var dataPacket = new MetricStat
+            {
+                AppKey = _appKey,
+                Environment = _environment,
+                Time = Timestamp.FromDateTime(DateTime.UtcNow),
+                InstanceName = appInstanceName
+            };
+
+            DrainMeasurements(dataPacket, drainedStats);
+            DrainCounters(dataPacket, drainedCounters);
+            DrainObservations(dataPacket, drainedObservations);
+
+            var grpcMetadata = new Metadata { { "UA", userAgent } };
+            var result = await _metricsClient.SendMetricsAsync(dataPacket, grpcMetadata, DateTime.UtcNow.AddSeconds(180)).ConfigureAwait(false);
+
+            if (result.Count != dataPacket.Stats.Count && !suppressLogging)
+                TryLog(LogLevel.Warning, "Metric count did not match. Possible data integrity issues");
+
+            _lastSend = DateTime.UtcNow;
+        }
+
+        private void HandleTransientSendFailure(
+            RpcException ex,
+            List<((string MetricKey, string? FeatureKey, string Variant) Key, double Value)> drainedStats,
+            List<((string MetricKey, string? FeatureKey, string Variant) Key, double Value)> drainedCounters,
+            List<(DateTime Date, string MetricKey, string? FeatureKey, string Variant, double Value)> drainedObservations,
+            bool suppressLogging)
+        {
+            RecordLastError(ex.Message);
+            RestoreDrainedMetrics(drainedStats, drainedCounters, drainedObservations);
+            ApplyTransientBackoff(ex, suppressLogging, "Transient error sending metrics to toggly");
+        }
+
+        private void HandleSendFailure(
+            Exception ex,
+            List<((string MetricKey, string? FeatureKey, string Variant) Key, double Value)> drainedStats,
+            List<((string MetricKey, string? FeatureKey, string Variant) Key, double Value)> drainedCounters,
+            List<(DateTime Date, string MetricKey, string? FeatureKey, string Variant, double Value)> drainedObservations,
+            bool suppressLogging)
+        {
+            if (!suppressLogging) TryLog(LogLevel.Error, ex, "Error sending metrics to toggly");
+            RecordLastError(ex.Message);
+            RestoreDrainedMetrics(drainedStats, drainedCounters, drainedObservations);
+        }
+
+        private void RecordLastError(string message)
+        {
+            _lastError = message;
+            _lastErrorTime = DateTime.UtcNow;
         }
 
         private void RestoreDrainedMetrics(
