@@ -149,8 +149,8 @@ jobs:
             -Dsonar.sources=src
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts
             -Dsonar.coverage.exclusions=**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts
-            -Dsonar.javascript.lcov.reportPaths=../../coverage/Electron-lcov.info
-            -Dsonar.typescript.lcov.reportPaths=../../coverage/Electron-lcov.info
+            -Dsonar.javascript.lcov.reportPaths=../coverage/Electron-lcov.info
+            -Dsonar.typescript.lcov.reportPaths=../coverage/Electron-lcov.info
             -Dsonar.typescript.tsconfigPaths=tsconfig.json
             -Dsonar.tests=tests
             -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx
@@ -187,12 +187,12 @@ jobs:
             -Dsonar.sources=src
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts
             -Dsonar.coverage.exclusions=**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts
-            -Dsonar.javascript.lcov.reportPaths=../../coverage/Electron-lcov.info
-            -Dsonar.typescript.lcov.reportPaths=../../coverage/Electron-lcov.info
+            -Dsonar.javascript.lcov.reportPaths=../coverage/Electron-lcov.info
+            -Dsonar.typescript.lcov.reportPaths=../coverage/Electron-lcov.info
             -Dsonar.typescript.tsconfigPaths=tsconfig.json
             -Dsonar.tests=tests
             -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx
-            -Dsonar.dependencyCheck.reportPath=../../dependency-check-reports/dependency-check-report.xml
+            -Dsonar.dependencyCheck.reportPath=../dependency-check-reports/dependency-check-report.xml
 
   dependency-check:
     name: OWASP Dependency Check
