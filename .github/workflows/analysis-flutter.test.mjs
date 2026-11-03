@@ -276,7 +276,7 @@ test('gate regressions run in the existing analyze job and trigger both push and
 test('SDK floor probe pins oldest resolvable Flutter and secure-storage matrix covers latest 11.2.x', () => {
   const floor = job('analyze-sdk-floor');
   assert.match(floor, /flutter-version: \$\{\{ matrix\.flutter-version \}\}/);
-  assert.match(floor, /flutter-version: \['3\.10\.0'\]/);
+  assert.match(floor, /flutter-version: \['3\.22\.0'\]/);
   assert.match(step(floor, 'Run tests'), /flutter test --test-randomize-ordering-seed random/);
   assert.match(step(floor, 'Analyze code'), /flutter analyze --no-fatal-infos --no-fatal-warnings/);
   const pluginMatrix = job('secure-storage-version-matrix');

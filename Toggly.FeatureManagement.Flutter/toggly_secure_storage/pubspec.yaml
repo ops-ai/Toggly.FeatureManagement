@@ -5,8 +5,8 @@ homepage: https://docs.toggly.io/
 repository: https://github.com/ops-ai/Toggly.FeatureManagement
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
-  flutter: ">=3.10.0"
+  sdk: '>=3.4.0 <4.0.0'
+  flutter: ">=3.22.0"
 
 dependencies:
   flutter:

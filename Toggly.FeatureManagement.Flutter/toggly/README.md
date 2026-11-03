@@ -6,9 +6,9 @@ Can be used *WITH* or *WITHOUT* [Toggly.io](https://toggly.io).
 
 | Constraint | Value | Notes |
 | --- | --- | --- |
-| Declared Dart SDK | `>=3.0.0 <4.0.0` | Dart 2 support dropped |
-| Declared Flutter | `>=3.10.0` | Matches Dart 3.0 floor |
-| CI | Flutter `3.10.0` floor probe + `stable` | Floor CI matches the declared package floor |
+| Declared Dart SDK | `>=3.4.0 <4.0.0` | Dart 2 support dropped; floor set by `crypto` ^3.0.6 |
+| Declared Flutter | `>=3.22.0` | Matches Dart 3.4 floor |
+| CI | Flutter `3.22.0` floor probe + `stable` | Floor CI matches the declared package floor |
 | equatable | `^3.0.0` | Requires Dart ≥3.0 |
 
 See repo root [`SUPPORT_MATRIX.md`](../../SUPPORT_MATRIX.md).

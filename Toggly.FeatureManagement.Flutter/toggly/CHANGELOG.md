@@ -1,11 +1,11 @@
 ## Unreleased
 
 ### Changed
-- **Breaking:** drop Dart 2 / Flutter &lt;3.10 support. Declared floors are now `sdk: '>=3.0.0 <4.0.0'` and `flutter: '>=3.10.0'`.
-- Dependency: `equatable` `^2.0.5` → `^3.0.0` (unused transitively by public API; aligns with Dart ≥3.0).
-- Dev tooling: `flutter_lints`/`lints` widened to span the Dart 3.0 floor through current 6.x (`>=3.0.0 <7.0.0` / `>=2.1.1 <7.0.0`); resolves to 6.x on current stable.
-- CI floor probe pins Flutter **3.10.0** (matches declared floor) alongside stable.
-- Example host SDK ceiling widened to `<4.0.0` with Dart floor raised to `>=3.0.0`.
+- **Breaking:** drop Dart 2 / Flutter &lt;3.22 support. Declared floors are now `sdk: '>=3.4.0 <4.0.0'` and `flutter: '>=3.22.0'`.
+- Dependency: `equatable` `^2.0.5` → `^3.0.0` (unused transitively by public API; aligns with Dart ≥3.4).
+- Dev tooling: `flutter_lints`/`lints` widened to span the Dart 3.4 floor through current 6.x (`>=3.0.0 <7.0.0` / `>=2.1.1 <7.0.0`); resolves to 6.x on current stable.
+- CI floor probe pins Flutter **3.22.0** (matches declared floor; `crypto` ^3.0.6 needs Dart ≥3.4) alongside stable.
+- Example host SDK ceiling widened to `<4.0.0` with Dart floor raised to `>=3.4.0`.
 - Added `api_contract_evaluation_test.dart`: mocked evaluated-signed HTTP + public `isFeatureOn`/`evaluateFeatureGate` coverage.
 
 ## 1.13.2

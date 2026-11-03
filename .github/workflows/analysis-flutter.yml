@@ -109,8 +109,8 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-  # Declared floor is Dart >=3.0.0 / Flutter >=3.10.0 (Dart 2 dropped).
-  # Floor CI pins Flutter 3.10.0 to match the declared package floor.
+  # Declared floor is Dart >=3.4.0 / Flutter >=3.22.0 (Dart 2 dropped).
+  # crypto ^3.0.6 requires Dart >=3.4; floor CI pins Flutter 3.22.0 to match.
   analyze-sdk-floor:
     name: SDK floor probe (Flutter ${{ matrix.flutter-version }})
     runs-on: ubuntu-latest
@@ -118,7 +118,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        flutter-version: ['3.10.0']
+        flutter-version: ['3.22.0']
     defaults:
       run:
         working-directory: Toggly.FeatureManagement.Flutter/toggly

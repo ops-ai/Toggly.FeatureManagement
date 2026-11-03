@@ -3,7 +3,7 @@ description: Benchmarks for the Toggly feature flags library
 publish_to: none  # Prevents accidental publishing
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.4.0 <4.0.0'
 
 dependencies:
   flutter:
