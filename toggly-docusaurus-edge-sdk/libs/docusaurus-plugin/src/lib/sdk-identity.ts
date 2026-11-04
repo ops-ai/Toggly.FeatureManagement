@@ -1,5 +1,5 @@
 export const SDK_ID = 'docusaurus';
-export const SDK_VERSION = '0.10.4';
+export const SDK_VERSION = '0.10.5';
 
 export const SDK_HEADER_ID = 'X-Toggly-Sdk';
 export const SDK_HEADER_VERSION = 'X-Toggly-Sdk-Version';

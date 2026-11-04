@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+2026-11-04
+
+### Changed
+- Declare Node `>=22` (Node 18 and 20 dropped as EOL), matching `@ops-ai/toggly-node-core` 0.14 (#857).
+
+
 ## 0.5.0
 
 2026-09-23

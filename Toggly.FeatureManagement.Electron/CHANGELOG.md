@@ -2,7 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## 1.5.0
+
+2026-11-04
 
 ### Changed
 - `engines.node` floor raised from `>=18` to `>=22` (Node 18 and 20 are EOL).

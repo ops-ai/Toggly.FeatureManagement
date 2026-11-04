@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.4.0
+
+2026-11-04
 
 ### Changed
 - Protobuf runtime/codegen **4.36.2** (was 3.25.x); JUnit Jupiter **6.1.3**.

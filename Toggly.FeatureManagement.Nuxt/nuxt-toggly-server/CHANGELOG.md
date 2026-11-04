@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.11.0
+
+2026-11-04
 
 ### Changed
 - Declare Node `>=22` (Node 18/20 dropped per owner support policy).
