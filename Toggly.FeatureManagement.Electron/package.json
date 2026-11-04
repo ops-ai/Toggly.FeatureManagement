@@ -113,7 +113,7 @@
     "@ops-ai/toggly-local-gates": "^1.0.1",
     "@ops-ai/toggly-segments": "^0.1.0",
     "@ops-ai/toggly-signed-defs": "^1.2.7",
-    "ws": "^8.0.0"
+    "ws": "^8.22.1"
   },
   "peerDependencies": {
     "electron": ">=28",
@@ -128,18 +128,18 @@
     }
   },
   "devDependencies": {
-    "@types/node": "^20.17.12",
-    "@types/react": "^18.3.18",
-    "@types/ws": "^8.0.0",
-    "@vitest/coverage-v8": "^3.0.4",
-    "electron": "^44.3.0",
+    "@types/node": "^22.20.5",
+    "@types/react": "^18.3.28",
+    "@types/ws": "^8.18.1",
+    "@vitest/coverage-v8": "^3.2.7",
+    "electron": "^45.2.1",
     "react": "^18.3.1",
-    "tsup": "^8.3.5",
-    "typescript": "^5.7.3",
-    "vitest": "^3.0.4"
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "publishConfig": {
     "access": "public",
