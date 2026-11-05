@@ -35,11 +35,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # consumer_ios is the Git-consumer simulator triple used by
-          # verify-swift-distribution. Package.swift still declares iOS 14;
-          # Xcode 27's iPhoneSimulator SDK only accepts 15.0+, so that job
-          # proves the current toolchain at the SDK's minimum while 16.x/26.x
-          # keep proving the declared iOS 14 floor.
+          # consumer_ios drives both the --consumer-target triple and the
+          # disposable Git-consumer Package.swift iOS floor (SwiftPM prefers
+          # the manifest over CLI flags on Darwin). The SDK Package.swift
+          # still declares iOS 14; Xcode 27's iPhoneSimulator SDK only accepts
+          # 15.0+, so that job raises only the verification consumer.
           - os: macos-15
             xcode: '16.1'
             coverage: false
