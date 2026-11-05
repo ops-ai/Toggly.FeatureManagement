@@ -1,4 +1,4 @@
-toggly>=0.1.0
+toggly>=0.2.0
 
 [all]
 redis>=4.0.0

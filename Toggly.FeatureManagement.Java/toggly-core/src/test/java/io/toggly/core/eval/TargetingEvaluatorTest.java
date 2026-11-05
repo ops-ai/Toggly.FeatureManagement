@@ -109,13 +109,61 @@ class TargetingEvaluatorTest {
     }
 
     @Test
-    void shouldNotApplyDefaultPercentageWithoutIdentity() {
+    void shouldEnableAnonymousWhenDefaultRolloutIs100() {
         Map<String, Object> params = new HashMap<>();
-        params.put("DefaultRolloutPercentage", 100);
+        params.put("Audience.DefaultRolloutPercentage", 100);
+
+        FeatureFilter filter = FeatureFilter.of("Targeting", params);
+
+        assertTrue(evaluator.evaluate(filter, "test-feature", EvaluationContext.empty()));
+    }
+
+    @Test
+    void shouldDisableAnonymousWhenDefaultRolloutIs0() {
+        Map<String, Object> params = new HashMap<>();
+        params.put("Audience.DefaultRolloutPercentage", 0);
 
         FeatureFilter filter = FeatureFilter.of("Targeting", params);
 
         assertFalse(evaluator.evaluate(filter, "test-feature", EvaluationContext.empty()));
+    }
+
+    @Test
+    void shouldFailClosedAnonymousWhenDefaultRolloutIsPartial() {
+        Map<String, Object> params = new HashMap<>();
+        params.put("Audience.DefaultRolloutPercentage", 50);
+
+        FeatureFilter filter = FeatureFilter.of("Targeting", params);
+
+        assertFalse(evaluator.evaluate(filter, "test-feature", EvaluationContext.empty()));
+    }
+
+    @Test
+    void shouldTreatBlankIdentityAsAnonymousForPartialRollout() {
+        Map<String, Object> params = new HashMap<>();
+        params.put("Audience.DefaultRolloutPercentage", 50);
+
+        FeatureFilter filter = FeatureFilter.of("Targeting", params);
+        EvaluationContext blankIdentity = EvaluationContext.builder().identity("").build();
+
+        assertFalse(evaluator.evaluate(filter, "test-feature", blankIdentity));
+    }
+
+    @Test
+    void shouldUseStickyBucketForPartialDefaultRolloutWithIdentity() {
+        String featureKey = "targeting-rollout";
+        String identity = "sticky-user";
+        double bucket = PercentageEvaluator.INSTANCE.calculateBucket(identity, featureKey);
+
+        Map<String, Object> above = new HashMap<>();
+        above.put("Audience.DefaultRolloutPercentage", bucket + 0.01);
+        assertTrue(evaluator.evaluate(FeatureFilter.of("Targeting", above), featureKey,
+                EvaluationContext.builder().identity(identity).build()));
+
+        Map<String, Object> below = new HashMap<>();
+        below.put("Audience.DefaultRolloutPercentage", bucket - 0.01);
+        assertFalse(evaluator.evaluate(FeatureFilter.of("Targeting", below), featureKey,
+                EvaluationContext.builder().identity(identity).build()));
     }
 
     @Test

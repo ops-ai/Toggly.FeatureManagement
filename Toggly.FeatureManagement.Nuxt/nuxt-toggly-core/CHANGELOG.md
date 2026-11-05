@@ -1,3 +1,8 @@
+## Unreleased
+
+### Changed
+- Declare Node `>=22` (Node 18/20 dropped per owner support policy). CI unit coverage now runs on Node 22, 24, and 26.
+
 ## 1.16.1 — 2026-10-16
 
 ### Fixed

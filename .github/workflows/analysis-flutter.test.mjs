@@ -11,10 +11,12 @@ import { splitJobList } from '../actions/verify-required-jobs/verify-required-jo
 
 const workflow = readFileSync(new URL('./analysis-flutter.yml', import.meta.url), 'utf8');
 const verifierPath = fileURLToPath(new URL('../actions/verify-required-jobs/verify-required-jobs.mjs', import.meta.url));
-const requiredJobs = ['analyze', 'sonar', 'build-platforms', 'smoke-test', 'dependency-check', 'analyze-providers', 'secure-storage-version-matrix', 'dependency-check-providers'];
+const requiredJobs = ['analyze', 'analyze-sdk-floor', 'sonar', 'build-platforms', 'smoke-test', 'dependency-check', 'analyze-providers', 'secure-storage-version-matrix', 'dependency-check-providers'];
 const reportingJobs = ['sonar', 'dependency-check', 'dependency-check-providers'];
 const outcomes = [
-  ['analyze', 'ANALYZE_RESULT', 'Core tests and analysis'], ['sonar', 'SONAR_RESULT', 'Core Sonar'],
+  ['analyze', 'ANALYZE_RESULT', 'Core tests and analysis'],
+  ['analyze-sdk-floor', 'ANALYZE_FLOOR_RESULT', 'SDK floor probe (oldest resolvable Flutter)'],
+  ['sonar', 'SONAR_RESULT', 'Core Sonar'],
   ['build-platforms', 'BUILD_RESULT', 'Core platform builds'], ['smoke-test', 'SMOKE_RESULT', 'Smoke test'],
   ['dependency-check', 'DEPENDENCY_CHECK_RESULT', 'Core OWASP'],
   ['analyze-providers', 'PROVIDERS_RESULT', 'Provider tests, analysis and requested Sonar'],
@@ -199,7 +201,7 @@ test('forks and explicit reporting opt-out skip credentialed work while provider
   }
 });
 
-test('summary requires all eight jobs and rejects failure cancellation missing and unexpected skips', () => {
+test('summary requires all nine jobs and rejects failure cancellation missing and unexpected skips', () => {
   const requirements = summaryRequirements();
   const dependencies = job('summary').match(/needs: \[([^\]]+)\]/)[1].split(',').map(name => name.trim());
   assert.deepEqual(new Set(dependencies), new Set(requiredJobs));
@@ -271,6 +273,16 @@ test('gate regressions run in the existing analyze job and trigger both push and
   assert.match(contract, /run: node --test \.github\/workflows\/analysis-flutter.test.mjs/);
 });
 
+test('SDK floor probe pins oldest resolvable Flutter and secure-storage matrix covers latest 11.2.x', () => {
+  const floor = job('analyze-sdk-floor');
+  assert.match(floor, /flutter-version: \$\{\{ matrix\.flutter-version \}\}/);
+  assert.match(floor, /flutter-version: \['3\.22\.0'\]/);
+  assert.match(step(floor, 'Run tests'), /flutter test --test-randomize-ordering-seed random/);
+  assert.match(step(floor, 'Analyze code'), /flutter analyze --no-fatal-infos --no-fatal-warnings/);
+  const pluginMatrix = job('secure-storage-version-matrix');
+  assert.match(pluginMatrix, /version: \['9\.0\.0', '9\.2\.4', '10\.3\.3', '11\.1\.1', '11\.2\.0'\]/);
+});
+
 function preservationHash(source) {
   // Only remote action refs on step-level YAML uses fields are mutable.
   // Preserve owner/repo/path, comments, inputs, shell text and all other bytes.
@@ -285,7 +297,7 @@ function assertPreservedWorkflow(source = workflow) {
     ['provider-server-main', 'b93385e2f5d3a04f0b7403de9467ed50100614df79b63e208d21037661f5ab94'],
     ['build-platforms', '61ac8fe87975f67986f441a00c0d4931855ccea0a80884aeafcdebba11b699c2'],
     ['smoke-test', 'c9dc0174462a463076a0063da63b6a382ed24673ded0d674eebfac0996916c6b'],
-    ['secure-storage-version-matrix', '6c1872adbfc6937e8d1b67ff203940891c2ce16d1aacb890a01919a64ba04fb0'],
+    ['secure-storage-version-matrix', 'fb86ba49fd636243e4a148bfb0a5ac8aaa34755513aeb1172e21da3f95c73e8d'],
   ]) assert.equal(preservationHash(job(name, source)), expected, name);
   assert.equal(preservationHash(job('analyze-providers', source).split('    steps:')[0]), '4fae063b0bcc707f6c9cd3b82d1da514f74219fe3ffe435e51ec10e75e43285a');
   assert.equal(preservationHash(job('analyze-providers', source).split('      - name: Resolve Sonar project version\n')[0]), '826239d2e91af9b369e808dc61392dea6c2a85534e7df67106a9eb3d337d6d5a');

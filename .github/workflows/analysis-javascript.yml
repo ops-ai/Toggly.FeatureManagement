@@ -372,21 +372,21 @@ jobs:
         working-directory: ${{ matrix.path }}
         run: npm run test:host
 
-      # SolidJS runs on Node 22/24/26; upload coverage once from the floor row
-      # so coverage-SolidJS does not collide across matrix cells.
+      # JavaScript and SolidJS run on Node 22/24/26; upload coverage once from
+      # the floor row so coverage-${{ matrix.sdk }} does not collide.
       - name: Require unit test coverage report
-        if: matrix.sdk != 'Docusaurus' && (matrix.sdk != 'SolidJS' || matrix.node-version == '22.x')
+        if: matrix.sdk != 'Docusaurus' && ((matrix.sdk != 'JavaScript' && matrix.sdk != 'SolidJS') || matrix.node-version == '22.x')
         working-directory: ${{ matrix.path }}
         run: find coverage -name lcov.info -size +0c -print -quit | grep -q .
 
       - name: Label coverage artifact
-        if: matrix.sdk != 'Docusaurus' && (matrix.sdk != 'SolidJS' || matrix.node-version == '22.x')
+        if: matrix.sdk != 'Docusaurus' && ((matrix.sdk != 'JavaScript' && matrix.sdk != 'SolidJS') || matrix.node-version == '22.x')
         working-directory: ${{ matrix.path }}
         run: printf '%s\n' 'coverage-${{ matrix.sdk }}' > coverage/artifact-name.txt
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
-        if: matrix.sdk != 'Docusaurus' && (matrix.sdk != 'SolidJS' || matrix.node-version == '22.x')
+        if: matrix.sdk != 'Docusaurus' && ((matrix.sdk != 'JavaScript' && matrix.sdk != 'SolidJS') || matrix.node-version == '22.x')
         with:
           name: coverage-${{ matrix.sdk }}
           path: ${{ matrix.path }}/coverage/
@@ -394,11 +394,31 @@ jobs:
           if-no-files-found: error
 
   test-docusaurus-host:
-    name: Current Docusaurus packed production host (Node 24)
+    name: Docusaurus ${{ matrix.docusaurus }} / React ${{ matrix.react }} (Node ${{ matrix.node-version }})
     needs: [prepare]
     if: needs.prepare.outputs.run_test_docusaurus_host == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node-version: '22.x'
+            docusaurus: '3.10.2'
+            react: '19.3.1'
+            upload-coverage: false
+          - node-version: '24.x'
+            docusaurus: '3.10.2'
+            react: '19.3.1'
+            upload-coverage: true
+          - node-version: '26.x'
+            docusaurus: '3.10.2'
+            react: '19.3.1'
+            upload-coverage: false
+          - node-version: '24.x'
+            docusaurus: '3.10.2'
+            react: '18.3.1'
+            upload-coverage: false
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -408,11 +428,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '24.x'
+          node-version: ${{ matrix.node-version }}
           cache: npm
           cache-dependency-path: |
             toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/package-lock.json
             toggly-docusaurus-edge-sdk/cloudflare/pages-function/package-lock.json
+            toggly-docusaurus-edge-sdk/cloudflare/worker/package-lock.json
       - name: Install locked plugin dependencies
         working-directory: toggly-docusaurus-edge-sdk/libs/docusaurus-plugin
         run: npm ci
@@ -420,11 +441,13 @@ jobs:
         working-directory: toggly-docusaurus-edge-sdk/libs/docusaurus-plugin
         run: npm run typecheck && npm run test:coverage
       - name: Label Docusaurus plugin coverage artifact
+        if: matrix.upload-coverage
         working-directory: toggly-docusaurus-edge-sdk/libs/docusaurus-plugin
         run: |
           test -s coverage/lcov.info
           printf '%s\n' 'coverage-Docusaurus' > coverage/artifact-name.txt
       - name: Upload Docusaurus plugin coverage artifact
+        if: matrix.upload-coverage && matrix.node-version == '24.x' && matrix.react == '19.3.1'
         uses: actions/upload-artifact@v7
         with:
           name: coverage-Docusaurus
@@ -438,20 +461,30 @@ jobs:
         working-directory: toggly-docusaurus-edge-sdk/cloudflare/pages-function
         run: npm run typecheck && npm run lint && npm run test:coverage
       - name: Label Pages Function coverage artifact
+        if: matrix.upload-coverage
         working-directory: toggly-docusaurus-edge-sdk/cloudflare/pages-function
         run: |
           test -s coverage/lcov.info
           printf '%s\n' 'coverage-Docusaurus-Pages' > coverage/artifact-name.txt
       - name: Upload Pages Function coverage artifact
+        if: matrix.upload-coverage && matrix.node-version == '24.x' && matrix.react == '19.3.1'
         uses: actions/upload-artifact@v7
         with:
           name: coverage-Docusaurus-Pages
           path: toggly-docusaurus-edge-sdk/cloudflare/pages-function/coverage/
           retention-days: 7
           if-no-files-found: error
+      - name: Install locked Worker dependencies
+        working-directory: toggly-docusaurus-edge-sdk/cloudflare/worker
+        run: npm ci
+      - name: Verify Worker types and Node + workerd tests
+        working-directory: toggly-docusaurus-edge-sdk/cloudflare/worker
+        run: npm run typecheck && npm test
       - name: Verify packed Docusaurus production and browser gates
         env:
           CHROME_BIN: /usr/bin/google-chrome
+          TOGGLY_DOCUSAURUS_VERSION: ${{ matrix.docusaurus }}
+          TOGGLY_DOCUSAURUS_REACT: ${{ matrix.react }}
         run: node tests/docusaurus-consumer-fixtures/packed-host.mjs
 
   test-astro-hosts:
@@ -565,26 +598,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: ['18.x', '20.x', '22.x']
+        # Owner decision: drop EOL Node 18/20; maintain 22 (LTS), 24 (LTS), 26 (Current).
+        node-version: ['22.x', '24.x', '26.x']
         config:
           - { package: Core, dir: toggly-node-core }
           - { package: Express, dir: toggly-express }
           - { package: Fastify, dir: toggly-fastify }
           - { package: Hono, dir: toggly-hono }
           - { package: Koa, dir: toggly-koa }
-        include:
-          # Exercise the explicit ECDSA hash contract on the current Node runtime.
-          - node-version: '24.x'
-            config: { package: Core, dir: toggly-node-core }
-          # Exercise packed current framework hosts on maintained Node lines.
-          - node-version: '24.x'
-            config: { package: Express, dir: toggly-express }
-          - node-version: '24.x'
-            config: { package: Hono, dir: toggly-hono }
-          - node-version: '26.x'
-            config: { package: Express, dir: toggly-express }
-          - node-version: '26.x'
-            config: { package: Hono, dir: toggly-hono }
 
     steps:
       - name: Checkout code
@@ -593,8 +614,7 @@ jobs:
           ref: ${{ env.CHECKOUT_REF }}
           fetch-depth: 0
 
-      # Install pnpm before setup-node so action-setup uses the runner Node,
-      # not matrix Node 18 (pnpm/action-setup@v6 @pnpm/exe breaks on 18).
+      # Install pnpm before setup-node so action-setup uses the runner Node.
       - name: Install pnpm
         uses: pnpm/action-setup@v6
         with:
@@ -628,13 +648,16 @@ jobs:
         working-directory: Toggly.FeatureManagement.Node/${{ matrix.config.dir }}
         run: pnpm test:coverage
 
+      # Packed hosts prove oldest-supported + latest-stable framework majors
+      # (Express 4/5, Fastify 4/5, Hono 4.x floor/latest). Koa dual majors run
+      # inside toggly-koa vitest packed-host tests on every Node row.
       - name: Run packed host compatibility fixture
-        if: (matrix.config.package == 'Fastify' && matrix.node-version == '20.x') || ((matrix.node-version == '24.x' || matrix.node-version == '26.x') && (matrix.config.package == 'Express' || matrix.config.package == 'Hono'))
+        if: matrix.config.package == 'Express' || matrix.config.package == 'Fastify' || matrix.config.package == 'Hono'
         working-directory: Toggly.FeatureManagement.Node/${{ matrix.config.dir }}
         run: pnpm test:hosts
 
       - name: Label coverage artifact
-        if: matrix.node-version == '20.x'
+        if: matrix.node-version == '22.x'
         working-directory: Toggly.FeatureManagement.Node/${{ matrix.config.dir }}
         run: |
           test -s coverage/lcov.info
@@ -642,7 +665,7 @@ jobs:
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
-        if: matrix.node-version == '20.x'
+        if: matrix.node-version == '22.x'
         with:
           name: coverage-Node-${{ matrix.config.package }}
           path: Toggly.FeatureManagement.Node/${{ matrix.config.dir }}/coverage/
