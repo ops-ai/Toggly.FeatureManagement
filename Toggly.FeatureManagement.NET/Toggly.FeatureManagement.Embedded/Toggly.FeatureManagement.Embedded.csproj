@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- net6/net7 need source changes (collection expressions, CancelAsync); keep net8+ only. -->
+    <TargetFrameworks>net8.0;net9.0;net10.0$(TogglyNet11Tfm)</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
@@ -15,8 +16,12 @@
     <ProjectReference Include="..\Toggly.FeatureManagement\Toggly.FeatureManagement.csproj" />
     <ProjectReference Include="..\Toggly.FeatureManagement.Catalog\Toggly.FeatureManagement.Catalog.csproj" />
   </ItemGroup>
-  <ItemGroup>
-    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  <!-- Azure.Core 1.64 on net10+ needs System.Text.Json >= 10.0.10; keep framework STJ on net8/net9. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="System.Text.Json" Version="10.0.14" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net11.0'">
+    <PackageReference Include="System.Text.Json" Version="11.0.0-rc.3.26522.148" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\AssemblyInfo.cs" Link="Properties\AssemblyInfo.cs" />

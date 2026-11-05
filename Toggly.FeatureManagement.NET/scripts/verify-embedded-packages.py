@@ -11,11 +11,17 @@ import zipfile
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--feed', type=Path, required=True, help='Directory containing locally packed candidate nupkgs')
-parser.add_argument('--framework', choices=['net8.0', 'net10.0'], required=True)
+parser.add_argument('--framework', choices=['net8.0', 'net9.0', 'net10.0', 'net11.0'], required=True)
 parser.add_argument('--dotnet', default='dotnet')
 args = parser.parse_args()
 root = Path(__file__).resolve().parents[1]
 feed = args.feed.resolve()
+ef_versions = {
+    'net8.0': '8.0.0',
+    'net9.0': '9.0.0',
+    'net10.0': '10.0.0',
+    'net11.0': '11.0.0-rc.3.26522.148',
+}
 
 # Obtain versions from the artifacts being exercised; shared version consistency is checked during packing.
 packages = {}
@@ -44,7 +50,7 @@ with tempfile.TemporaryDirectory(prefix='toggly-packed-consumer-') as temporary:
     for package_id in ['Toggly.FeatureManagement.Dashboard', 'Toggly.FeatureManagement.Storage.EntityFramework']:
         ET.SubElement(references, 'PackageReference', Include=package_id, Version=packages[package_id])
     ET.SubElement(references, 'PackageReference', Include='Microsoft.EntityFrameworkCore.Sqlite',
-                  Version='8.0.0' if args.framework == 'net8.0' else '10.0.0')
+                  Version=ef_versions[args.framework])
     project_file = host / 'Consumer.csproj'
     ET.ElementTree(project).write(project_file, encoding='unicode')
     config = ET.Element('configuration')

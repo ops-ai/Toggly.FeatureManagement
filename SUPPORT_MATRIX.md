@@ -22,8 +22,9 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Electron | `>=28` | 28.3.3 + 45.2.1 packed hosts (Node 22/24/26 unit) | 45.2.1 | Maintain |
 | Svelte | `^4 \|\| ^5` | 4 + 5 | 5.x | Maintain |
 | SvelteKit | kit `^2 \|\| ^3` | 2.x, 3.1.0 packed host | 3.1.x | Maintain |
-| .NET core family | netstandard2.1…net9 + **net10** | multi-TFM build | net10 | Wave 2 |
-| .NET Mongo/Dapper/EF | includes net10 | net8/net10 consumers | net10 | Maintain |
+| .NET core family | netstandard2.1…net10 + **net11** (RC) | multi-TFM build + parity matrix | net10 / net11 RC | Maintain; net11 allow-failure until GA |
+| .NET Dashboard / Embedded | net8…net11 (RC) | unit + embedded consumer matrix | net10 / net11 RC | net8 floor (Razor); net11 allow-failure |
+| .NET Mongo/Dapper/EF | includes net10 + net11 RC | net8/net10/net11 consumers | net10 / net11 RC | Maintain |
 | Java Spring | Boot 3.5 + Boot 4.1 / Spring 6.2+7 / Java 17 | Boot 3.5.16 + Boot 4.1.2 starters; Spring 6.2.19 + 7.0.10 (Security 6.5.11 / 7.1.2) MVC/WebFlux CI + `webflux` / `webflux-spring7` hosts; JDK 17/21/25 | Boot 4.1 / Spring 7.0 | Dual Boot starters; single MVC/WebFlux artifacts (provided Spring) |
 | Java Redis | Jedis 5 + Jedis 8 | dual artifacts | Jedis 8 | No Lettuce 7 |
 | Android | AGP 9.5 / Kotlin 2.4 / compileSdk 37 / minSdk 24 | Java 17+21+25; unit tests + API 36 emulator | AGP 9.5.0 / Kotlin 2.4.21 | Wave 3; AVD 37 blocked on GHA macos-intel |

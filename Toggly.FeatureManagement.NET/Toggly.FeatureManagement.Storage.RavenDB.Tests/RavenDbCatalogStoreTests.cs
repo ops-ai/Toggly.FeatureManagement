@@ -73,7 +73,7 @@ public sealed class RavenDbCatalogStoreTests
         stored.Should().NotBeNull();
         stored!.Id.Should().Be("TogglyCatalogs/1c168adb00d208e42f93314529f1fa9c0427eb63233ceda95a5db52b7012a719");
         stored.Revision.Should().NotBeNullOrWhiteSpace();
-        session.Object.Advanced.UseOptimisticConcurrency.Should().BeTrue();
+        session.Object.Advanced.OptimisticConcurrencyMode.Should().Be(OptimisticConcurrencyMode.Writes);
     }
 
     [Fact]
@@ -155,7 +155,7 @@ public sealed class RavenDbCatalogStoreTests
     {
         var session = new Mock<IAsyncDocumentSession>();
         var advanced = new Mock<IAsyncAdvancedSessionOperations>();
-        advanced.SetupProperty(s => s.UseOptimisticConcurrency);
+        advanced.SetupProperty(s => s.OptimisticConcurrencyMode);
         session.SetupGet(s => s.Advanced).Returns(advanced.Object);
         return session;
     }

@@ -7,6 +7,9 @@ on:
       - main
     paths:
       - 'Toggly.FeatureManagement.NET/**'
+      - 'docs/filter-parity/**'
+      - 'variant-allocator-corpus/**'
+      - 'SUPPORT_MATRIX.md'
       - 'Toggly.CLI/**'
       - 'Toggly.FeatureManagement.Blazor/**'
       - 'Toggly.FeatureManagement.Client/**'
@@ -36,9 +39,13 @@ permissions:
 jobs:
   analyze:
     name: Build, Test & Analyze
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: [dependency-check]
     if: always()
+    env:
+      # Required job: keep net11.0 out of TargetFrameworks (see Directory.Build.props).
+      # Preview TFM is exercised only by test-net11-preview (allow-failure).
+      ExcludeNet11Preview: 'true'
 
     steps:
       - name: Checkout code
@@ -50,7 +57,12 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
+          # Stable TFMs only (through net10). Do not install the net11 RC SDK here —
+          # a net11-only failure must not break this required job.
+          # (netstandard2.1 is covered by concrete runtimes below).
           dotnet-version: |
+            3.1.x
+            5.0.x
             6.0.x
             7.0.x
             8.0.x
@@ -121,6 +133,7 @@ jobs:
           dotnet restore Toggly.FeatureManagement.NET/Toggly.Storage.MongoDB.Tests/Toggly.Storage.MongoDB.Tests.csproj
           dotnet restore Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Storage.RavenDB.Tests/Toggly.FeatureManagement.Storage.RavenDB.Tests.csproj
           dotnet restore Toggly.FeatureManagement.NET/Toggly.Metrics.SystemMetrics.Tests/Toggly.Metrics.SystemMetrics.Tests.csproj
+          dotnet restore Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Parity.Tests/Toggly.FeatureManagement.Parity.Tests.csproj
           dotnet restore Toggly.CLI.Tests/Toggly.CLI.Tests.csproj
         continue-on-error: true
 
@@ -145,9 +158,9 @@ jobs:
             /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
             /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
             /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
-            /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**,**/Toggly.CLI/scripts/**,**/Toggly.CLI/packaging/**" \
-            /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**,**/Toggly.CLI/scripts/**,**/Toggly.CLI/packaging/**" \
-            /d:sonar.test.inclusions="**/*Tests*.cs,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,Toggly.FeatureManagement.Blazor/tests/**"
+            /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**,**/Toggly.FeatureManagement.NET/scripts/**,**/Toggly.CLI/scripts/**,**/Toggly.CLI/packaging/**" \
+            /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**,**/Toggly.FeatureManagement.Parity.Tests/**,**/Toggly.FeatureManagement.NET/scripts/**,**/Toggly.CLI/scripts/**,**/Toggly.CLI/packaging/**" \
+            /d:sonar.test.inclusions="**/*Tests*.cs,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.Parity.Tests/**,Toggly.FeatureManagement.Blazor/tests/**"
 
       - name: Build solution
         run: dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln --no-restore -c Release
@@ -163,6 +176,7 @@ jobs:
           dotnet build Toggly.FeatureManagement.NET/Toggly.Storage.MongoDB.Tests/Toggly.Storage.MongoDB.Tests.csproj -c Release
           dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Storage.RavenDB.Tests/Toggly.FeatureManagement.Storage.RavenDB.Tests.csproj -c Release
           dotnet build Toggly.FeatureManagement.NET/Toggly.Metrics.SystemMetrics.Tests/Toggly.Metrics.SystemMetrics.Tests.csproj -c Release
+          dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Parity.Tests/Toggly.FeatureManagement.Parity.Tests.csproj -c Release
           dotnet build Toggly.CLI.Tests/Toggly.CLI.Tests.csproj -c Release
 
       - name: Run core tests
@@ -173,6 +187,22 @@ jobs:
             --results-directory ./TestResults \
             --logger "trx;LogFileName=core-test-results.trx" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+
+
+      - name: Run filter-parity and variant-allocator corpus tests (stable TFMs)
+        run: |
+          set -euo pipefail
+          frameworks=(netcoreapp3.1 net5.0 net6.0 net7.0 net8.0 net9.0 net10.0)
+          for framework in "${frameworks[@]}"; do
+            echo "::group::Parity tests ${framework}"
+            dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Parity.Tests/Toggly.FeatureManagement.Parity.Tests.csproj \
+              -c Release -f "${framework}" \
+              --collect:"XPlat Code Coverage" \
+              --results-directory ./TestResults \
+              --logger "trx;LogFileName=parity-${framework}.trx" \
+              -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+            echo "::endgroup::"
+          done
 
       - name: Run CLI tests
         run: |
@@ -266,11 +296,23 @@ jobs:
 
       - name: Run embedded catalog, runtime, and dashboard tests
         run: |
+          set -euo pipefail
+          # Catalog.Tests: net9/net10. Embedded/Dashboard.Tests: net8–net10 here;
+          # net11.0 is covered by the allow-failure test-net11-preview job.
           for project in Catalog Embedded Dashboard; do
-            dotnet test "Toggly.FeatureManagement.NET/Toggly.FeatureManagement.$project.Tests/Toggly.FeatureManagement.$project.Tests.csproj" \
-              --no-build -c Release --collect:"XPlat Code Coverage" \
-              --results-directory ./TestResults \
-              -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+            case "$project" in
+              Catalog) frameworks=(net9.0 net10.0) ;;
+              *) frameworks=(net8.0 net9.0 net10.0) ;;
+            esac
+            for framework in "${frameworks[@]}"; do
+              echo "::group::${project} tests ${framework}"
+              dotnet test "Toggly.FeatureManagement.NET/Toggly.FeatureManagement.$project.Tests/Toggly.FeatureManagement.$project.Tests.csproj" \
+                -c Release -f "${framework}" --collect:"XPlat Code Coverage" \
+                --results-directory ./TestResults \
+                --logger "trx;LogFileName=${project,,}-${framework}.trx" \
+                -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+              echo "::endgroup::"
+            done
           done
 
       - name: Run SQLite dashboard browser tests
@@ -358,9 +400,9 @@ jobs:
               /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
               /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
               /d:sonar.dependencyCheck.reportPath="${GITHUB_WORKSPACE}/dependency-check-reports/dependency-check-report.xml" \
-              /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**,**/Toggly.CLI/scripts/**,**/Toggly.CLI/packaging/**" \
-              /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**,**/Toggly.CLI/scripts/**,**/Toggly.CLI/packaging/**" \
-              /d:sonar.test.inclusions="**/*Tests*.cs,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,Toggly.FeatureManagement.Blazor/tests/**"; then
+              /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**,**/Toggly.FeatureManagement.NET/scripts/**,**/Toggly.CLI/scripts/**,**/Toggly.CLI/packaging/**" \
+              /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**,**/Toggly.FeatureManagement.Parity.Tests/**,**/Toggly.FeatureManagement.NET/scripts/**,**/Toggly.CLI/scripts/**,**/Toggly.CLI/packaging/**" \
+              /d:sonar.test.inclusions="**/*Tests*.cs,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.Parity.Tests/**,Toggly.FeatureManagement.Blazor/tests/**"; then
               break
             fi
 
@@ -554,6 +596,9 @@ jobs:
   pack-packages:
     name: Pack NuGet packages
     runs-on: ubuntu-latest
+    env:
+      # Required job: pack stable TFMs only. net11.0 packs happen in test-net11-preview.
+      ExcludeNet11Preview: 'true'
 
     steps:
       - name: Checkout code
@@ -562,6 +607,8 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
+          # Stable TFMs only — omit the net11 RC SDK so preview restore/build
+          # failures cannot fail this required pack job.
           dotnet-version: |
             6.0.x
             7.0.x
@@ -603,13 +650,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        framework: [net8.0, net10.0]
+        # net11.0 consumer verify lives in test-net11-preview (allow-failure) so a
+        # preview-only pack/restore failure cannot fail required checks.
+        framework: [net8.0, net9.0, net10.0]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: |
             8.0.x
+            9.0.x
             10.0.x
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -706,10 +756,64 @@ jobs:
             blazor-pack
             Toggly.FeatureManagement.Blazor/coverage/
 
+
+  test-net11-preview:
+    name: Test net11.0 preview (allow-failure)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      # Opt into net11.0 for this job; required jobs leave CI default (strip net11).
+      IncludeNet11Preview: 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup .NET 11 RC
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+            11.0.100-rc.3.26522.148
+
+      - name: Setup Node.js for embedded consumer verify
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+
+      - name: Build and test net11.0 (parity, Dashboard, Embedded)
+        run: |
+          set -euo pipefail
+          echo "::notice::net11.0 is RC; this job is allow-failure until GA"
+          # Explicit -f selects net11; IncludeNet11Preview keeps it in TargetFrameworks under CI.
+          dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Parity.Tests/Toggly.FeatureManagement.Parity.Tests.csproj -c Release -f net11.0 --logger "trx;LogFileName=parity-net11.0.trx" --results-directory ./TestResults
+          dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard.Tests/Toggly.FeatureManagement.Dashboard.Tests.csproj -c Release -f net11.0 --logger "trx;LogFileName=dashboard-net11.0.trx" --results-directory ./TestResults
+          dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Embedded.Tests/Toggly.FeatureManagement.Embedded.Tests.csproj -c Release -f net11.0 --logger "trx;LogFileName=embedded-net11.0.trx" --results-directory ./TestResults
+
+      - name: Pack server packages with net11.0 for preview consumer
+        run: |
+          set -euo pipefail
+          node .github/package-registry/dotnet-ci.mjs pack
+          # dotnet-ci pack writes nuget-analysis-pack; keep a dedicated feed name for the consumer step
+          mv nuget-analysis-pack nuget-net11-preview-feed
+          ls nuget-net11-preview-feed/*.*nupkg | head
+
+      - name: Install browser test dependencies
+        working-directory: Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Dashboard.BrowserTests
+        run: |
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+
+      - name: Verify Embedded NuGet consumer on net11.0
+        run: python3 Toggly.FeatureManagement.NET/scripts/verify-embedded-packages.py --feed nuget-net11-preview-feed --framework net11.0
+
   summary:
     name: Analysis Summary
     runs-on: ubuntu-latest
-    needs: [analyze, dependency-check, build-cli, pack-packages, embedded-consumer, smoke-test, blazor-runtime]
+    needs: [analyze, dependency-check, build-cli, pack-packages, embedded-consumer, smoke-test, blazor-runtime, test-net11-preview]
     if: always()
 
     steps:
@@ -721,4 +825,5 @@ jobs:
         with:
           needs-json: ${{ toJSON(needs) }}
           required-jobs: analyze,dependency-check,build-cli,pack-packages,embedded-consumer,smoke-test,blazor-runtime
+          # test-net11-preview is intentionally allow-failure (RC) and omitted from required-jobs
           allow-skipped: ${{ toJSON(inputs.run_reporting) == 'false' && 'dependency-check' || 'none' }}
