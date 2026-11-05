@@ -42,6 +42,10 @@ jobs:
     runs-on: ubuntu-22.04
     needs: [dependency-check]
     if: always()
+    env:
+      # Required job: keep net11.0 out of TargetFrameworks (see Directory.Build.props).
+      # Preview TFM is exercised only by test-net11-preview (allow-failure).
+      ExcludeNet11Preview: 'true'
 
     steps:
       - name: Checkout code
@@ -53,7 +57,8 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
-          # Install every SDK/runtime needed to build+test library TFMs
+          # Stable TFMs only (through net10). Do not install the net11 RC SDK here —
+          # a net11-only failure must not break this required job.
           # (netstandard2.1 is covered by concrete runtimes below).
           dotnet-version: |
             3.1.x
@@ -63,7 +68,6 @@ jobs:
             8.0.x
             9.0.x
             10.0.x
-            11.0.100-rc.3.26522.148
 
       - name: Setup Node.js for shared package governance
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -592,6 +596,9 @@ jobs:
   pack-packages:
     name: Pack NuGet packages
     runs-on: ubuntu-latest
+    env:
+      # Required job: pack stable TFMs only. net11.0 packs happen in test-net11-preview.
+      ExcludeNet11Preview: 'true'
 
     steps:
       - name: Checkout code
@@ -600,13 +607,14 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
+          # Stable TFMs only — omit the net11 RC SDK so preview restore/build
+          # failures cannot fail this required pack job.
           dotnet-version: |
             6.0.x
             7.0.x
             8.0.x
             9.0.x
             10.0.x
-            11.0.100-rc.3.26522.148
 
       - name: Setup Node.js for shared package governance
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7

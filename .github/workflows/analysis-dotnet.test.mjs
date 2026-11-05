@@ -322,3 +322,30 @@ test('reporting false skips only dependency reporting and allows that exact summ
   assert.equal(calls.length, 0);
   assert.equal(result.stderr.trim(), 'SONAR_TOKEN');
 });
+
+test('required analyze and pack jobs stay off net11; only the allow-failure preview job builds it', () => {
+  const analyze = workflow.slice(workflow.indexOf('  analyze:'), workflow.indexOf('  dependency-check:'));
+  const pack = workflow.slice(workflow.indexOf('  pack-packages:'), workflow.indexOf('  embedded-consumer:'));
+  const preview = workflow.slice(workflow.indexOf('  test-net11-preview:'), workflow.indexOf('  summary:'));
+
+  assert.match(analyze, /ExcludeNet11Preview: 'true'/);
+  assert.match(pack, /ExcludeNet11Preview: 'true'/);
+  assert.doesNotMatch(analyze, /11\.0\.100-rc/);
+  assert.doesNotMatch(pack, /11\.0\.100-rc/);
+
+  assert.match(preview, /continue-on-error: true/);
+  assert.match(preview, /IncludeNet11Preview: 'true'/);
+  assert.match(preview, /11\.0\.100-rc\.3\.26522\.148/);
+  assert.match(preview, /-f net11\.0/);
+
+  const summary = workflow.slice(workflow.indexOf('  summary:'));
+  assert.match(summary, /required-jobs: analyze,dependency-check,build-cli,pack-packages,embedded-consumer,smoke-test,blazor-runtime/);
+  assert.doesNotMatch(summary, /required-jobs:.*test-net11-preview/);
+
+  const props = readFileSync(new URL('../../Toggly.FeatureManagement.NET/Directory.Build.props', import.meta.url), 'utf8');
+  assert.match(props, /TogglyNet11Tfm/);
+  assert.match(
+    props,
+    /TogglyNet11Tfm Condition="'\$\(ExcludeNet11Preview\)' == 'true' Or \('\$\(CI\)' == 'true' And '\$\(IncludeNet11Preview\)' != 'true'\)"/,
+  );
+});
