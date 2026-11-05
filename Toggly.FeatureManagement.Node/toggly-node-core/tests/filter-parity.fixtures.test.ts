@@ -87,14 +87,19 @@ function defsResponse(definitions: FeatureDefinitionModel[]) {
 
 describe('filter-parity golden fixtures (node-core)', () => {
   const fixtures = loadFixtures()
+  // createTogglyClient does not register on defaultClient; track instances so
+  // afterEach can close refresh/telemetry timers that closeToggly() would miss.
+  const openClients: Array<ReturnType<typeof createTogglyClient>> = []
 
   beforeEach(() => {
     vi.clearAllMocks()
     closeToggly()
   })
 
-  afterEach(() => {
-    closeToggly()
+  afterEach(async () => {
+    const clients = openClients.splice(0)
+    await Promise.all(clients.map((client) => client.close()))
+    await closeToggly()
   })
 
   it('loads the required Wave 1 cases', () => {
@@ -138,6 +143,7 @@ describe('filter-parity golden fixtures (node-core)', () => {
         enableStreaming: false,
         enableFileCache: false,
       })
+      openClients.push(client)
       await client.init()
 
       const context = buildContext(fixture)
