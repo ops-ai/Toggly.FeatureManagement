@@ -372,19 +372,21 @@ jobs:
         working-directory: ${{ matrix.path }}
         run: npm run test:host
 
+      # SolidJS runs on Node 22/24/26; upload coverage once from the floor row
+      # so coverage-SolidJS does not collide across matrix cells.
       - name: Require unit test coverage report
-        if: matrix.sdk != 'Docusaurus'
+        if: matrix.sdk != 'Docusaurus' && (matrix.sdk != 'SolidJS' || matrix.node-version == '22.x')
         working-directory: ${{ matrix.path }}
         run: find coverage -name lcov.info -size +0c -print -quit | grep -q .
 
       - name: Label coverage artifact
-        if: matrix.sdk != 'Docusaurus'
+        if: matrix.sdk != 'Docusaurus' && (matrix.sdk != 'SolidJS' || matrix.node-version == '22.x')
         working-directory: ${{ matrix.path }}
         run: printf '%s\n' 'coverage-${{ matrix.sdk }}' > coverage/artifact-name.txt
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
-        if: matrix.sdk != 'Docusaurus'
+        if: matrix.sdk != 'Docusaurus' && (matrix.sdk != 'SolidJS' || matrix.node-version == '22.x')
         with:
           name: coverage-${{ matrix.sdk }}
           path: ${{ matrix.path }}/coverage/
