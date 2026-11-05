@@ -238,23 +238,26 @@ test('cancellation blocks Server diagnostics even if an earlier step failed', ()
 });
 
 test('preserves Android Java matrix, Gradle checks, native telemetry coverage and scanner configuration', () => {
-  assert.match(job('build-and-test'), /java: \['17', '21'\]/);
+  assert.match(job('build-and-test'), /java: \['17', '21', '25'\]/);
   for (const [jobName, stepName, command] of [
     ['build-and-test', 'Build all modules', './gradlew build -x test'],
     ['build-and-test', 'Run unit tests', './gradlew test'],
     ['lint', 'Run Android Lint', './gradlew lint'],
     ['build-samples', 'Build release artifacts', './gradlew assembleRelease'],
     ['smoke-test', 'Compile smoke tests', './gradlew :toggly-android-core:compileDebugUnitTestKotlin'],
-    ['smoke-test', 'Run smoke test', './gradlew :toggly-android-core:testDebugUnitTest --tests "io.toggly.core.SmokeTest"'],
   ]) assert.ok(step(job(jobName), stepName).includes(`run: ${command}`));
+  const smokeRun = step(job('smoke-test'), 'Run smoke test');
+  assert.ok(smokeRun.includes('./gradlew :toggly-android-core:testDebugUnitTest --tests "io.toggly.core.SmokeTest"'));
+  assert.match(smokeRun, /for attempt in 1 2 3 4 5/);
+  assert.match(smokeRun, /retrying in \$\{sleep_seconds\}s/);
   assert.match(step(job('api-compatibility'), 'Check API compatibility'), /\.\/gradlew apiCheck/);
   const coverage = job('code-coverage');
   assert.match(coverage, /runs-on: macos-15-intel/);
   assert.match(step(coverage, 'Run tests with coverage'), /\.\/gradlew testDebugUnitTest koverXmlReport/);
   const collector = step(coverage, 'Test the public acceptance collector with coverage');
   for (const command of ['coverage==7.10.7', '--source=tool -m unittest discover', "--omit='tool/test_*.py' --fail-under=80", "--omit='tool/test_*.py' -o coverage.xml"]) assert.ok(collector.includes(command));
-  const native = step(coverage, 'Measure public acceptance Activity coverage on Android API 35');
-  assert.match(native, /api-level: 35/);
+  const native = step(coverage, 'Measure public acceptance Activity coverage on Android API 36');
+  assert.match(native, /api-level: 36/);
   assert.match(native, /script: bash tool\/run_android_coverage.sh/);
   const artifact = step(coverage, 'Upload coverage artifact');
   for (const path of ['name: android-coverage', '**/build/reports/kover/report.xml', 'app/build/reports/coverage/androidTest/debug/connected/report.xml', 'app/build/reports/androidTests/connected/device-diagnostics.txt', 'acceptance/public-telemetry-host/coverage.xml']) assert.ok(artifact.includes(path));

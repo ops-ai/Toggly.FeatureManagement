@@ -16,6 +16,7 @@
     <description>Spring MVC integration for Toggly feature flags (interceptors, controller annotations)</description>
 
     <properties>
+        <!-- Overridable for CI matrix (6.2.x baseline + 7.0.x proof) -->
         <spring.version>6.2.19</spring.version>
         <jakarta-servlet.version>6.1.0</jakarta-servlet.version>
     </properties>
@@ -54,7 +55,6 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>5.10.0</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
