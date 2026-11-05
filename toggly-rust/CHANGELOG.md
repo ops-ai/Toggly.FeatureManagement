@@ -83,6 +83,12 @@
 
 ### Fixed
 
+- Live-update `wss://` connects name an explicit `aws-lc-rs` rustls
+  `ClientConfig` instead of `tokio_tungstenite::connect_async`'s default
+  builder. With `telemetry` enabled, both `ring` (tonic `tls-ring`) and
+  `aws-lc-rs` (reqwest) are linked; the default builder panics without a
+  process-level provider. Libraries must not call
+  `CryptoProvider::install_default()` (would override the host app).
 - Commit the workspace `Cargo.lock` so SonarCloud security analysis sees pinned
   dependency versions (clears `text:S8570` on member `Cargo.toml` files).
 - Align Rust Sonar scans with Java/JS: suppress `rust:S4790` only on

@@ -130,6 +130,7 @@ pub mod provider;
 mod sdk_identity;
 mod segment_membership;
 pub mod telemetry;
+mod ws_tls;
 
 pub use client::TogglyClient;
 pub use config::{OnErrorCallback, TogglyConfig, TogglyConfigBuilder};
