@@ -1957,6 +1957,43 @@ public class TogglyMetricsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ObserveAsync_WhenPendingCapReached_DropsUntilDrainThenAcceptsAgain()
+    {
+        // Cap is enforced via Interlocked pending count (not ConcurrentBag.Count) on the
+        // ObserveAsync path; overflow is dropped until a successful drain frees slots.
+        var logger = new Mock<ILogger>();
+        logger.Setup(x => x.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+        _loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(logger.Object);
+        var packets = CapturePackets();
+        _service = CreateService();
+
+        for (var i = 0; i < TogglyMetricsService.MaxPendingObservations; i++)
+            await _service.ObserveAsync("capped-observation", i);
+
+        await _service.ObserveAsync("capped-overflow", 99999);
+
+        logger.Verify(
+            x => x.Log(
+                LogLevel.Debug,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("Pending metrics observations cap")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.AtLeastOnce);
+
+        await SendPendingMetricsAsync();
+        var firstPacket = packets.Should().ContainSingle().Which;
+        firstPacket.Observations.Should().NotBeEmpty();
+        firstPacket.Observations.Should().NotContain(o => o.Metric == "capped-overflow");
+
+        await _service.ObserveAsync("after-drain", 42);
+        await SendPendingMetricsAsync();
+        packets.Should().HaveCount(2);
+        packets[1].Observations.Should().ContainSingle(o => o.Metric == "after-drain")
+            .Which.VariantValues["enabled"].Should().Be(42);
+    }
+
+    [Fact]
     public async Task SendMetrics_InvalidObservationTime_SkipsPoisonObservationAndSendsDrainedPacket()
     {
         _metricsRegistryServiceMock.SetupSequence(x => x.GetObservationValuesAsync())

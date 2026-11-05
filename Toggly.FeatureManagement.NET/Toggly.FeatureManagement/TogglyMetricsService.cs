@@ -38,6 +38,12 @@ namespace Toggly.FeatureManagement
         
         private readonly ConcurrentBag<(DateTime Date, string MetricKey, string? FeatureKey, string Variant, double Value)> _observations = new ConcurrentBag<(DateTime, string, string?, string, double)>();
 
+        /// <summary>
+        /// Approximate pending observation count. Avoids contended <see cref="ConcurrentBag{T}.Count"/>
+        /// on the hot ObserveAsync path; kept in sync via Interlocked increment/decrement.
+        /// </summary>
+        private int _pendingObservationCount;
+
         private readonly Timer _timer;
 
         private readonly string userAgent;
@@ -64,7 +70,7 @@ namespace Toggly.FeatureManagement
         /// <summary>
         /// Caps pending observation samples retained across failed sends to keep memory bounded.
         /// </summary>
-        private const int MaxPendingObservations = 10000;
+        internal const int MaxPendingObservations = 10000;
 
         private readonly GrpcTransientError.BackoffState _transientBackoff = new GrpcTransientError.BackoffState();
 
@@ -303,13 +309,11 @@ namespace Toggly.FeatureManagement
 
             foreach (var observation in drainedObservations)
             {
-                if (_observations.Count >= MaxPendingObservations)
+                if (!TryEnqueueObservation(observation))
                 {
                     TryLog(LogLevel.Debug, "Pending metrics observations cap ({Cap}) reached; dropping restored observation {MetricKey}", MaxPendingObservations, observation.MetricKey);
                     break;
                 }
-
-                _observations.Add(observation);
             }
         }
 
@@ -417,6 +421,10 @@ namespace Toggly.FeatureManagement
 
             while (_observations.TryTake(out var observation))
             {
+                // Item left the bag — keep the Interlocked counter aligned even when the sample
+                // is later dropped as unencodable (so pending count can fall back toward zero / reset).
+                Interlocked.Decrement(ref _pendingObservationCount);
+
                 Google.Protobuf.WellKnownTypes.Timestamp observationTime;
                 try
                 {
@@ -549,13 +557,26 @@ namespace Toggly.FeatureManagement
                 return;
             }
 
-            if (_observations.Count >= MaxPendingObservations)
+            if (!TryEnqueueObservation((date, metricKey, featureKey, variant, value)))
             {
                 TryLog(LogLevel.Debug, "Pending metrics observations cap ({Cap}) reached; dropping observation {MetricKey}", MaxPendingObservations, metricKey);
-                return;
+            }
+        }
+
+        /// <summary>
+        /// Reserves a pending-observation slot with <see cref="Interlocked"/> and enqueues when under cap.
+        /// </summary>
+        private bool TryEnqueueObservation((DateTime Date, string MetricKey, string? FeatureKey, string Variant, double Value) observation)
+        {
+            var pending = Interlocked.Increment(ref _pendingObservationCount);
+            if (pending > MaxPendingObservations)
+            {
+                Interlocked.Decrement(ref _pendingObservationCount);
+                return false;
             }
 
-            _observations.Add((date, metricKey, featureKey, variant, value));
+            _observations.Add(observation);
+            return true;
         }
 
         /// <inheritdoc/>

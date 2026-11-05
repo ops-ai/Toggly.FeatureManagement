@@ -13,6 +13,13 @@ namespace Toggly.FeatureManagement
         private static readonly TimeSpan MaxBackoff = TimeSpan.FromMinutes(30);
 
         /// <summary>
+        /// Minimum spacing between Warning logs for consecutive transient failures.
+        /// Kept longer than and independent of the retry backoff so a timer tick
+        /// that fires after <see cref="GetBackoffDelay"/> does not immediately re-log.
+        /// </summary>
+        internal static readonly TimeSpan WarningLogInterval = TimeSpan.FromMinutes(5);
+
+        /// <summary>
         /// Returns true for statuses that usually clear on retry. <see cref="StatusCode.Cancelled"/>
         /// is treated as transient only while the host is not shutting down.
         /// </summary>
@@ -76,7 +83,7 @@ namespace Toggly.FeatureManagement
                 var now = DateTime.UtcNow;
                 var shouldLog = now >= _nextLogUtc;
                 if (shouldLog)
-                    _nextLogUtc = now.Add(delay);
+                    _nextLogUtc = now.Add(WarningLogInterval);
                 return (shouldLog, delay);
             }
         }

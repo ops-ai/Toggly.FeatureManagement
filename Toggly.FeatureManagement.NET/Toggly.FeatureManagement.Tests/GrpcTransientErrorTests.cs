@@ -36,6 +36,21 @@ public class GrpcTransientErrorTests
     }
 
     [Fact]
+    public void WarningLogInterval_IsLongerThanAndIndependentOfEarlyBackoffDelays()
+    {
+        // The retry timer uses GetBackoffDelay; if the log window matched that delay,
+        // every timer tick would re-emit Warning. The log interval must stay longer
+        // than early backoff steps and not be derived from the current delay.
+        GrpcTransientError.WarningLogInterval.Should().Be(TimeSpan.FromMinutes(5));
+        GrpcTransientError.WarningLogInterval.Should().BeGreaterThan(GrpcTransientError.GetBackoffDelay(1));
+        GrpcTransientError.WarningLogInterval.Should().BeGreaterThan(GrpcTransientError.GetBackoffDelay(2));
+        GrpcTransientError.WarningLogInterval.Should().BeGreaterThan(GrpcTransientError.GetBackoffDelay(3));
+        GrpcTransientError.WarningLogInterval.Should().NotBe(GrpcTransientError.GetBackoffDelay(4));
+        GrpcTransientError.WarningLogInterval.Should().NotBe(GrpcTransientError.GetBackoffDelay(5));
+        GrpcTransientError.WarningLogInterval.Should().NotBe(GrpcTransientError.GetBackoffDelay(6));
+    }
+
+    [Fact]
     public void BackoffState_LogsFirstFailureThenSuppressesUntilWindowElapses()
     {
         var state = new GrpcTransientError.BackoffState();
@@ -44,9 +59,15 @@ public class GrpcTransientErrorTests
         first.ShouldLog.Should().BeTrue();
         first.Delay.Should().Be(TimeSpan.FromMinutes(1));
 
+        // Immediate subsequent failures must be suppressed even though backoff is only 1–2 minutes;
+        // the log window is WarningLogInterval (5m), independent of Delay.
         var second = state.RecordFailure();
         second.ShouldLog.Should().BeFalse();
         second.Delay.Should().Be(TimeSpan.FromMinutes(2));
+
+        var third = state.RecordFailure();
+        third.ShouldLog.Should().BeFalse();
+        third.Delay.Should().Be(TimeSpan.FromMinutes(4));
 
         state.Reset();
         var afterReset = state.RecordFailure();
