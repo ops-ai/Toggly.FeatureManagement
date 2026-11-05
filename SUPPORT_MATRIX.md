@@ -22,6 +22,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Electron | `>=28` | 28.3.3 + 45.2.1 packed hosts (Node 22/24/26 unit) | 45.2.1 | Maintain |
 | Svelte | `^4 \|\| ^5` | 4 + 5 | 5.x | Maintain |
 | SvelteKit | kit `^2 \|\| ^3` | 2.x, 3.1.0 packed host | 3.1.x | Maintain |
+| Solid | solid-js `^1.9`; Node `>=22.12` | unit 22/24/26 + SolidStart packed host (Node 24) | solid-js 1.9.18; Node 26 | Maintain; host fixture requires Node >=24 |
 | .NET core family | netstandard2.1…net9 + **net10** | multi-TFM build | net10 | Wave 2 |
 | .NET Mongo/Dapper/EF | includes net10 | net8/net10 consumers | net10 | Maintain |
 | Java Spring | Boot 3.5 + Boot 4.1 / Spring 6.2+7 / Java 17 | Boot 3.5.16 + Boot 4.1.2 starters; Spring 6.2.19 + 7.0.10 (Security 6.5.11 / 7.1.2) MVC/WebFlux CI + `webflux` / `webflux-spring7` hosts; JDK 17/21/25 | Boot 4.1 / Spring 7.0 | Dual Boot starters; single MVC/WebFlux artifacts (provided Spring) |

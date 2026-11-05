@@ -505,6 +505,14 @@ test('selects system Chrome before packed JavaScript browser host', () => {
   assert.match(workflow, /CHROME_BIN=\/usr\/bin\/google-chrome/);
 });
 
+test('uploads SolidJS and JavaScript coverage only from the Node 22.x matrix row', () => {
+  const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  assert.match(
+    testJob,
+    /matrix\.sdk != 'Docusaurus' && \(\(matrix\.sdk != 'JavaScript' && matrix\.sdk != 'SolidJS'\) \|\| matrix\.node-version == '22\.x'\)/,
+  );
+});
+
 test('classifies the JavaScript packed browser harness as test code in both scanners', () => {
   const harness = 'Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs';
   for (const property of ['exclusions', 'test.inclusions']) {
@@ -533,7 +541,7 @@ test('runs the vanilla JavaScript SDK on Node 22/24/26 and uploads coverage from
   const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   assert.match(
     testJob,
-    /matrix\.sdk != 'Docusaurus' && \(matrix\.sdk != 'JavaScript' \|\| matrix\.node-version == '22\.x'\)/,
+    /matrix\.sdk != 'Docusaurus' && \(\(matrix\.sdk != 'JavaScript' && matrix\.sdk != 'SolidJS'\) \|\| matrix\.node-version == '22\.x'\)/,
   );
 });
 

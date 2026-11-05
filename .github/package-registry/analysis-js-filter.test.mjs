@@ -40,7 +40,14 @@ test('Gatsby-only restores shared declarations for its linked Segments dependenc
 test('Gatsby mixed with standalone SDKs still requires shared declarations', () => {
   const result = filterAnalysisJs('Client-Core,Gatsby,SolidJS');
   assert.equal(result.needSharedDeps, true);
-  assert.deepEqual(result.testMatrix.map(({ sdk }) => sdk), ['Client-Core', 'SolidJS', 'Gatsby']);
+  assert.deepEqual(
+    [...new Set(result.testMatrix.map(({ sdk }) => sdk))],
+    ['Client-Core', 'SolidJS', 'Gatsby'],
+  );
+  assert.deepEqual(
+    result.testMatrix.filter((row) => row.sdk === 'SolidJS').map((row) => row['node-version']),
+    ['22.x', '24.x', '26.x'],
+  );
   assert.equal(result.requiredJobs, 'sonar,dependency-check,test,solidstart-host');
   assert.equal(result.runSolidstartHost, true);
   assert.equal(result.runTestCurrentBrowserHosts, false);
@@ -49,10 +56,23 @@ test('Gatsby mixed with standalone SDKs still requires shared declarations', () 
 test('standalone SDKs without Gatsby do not require shared artifacts', () => {
   const result = filterAnalysisJs('Client-Core,SolidJS,SvelteKit');
   assert.equal(result.needSharedDeps, false);
-  assert.deepEqual(result.testMatrix.map(({ sdk }) => sdk), ['Client-Core', 'SolidJS', 'SvelteKit']);
+  assert.deepEqual(
+    [...new Set(result.testMatrix.map(({ sdk }) => sdk))],
+    ['Client-Core', 'SolidJS', 'SvelteKit'],
+  );
   assert.equal(result.requiredJobs, 'sonar,dependency-check,test,solidstart-host,test-current-browser-hosts');
   assert.equal(result.runSolidstartHost, true);
   assert.equal(result.runTestCurrentBrowserHosts, true);
+});
+
+test('SolidJS unit matrix covers Node 22/24/26 floors and latest', () => {
+  const result = filterAnalysisJs('SolidJS');
+  assert.deepEqual(
+    result.testMatrix.map((row) => row['node-version']),
+    ['22.x', '24.x', '26.x'],
+  );
+  assert.ok(result.testMatrix.every((row) => row.sdk === 'SolidJS'));
+  assert.ok(result.testMatrix.every((row) => row['test-cmd'] === 'npm run test:coverage'));
 });
 
 test('Vue filter limits matrix and requires browser hosts', () => {
