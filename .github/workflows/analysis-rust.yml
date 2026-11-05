@@ -60,17 +60,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-${{ matrix.rust }}-
 
-      # Unlocked resolve picks actix-server 2.10 (rustc ≥1.89). Cap actix-web,
-      # pin actix-server 2.6, and pin actix-rt 2.10 (2.15 drops default net/signal
-      # features that 2.6 still expects) so the 1.88 matrix stays on MSRV.
-      - name: Pin MSRV-compatible actix stack
-        if: matrix.rust == '1.88.0'
-        run: |
-          perl -pi -e 's/actix-web = ">=4.4, <4.16"/actix-web = ">=4.4, <4.13"/' Cargo.toml
-          cargo generate-lockfile
-          cargo update -p actix-server --precise 2.6.0
-          cargo update -p actix-rt --precise 2.10.0
-
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -83,20 +72,27 @@ jobs:
       - name: Run tests
         run: cargo test --all-features --workspace
 
-      - name: Verify current framework package artifacts
+      # Prove actix-web declared range ends: floor 4.7.0 and latest 4.18.1.
+      # FeatureGuard needs GuardContext::app_data (actix-web >=4.7.0).
+      - name: Prove actix-web floor and latest
         if: matrix.rust == 'stable'
         run: |
-          cargo update -p actix-web --precise 4.15.0
-          cargo update -p actix-server --precise 2.9.8
-          cargo test -p toggly-actix -p toggly-axum -p toggly-axum08 -p toggly-rocket
-          cargo package -p toggly-axum08 --allow-dirty --no-verify
-          ver="$(sed -n 's/^version = "\([^"]*\)"/\1/p' toggly-axum08/Cargo.toml | head -1)"
+          cargo update -p actix-web --precise 4.7.0
+          cargo test -p toggly-actix
+          cargo update -p actix-web --precise 4.18.1
+          cargo test -p toggly-actix -p toggly-axum -p toggly-rocket
+          cargo package -p toggly-axum --allow-dirty --no-verify
+          ver="$(sed -n 's/^version = "\([^"]*\)"/\1/p' toggly-axum/Cargo.toml | head -1)"
+          # Fall back to workspace.package.version when the member uses version.workspace.
+          if [ -z "$ver" ]; then
+            ver="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)"
+          fi
           test -n "$ver"
-          archive="target/package/toggly-axum08-${ver}.crate"
-          unpacked="$RUNNER_TEMP/toggly-axum08-package"
+          archive="target/package/toggly-axum-${ver}.crate"
+          unpacked="$RUNNER_TEMP/toggly-axum-package"
           mkdir -p "$unpacked"
           tar -xf "$archive" -C "$unpacked"
-          cargo run --manifest-path "$unpacked/toggly-axum08-${ver}/Cargo.toml" \
+          cargo run --manifest-path "$unpacked/toggly-axum-${ver}/Cargo.toml" \
             --example current_host
 
   smoke-test:
@@ -196,18 +192,8 @@ jobs:
         with:
           toolchain: 1.89.0
 
-      - name: Pin MSRV-compatible actix stack
-        run: |
-          perl -pi -e 's/actix-web = ">=4.4, <4.16"/actix-web = ">=4.4, <4.13"/' Cargo.toml
-          cargo generate-lockfile
-          cargo update -p actix-server --precise 2.6.0
-          cargo update -p actix-rt --precise 2.10.0
-
       - name: Check MSRV
-        run: |
-          # actix-server 2.10+ requires rustc 1.89; keep MSRV 1.88 green.
-          cargo update -p actix-server --precise 2.9.8
-          cargo check --all-features --workspace
+        run: cargo check --all-features --workspace
 
   security:
     name: Security Audit

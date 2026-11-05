@@ -5,12 +5,11 @@ members = [
     "toggly-macros",
     "toggly-actix",
     "toggly-axum",
-    "toggly-axum08",
     "toggly-rocket",
 ]
 
 [workspace.package]
-version = "0.11.1"
+version = "0.12.0"
 authors = ["Toggly <support@toggly.io>"]
 edition = "2021"
 rust-version = "1.89"
@@ -27,13 +26,16 @@ time = ">=0.3.7, <0.3.56"
 
 # Core dependencies
 tokio = { version = "1.36", features = ["rt-multi-thread", "macros", "sync", "time"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# reqwest 0.13 renames the rustls feature from `rustls-tls` → `rustls`.
+# `Error::Http(reqwest::Error)` / `From<reqwest::Error>` leak into the public
+# API, so this is a semver-major bump for `toggly` (0.11 → 0.12).
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["raw_value"] }
 thiserror = "2.0"
 async-trait = "0.1"
 parking_lot = "0.12"
-dashmap = "5.5"
+dashmap = "6"
 
 # Logging/Tracing
 tracing = "0.1"
@@ -44,29 +46,34 @@ metrics = "0.24"
 prometheus = "0.14"
 
 # Optional Toggly usage/metrics gRPC export (`telemetry` feature)
-tonic = { version = "0.12", features = ["tls", "tls-roots"] }
-prost = "0.13"
-prost-types = "0.13"
-tower = "0.4"
+# tonic 0.14 splits prost into tonic-prost / tonic-prost-build; TLS feature
+# flags renamed from tls/tls-roots to tls-ring + tls-native-roots.
+tonic = { version = "0.14", features = ["tls-ring", "tls-native-roots"] }
+tonic-prost = "0.14"
+prost = "0.14"
+prost-types = "0.14"
+tower = "0.5"
 
 # Framework integrations
-actix-web = ">=4.4, <4.16"
-axum = "0.7"
+# FeatureGuard needs GuardContext::app_data (actix-web >=4.7.0).
+actix-web = ">=4.7, <5"
+# toggly-axum targets axum 0.8 (toggly-axum08 retired into this crate).
+axum = "0.8"
 rocket = "0.5"
 
 # Testing
 mockito = "1.2"
 tokio-test = "0.4"
 wiremock = "0.6"
-tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-webpki-roots"] }
 futures-util = "0.3"
 
 # Workspace crates — path pin range covers both the last version published
 # to crates.io and the new workspace.package.version above. Downstream
-# adapter crates (e.g. toggly-axum08) run `cargo package`/`publish` in CI,
-# which resolves `toggly` against crates.io — that lags this manifest until
-# the release workflow actually publishes the bump. A bare `^X.Y.Z` caret
-# pin breaks that resolution as soon as X.Y changes here (see OPS-1247), so
-# widen the range across every published version between them instead.
-toggly = { version = ">=0.6.3, <0.12.0", path = "toggly" }
-toggly-macros = { version = ">=0.6.3, <0.12.0", path = "toggly-macros" }
+# adapter crates run `cargo package`/`publish` in CI, which resolves
+# `toggly` against crates.io — that lags this manifest until the release
+# workflow actually publishes the bump. A bare `^X.Y.Z` caret pin breaks
+# that resolution as soon as X.Y changes here (see OPS-1247), so widen
+# the range across every published version between them instead.
+toggly = { version = ">=0.6.3, <0.13.0", path = "toggly" }
+toggly-macros = { version = ">=0.6.3, <0.13.0", path = "toggly-macros" }

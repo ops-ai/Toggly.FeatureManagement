@@ -15,18 +15,20 @@ readme = "../README.md"
 
 [features]
 default = ["rustls-tls"]
-rustls-tls = ["reqwest/rustls-tls"]
+# Keep the public Cargo feature name; reqwest 0.13 renamed rustls-tls → rustls.
+rustls-tls = ["reqwest/rustls"]
 native-tls = ["reqwest/native-tls"]
 # Local Prometheus / `metrics` crate integration — not Toggly gRPC export.
 metrics = ["dep:metrics", "dep:prometheus"]
 # Batched Usage.SendStats + Metrics.SendMetrics via tonic/prost.
-# Also gates build-dep tonic-build so feature-off stays free of prost tooling.
+# Also gates build-dep tonic-prost-build so feature-off stays free of prost tooling.
 telemetry = [
     "dep:tonic",
+    "dep:tonic-prost",
     "dep:prost",
     "dep:prost-types",
     "dep:tower",
-    "dep:tonic-build",
+    "dep:tonic-prost-build",
     "dep:protoc-bin-vendored",
 ]
 
@@ -47,6 +49,7 @@ prometheus = { workspace = true, optional = true }
 
 # Optional Toggly usage / business-metrics gRPC export
 tonic = { workspace = true, optional = true }
+tonic-prost = { workspace = true, optional = true }
 prost = { workspace = true, optional = true }
 prost-types = { workspace = true, optional = true }
 tower = { workspace = true, optional = true }
@@ -68,9 +71,14 @@ hex = "0.4"
 tokio-tungstenite = { workspace = true }
 futures-util = { workspace = true }
 url = "2.5"
+# Explicit rustls ClientConfig for wss:// (name aws-lc-rs; see ws_tls.rs).
+# Direct deps so we do not rely on tokio-tungstenite's default builder, which
+# panics when both ring (tonic tls-ring) and aws-lc-rs (reqwest) are linked.
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12", "aws_lc_rs"] }
+webpki-roots = "1"
 
 [build-dependencies]
-tonic-build = { version = "0.12", optional = true }
+tonic-prost-build = { version = "0.14", optional = true }
 # Bundled protoc so CI / crates.io consumers do not need a system install.
 protoc-bin-vendored = { version = "3", optional = true }
 
@@ -79,3 +87,6 @@ tokio-test = { workspace = true }
 wiremock = { workspace = true }
 tracing-subscriber = { workspace = true }
 async-trait = { workspace = true }
+# Dual-provider wss:// regression test (mint self-signed server cert).
+rcgen = "0.14"
+tokio-rustls = { version = "0.26", default-features = false, features = ["aws-lc-rs"] }
