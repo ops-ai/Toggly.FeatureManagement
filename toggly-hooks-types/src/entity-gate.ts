@@ -10,7 +10,12 @@ export interface EntityGate {
   rules: EntityGateRule[]
 }
 
-export type EvaluatedDefinitionValue = boolean | EntityGate
+/** Evaluated-signed definition envelope (`{ enabled: boolean }`), not a bare boolean. */
+export interface EvaluatedEnabledEnvelope {
+  enabled: boolean
+}
+
+export type EvaluatedDefinitionValue = boolean | EvaluatedEnabledEnvelope | EntityGate
 
 export type EvaluatedDefinitions = Record<string, EvaluatedDefinitionValue>
 
@@ -60,6 +65,13 @@ export function resolveEvaluatedDefinition(
   }
   if (value === false) {
     return false
+  }
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as EvaluatedEnabledEnvelope).enabled === 'boolean'
+  ) {
+    return (value as EvaluatedEnabledEnvelope).enabled
   }
   if (!isEntityGate(value)) {
     return false

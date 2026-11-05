@@ -8,7 +8,11 @@ export interface EntityGate {
     requirement: 'all' | 'any';
     rules: EntityGateRule[];
 }
-export type EvaluatedDefinitionValue = boolean | EntityGate;
+/** Evaluated-signed definition envelope (`{ enabled: boolean }`), not a bare boolean. */
+export interface EvaluatedEnabledEnvelope {
+    enabled: boolean;
+}
+export type EvaluatedDefinitionValue = boolean | EvaluatedEnabledEnvelope | EntityGate;
 export type EvaluatedDefinitions = Record<string, EvaluatedDefinitionValue>;
 export interface TogglyEntityContext {
     kind: string;

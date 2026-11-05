@@ -45,6 +45,11 @@ function resolveEvaluatedDefinition(value, context, defaultValue = false) {
     if (value === false) {
         return false;
     }
+    if (typeof value === 'object' &&
+        value !== null &&
+        typeof value.enabled === 'boolean') {
+        return value.enabled;
+    }
     if (!isEntityGate(value)) {
         return false;
     }
@@ -95,7 +100,7 @@ function evaluateRule(rule, attributes) {
     return false;
 }
 function findAttributeKey(attributes, property) {
-    if (Object.prototype.hasOwnProperty.call(attributes, property)) {
+    if (Object.hasOwn(attributes, property)) {
         return property;
     }
     const expected = property.toLowerCase();

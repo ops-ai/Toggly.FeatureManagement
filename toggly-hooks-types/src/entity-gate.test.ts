@@ -39,6 +39,22 @@ describe('entity-gate', () => {
     expect(resolveEvaluatedDefinition(false, null, true)).toBe(false)
   })
 
+  it('resolves evaluated-signed enabled envelopes to booleans', () => {
+    expect(resolveEvaluatedDefinition({ enabled: true })).toBe(true)
+    expect(resolveEvaluatedDefinition({ enabled: false })).toBe(false)
+    expect(resolveEvaluatedDefinition({ enabled: true }, null, false)).toBe(true)
+    expect(resolveEvaluatedDefinition({ enabled: false }, null, true)).toBe(false)
+  })
+
+  it('flattens enabled envelopes via toBooleanDefinitions', () => {
+    expect(
+      toBooleanDefinitions({
+        AlwaysOn: { enabled: true },
+        AlwaysOff: { enabled: false },
+      }),
+    ).toEqual({ AlwaysOn: true, AlwaysOff: false })
+  })
+
   it('never lets the default value open an ungated entity gate', () => {
     expect(resolveEvaluatedDefinition(datetimeGate, null, true)).toBe(false)
   })
