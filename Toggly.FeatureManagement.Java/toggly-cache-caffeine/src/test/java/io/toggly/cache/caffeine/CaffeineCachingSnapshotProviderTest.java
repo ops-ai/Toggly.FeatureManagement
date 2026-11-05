@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -88,6 +90,11 @@ class CaffeineCachingSnapshotProviderTest {
         assertThat(cached.stats().hitCount()).isEqualTo(1);
         cached.setDefinitionCacheRecorder(recorder);
         assertThat(source.recorder).isSameAs(recorder);
+        Consumer<FeatureSnapshot> listener = snapshot -> { };
+        cached.addRefreshListener(listener);
+        assertThat(source.refreshListener.get()).isSameAs(listener);
+        cached.removeRefreshListener(listener);
+        assertThat(source.refreshListener.get()).isNull();
         cached.clearJwks();
         assertThat(source.clearJwksCount).hasValue(1);
 
@@ -116,6 +123,7 @@ class CaffeineCachingSnapshotProviderTest {
         private final AtomicInteger clearCount = new AtomicInteger();
         private final AtomicInteger clearJwksCount = new AtomicInteger();
         private final AtomicInteger closeCount = new AtomicInteger();
+        private final AtomicReference<Consumer<FeatureSnapshot>> refreshListener = new AtomicReference<>();
         private boolean failRefresh;
         private boolean returnNull;
         private DefinitionCacheRecorder recorder;
@@ -147,6 +155,18 @@ class CaffeineCachingSnapshotProviderTest {
         @Override
         public void setDefinitionCacheRecorder(DefinitionCacheRecorder value) {
             recorder = value;
+        }
+
+        @Override
+        public void addRefreshListener(Consumer<FeatureSnapshot> listener) {
+            refreshListener.set(listener);
+        }
+
+        @Override
+        public void removeRefreshListener(Consumer<FeatureSnapshot> listener) {
+            if (refreshListener.get() == listener) {
+                refreshListener.set(null);
+            }
         }
 
         @Override

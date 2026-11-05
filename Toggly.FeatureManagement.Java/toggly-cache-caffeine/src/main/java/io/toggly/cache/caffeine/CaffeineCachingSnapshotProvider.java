@@ -9,6 +9,7 @@ import io.toggly.core.snapshot.SnapshotProvider;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -144,6 +145,16 @@ public class CaffeineCachingSnapshotProvider implements SnapshotProvider {
     @Override
     public void setDefinitionCacheRecorder(io.toggly.core.telemetry.DefinitionCacheRecorder recorder) {
         delegate.setDefinitionCacheRecorder(recorder);
+    }
+
+    @Override
+    public void addRefreshListener(Consumer<FeatureSnapshot> listener) {
+        delegate.addRefreshListener(listener);
+    }
+
+    @Override
+    public void removeRefreshListener(Consumer<FeatureSnapshot> listener) {
+        delegate.removeRefreshListener(listener);
     }
 
     @Override

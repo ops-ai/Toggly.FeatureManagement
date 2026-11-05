@@ -113,11 +113,18 @@ class RedisCachingSnapshotProviderReliabilityTest {
         when(pool.isClosed()).thenReturn(false);
 
         provider.setDefinitionCacheRecorder(recorder);
+        java.util.function.Consumer<FeatureSnapshot> listener = snapshot -> { };
+        provider.addRefreshListener(listener);
+        provider.removeRefreshListener(listener);
         provider.clearJwks();
         provider.clear();
         provider.close();
 
         verify(delegate).setDefinitionCacheRecorder(recorder);
+        // Wrapper owns public listeners; only the internal write-before-notify bridge is
+        // registered on the delegate (added in the constructor, removed on close).
+        verify(delegate).addRefreshListener(org.mockito.ArgumentMatchers.any());
+        verify(delegate).removeRefreshListener(org.mockito.ArgumentMatchers.any());
         verify(delegate).clearJwks();
         verify(jedis).del("unit:snapshot");
         verify(delegate).clear();
