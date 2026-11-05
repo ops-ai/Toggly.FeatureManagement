@@ -22,4 +22,5 @@ using System.Runtime.InteropServices;
 [assembly: InternalsVisibleTo("Toggly.FeatureManagement.Embedded.Tests")]
 [assembly: InternalsVisibleTo("Toggly.FeatureManagement.Dashboard.Tests")]
 [assembly: InternalsVisibleTo("Toggly.FeatureManagement.Web.Tests")]
+[assembly: InternalsVisibleTo("Toggly.FeatureManagement.Parity.Tests")]
 [assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]
