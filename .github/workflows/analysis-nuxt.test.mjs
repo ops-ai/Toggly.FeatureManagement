@@ -79,6 +79,26 @@ test('packed host jobs stay on ubuntu-24.04 for Playwright consumer installs', (
   assert.match(packedHost, /runs-on: ubuntu-24\.04/);
 });
 
+test('Nuxt analysis exercises Node 22/24/26 and current Nuxt 3/4 packed hosts', () => {
+  const testJob = job('test');
+  assert.match(testJob, /node-version: \['22', '24', '26'\]/);
+  assert.doesNotMatch(testJob, /node-version: '20'/);
+
+  const packedHost = job('packed-host');
+  assert.match(packedHost, /node-version: \['22', '24', '26'\]/);
+  assert.match(packedHost, /nuxt-version: \['3\.21\.11', '4\.6\.3'\]/);
+  assert.match(step(packedHost, 'Isolate Playwright browser cache'), /PLAYWRIGHT_BROWSERS_PATH=/);
+  assert.match(
+    step(packedHost, 'Isolate Playwright browser cache'),
+    /ms-playwright-\$\{\{\s*matrix\.nuxt-version\s*\}\}-node\$\{\{\s*matrix\.node-version\s*\}\}/,
+  );
+  assert.doesNotMatch(packedHost, /4\.5\.2|3\.21\.1[^\d]/);
+
+  const smoke = job('smoke-test');
+  assert.match(smoke, /node-version: '22'/);
+  assert.doesNotMatch(smoke, /node-version: '20'/);
+});
+
 test('packed host runner uses shared segments dist helper before packing', () => {
   assert.match(packedHostRunner, /ensureTogglySegmentsDist/);
   assert.doesNotMatch(

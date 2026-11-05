@@ -115,7 +115,7 @@ function runElectron(
 }
 
 function withoutKnownElectronInfrastructureDiagnostics(stderr: string): string {
-  // Electron 44 can emit this macOS display-link diagnostic in headless mode
+  // Electron 44+ can emit this macOS display-link diagnostic in headless mode
   // before BrowserWindow starts. It is unrelated to preload execution, which
   // the fixture verifies through its exit code and renderer bridge report.
   const withoutMacDisplayDiagnostic = stderr.replace(
@@ -124,15 +124,20 @@ function withoutKnownElectronInfrastructureDiagnostics(stderr: string): string {
   )
 
   // GitHub's Linux runner has no session D-Bus service. Chromium reports these
-  // two exact connection attempts even when the BrowserWindow and preload run
-  // successfully under Xvfb. Keep every other stderr line visible to this test.
+  // connection attempts even when the BrowserWindow and preload run successfully
+  // under Xvfb. Electron 45 also probes the system bus socket and moved the
+  // object_proxy.cc line number; keep every other stderr line visible.
   return withoutMacDisplayDiagnostic
     .replace(
-      /^\[\d+:\d{4}\/\d{6}\.\d+:ERROR:dbus\/bus\.cc:406\] Failed to connect to the bus: Could not parse server address: Unknown address type \(examples of valid types are "tcp" and on UNIX "unix"\)\r?\n?/gm,
+      /^\[\d+:\d{4}\/\d{6}\.\d+:ERROR:dbus\/bus\.cc:\d+\] Failed to connect to the bus: Could not parse server address: Unknown address type \(examples of valid types are "tcp" and on UNIX "unix"\)\r?\n?/gm,
       '',
     )
     .replace(
-      /^\[\d+:\d{4}\/\d{6}\.\d+:ERROR:dbus\/object_proxy\.cc:572\] Failed to call method: org\.freedesktop\.DBus\.NameHasOwner: object_path= \/org\/freedesktop\/DBus: unknown error type: \r?\n?/gm,
+      /^\[\d+:\d{4}\/\d{6}\.\d+:ERROR:dbus\/bus\.cc:\d+\] Failed to connect to the bus: Failed to connect to socket \/run\/dbus\/system_bus_socket: Connection refused\r?\n?/gm,
+      '',
+    )
+    .replace(
+      /^\[\d+:\d{4}\/\d{6}\.\d+:ERROR:dbus\/object_proxy\.cc:\d+\] Failed to call method: org\.freedesktop\.DBus\.NameHasOwner: object_path= \/org\/freedesktop\/DBus: unknown error type: \r?\n?/gm,
       '',
     )
 }
@@ -141,7 +146,9 @@ describe('Electron preload runtime', () => {
   it('removes only the known display and session-bus infrastructure diagnostics', () => {
     const diagnostics = [
       '[123:0912/233532.881172:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")',
+      '[123:1102/121005.538070:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: Connection refused',
       '[123:0912/233533.012923:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: ',
+      '[123:1102/121005.580963:ERROR:dbus/object_proxy.cc:589] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: ',
       'unexpected preload diagnostic',
     ].join('\n')
 

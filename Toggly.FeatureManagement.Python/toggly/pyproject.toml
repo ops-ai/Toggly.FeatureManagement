@@ -36,6 +36,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Typing :: Typed"
 ]
@@ -53,9 +54,12 @@ websocket = [
     "websocket-client>=1.6.0"
 ]
 telemetry = [
-    # grpcio 1.80+ requires Python >=3.9; keep 3.8 on the last supporting line.
+    # Keep floors wide; pin per-runtime ceilings only where upstream dropped support.
+    # grpcio 1.71+ needs >=3.9; 1.81+ needs >=3.10. protobuf 7.x needs >=3.10 and
+    # remains in range via the open lower bound (pip selects a compatible release).
     "grpcio>=1.62.0,<1.71; python_version < '3.9'",
-    "grpcio>=1.80.0; python_version >= '3.9'",
+    "grpcio>=1.80.0,<1.81; python_version == '3.9'",
+    "grpcio>=1.80.0; python_version >= '3.10'",
     "protobuf>=4.25.0",
 ]
 dev = [
@@ -67,7 +71,8 @@ dev = [
     "websockets>=12.0",
     "websocket-client>=1.6.0",
     "grpcio>=1.62.0,<1.71; python_version < '3.9'",
-    "grpcio>=1.80.0; python_version >= '3.9'",
+    "grpcio>=1.80.0,<1.81; python_version == '3.9'",
+    "grpcio>=1.80.0; python_version >= '3.10'",
     "protobuf>=4.25.0",
 ]
 

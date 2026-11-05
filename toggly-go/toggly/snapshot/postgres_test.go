@@ -287,6 +287,101 @@ func TestPostgresProvider_DefaultOptions(t *testing.T) {
 	if provider.jwksID != "toggly_jwks" {
 		t.Errorf("expected default JWKS ID toggly_jwks, got %s", provider.jwksID)
 	}
+	if !provider.autoCreate {
+		t.Error("expected autoCreate true by default")
+	}
+}
+
+func TestPostgresProvider_DisableAutoCreateTable_Options(t *testing.T) {
+	// Unit-level: NewPostgresProvider does not touch the DB until ensureTable.
+	disabled := NewPostgresProvider(PostgresOptions{
+		DisableAutoCreateTable: true,
+	})
+	if disabled.autoCreate {
+		t.Fatal("expected autoCreate false when DisableAutoCreateTable is set")
+	}
+
+	// Deprecated AutoCreateTable must not override the new default (create on).
+	ignored := NewPostgresProvider(PostgresOptions{
+		AutoCreateTable: false,
+	})
+	if !ignored.autoCreate {
+		t.Fatal("expected AutoCreateTable to be ignored; default remains create-on")
+	}
+
+	enabled := NewPostgresProvider(PostgresOptions{})
+	if !enabled.autoCreate {
+		t.Fatal("expected autoCreate true by default")
+	}
+}
+
+func postgresTableExists(t *testing.T, db *sql.DB, tableName string) bool {
+	t.Helper()
+	var exists bool
+	err := db.QueryRow(
+		`SELECT EXISTS (
+			SELECT 1 FROM information_schema.tables
+			WHERE table_schema = current_schema() AND table_name = $1
+		)`,
+		tableName,
+	).Scan(&exists)
+	if err != nil {
+		t.Fatalf("information_schema query failed: %v", err)
+	}
+	return exists
+}
+
+func TestPostgresProvider_DisableAutoCreateTable(t *testing.T) {
+	db := getPostgresDB(t)
+	defer func() { _ = db.Close() }()
+
+	tableName := "test_snapshots_no_autocreate"
+	cleanupPostgresTable(t, db, tableName)
+	defer cleanupPostgresTable(t, db, tableName)
+
+	provider := NewPostgresProvider(PostgresOptions{
+		DB:                     db,
+		TableName:              tableName,
+		DisableAutoCreateTable: true,
+	})
+	ctx := context.Background()
+
+	snap, err := provider.LoadDefinitions(ctx)
+	if err == nil {
+		t.Fatal("expected error when table does not exist and auto-create is disabled")
+	}
+	if snap != nil {
+		t.Fatalf("expected nil snapshot on error, got %+v", snap)
+	}
+	if postgresTableExists(t, db, tableName) {
+		t.Fatal("expected no table when DisableAutoCreateTable is true")
+	}
+}
+
+func TestPostgresProvider_DefaultCreatesTable(t *testing.T) {
+	db := getPostgresDB(t)
+	defer func() { _ = db.Close() }()
+
+	tableName := "test_snapshots_default_create"
+	cleanupPostgresTable(t, db, tableName)
+	defer cleanupPostgresTable(t, db, tableName)
+
+	provider := NewPostgresProvider(PostgresOptions{
+		DB:        db,
+		TableName: tableName,
+	})
+	ctx := context.Background()
+
+	snap, err := provider.LoadDefinitions(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if snap != nil {
+		t.Fatalf("expected nil snapshot, got %+v", snap)
+	}
+	if !postgresTableExists(t, db, tableName) {
+		t.Fatal("expected default provider to create the snapshot table")
+	}
 }
 
 func TestPostgresProvider_ImplementsInterface(t *testing.T) {

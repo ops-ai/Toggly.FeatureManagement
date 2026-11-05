@@ -3,17 +3,22 @@
 From this workspace, run `pnpm install --frozen-lockfile && pnpm build`, then:
 
 ```sh
-node tests/hosts/run.mjs 3.0.0    # retained Nuxt minimum
-node tests/hosts/run.mjs 3.21.1 locked # committed candidate consumer lock
-node tests/hosts/run.mjs 3.21.11  # current retained major
-node tests/hosts/run.mjs 4.5.2 locked # current new major
+node tests/hosts/run.mjs 3.0.0    # retained Nuxt minimum (manual)
+node tests/hosts/run.mjs 3.21.11 locked # current Nuxt 3 major (CI)
+node tests/hosts/run.mjs 4.6.3 locked   # current Nuxt 4 major (CI)
 ```
 
-Use Node 24.18+ for these current hosts. For the frozen retained Node 18
-combination, use Node 18.20.8 and `node tests/hosts/run.mjs 3.16.2 locked`. The runner packs all four sibling
-packages, installs them in an isolated temporary application, and runs Nuxt
-prepare, public type checking, production build, real HTTP SSR, concurrent
-request targeting, and headless Chromium hydration/identity/refresh checks.
+Use Node 22.22+ / 24.15+ / 26+ for these current hosts (SDK engines:
+`>=22`; Nuxt 4.6 also drops Node 20). Current hosts pin Playwright **1.64.1**
+(≥1.60 required: 1.58.x hangs forever extracting Chromium on Node 24.16+/26
+after download hits 100%). CI also sets a per-matrix `PLAYWRIGHT_BROWSERS_PATH`
+so concurrent packed-host jobs do not contend on the shared Chromium cache.
+The historical `locks/3.16.2/` Node 18.20.8 profile remains on disk as frozen
+evidence only and is no longer a supported CI target. The runner packs all
+four sibling packages, installs them in an isolated temporary application, and
+runs Nuxt prepare, public type checking, production build, real HTTP SSR,
+concurrent request targeting, and headless Chromium hydration/identity/refresh
+checks.
 Both Vue flags and public core `isFeatureOn`/gate checks must agree before
 network initialization and after identity changes.
 Install the matching Playwright Chromium browser if it is not already present.
@@ -35,7 +40,7 @@ The runner rejects `TOGGLY_SIGNED_DEFS_ARTIFACT` and checks every dependency's
 resolved URL; no dependency tarballs, aliases, overrides, or source links are
 accepted. The retained locks preserve framework package versions from their
 original snapshots; candidate versions and the public signer/reporter entries
-are maintained with npm. A third lock records the Nuxt 4.5.2 consumer. This is pre-publication candidate evidence, not a claim
+are maintained with npm. A third lock records the Nuxt 4.6.3 consumer. This is pre-publication candidate evidence, not a claim
 that all four candidate SDK versions are already published.
 
 The first production host retains manual/defaults-only initialization coverage.
@@ -59,24 +64,27 @@ The two current hosts use maintained public-registry locks. No lock integrity is
 Nuxt 4.0.0's pinned Nitro 2.12.0 builds and serves SSR, but fresh production
 installs can look for browser assets under `.output/server/chunks/public` and
 return ENOENT. A plain Nuxt 4.0 control without this SDK reproduced the same
-failure. Nuxt 4.5.2 passes the complete fixture. The peer range is not narrowed.
+failure. Nuxt 4.6.3 passes the complete fixture when the consumer pins Vue
+**3.5.44** (Nuxt 4.6's `vue@^3.5.44` floor); an older direct Vue pin can leave
+duplicate Vue copies and an incomplete Nitro-traced `vue` package at runtime.
+The peer range is not narrowed.
 
 A fresh Nuxt 3.0.0 install on Node 18.20.8 resolves some transitive dependencies
 requiring Node 20.19+ (`chokidar`/`readdirp`) or Node 20+ (`lru-cache`), and the
 historical Nuxt telemetry loader fails on `import.meta`. That combination is not
-passing Node 18 evidence. The retained Nuxt 3.0 fixture passes on Node 24.18;
-the package engine declaration is unchanged. This fresh-resolution failure is separate from the passing frozen Node 18
-combination below; it does not establish incompatibility for every Nuxt 3 host.
+passing Node 18 evidence. The retained Nuxt 3.0 fixture historically passed on
+Node 24.18; current package engines declare `>=22` after the Node 18/20 drop.
+This fresh-resolution failure is separate from the frozen Node 18 lock below.
 
-## Frozen Node 18 compatibility host
+## Frozen Node 18 compatibility host (historical; not CI)
 
 `locks/3.16.2/` records a real packed consumer on Node **18.20.8**, Nuxt and
 Kit **3.16.2**, Nitro **2.11.9**, Vite **6.2.6**, Vue **3.5.13**, Nuxt CLI
 **3.24.1**, TypeScript **5.7.3**, vue-tsc **2.2.4**, and Playwright **1.51.1**
-with Chromium **134.0.6998.35**. The runner requires `locked` mode for this
-profile and uses `npm ci --engine-strict`; fresh resolution cannot silently
-replace it. It runs the same complete SSR, request-isolation, hydration, public
-core/Vue agreement, gate, identity, refresh and directive assertions.
+with Chromium **134.0.6998.35**. Owner support policy (2026-11-01) drops Node
+18/20; this profile is retained as historical evidence only and is not part of
+CI. The runner requires `locked` mode for this profile and uses
+`npm ci --engine-strict`; fresh resolution cannot silently replace it.
 
 Lock provenance (also recorded in `locks/3.16.2/provenance.json`): first resolve a framework-only manifest with the exact six
 direct framework/tool versions shown in the profile (Nuxt, Kit, Vue,
