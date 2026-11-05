@@ -307,13 +307,20 @@ namespace Toggly.FeatureManagement
             foreach (var (key, value) in drainedCounters)
                 _counters.AddOrUpdate(key, value, (_, existing) => existing + value);
 
-            foreach (var observation in drainedObservations)
+            var restored = 0;
+            while (restored < drainedObservations.Count &&
+                   TryEnqueueObservation(drainedObservations[restored]))
             {
-                if (!TryEnqueueObservation(observation))
-                {
-                    TryLog(LogLevel.Debug, "Pending metrics observations cap ({Cap}) reached; dropping restored observation {MetricKey}", MaxPendingObservations, observation.MetricKey);
-                    break;
-                }
+                restored++;
+            }
+
+            if (restored < drainedObservations.Count)
+            {
+                TryLog(
+                    LogLevel.Debug,
+                    "Pending metrics observations cap ({Cap}) reached; dropping restored observation {MetricKey}",
+                    MaxPendingObservations,
+                    drainedObservations[restored].MetricKey);
             }
         }
 
