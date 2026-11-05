@@ -38,7 +38,6 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -80,7 +79,7 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     private final AtomicBoolean refreshInFlight = new AtomicBoolean(false);
     private final AtomicBoolean pendingWebSocketRefresh = new AtomicBoolean(false);
     private final AtomicReference<DefinitionCacheRecorder> definitionCacheRecorder = new AtomicReference<>();
-    private final CopyOnWriteArrayList<Consumer<FeatureSnapshot>> refreshListeners = new CopyOnWriteArrayList<>();
+    private final RefreshListenerSupport refreshListeners = new RefreshListenerSupport(HttpSnapshotProvider.class);
 
     /**
      * Creates an HTTP snapshot provider.
@@ -282,32 +281,18 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
             lastSignedTimestamp.set(snapshot.getSignedTimestamp());
         }
         if (notifyListeners) {
-            notifyRefreshListeners(snapshot);
+            refreshListeners.notifyListeners(snapshot);
         }
     }
 
     @Override
     public void addRefreshListener(Consumer<FeatureSnapshot> listener) {
-        if (listener != null) {
-            refreshListeners.addIfAbsent(listener);
-        }
+        refreshListeners.add(listener);
     }
 
     @Override
     public void removeRefreshListener(Consumer<FeatureSnapshot> listener) {
-        if (listener != null) {
-            refreshListeners.remove(listener);
-        }
-    }
-
-    private void notifyRefreshListeners(FeatureSnapshot snapshot) {
-        for (Consumer<FeatureSnapshot> listener : refreshListeners) {
-            try {
-                listener.accept(snapshot);
-            } catch (Exception e) {
-                LOGGER.log(Level.WARNING, "Refresh listener threw", e);
-            }
-        }
+        refreshListeners.remove(listener);
     }
 
     @Override

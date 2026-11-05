@@ -8,6 +8,7 @@ import io.toggly.core.model.VariantAllocation;
 import io.toggly.core.model.VariantDefinition;
 import io.toggly.core.snapshot.FeatureSnapshot;
 import io.toggly.core.snapshot.HttpSnapshotProvider;
+import io.toggly.core.snapshot.RefreshListenerSupport;
 import io.toggly.core.snapshot.SnapshotProvider;
 import io.toggly.core.telemetry.DefinitionCacheRecorder;
 import io.toggly.core.util.SimpleJson;
@@ -23,7 +24,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -64,8 +64,8 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     private final String cacheKey;
     private final AtomicReference<DefinitionCacheRecorder> definitionCacheRecorder = new AtomicReference<>();
     private final AtomicBoolean durableStartupCounted = new AtomicBoolean(false);
-    private final CopyOnWriteArrayList<Consumer<FeatureSnapshot>> refreshListeners =
-            new CopyOnWriteArrayList<>();
+    private final RefreshListenerSupport refreshListeners =
+            new RefreshListenerSupport(RedisCachingSnapshotProvider.class);
     /**
      * Receives underlying apply-on-change notifications, persists to Redis first, then
      * notifies wrapper listeners so onRefresh callbacks observe the updated cache.
@@ -170,7 +170,7 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
 
     private void onDelegateSnapshotApplied(FeatureSnapshot snapshot) {
         persistSnapshot(snapshot);
-        notifyRefreshListeners(snapshot);
+        refreshListeners.notifyListeners(snapshot);
     }
 
     private void persistSnapshot(FeatureSnapshot snapshot) {
@@ -226,26 +226,12 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
 
     @Override
     public void addRefreshListener(Consumer<FeatureSnapshot> listener) {
-        if (listener != null) {
-            refreshListeners.addIfAbsent(listener);
-        }
+        refreshListeners.add(listener);
     }
 
     @Override
     public void removeRefreshListener(Consumer<FeatureSnapshot> listener) {
-        if (listener != null) {
-            refreshListeners.remove(listener);
-        }
-    }
-
-    private void notifyRefreshListeners(FeatureSnapshot snapshot) {
-        for (Consumer<FeatureSnapshot> listener : refreshListeners) {
-            try {
-                listener.accept(snapshot);
-            } catch (Exception e) {
-                LOGGER.log(Level.WARNING, "Refresh listener threw", e);
-            }
-        }
+        refreshListeners.remove(listener);
     }
 
     @Override
