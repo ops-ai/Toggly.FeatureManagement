@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.1 - 2026-11-04
 
 ### Compatibility
 - Declare Python 3.15 support and add it to the Flask CI matrix. Declared

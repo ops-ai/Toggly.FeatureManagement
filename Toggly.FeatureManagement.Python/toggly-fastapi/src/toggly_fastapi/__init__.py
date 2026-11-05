@@ -34,7 +34,7 @@ from toggly_fastapi.middleware import (
     get_toggly_client,
 )
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 __all__ = [
     "ClientDep",
     "ContextDep",

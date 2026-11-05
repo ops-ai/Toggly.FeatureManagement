@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.3 - 2026-11-04
 
 ### Compatibility
 - Declare Python 3.15 support and add it to the cache CI matrix. Declared

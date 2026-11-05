@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.11.0
+
+2026-11-04
 
 ### Changed
 - Toolchain: AGP 8.7.3 → 9.5.0 (built-in Kotlin), Gradle 8.14.5 → 9.6.0,

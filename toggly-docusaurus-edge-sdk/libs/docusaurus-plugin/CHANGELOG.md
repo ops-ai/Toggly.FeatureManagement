@@ -1,4 +1,6 @@
-## Unreleased
+## 0.10.5
+
+2026-11-04
 
 ### Changed
 - Prove current Docusaurus `3.10.2` packed hosts on React `18.3.1` and `19.3.1`

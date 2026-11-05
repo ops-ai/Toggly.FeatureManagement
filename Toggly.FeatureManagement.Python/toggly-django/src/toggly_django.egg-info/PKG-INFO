@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: toggly-django
-Version: 0.5.0
+Version: 0.5.1
 Summary: Django integration for Toggly feature flag management
 Author-email: Toggly <support@toggly.io>
 Maintainer-email: Toggly <support@toggly.io>

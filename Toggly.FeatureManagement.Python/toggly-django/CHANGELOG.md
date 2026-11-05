@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 - 2026-11-04
 
 ### Compatibility
 - Keep Django `>=4.2` floor. CI now includes the Python 3.8/3.9 + Django 4.2

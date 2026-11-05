@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.13.3
+
+2026-11-04
+
+### Fixed
+- Snapshot `DisableAutoCreateTable` correctly skips `CREATE TABLE IF NOT EXISTS`
+  for Postgres and SQLite. `AutoCreateTable` remains a deprecated no-op for
+  struct-literal compatibility (#853).
+
+
 ## 0.13.2
 
 2026-10-19
