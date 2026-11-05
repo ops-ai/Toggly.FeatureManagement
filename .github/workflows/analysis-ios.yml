@@ -10,6 +10,7 @@ on:
       - 'Package.swift'
       - '.github/scripts/verify-swift-distribution*'
       - '.github/workflows/analysis-ios.yml'
+      - '.github/workflows/analysis-ios.test.mjs'
   workflow_dispatch:
   workflow_call:
     inputs:
@@ -26,12 +27,39 @@ permissions:
   security-events: write
 
 jobs:
+  # Floor Xcode 16.1 stays on macos-15. Current Xcode 26.x / 27.x live on
+  # macos-26 and the dedicated xcode-27 image (runner-images, 2026-10).
   build-and-test:
-    runs-on: macos-15
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        xcode: ['16.1', '16.2', '16.4']
+        include:
+          # consumer_ios drives both the --consumer-target triple and the
+          # disposable Git-consumer Package.swift iOS floor (SwiftPM prefers
+          # the manifest over CLI flags on Darwin). The SDK Package.swift
+          # still declares iOS 14; Xcode 27's iPhoneSimulator SDK only accepts
+          # 15.0+, so that job raises only the verification consumer.
+          - os: macos-15
+            xcode: '16.1'
+            coverage: false
+            consumer_ios: '14.0'
+          - os: macos-15
+            xcode: '16.2'
+            coverage: false
+            consumer_ios: '14.0'
+          - os: macos-15
+            xcode: '16.4'
+            coverage: false
+            consumer_ios: '14.0'
+          - os: macos-26
+            xcode: '26.6'
+            coverage: true
+            consumer_ios: '14.0'
+          - os: xcode-27
+            xcode: '27.1'
+            coverage: false
+            consumer_ios: '15.0'
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -49,7 +77,7 @@ jobs:
         timeout-minutes: 10
         run: |
           python3 .github/scripts/verify-swift-distribution.test.py
-          python3 .github/scripts/verify-swift-distribution.py --repository "https://github.com/${{ github.repository }}.git" --revision "$(git rev-parse HEAD)" --consumer-target arm64-apple-ios14.0-simulator --consumer-sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          python3 .github/scripts/verify-swift-distribution.py --repository "https://github.com/${{ github.repository }}.git" --revision "$(git rev-parse HEAD)" --consumer-target "arm64-apple-ios${{ matrix.consumer_ios }}-simulator" --consumer-sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)"
 
       - name: Resolve package dependencies
         working-directory: ${{ env.SDK_ROOT }}
@@ -64,7 +92,7 @@ jobs:
         run: swift test -v
 
       - name: Provision iOS simulator for coverage
-        if: matrix.xcode == '16.4'
+        if: matrix.coverage
         run: |
           runtime="$(xcrun simctl list runtimes -j | python3 -c 'import json, sys; print(next((r["identifier"] for r in json.load(sys.stdin)["runtimes"] if ".SimRuntime.iOS-" in r["identifier"] and r.get("isAvailable")), ""))')"
           if [ -z "$runtime" ]; then
@@ -72,11 +100,24 @@ jobs:
             runtime="$(xcrun simctl list runtimes -j | python3 -c 'import json, sys; print(next((r["identifier"] for r in json.load(sys.stdin)["runtimes"] if ".SimRuntime.iOS-" in r["identifier"] and r.get("isAvailable")), ""))')"
           fi
           test -n "$runtime"
-          device="$(xcrun simctl create 'Toggly Coverage iPhone' 'iPhone 16' "$runtime")"
+          device_type="$(xcrun simctl list devicetypes -j | python3 -c '
+          import json, sys
+          types = json.load(sys.stdin)["devicetypes"]
+          preferred = ("iPhone 17", "iPhone 16", "iPhone 15", "iPhone")
+          for name in preferred:
+              for dt in types:
+                  if dt.get("productFamily") == "iPhone" and dt.get("name") == name:
+                      print(dt["identifier"]); raise SystemExit
+          for dt in types:
+              if dt.get("productFamily") == "iPhone" and "iPhone" in dt.get("name", ""):
+                  print(dt["identifier"]); raise SystemExit
+          raise SystemExit("no iPhone device type found")
+          ')"
+          device="$(xcrun simctl create 'Toggly Coverage iPhone' "$device_type" "$runtime")"
           echo "IOS_COVERAGE_DEVICE_ID=$device" >> "$GITHUB_ENV"
 
       - name: Run iOS simulator tests with coverage
-        if: matrix.xcode == '16.4'
+        if: matrix.coverage
         working-directory: ${{ env.SDK_ROOT }}
         run: |
           xcodebuild test \
@@ -88,7 +129,7 @@ jobs:
             -quiet
 
       - name: Export simulator coverage for all four products
-        if: matrix.xcode == '16.4'
+        if: matrix.coverage
         working-directory: ${{ env.SDK_ROOT }}
         run: |
           python3 scripts/xccov-to-sonar.py \
@@ -97,7 +138,7 @@ jobs:
             coverage-generic.xml
 
       - name: Upload coverage to Codecov
-        if: matrix.xcode == '16.4'
+        if: matrix.coverage
         uses: codecov/codecov-action@v7
         with:
           file: ${{ env.SDK_ROOT }}/coverage.lcov
@@ -107,7 +148,7 @@ jobs:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload coverage artifact
-        if: matrix.xcode == '16.4'
+        if: matrix.coverage
         uses: actions/upload-artifact@v7
         with:
           name: ios-coverage
@@ -118,10 +159,16 @@ jobs:
           if-no-files-found: error
 
   lint:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+
+      - name: Verify iOS analysis workflow contract
+        run: node --test .github/workflows/analysis-ios.test.mjs
 
       - name: Install SwiftLint
         run: brew install swiftlint
@@ -148,14 +195,14 @@ jobs:
 
   smoke-test:
     name: Smoke Test
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 5
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
 
       - name: Select Xcode version
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
 
       - name: Resolve package dependencies
         working-directory: ${{ env.SDK_ROOT }}
@@ -336,7 +383,7 @@ jobs:
           exit 0
 
   build-platforms:
-    runs-on: macos-15
+    runs-on: macos-26
     strategy:
       matrix:
         destination:
@@ -349,7 +396,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.4.app
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
 
       - name: Build for platform
         working-directory: ${{ env.SDK_ROOT }}
