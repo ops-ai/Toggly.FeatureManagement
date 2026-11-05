@@ -129,6 +129,10 @@ namespace Toggly.FeatureManagement
         private volatile bool _disposed = false;
         private volatile bool _shuttingDown = false;
 
+        private readonly GrpcTransientError.BackoffState _transientBackoff = new GrpcTransientError.BackoffState();
+
+        private static readonly TimeSpan DefaultSendInterval = TimeSpan.FromMinutes(1);
+
         public TogglyUsageStatsProvider(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider, Usage.UsageClient usageClient)
         {
             _appKey = togglySettings.Value.AppKey;
@@ -148,7 +152,7 @@ namespace Toggly.FeatureManagement
 
             _logger = loggerFactory.CreateLogger<TogglyUsageStatsProvider>();
 
-            _timer = new Timer(TimerCallback, null, new TimeSpan(0, 1, 0), new TimeSpan(0, 1, 0));
+            _timer = new Timer(TimerCallback, null, DefaultSendInterval, DefaultSendInterval);
             _longTimer = new Timer(LongTimerCallback, null, new TimeSpan(1, 0, 0, 0), new TimeSpan(1, 0, 0, 0));
             applicationLifetime.ApplicationStopping.Register(OnApplicationStopping);
 
@@ -294,25 +298,69 @@ namespace Toggly.FeatureManagement
                 }
 
                 batch = CaptureBatch();
-                if (!suppressLogging) TryLog(LogLevel.Trace, "Sending stats");
-                var dataPacket = CreateDataPacket(batch);
-                var grpcMetadata = new Metadata { { "UA", userAgent } };
-                var result = await _usageClient.SendStatsAsync(dataPacket, grpcMetadata, DateTime.UtcNow.AddSeconds(180)).ConfigureAwait(false);
-                if (result.FeatureCount != dataPacket.Stats.Count && !suppressLogging)
-                    TryLog(LogLevel.Warning, "Feature count did not match. Possible data integrity issues");
-                _lastSend = DateTime.UtcNow;
+                await TransmitBatchAsync(batch, suppressLogging).ConfigureAwait(false);
+                ResetTransientBackoff();
+            }
+            catch (RpcException ex) when (GrpcTransientError.IsTransient(ex, _shuttingDown))
+            {
+                HandleTransientSendFailure(ex, batch, suppressLogging);
             }
             catch (Exception ex)
             {
-                if (!suppressLogging) TryLog(LogLevel.Error, ex, "Error sending stats to toggly");
-                if (batch != null) RestoreBatch(batch);
-                _lastError = ex.Message;
-                _lastErrorTime = DateTime.UtcNow;
+                HandleSendFailure(ex, batch, suppressLogging);
             }
             finally
             {
                 _sendStatsSemaphore.Release();
             }
+        }
+
+        private async Task TransmitBatchAsync(UsageStatsBatch batch, bool suppressLogging)
+        {
+            if (!suppressLogging) TryLog(LogLevel.Trace, "Sending stats");
+            var dataPacket = CreateDataPacket(batch);
+            var grpcMetadata = new Metadata { { "UA", userAgent } };
+            var result = await _usageClient.SendStatsAsync(dataPacket, grpcMetadata, DateTime.UtcNow.AddSeconds(180)).ConfigureAwait(false);
+            if (result.FeatureCount != dataPacket.Stats.Count && !suppressLogging)
+                TryLog(LogLevel.Warning, "Feature count did not match. Possible data integrity issues");
+            _lastSend = DateTime.UtcNow;
+        }
+
+        private void HandleTransientSendFailure(RpcException ex, UsageStatsBatch? batch, bool suppressLogging)
+        {
+            if (batch != null) RestoreBatch(batch);
+            RecordLastError(ex.Message);
+            ApplyTransientBackoff(ex, suppressLogging, "Transient error sending stats to toggly");
+        }
+
+        private void HandleSendFailure(Exception ex, UsageStatsBatch? batch, bool suppressLogging)
+        {
+            if (!suppressLogging) TryLog(LogLevel.Error, ex, "Error sending stats to toggly");
+            if (batch != null) RestoreBatch(batch);
+            RecordLastError(ex.Message);
+        }
+
+        private void RecordLastError(string message)
+        {
+            _lastError = message;
+            _lastErrorTime = DateTime.UtcNow;
+        }
+
+        private void ApplyTransientBackoff(RpcException ex, bool suppressLogging, string message)
+        {
+            var (shouldLog, delay) = _transientBackoff.RecordFailure();
+            if (!suppressLogging && shouldLog)
+                TryLog(LogLevel.Warning, ex, message);
+
+            if (!_shuttingDown && !_disposed)
+                _timer.Change(delay, DefaultSendInterval);
+        }
+
+        private void ResetTransientBackoff()
+        {
+            _transientBackoff.Reset();
+            if (!_shuttingDown && !_disposed)
+                _timer.Change(DefaultSendInterval, DefaultSendInterval);
         }
 
         private bool HasPendingStats()
