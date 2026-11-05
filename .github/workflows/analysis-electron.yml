@@ -26,8 +26,13 @@ permissions:
 
 jobs:
   test:
-    name: Test Electron SDK
+    name: Test Electron SDK (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Owner decision: drop EOL Node 18/20; maintain 22 (LTS), 24 (LTS), 26 (LTS).
+        node-version: [22.x, 24.x, 26.x]
 
     steps:
       - name: Checkout code
@@ -35,14 +40,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v7
         with:
-          node-version: 'lts/*'
+          node-version: ${{ matrix.node-version }}
           cache: 'npm'
           cache-dependency-path: Toggly.FeatureManagement.Electron/package-lock.json
 
       - name: Verify Electron analysis workflow contract
+        if: ${{ matrix.node-version == '22.x' }}
         run: node --test .github/workflows/analysis-electron.test.mjs
 
       - name: Build toggly-segments
@@ -70,19 +76,9 @@ jobs:
         # browser path instead of using a single-process test-only fallback.
         run: xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npm run test:coverage
 
-      # Registry packed-host gate: unset local tarball so packed-hosts.mjs
-      # resolves @ops-ai/toggly-client-telemetry from public npm.
-      - name: Run packed Electron floor and current hosts
-        working-directory: Toggly.FeatureManagement.Electron
-        env:
-          TOGGLY_CLIENT_TELEMETRY_TARBALL: ''
-        run: |
-          unset TOGGLY_CLIENT_TELEMETRY_TARBALL
-          xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npm run test:hosts
-
       - name: Upload coverage artifact
+        if: matrix.node-version == '22.x'
         uses: actions/upload-artifact@v7
-        if: always()
         with:
           name: coverage-Electron
           path: |
@@ -91,10 +87,55 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  packed-host:
+    name: Packed Electron ${{ matrix.host }} (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - host: electron28-retained-floor
+            node-version: '24'
+          - host: electron45-current
+            node-version: '24'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+          cache-dependency-path: Toggly.FeatureManagement.Electron/package-lock.json
+
+      - name: Build toggly-segments
+        run: |
+          set -euo pipefail
+          (cd toggly-segments && (npm ci || npm install) && npm run build)
+
+      - name: Install dependencies with local client-telemetry
+        uses: ./.github/actions/install-local-client-telemetry
+        with:
+          package-dir: Toggly.FeatureManagement.Electron
+
+      # Registry packed-host gate: unset local tarball so packed-hosts.mjs
+      # resolves @ops-ai/toggly-client-telemetry from public npm.
+      - name: Run packed Electron host
+        working-directory: Toggly.FeatureManagement.Electron
+        env:
+          TOGGLY_CLIENT_TELEMETRY_TARBALL: ''
+          HOST: ${{ matrix.host }}
+        run: |
+          unset TOGGLY_CLIENT_TELEMETRY_TARBALL
+          xvfb-run --auto-servernum --server-args="-screen 0 1280x1024x24" npm run test:hosts
+
   sonar:
     name: SonarQube Analysis
     runs-on: ubuntu-latest
-    needs: [test, dependency-check]
+    needs: [test, packed-host, dependency-check]
     if: ${{ always() && toJSON(inputs.run_reporting) != 'false' && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork) }}
 
     steps:
@@ -149,8 +190,8 @@ jobs:
             -Dsonar.sources=src
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts
             -Dsonar.coverage.exclusions=**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts
-            -Dsonar.javascript.lcov.reportPaths=../../coverage/Electron-lcov.info
-            -Dsonar.typescript.lcov.reportPaths=../../coverage/Electron-lcov.info
+            -Dsonar.javascript.lcov.reportPaths=../coverage/Electron-lcov.info
+            -Dsonar.typescript.lcov.reportPaths=../coverage/Electron-lcov.info
             -Dsonar.typescript.tsconfigPaths=tsconfig.json
             -Dsonar.tests=tests
             -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx
@@ -187,12 +228,12 @@ jobs:
             -Dsonar.sources=src
             -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/coverage/**,**/*.config.js,**/*.config.ts
             -Dsonar.coverage.exclusions=**/example/**,**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx,**/*.config.js,**/*.config.ts
-            -Dsonar.javascript.lcov.reportPaths=../../coverage/Electron-lcov.info
-            -Dsonar.typescript.lcov.reportPaths=../../coverage/Electron-lcov.info
+            -Dsonar.javascript.lcov.reportPaths=../coverage/Electron-lcov.info
+            -Dsonar.typescript.lcov.reportPaths=../coverage/Electron-lcov.info
             -Dsonar.typescript.tsconfigPaths=tsconfig.json
             -Dsonar.tests=tests
             -Dsonar.test.inclusions=**/*.spec.ts,**/*.test.ts,**/*.spec.tsx,**/*.test.tsx
-            -Dsonar.dependencyCheck.reportPath=../../dependency-check-reports/dependency-check-report.xml
+            -Dsonar.dependencyCheck.reportPath=../dependency-check-reports/dependency-check-report.xml
 
   dependency-check:
     name: OWASP Dependency Check
@@ -249,7 +290,7 @@ jobs:
   summary:
     name: Analysis Summary
     runs-on: ubuntu-latest
-    needs: [test, sonar, dependency-check]
+    needs: [test, packed-host, sonar, dependency-check]
     if: always()
 
     steps:
@@ -260,13 +301,14 @@ jobs:
         uses: ./.github/actions/verify-required-jobs
         with:
           needs-json: ${{ toJSON(needs) }}
-          required-jobs: test,sonar,dependency-check
+          required-jobs: test,packed-host,sonar,dependency-check
           allow-skipped: ${{ (toJSON(inputs.run_reporting) == 'false' || github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork) && 'sonar,dependency-check' || 'none' }}
 
       - name: Check test results
         if: ${{ always() }}
         env:
           TEST_RESULT: ${{ needs.test.result }}
+          PACKED_HOST_RESULT: ${{ needs.packed-host.result }}
           SONAR_RESULT: ${{ needs.sonar.result }}
           DEPENDENCY_CHECK_RESULT: ${{ needs.dependency-check.result }}
           FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
@@ -276,6 +318,7 @@ jobs:
             echo "## Electron SDK Analysis Summary"
             echo ""
             echo "Tests: ${TEST_RESULT}"
+            echo "Packed hosts: ${PACKED_HOST_RESULT}"
             echo "Sonar: ${SONAR_RESULT}"
             echo "OWASP: ${DEPENDENCY_CHECK_RESULT}"
             if [ "${RUN_REPORTING}" = "false" ]; then
@@ -286,6 +329,10 @@ jobs:
             echo ""
             echo "### Packages Analyzed"
             echo "- @ops-ai/electron-feature-flags-toggly"
+            echo ""
+            echo "### Matrix"
+            echo "- Node: 22.x, 24.x, 26.x"
+            echo "- Electron packed hosts: 28.3.3 (floor), 45.2.1 (latest)"
             echo ""
             echo "SonarCloud: https://sonarcloud.io/project/overview?id=toggly-sdks-electron"
           } >> "$GITHUB_STEP_SUMMARY"

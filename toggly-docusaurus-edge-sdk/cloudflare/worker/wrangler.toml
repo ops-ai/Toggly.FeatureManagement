@@ -1,6 +1,6 @@
 name = "toggly-docusaurus-edge-worker"
 main = "src/index.ts"
-compatibility_date = "2024-01-01"
+compatibility_date = "2026-11-02"
 
 # Default (non-secret) variables. Override per-environment below.
 # Secrets are NOT defined here — set them via `wrangler secret put` or the

@@ -274,10 +274,22 @@ test('contract executes in its existing job and tracks workflow and shared gate 
 });
 
 test('preserves Python package matrices, host checks, coverage XML and precise Sonar classification', () => {
-  for (const name of ['test-core', 'test-flask', 'test-cache']) assert.match(job(name), /python-version: \["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"\]/);
-  assert.match(job('test-fastapi'), /python-version: \["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"\]/);
+  for (const name of ['test-core', 'test-flask', 'test-cache']) assert.match(job(name), /python-version: \["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.15"\]/);
+  assert.match(job('test-fastapi'), /python-version: \["3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.15"\]/);
   assert.match(job('test-django'), /django-version: \["4.2.\*", "5.0.\*", "5.1.\*"\]/);
-  for (const version of ['5.2.17', '6.0.8', '6.1.1']) {
+  assert.ok(job('test-django').includes('python-version: "3.8"'));
+  assert.ok(job('test-django').includes('django-version: "4.2.*"'));
+  // ubuntu-latest is 26.04 without setup-python 3.8/3.9 builds; floor legs stay on 24.04.
+  for (const name of ['test-core', 'test-flask', 'test-cache', 'test-fastapi']) {
+    assert.match(job(name), /runs-on: \$\{\{ matrix\.os \}\}/);
+    assert.ok(job(name).includes('os: ubuntu-24.04'));
+    assert.ok(job(name).includes('python-version: "3.9"'));
+  }
+  assert.match(job('test-django'), /runs-on: \$\{\{ matrix\.os \|\| 'ubuntu-latest' \}\}/);
+  assert.match(job('test-packed-host'), /runs-on: \$\{\{ matrix\.os \|\| 'ubuntu-latest' \}\}/);
+  assert.ok(job('test-django').includes('os: ubuntu-24.04'));
+  assert.ok(job('test-packed-host').includes('os: ubuntu-24.04'));
+  for (const version of ['5.2.18', '6.0.9', '6.1.2']) {
     assert.ok(job('test-django').includes(`django-version: "${version}"`));
     assert.ok(job('test-packed-host').includes(`django-version: "${version}"`));
   }

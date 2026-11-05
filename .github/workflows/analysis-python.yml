@@ -112,11 +112,24 @@ jobs:
 
   test-core:
     name: Test Core (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    # setup-python has no 3.8/3.9 builds for Ubuntu 26.04 (ubuntu-latest); keep
+    # those floor legs on 24.04 while newer Pythons stay on latest.
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        os: [ubuntu-latest]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
+        exclude:
+          - os: ubuntu-latest
+            python-version: "3.8"
+          - os: ubuntu-latest
+            python-version: "3.9"
+        include:
+          - os: ubuntu-24.04
+            python-version: "3.8"
+          - os: ubuntu-24.04
+            python-version: "3.9"
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -135,6 +148,7 @@ jobs:
         run: |
           cd toggly
           pip install -e ".[dev]"
+          python -c "import grpc, google.protobuf as pb; print(f'grpcio={grpc.__version__} protobuf={pb.__version__}')"
 
       - name: Run tests
         run: |
@@ -151,35 +165,44 @@ jobs:
 
   test-django:
     name: Test Django (Python ${{ matrix.python-version }}, Django ${{ matrix.django-version }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
         django-version: ["4.2.*", "5.0.*", "5.1.*"]
         include:
+          # Declared floor: Django 4.2 on the oldest supported Python (Ubuntu
+          # 24.04 still publishes setup-python builds for 3.8/3.9).
+          - python-version: "3.8"
+            django-version: "4.2.*"
+            os: ubuntu-24.04
+          - python-version: "3.9"
+            django-version: "4.2.*"
+            os: ubuntu-24.04
+          # Django 5.2 LTS + 6.0 + latest 6.x on every Python each supports.
           - python-version: "3.10"
-            django-version: "5.2.17"
+            django-version: "5.2.18"
           - python-version: "3.11"
-            django-version: "5.2.17"
+            django-version: "5.2.18"
           - python-version: "3.12"
-            django-version: "5.2.17"
+            django-version: "5.2.18"
           - python-version: "3.12"
-            django-version: "6.0.8"
+            django-version: "6.0.9"
           - python-version: "3.12"
-            django-version: "6.1.1"
+            django-version: "6.1.2"
           - python-version: "3.13"
-            django-version: "5.2.17"
+            django-version: "5.2.18"
           - python-version: "3.13"
-            django-version: "6.0.8"
+            django-version: "6.0.9"
           - python-version: "3.13"
-            django-version: "6.1.1"
+            django-version: "6.1.2"
           - python-version: "3.14"
-            django-version: "5.2.17"
+            django-version: "5.2.18"
           - python-version: "3.14"
-            django-version: "6.0.8"
+            django-version: "6.0.9"
           - python-version: "3.14"
-            django-version: "6.1.1"
+            django-version: "6.1.2"
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -216,11 +239,22 @@ jobs:
 
   test-flask:
     name: Test Flask (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        os: [ubuntu-latest]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
+        exclude:
+          - os: ubuntu-latest
+            python-version: "3.8"
+          - os: ubuntu-latest
+            python-version: "3.9"
+        include:
+          - os: ubuntu-24.04
+            python-version: "3.8"
+          - os: ubuntu-24.04
+            python-version: "3.9"
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -256,11 +290,18 @@ jobs:
 
   test-fastapi:
     name: Test FastAPI (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        os: [ubuntu-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
+        exclude:
+          - os: ubuntu-latest
+            python-version: "3.9"
+        include:
+          - os: ubuntu-24.04
+            python-version: "3.9"
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -296,11 +337,22 @@ jobs:
 
   test-cache:
     name: Test Cache (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        os: [ubuntu-latest]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
+        exclude:
+          - os: ubuntu-latest
+            python-version: "3.8"
+          - os: ubuntu-latest
+            python-version: "3.9"
+        include:
+          - os: ubuntu-24.04
+            python-version: "3.8"
+          - os: ubuntu-24.04
+            python-version: "3.9"
     defaults:
       run:
         working-directory: ${{ env.SDK_ROOT }}
@@ -336,7 +388,7 @@ jobs:
 
   test-packed-host:
     name: Packed host (Python ${{ matrix.python-version }}, Django ${{ matrix.django-version }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
@@ -344,6 +396,7 @@ jobs:
           - python-version: "3.8"
             django-version: "4.2.*"
             frameworks: "core,django"
+            os: ubuntu-24.04
           - python-version: "3.10"
             django-version: "5.0.*"
             frameworks: "core,django"
@@ -351,13 +404,13 @@ jobs:
             django-version: "5.1.*"
             frameworks: "core,django"
           - python-version: "3.12"
-            django-version: "5.2.17"
+            django-version: "5.2.18"
             frameworks: "core,django"
           - python-version: "3.12"
-            django-version: "6.0.8"
+            django-version: "6.0.9"
             frameworks: "core,django"
           - python-version: "3.14"
-            django-version: "6.1.1"
+            django-version: "6.1.2"
             frameworks: "all"
     defaults:
       run:
@@ -788,7 +841,7 @@ jobs:
             echo "- toggly-cache"
             echo ""
             echo "### Python Versions Tested"
-            echo "- 3.8, 3.9, 3.10, 3.11, 3.12, 3.13, 3.14"
+            echo "- 3.8, 3.9, 3.10, 3.11, 3.12, 3.13, 3.14, 3.15"
             echo ""
             echo "Check SonarCloud for detailed results: https://sonarcloud.io/project/overview?id=toggly-sdks-python"
           } >> "$GITHUB_STEP_SUMMARY"

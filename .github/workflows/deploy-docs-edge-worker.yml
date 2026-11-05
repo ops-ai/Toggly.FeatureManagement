@@ -28,11 +28,11 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install worker dependencies
         working-directory: toggly-docusaurus-edge-sdk/cloudflare/worker
-        run: npm install
+        run: npm ci
 
       - name: Deploy production Worker (docs.toggly.io)
         working-directory: toggly-docusaurus-edge-sdk/cloudflare/worker
@@ -49,11 +49,11 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install worker dependencies
         working-directory: toggly-docusaurus-edge-sdk/cloudflare/worker
-        run: npm install
+        run: npm ci
 
       - name: Deploy staging Worker (staging-docs.toggly.io)
         working-directory: toggly-docusaurus-edge-sdk/cloudflare/worker

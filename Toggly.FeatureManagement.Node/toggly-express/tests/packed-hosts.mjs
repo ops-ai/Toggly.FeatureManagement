@@ -213,12 +213,12 @@ const hostDirectory = mkdtempSync(join(tmpdir(), 'toggly-express-host-'))
 try {
   verifyPackedFile(packed.tarball)
   writeHostFixture(hostDirectory)
-  for (const expressVersion of ['4.22.2', '5.2.1']) {
+  for (const expressVersion of ['4.22.3', '5.3.0']) {
     run('npm', [
       'install', '--no-package-lock',
       `express@${expressVersion}`,
       '@types/express@5.0.6',
-      '@types/node@22.19.11',
+      '@types/node@22.20.5',
       'typescript@5.9.3',
       packedCore.tarball,
       packedEval.tarball,

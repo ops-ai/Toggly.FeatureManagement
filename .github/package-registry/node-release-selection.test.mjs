@@ -150,5 +150,5 @@ test("release workflow uses aggregate analysis gates and retains Node publish ma
     path.join(repository, ".github/workflows/analysis-javascript.yml"),
     "utf8",
   );
-  assert.match(analysis, /node-version: \['18\.x', '20\.x', '22\.x'\]/);
+  assert.match(analysis, /node-version: \['22\.x', '24\.x', '26\.x'\]/);
 });

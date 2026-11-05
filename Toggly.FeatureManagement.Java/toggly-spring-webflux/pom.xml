@@ -16,7 +16,9 @@
     <description>Spring WebFlux integration for Toggly feature flags (reactive, non-blocking)</description>
 
     <properties>
+        <!-- Overridable for CI matrix (6.2.x baseline + 7.0.x proof) -->
         <spring.version>6.2.19</spring.version>
+        <toggly.spring-security.version>6.5.11</toggly.spring-security.version>
         <reactor.version>3.8.7</reactor.version>
     </properties>
 
@@ -66,12 +68,12 @@
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-core</artifactId>
+            <version>${toggly.spring-security.version}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
-            <version>5.10.0</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
