@@ -297,7 +297,7 @@ function assertPreservedWorkflow(source = workflow) {
     ['provider-server-main', 'b93385e2f5d3a04f0b7403de9467ed50100614df79b63e208d21037661f5ab94'],
     ['build-platforms', '61ac8fe87975f67986f441a00c0d4931855ccea0a80884aeafcdebba11b699c2'],
     ['smoke-test', 'c9dc0174462a463076a0063da63b6a382ed24673ded0d674eebfac0996916c6b'],
-    ['secure-storage-version-matrix', 'fb86ba49fd636243e4a148bfb0a5ac8aaa34755513aeb1172e21da3f95c73e8d'],
+    ['secure-storage-version-matrix', 'b6920b5e3c4b0c074cac4030a4465ba3ca006ffc2e0f01682260200b503e4338'],
   ]) assert.equal(preservationHash(job(name, source)), expected, name);
   assert.equal(preservationHash(job('analyze-providers', source).split('    steps:')[0]), '4fae063b0bcc707f6c9cd3b82d1da514f74219fe3ffe435e51ec10e75e43285a');
   assert.equal(preservationHash(job('analyze-providers', source).split('      - name: Resolve Sonar project version\n')[0]), '826239d2e91af9b369e808dc61392dea6c2a85534e7df67106a9eb3d337d6d5a');
