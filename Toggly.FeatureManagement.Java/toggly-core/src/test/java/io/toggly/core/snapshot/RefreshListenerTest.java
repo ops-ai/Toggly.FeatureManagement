@@ -223,4 +223,45 @@ class RefreshListenerTest {
         memory.setFeatures(Map.of());
         assertThat(seen).hasSize(1);
     }
+
+    @Test
+    void applyCachedSnapshotDoesNotNotifyListeners() {
+        HttpSnapshotProvider sdk = newProvider();
+        List<FeatureSnapshot> seen = new ArrayList<>();
+        sdk.addRefreshListener(seen::add);
+
+        FeatureSnapshot cached = new FeatureSnapshot(
+                Map.of("cached", FeatureDefinition.builder().featureKey("cached").build()),
+                Map.of(),
+                java.time.Instant.now(),
+                "\"cached-etag\"");
+        assertThat(sdk.applyCachedSnapshot(cached)).isTrue();
+        assertThat(sdk.getSnapshot().getFeature("cached")).isNotNull();
+        assertThat(seen).isEmpty();
+
+        // Network refresh still notifies.
+        sdk.refresh();
+        assertThat(seen).hasSize(1);
+        assertThat(seen.get(0).getFeature("feature-a")).isNotNull();
+    }
+
+    @Test
+    void applyCachedSnapshotReentryFromListenerDoesNotRecurse() {
+        HttpSnapshotProvider sdk = newProvider();
+        AtomicInteger calls = new AtomicInteger();
+        sdk.addRefreshListener(snapshot -> {
+            calls.incrementAndGet();
+            // Simulate Redis durable re-apply that a listener may trigger via getSnapshot.
+            FeatureSnapshot cached = new FeatureSnapshot(
+                    Map.of("reenter", FeatureDefinition.builder().featureKey("reenter").build()),
+                    Map.of(),
+                    java.time.Instant.now(),
+                    "\"reenter\"");
+            assertThat(sdk.applyCachedSnapshot(cached)).isTrue();
+        });
+
+        assertThatCode(sdk::refresh).doesNotThrowAnyException();
+        assertThat(calls).hasValue(1);
+        assertThat(sdk.getSnapshot().getFeature("reenter")).isNotNull();
+    }
 }

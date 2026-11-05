@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -63,6 +64,13 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     private final String cacheKey;
     private final AtomicReference<DefinitionCacheRecorder> definitionCacheRecorder = new AtomicReference<>();
     private final AtomicBoolean durableStartupCounted = new AtomicBoolean(false);
+    private final CopyOnWriteArrayList<Consumer<FeatureSnapshot>> refreshListeners =
+            new CopyOnWriteArrayList<>();
+    /**
+     * Receives underlying apply-on-change notifications, persists to Redis first, then
+     * notifies wrapper listeners so onRefresh callbacks observe the updated cache.
+     */
+    private final Consumer<FeatureSnapshot> delegateRefreshBridge = this::onDelegateSnapshotApplied;
 
     /**
      * Creates a Redis caching provider with default configuration.
@@ -84,6 +92,7 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
         this.config = config;
         this.cacheKey = config.getKeyPrefix() + SNAPSHOT_KEY;
         this.pool = createPool(config);
+        this.delegate.addRefreshListener(delegateRefreshBridge);
     }
 
     /**
@@ -103,6 +112,7 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
                 .build();
         this.cacheKey = keyPrefix + SNAPSHOT_KEY;
         this.pool = pool;
+        this.delegate.addRefreshListener(delegateRefreshBridge);
     }
 
     private JedisPool createPool(RedisCacheConfig config) {
@@ -153,8 +163,20 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     @Override
     public FeatureSnapshot refresh() {
         FeatureSnapshot snapshot = delegate.refresh();
+        // Persist even on unchanged/304 refreshes (bridge only runs when the delegate applies).
+        persistSnapshot(snapshot);
+        return snapshot;
+    }
 
-        // Store in Redis
+    private void onDelegateSnapshotApplied(FeatureSnapshot snapshot) {
+        persistSnapshot(snapshot);
+        notifyRefreshListeners(snapshot);
+    }
+
+    private void persistSnapshot(FeatureSnapshot snapshot) {
+        if (snapshot == null) {
+            return;
+        }
         try (Jedis jedis = pool.getResource()) {
             String serialized = serialize(snapshot);
             long ttlSeconds = config.getTtl().toSeconds();
@@ -166,8 +188,6 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Error writing to Redis cache", e);
         }
-
-        return snapshot;
     }
 
     @Override
@@ -206,16 +226,31 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
 
     @Override
     public void addRefreshListener(Consumer<FeatureSnapshot> listener) {
-        delegate.addRefreshListener(listener);
+        if (listener != null) {
+            refreshListeners.addIfAbsent(listener);
+        }
     }
 
     @Override
     public void removeRefreshListener(Consumer<FeatureSnapshot> listener) {
-        delegate.removeRefreshListener(listener);
+        if (listener != null) {
+            refreshListeners.remove(listener);
+        }
+    }
+
+    private void notifyRefreshListeners(FeatureSnapshot snapshot) {
+        for (Consumer<FeatureSnapshot> listener : refreshListeners) {
+            try {
+                listener.accept(snapshot);
+            } catch (Exception e) {
+                LOGGER.log(Level.WARNING, "Refresh listener threw", e);
+            }
+        }
     }
 
     @Override
     public void close() {
+        delegate.removeRefreshListener(delegateRefreshBridge);
         if (pool != null && !pool.isClosed()) {
             pool.close();
         }

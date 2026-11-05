@@ -209,11 +209,11 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
 
     private void applyFetchResult(FetchResult result) {
         if (result.outcome == CacheOutcome.MISS) {
-            applySnapshot(result.snapshot);
+            applySnapshot(result.snapshot, true);
             recordDefinitionCacheMiss();
         } else {
             if (result.snapshot != null && result.applySnapshot) {
-                applySnapshot(result.snapshot);
+                applySnapshot(result.snapshot, true);
             }
             recordDefinitionCacheHit();
         }
@@ -258,7 +258,10 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
                 }
             }
             boolean startupFromDurable = currentSnapshot.get().isEmpty();
-            applySnapshot(snapshot);
+            // Durable/cache restore must not fire onRefresh listeners — Redis getSnapshot
+            // hits re-enter applyCachedSnapshot, and a listener that reads features again
+            // would recurse. Notify only for network-applied changes (refresh/poll/WS).
+            applySnapshot(snapshot, false);
             // Startup served from durable snapshot before first network — count once.
             if (startupFromDurable) {
                 recordDefinitionCacheHit();
@@ -270,7 +273,7 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         }
     }
 
-    private void applySnapshot(FeatureSnapshot snapshot) {
+    private void applySnapshot(FeatureSnapshot snapshot, boolean notifyListeners) {
         currentSnapshot.set(snapshot);
         if (snapshot.getEtag() != null) {
             lastEtag.set(snapshot.getEtag());
@@ -278,7 +281,9 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         if (snapshot.getSignedTimestamp() != null) {
             lastSignedTimestamp.set(snapshot.getSignedTimestamp());
         }
-        notifyRefreshListeners(snapshot);
+        if (notifyListeners) {
+            notifyRefreshListeners(snapshot);
+        }
     }
 
     @Override
