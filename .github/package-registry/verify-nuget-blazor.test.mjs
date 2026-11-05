@@ -59,12 +59,32 @@ test("Blazor packages inherit the common version, changelog and release inventor
       "utf8",
     );
     assert.doesNotMatch(project, /<(?:Version|PackageVersion)>/);
-    assert.match(project, /<TargetFramework>net8\.0<\/TargetFramework>/);
-    if (pkg.id === "Toggly.FeatureManagement.Blazor")
+    assert.match(
+      project,
+      /<TargetFrameworks>net8\.0;net9\.0;net10\.0;net11\.0<\/TargetFrameworks>/,
+    );
+    if (pkg.id === "Toggly.FeatureManagement.Blazor") {
       assert.doesNotMatch(
         project,
         /Toggly.FeatureManagement\" Version=|Client.Desktop|FrameworkReference/,
       );
+      assert.match(
+        project,
+        /Microsoft\.AspNetCore\.Components\.Web.*8\.0\./s,
+      );
+      assert.match(
+        project,
+        /Microsoft\.AspNetCore\.Components\.Web.*9\.0\./s,
+      );
+      assert.match(
+        project,
+        /Microsoft\.AspNetCore\.Components\.Web.*10\.0\./s,
+      );
+      assert.match(
+        project,
+        /Microsoft\.AspNetCore\.Components\.Web.*11\.0\.0-rc\./s,
+      );
+    }
   }
 });
 test("Blazor packed artifacts meet existing NuGet metadata contract", () => {

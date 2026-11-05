@@ -23,6 +23,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Svelte | `^4 \|\| ^5` | 4 + 5 | 5.x | Maintain |
 | SvelteKit | kit `^2 \|\| ^3` | 2.x, 3.1.0 packed host | 3.1.x | Maintain |
 | .NET core family | netstandard2.1…net9 + **net10** | multi-TFM build | net10 | Wave 2 |
+| Blazor (`Toggly.FeatureManagement.Blazor` / `.Server`) | **net8–net11** | CI matrix net8/9/10 + net11 RC allow-failure | net10 stable; net11 RC | Maintain; net6/7 skipped (Client is net8-only) |
 | .NET Mongo/Dapper/EF | includes net10 | net8/net10 consumers | net10 | Maintain |
 | Java Spring | Boot 3.5 + Boot 4.1 / Spring 6.2+7 / Java 17 | Boot 3.5.16 + Boot 4.1.2 starters; Spring 6.2.19 + 7.0.10 (Security 6.5.11 / 7.1.2) MVC/WebFlux CI + `webflux` / `webflux-spring7` hosts; JDK 17/21/25 | Boot 4.1 / Spring 7.0 | Dual Boot starters; single MVC/WebFlux artifacts (provided Spring) |
 | Java Redis | Jedis 5 + Jedis 8 | dual artifacts | Jedis 8 | No Lettuce 7 |

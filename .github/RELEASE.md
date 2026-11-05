@@ -246,10 +246,11 @@ follows the Blazor browser package and trusted server core. The SDK packed-consu
 checks use the complete local candidate feed; Toggly.Samples remains a separate
 public-package installation gate.
 
-The Blazor runtime compatibility jobs retain .NET 8/.NET 10 tests, browser crypto
-coverage and packed consumer checks in `analysis-dotnet.yml`. No separate Blazor
-publication workflow is used. Registry publisher permissions still need to cover
-the new package IDs; configuration does not prove first publication.
+The Blazor runtime compatibility jobs retain .NET 8/.NET 9/.NET 10 tests, a clearly
+marked .NET 11 RC allow-failure job, browser crypto coverage and packed consumer
+checks in `analysis-dotnet.yml`. No separate Blazor publication workflow is used.
+Registry publisher permissions still need to cover the new package IDs; configuration
+does not prove first publication.
 
 ### Frontend .NET telemetry verification
 
