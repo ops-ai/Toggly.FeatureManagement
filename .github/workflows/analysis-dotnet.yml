@@ -56,7 +56,14 @@ jobs:
             8.0.x
             9.0.x
             10.0.x
-            11.0.100-rc.3.26522.148
+
+      # Blazor (and peer net11-RC packages) declare net11.0 unconditionally; shared
+      # analyze/pack/build-families must restore that TFM (NETSDK1045 without this SDK).
+      - name: Setup .NET 11 RC (Blazor preview TFM)
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
 
       - name: Setup Node.js for shared package governance
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -569,7 +576,12 @@ jobs:
             8.0.x
             9.0.x
             10.0.x
-            11.0.100-rc.3.26522.148
+
+      - name: Setup .NET 11 RC (Blazor preview TFM)
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
 
       - name: Setup Node.js for shared package governance
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -673,8 +685,13 @@ jobs:
             8.0.x
             9.0.x
             10.0.x
-            11.0.100-rc.3.26522.148
             ${{ matrix.sdk }}
+      # Pack step multi-targets Blazor including net11.0; need preview SDK even on net8/9/10 matrix cells.
+      - name: Setup .NET 11 RC (Blazor preview TFM)
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
@@ -725,7 +742,11 @@ jobs:
           dotnet-version: |
             8.0.x
             10.0.x
-            11.0.100-rc.3.26522.148
+      - name: Setup .NET 11 RC (Blazor preview TFM)
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
       - run: dotnet test Toggly.FeatureManagement.Blazor/tests/Toggly.FeatureManagement.Blazor.Tests -c Release -p:TestFramework=net11.0 --collect:"XPlat Code Coverage" --settings Toggly.FeatureManagement.Blazor/coverage.runsettings --results-directory TestResults/blazor-net11
       - run: python3 Toggly.FeatureManagement.Blazor/check-coverage.py TestResults/blazor-net11
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
