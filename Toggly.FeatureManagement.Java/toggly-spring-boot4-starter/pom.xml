@@ -16,7 +16,7 @@
     <description>Spring Boot 4 auto-configuration for Toggly feature flags</description>
 
     <properties>
-        <spring-boot.version>4.1.1</spring-boot.version>
+        <spring-boot.version>4.1.2</spring-boot.version>
     </properties>
 
     <dependencies>
