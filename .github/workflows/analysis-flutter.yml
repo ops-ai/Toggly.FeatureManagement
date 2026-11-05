@@ -564,6 +564,9 @@ jobs:
         run: |
           cp pubspec_overrides.yaml.example pubspec_overrides.yaml
           printf '  flutter_secure_storage: %s\n' '${{ matrix.version }}' >> pubspec_overrides.yaml
+          # Nested example pub get also runs; path-override unpublished core
+          # (>=2.0.0) so resolution does not require pub.dev yet.
+          cp example/pubspec_overrides.yaml.example example/pubspec_overrides.yaml
           flutter pub get
 
       - name: Analyze and test the selected plugin major
