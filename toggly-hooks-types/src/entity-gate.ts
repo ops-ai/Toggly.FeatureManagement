@@ -138,7 +138,7 @@ function findAttributeKey(
   attributes: Record<string, unknown>,
   property: string,
 ): string | undefined {
-  if (Object.prototype.hasOwnProperty.call(attributes, property)) {
+  if (Object.prototype.hasOwnProperty.call(attributes, property)) { // NOSONAR typescript:S6653 — Object.hasOwn is ES2022; package target is ES2020
     return property
   }
   const expected = property.toLowerCase()
