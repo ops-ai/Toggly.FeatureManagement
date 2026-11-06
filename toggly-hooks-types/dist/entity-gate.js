@@ -100,7 +100,7 @@ function evaluateRule(rule, attributes) {
     return false;
 }
 function findAttributeKey(attributes, property) {
-    if (Object.hasOwn(attributes, property)) {
+    if (Object.prototype.hasOwnProperty.call(attributes, property)) {
         return property;
     }
     const expected = property.toLowerCase();

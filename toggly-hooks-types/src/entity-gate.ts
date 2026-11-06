@@ -138,7 +138,7 @@ function findAttributeKey(
   attributes: Record<string, unknown>,
   property: string,
 ): string | undefined {
-  if (Object.hasOwn(attributes, property)) {
+  if (Object.prototype.hasOwnProperty.call(attributes, property)) {
     return property
   }
   const expected = property.toLowerCase()
