@@ -46,6 +46,38 @@ describe('entity-gate', () => {
     expect(resolveEvaluatedDefinition({ enabled: false }, null, true)).toBe(false)
   })
 
+  it('ignores enabled inherited via the prototype chain', () => {
+    const polluted = Object.create({ enabled: true }) as Record<string, unknown>
+    expect(resolveEvaluatedDefinition(polluted as never)).toBe(false)
+
+    const proto = { enabled: true }
+    const viaAssign = Object.assign(Object.create(proto), { unrelated: true })
+    expect(resolveEvaluatedDefinition(viaAssign as never)).toBe(false)
+  })
+
+  it('still evaluates rules when a gate also carries enabled', () => {
+    const gatedWithEnabled = {
+      enabled: true,
+      requirement: 'all' as const,
+      rules: [{ property: 'Color', op: 'eq', value: 'red' }],
+    }
+    expect(resolveEvaluatedDefinition(gatedWithEnabled)).toBe(false)
+    expect(
+      resolveEvaluatedDefinition(gatedWithEnabled, {
+        kind: 'Order',
+        key: '1',
+        attributes: { Color: 'blue' },
+      }),
+    ).toBe(false)
+    expect(
+      resolveEvaluatedDefinition(gatedWithEnabled, {
+        kind: 'Order',
+        key: '1',
+        attributes: { Color: 'red' },
+      }),
+    ).toBe(true)
+  })
+
   it('flattens enabled envelopes via toBooleanDefinitions', () => {
     expect(
       toBooleanDefinitions({

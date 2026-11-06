@@ -69,7 +69,9 @@ export function resolveEvaluatedDefinition(
   if (
     typeof value === 'object' &&
     value !== null &&
-    typeof (value as EvaluatedEnabledEnvelope).enabled === 'boolean'
+    Object.prototype.hasOwnProperty.call(value, 'enabled') && // NOSONAR typescript:S6653 — Object.hasOwn is ES2022; package target is ES2020
+    typeof (value as EvaluatedEnabledEnvelope).enabled === 'boolean' &&
+    !isEntityGate(value)
   ) {
     return (value as EvaluatedEnabledEnvelope).enabled
   }

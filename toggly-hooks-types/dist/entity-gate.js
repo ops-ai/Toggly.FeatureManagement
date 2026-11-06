@@ -47,7 +47,9 @@ function resolveEvaluatedDefinition(value, context, defaultValue = false) {
     }
     if (typeof value === 'object' &&
         value !== null &&
-        typeof value.enabled === 'boolean') {
+        Object.prototype.hasOwnProperty.call(value, 'enabled') && // NOSONAR typescript:S6653 — Object.hasOwn is ES2022; package target is ES2020
+        typeof value.enabled === 'boolean' &&
+        !isEntityGate(value)) {
         return value.enabled;
     }
     if (!isEntityGate(value)) {
@@ -100,7 +102,7 @@ function evaluateRule(rule, attributes) {
     return false;
 }
 function findAttributeKey(attributes, property) {
-    if (Object.prototype.hasOwnProperty.call(attributes, property)) {
+    if (Object.prototype.hasOwnProperty.call(attributes, property)) { // NOSONAR typescript:S6653 — Object.hasOwn is ES2022; package target is ES2020
         return property;
     }
     const expected = property.toLowerCase();
