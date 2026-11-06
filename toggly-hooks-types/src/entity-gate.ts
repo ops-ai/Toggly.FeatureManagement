@@ -73,7 +73,7 @@ export function resolveEvaluatedDefinition(
     typeof (value as EvaluatedEnabledEnvelope).enabled === 'boolean' &&
     !isEntityGate(value)
   ) {
-    return (value as EvaluatedEnabledEnvelope).enabled
+    return value.enabled
   }
   if (!isEntityGate(value)) {
     return false
