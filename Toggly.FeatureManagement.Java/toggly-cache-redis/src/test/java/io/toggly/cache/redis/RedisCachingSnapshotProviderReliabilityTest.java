@@ -193,6 +193,25 @@ class RedisCachingSnapshotProviderReliabilityTest {
     }
 
     @Test
+    void featureNamedMetricsDoesNotHideTopLevelMetrics() {
+        RedisCachingSnapshotProvider provider = provider(Duration.ofSeconds(5));
+        when(pool.getResource()).thenReturn(jedis);
+        when(jedis.get("unit:snapshot")).thenReturn(
+                "{\"features\":{\"metrics\":{\"featureKey\":\"metrics\",\"requirementType\":\"Any\","
+                        + "\"filters\":[],\"contextKind\":\"metrics\"}},"
+                        + "\"metrics\":{\"checkout-count\":{\"metricKey\":\"checkout-count\","
+                        + "\"name\":\"Checkout count\",\"type\":\"counter\",\"unit\":\"count\"}},"
+                        + "\"timestamp\":\"2026-09-29T00:00:00Z\"}");
+
+        FeatureSnapshot loaded = provider.getSnapshot();
+
+        assertThat(loaded.getFeature("metrics")).isNotNull();
+        assertThat(loaded.getFeature("metrics").getContextKind()).isEqualTo("metrics");
+        assertThat(loaded.getMetrics()).isEqualTo(
+                Map.of("checkout-count", MetricDefinition.of("Checkout count", "counter", "count")));
+    }
+
+    @Test
     void nonHttpCacheHitsAreRecordedOnceUntilTheCacheIsCleared() {
         RedisCachingSnapshotProvider provider = provider(Duration.ofSeconds(3));
         when(pool.getResource()).thenReturn(jedis);

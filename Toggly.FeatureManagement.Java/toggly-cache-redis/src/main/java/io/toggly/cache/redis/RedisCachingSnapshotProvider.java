@@ -462,33 +462,77 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     }
 
     /**
-     * Extracts the raw object body (without surrounding braces) for a top-level JSON key.
+     * Extracts the raw object body (without surrounding braces) for a root JSON key.
+     * A feature key or string value with the same name is not a match.
      */
     private String extractObjectByKey(String json, String key) {
-        String search = "\"" + key + "\"";
-        int idx = json.indexOf(search);
-        if (idx < 0) {
+        int index = skipFeatureWhitespace(json, 0);
+        if (index >= json.length() || json.charAt(index) != '{') {
             return null;
         }
-        idx += search.length();
-        while (idx < json.length() && Character.isWhitespace(json.charAt(idx))) {
-            idx++;
+        index++;
+        while (index < json.length()) {
+            index = skipFeatureSeparators(json, index);
+            if (index >= json.length() || json.charAt(index) == '}') {
+                return null;
+            }
+            if (json.charAt(index) != '"') {
+                return null;
+            }
+            int[] position = {index};
+            Object parsedKey = SimpleJson.parseValue(json, position);
+            if (!(parsedKey instanceof String name)) {
+                return null;
+            }
+            index = skipFeatureWhitespace(json, position[0]);
+            if (index >= json.length() || json.charAt(index) != ':') {
+                return null;
+            }
+            index = skipFeatureWhitespace(json, index + 1);
+            if (index >= json.length()) {
+                return null;
+            }
+            if (name.equals(key)) {
+                if (json.charAt(index) != '{') {
+                    return null;
+                }
+                int end = findMatchingBrace(json, index);
+                if (end <= index) {
+                    return null;
+                }
+                return json.substring(index + 1, end);
+            }
+            index = skipJsonValue(json, index);
+            if (index < 0) {
+                return null;
+            }
         }
-        if (idx >= json.length() || json.charAt(idx) != ':') {
-            return null;
+        return null;
+    }
+
+    private int skipJsonValue(String json, int index) {
+        char current = json.charAt(index);
+        if (current == '{') {
+            int end = findMatchingBrace(json, index);
+            return end < 0 ? -1 : end + 1;
         }
-        idx++;
-        while (idx < json.length() && Character.isWhitespace(json.charAt(idx))) {
-            idx++;
+        if (current == '[') {
+            int end = SimpleJson.findMatchingBracket(json, index);
+            return end < 0 ? -1 : end + 1;
         }
-        if (idx >= json.length() || json.charAt(idx) != '{') {
-            return null;
+        if (current == '"') {
+            int[] position = {index};
+            SimpleJson.parseValue(json, position);
+            return position[0];
         }
-        int end = findMatchingBrace(json, idx);
-        if (end <= idx) {
-            return null;
+        while (index < json.length()) {
+            char currentChar = json.charAt(index);
+            if (currentChar == ',' || currentChar == '}' || Character.isWhitespace(currentChar)) {
+                break;
+            }
+            index++;
         }
-        return json.substring(idx + 1, end);
+        return index;
     }
 
     private Long extractLongValue(String json, String key) {
