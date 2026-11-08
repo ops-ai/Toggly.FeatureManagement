@@ -189,4 +189,52 @@ class RedisRefreshListenerOrderingTest {
         assertThat(listenerCalls).hasValue(0);
         assertThat(provider.getSnapshot().getFeature("feature-a")).isNotNull();
     }
+
+    @Test
+    void peerRedisRevisionNotifiesOnceAndLaterReadsDoNot() {
+        RedisCachingSnapshotProvider writer = newRedis();
+        TogglyConfig readerConfig = TogglyConfig.builder()
+                .appKey("test-app")
+                .environment("Production")
+                .baseUrl("http://127.0.0.1:" + server.getAddress().getPort())
+                .refreshIntervalSeconds(0)
+                .enableLiveUpdates(false)
+                .build();
+        HttpSnapshotProvider readerHttp = new HttpSnapshotProvider(readerConfig);
+        RedisCachingSnapshotProvider reader = new RedisCachingSnapshotProvider(
+                readerHttp, pool, "toggly:order:", Duration.ofMinutes(5));
+        try {
+            writer.refresh();
+
+            AtomicInteger calls = new AtomicInteger();
+            reader.addRefreshListener(snapshot -> {
+                calls.incrementAndGet();
+                assertThatCode(reader::getSnapshot).doesNotThrowAnyException();
+                assertThat(snapshot.getFeature("feature-b")).isNotNull();
+                assertThat(reader.getSnapshot().getFeature("feature-b")).isNotNull();
+            });
+
+            FeatureSnapshot initial = reader.getSnapshot();
+            assertThat(initial.getFeature("feature-a")).isNotNull();
+            assertThat(calls).hasValue(0);
+
+            body.set("[{\"featureKey\":\"feature-b\",\"filters\":[{\"name\":\"AlwaysOn\"}]}]");
+            etag.set("\"rev-2\"");
+            writer.refresh();
+
+            FeatureSnapshot adopted = reader.getSnapshot();
+            assertThat(adopted.getFeature("feature-b")).isNotNull();
+            assertThat(calls).hasValue(1);
+
+            reader.getSnapshot();
+            assertThat(calls).hasValue(1);
+
+            statusCode.set(304);
+            reader.refresh();
+            assertThat(calls).hasValue(1);
+            assertThat(reader.getSnapshot().getFeature("feature-b")).isNotNull();
+        } finally {
+            reader.close();
+        }
+    }
 }

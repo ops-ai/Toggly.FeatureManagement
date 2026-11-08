@@ -264,4 +264,31 @@ class RefreshListenerTest {
         assertThat(calls).hasValue(1);
         assertThat(sdk.getSnapshot().getFeature("reenter")).isNotNull();
     }
+
+    @Test
+    void applyCachedSnapshotNotifiesWhenRevisionReplacesLiveSnapshot() {
+        HttpSnapshotProvider sdk = newProvider();
+        sdk.refresh();
+        List<String> etags = new ArrayList<>();
+        FeatureSnapshot cached = new FeatureSnapshot(
+                Map.of("cached", FeatureDefinition.builder().featureKey("cached").build()),
+                Map.of(),
+                java.time.Instant.now(),
+                "\"cached-etag\"");
+        sdk.addRefreshListener(snapshot -> {
+            etags.add(snapshot.getEtag());
+            assertThat(sdk.applyCachedSnapshot(cached)).isTrue();
+            assertThat(sdk.getSnapshot().getFeature("cached")).isNotNull();
+        });
+
+        assertThat(sdk.applyCachedSnapshot(cached)).isTrue();
+        assertThat(etags).containsExactly("\"cached-etag\"");
+
+        assertThat(sdk.applyCachedSnapshot(cached)).isTrue();
+        assertThat(etags).containsExactly("\"cached-etag\"");
+
+        statusCode.set(304);
+        sdk.refresh();
+        assertThat(etags).containsExactly("\"cached-etag\"");
+    }
 }

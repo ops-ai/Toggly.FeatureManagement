@@ -80,6 +80,8 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     private final AtomicBoolean pendingWebSocketRefresh = new AtomicBoolean(false);
     private final AtomicReference<DefinitionCacheRecorder> definitionCacheRecorder = new AtomicReference<>();
     private final RefreshListenerSupport refreshListeners = new RefreshListenerSupport(HttpSnapshotProvider.class);
+    /** Set while listeners run so a callback that re-enters apply cannot notify again. */
+    private final ThreadLocal<Boolean> refreshNotificationInProgress = new ThreadLocal<>();
 
     /**
      * Creates an HTTP snapshot provider.
@@ -256,14 +258,20 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
                             config.getAllowedKeyIds());
                 }
             }
-            boolean startupFromDurable = currentSnapshot.get().isEmpty();
-            // Durable/cache restore must not fire onRefresh listeners — Redis getSnapshot
-            // hits re-enter applyCachedSnapshot, and a listener that reads features again
-            // would recurse. Notify only for network-applied changes (refresh/poll/WS).
+            FeatureSnapshot previous = currentSnapshot.get();
+            boolean startupFromDurable = previous.isEmpty();
+            // Startup restore is not a change. Same definitions must stay silent so a
+            // listener that reads features cannot recurse through Redis getSnapshot.
+            // A different definition set replacing a live snapshot is a peer write;
+            // notify, or the next poll can be a 304 and onRefresh never runs.
+            boolean replacesLiveRevision = !startupFromDurable && !isSameRevision(previous, snapshot);
             applySnapshot(snapshot, false);
             // Startup served from durable snapshot before first network — count once.
             if (startupFromDurable) {
                 recordDefinitionCacheHit();
+            }
+            if (replacesLiveRevision) {
+                notifyRefreshListeners(snapshot);
             }
             return true;
         } catch (Exception e) {
@@ -281,7 +289,29 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
             lastSignedTimestamp.set(snapshot.getSignedTimestamp());
         }
         if (notifyListeners) {
+            notifyRefreshListeners(snapshot);
+        }
+    }
+
+    /**
+     * Definitions and metrics identify a revision. Quoted ETags do not survive the Redis
+     * serializer (the value collapses to a single backslash), so an ETag compare treats
+     * distinct peer writes as the same revision and drops {@code onRefresh}.
+     */
+    private static boolean isSameRevision(FeatureSnapshot previous, FeatureSnapshot incoming) {
+        return Objects.equals(previous.getFeatures(), incoming.getFeatures())
+                && Objects.equals(previous.getMetrics(), incoming.getMetrics());
+    }
+
+    private void notifyRefreshListeners(FeatureSnapshot snapshot) {
+        if (Boolean.TRUE.equals(refreshNotificationInProgress.get())) {
+            return;
+        }
+        refreshNotificationInProgress.set(Boolean.TRUE);
+        try {
             refreshListeners.notifyListeners(snapshot);
+        } finally {
+            refreshNotificationInProgress.remove();
         }
     }
 

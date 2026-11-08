@@ -99,7 +99,8 @@ public interface SnapshotProvider {
      * Registers a listener invoked when the provider applies a new feature snapshot.
      *
      * <p>Default is a no-op so third-party providers remain source-compatible. Caching
-     * wrappers should forward to their delegate.</p>
+     * wrappers should observe delegate updates, refresh their own cache, then notify
+     * their listeners so callbacks read the wrapper's snapshot.</p>
      *
      * <p>Listeners run on the thread that applied the snapshot (for example the caller of
      * {@link #refresh()}, a scheduled poll thread, or a WebSocket callback thread). Listener

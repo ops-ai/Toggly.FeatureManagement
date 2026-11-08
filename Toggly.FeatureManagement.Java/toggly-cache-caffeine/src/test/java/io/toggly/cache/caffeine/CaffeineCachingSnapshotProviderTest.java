@@ -92,9 +92,10 @@ class CaffeineCachingSnapshotProviderTest {
         assertThat(source.recorder).isSameAs(recorder);
         Consumer<FeatureSnapshot> listener = snapshot -> { };
         cached.addRefreshListener(listener);
-        assertThat(source.refreshListener.get()).isSameAs(listener);
+        assertThat(source.refreshListener.get()).isNotNull();
+        assertThat(source.refreshListener.get()).isNotSameAs(listener);
         cached.removeRefreshListener(listener);
-        assertThat(source.refreshListener.get()).isNull();
+        assertThat(source.refreshListener.get()).isNotNull();
         cached.clearJwks();
         assertThat(source.clearJwksCount).hasValue(1);
 
@@ -107,6 +108,82 @@ class CaffeineCachingSnapshotProviderTest {
         assertThat(source.clearCount).hasValue(2);
         cached.close();
         assertThat(source.closeCount).hasValue(1);
+        assertThat(source.refreshListener.get()).isNull();
+    }
+
+    @Test
+    void delegateRefreshUpdatesCacheBeforeListenerRuns() {
+        FakeProvider source = new FakeProvider();
+        source.notifyOnRefresh = true;
+        CaffeineCachingSnapshotProvider cached = new CaffeineCachingSnapshotProvider(source);
+        assertThat(cached.getSnapshot().getEtag()).isEqualTo("refresh-1");
+
+        AtomicInteger calls = new AtomicInteger();
+        AtomicReference<String> seen = new AtomicReference<>();
+        Consumer<FeatureSnapshot> listener = snapshot -> {
+            calls.incrementAndGet();
+            seen.set(cached.getSnapshot().getEtag());
+        };
+        cached.addRefreshListener(listener);
+
+        assertThat(source.refresh().getEtag()).isEqualTo("refresh-2");
+        assertThat(calls).hasValue(1);
+        assertThat(seen).hasValue("refresh-2");
+        assertThat(cached.getSnapshot().getEtag()).isEqualTo("refresh-2");
+        assertThat(source.refreshCount).hasValue(2);
+
+        cached.removeRefreshListener(listener);
+        source.refresh();
+        assertThat(calls).hasValue(1);
+        assertThat(cached.getSnapshot().getEtag()).isEqualTo("refresh-3");
+        cached.close();
+    }
+
+    @Test
+    void refreshListenerReadsCacheWithoutRecursiveLoad() {
+        FakeProvider source = new FakeProvider();
+        source.notifyOnRefresh = true;
+        CaffeineCachingSnapshotProvider cached = new CaffeineCachingSnapshotProvider(source);
+        cached.getSnapshot();
+
+        AtomicInteger calls = new AtomicInteger();
+        AtomicReference<String> seen = new AtomicReference<>();
+        cached.addRefreshListener(snapshot -> {
+            calls.incrementAndGet();
+            seen.set(cached.getSnapshot().getEtag());
+        });
+
+        assertThat(cached.refresh().getEtag()).isEqualTo("refresh-2");
+        assertThat(calls).hasValue(1);
+        assertThat(seen).hasValue("refresh-2");
+        assertThat(source.refreshCount).hasValue(2);
+        cached.close();
+    }
+
+    @Test
+    void asynchronousRefreshUpdatesCacheBeforeListenerRuns() throws Exception {
+        FakeProvider source = new FakeProvider();
+        source.notifyOnRefresh = true;
+        CaffeineCacheConfig config = CaffeineCacheConfig.builder()
+                .expireAfterWrite(Duration.ofMinutes(1))
+                .refreshAfterWrite(Duration.ofMillis(1))
+                .build();
+        CaffeineCachingSnapshotProvider cached = new CaffeineCachingSnapshotProvider(source, config);
+        assertThat(cached.getSnapshot().getEtag()).isEqualTo("refresh-1");
+
+        AtomicReference<String> seen = new AtomicReference<>();
+        cached.addRefreshListener(snapshot -> seen.set(cached.getSnapshot().getEtag()));
+
+        long deadline = System.nanoTime() + Duration.ofSeconds(2).toNanos();
+        while (seen.get() == null && System.nanoTime() < deadline) {
+            cached.getSnapshot();
+            Thread.sleep(10);
+        }
+
+        assertThat(seen.get()).isNotNull().isNotEqualTo("refresh-1");
+        assertThat(cached.getSnapshot().getEtag()).isNotEqualTo("refresh-1");
+        assertThat(source.refreshCount.get()).isGreaterThanOrEqualTo(2);
+        cached.close();
     }
 
     @Test
@@ -126,6 +203,7 @@ class CaffeineCachingSnapshotProviderTest {
         private final AtomicReference<Consumer<FeatureSnapshot>> refreshListener = new AtomicReference<>();
         private boolean failRefresh;
         private boolean returnNull;
+        private boolean notifyOnRefresh;
         private DefinitionCacheRecorder recorder;
 
         @Override
@@ -139,7 +217,14 @@ class CaffeineCachingSnapshotProviderTest {
             if (failRefresh) {
                 throw new IllegalStateException("source unavailable");
             }
-            return returnNull ? null : new FeatureSnapshot(null, null, null, "refresh-" + count);
+            FeatureSnapshot snapshot = returnNull
+                    ? null
+                    : new FeatureSnapshot(null, null, null, "refresh-" + count);
+            Consumer<FeatureSnapshot> listener = refreshListener.get();
+            if (notifyOnRefresh && listener != null && snapshot != null) {
+                listener.accept(snapshot);
+            }
+            return snapshot;
         }
 
         @Override
