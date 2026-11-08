@@ -470,44 +470,61 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
         if (index >= json.length() || json.charAt(index) != '{') {
             return null;
         }
-        index++;
-        while (index < json.length()) {
-            index = skipFeatureSeparators(json, index);
-            if (index >= json.length() || json.charAt(index) == '}') {
+        return objectBodyAtRoot(json, key, index + 1);
+    }
+
+    private String objectBodyAtRoot(String json, String key, int index) {
+        int[] cursor = {index};
+        while (cursor[0] >= 0 && cursor[0] < json.length()) {
+            cursor[0] = skipFeatureSeparators(json, cursor[0]);
+            if (cursor[0] >= json.length() || json.charAt(cursor[0]) == '}') {
                 return null;
             }
-            if (json.charAt(index) != '"') {
+            String name = readRootName(json, cursor);
+            if (name == null || !moveToRootValue(json, cursor)) {
                 return null;
             }
-            int[] position = {index};
-            Object parsedKey = SimpleJson.parseValue(json, position);
-            if (!(parsedKey instanceof String name)) {
-                return null;
+            if (key.equals(name)) {
+                return objectInterior(json, cursor[0]);
             }
-            index = skipFeatureWhitespace(json, position[0]);
-            if (index >= json.length() || json.charAt(index) != ':') {
-                return null;
-            }
-            index = skipFeatureWhitespace(json, index + 1);
-            if (index >= json.length()) {
-                return null;
-            }
-            if (name.equals(key)) {
-                if (json.charAt(index) != '{') {
-                    return null;
-                }
-                int end = findMatchingBrace(json, index);
-                if (end <= index) {
-                    return null;
-                }
-                return json.substring(index + 1, end);
-            }
-            index = skipJsonValue(json, index);
-            if (index < 0) {
-                return null;
-            }
+            cursor[0] = skipJsonValue(json, cursor[0]);
         }
         return null;
+    }
+
+    private String readRootName(String json, int[] cursor) {
+        if (json.charAt(cursor[0]) != '"') {
+            return null;
+        }
+        Object parsedKey = SimpleJson.parseValue(json, cursor);
+        if (parsedKey instanceof String name) {
+            return name;
+        }
+        return null;
+    }
+
+    private boolean moveToRootValue(String json, int[] cursor) {
+        int index = skipFeatureWhitespace(json, cursor[0]);
+        if (index >= json.length() || json.charAt(index) != ':') {
+            return false;
+        }
+        index = skipFeatureWhitespace(json, index + 1);
+        if (index >= json.length()) {
+            return false;
+        }
+        cursor[0] = index;
+        return true;
+    }
+
+    private String objectInterior(String json, int index) {
+        if (index >= json.length() || json.charAt(index) != '{') {
+            return null;
+        }
+        int end = findMatchingBrace(json, index);
+        if (end <= index) {
+            return null;
+        }
+        return json.substring(index + 1, end);
     }
 
     private int skipJsonValue(String json, int index) {

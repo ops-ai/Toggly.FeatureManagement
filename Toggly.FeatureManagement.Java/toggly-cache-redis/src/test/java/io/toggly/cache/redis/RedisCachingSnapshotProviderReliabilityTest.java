@@ -212,6 +212,37 @@ class RedisCachingSnapshotProviderReliabilityTest {
     }
 
     @Test
+    void rootScalarsBeforeMetricsStillLoad() {
+        RedisCachingSnapshotProvider provider = provider(Duration.ofSeconds(5));
+        when(pool.getResource()).thenReturn(jedis);
+        when(jedis.get("unit:snapshot")).thenReturn(
+                "{\"features\":{},\"note\":\"metrics\",\"tags\":[\"metrics\"],\"signedTimestamp\":5,"
+                        + "\"metrics\":{"
+                        + "\"only-key\":{\"metricKey\":\"only-key\",\"type\":\"counter\",\"unit\":\"count\"},"
+                        + "\"bare\":{}"
+                        + "},\"timestamp\":\"2026-09-29T00:00:00Z\"}");
+
+        FeatureSnapshot loaded = provider.getSnapshot();
+
+        assertThat(loaded.getMetrics()).isEqualTo(Map.of(
+                "only-key", MetricDefinition.of("only-key", "counter", "count"),
+                "bare", MetricDefinition.of("bare", null, null)));
+    }
+
+    @Test
+    void nonObjectMetricsValueLeavesMetricsEmpty() {
+        RedisCachingSnapshotProvider provider = provider(Duration.ofSeconds(5));
+        when(pool.getResource()).thenReturn(jedis);
+        when(jedis.get("unit:snapshot")).thenReturn(
+                "{\"features\":{},\"metrics\":\"nope\",\"timestamp\":\"2026-09-29T00:00:00Z\"}");
+
+        FeatureSnapshot loaded = provider.getSnapshot();
+
+        assertThat(loaded.getMetrics()).isEmpty();
+        assertThat(loaded.getFeatures()).isEmpty();
+    }
+
+    @Test
     void nonHttpCacheHitsAreRecordedOnceUntilTheCacheIsCleared() {
         RedisCachingSnapshotProvider provider = provider(Duration.ofSeconds(3));
         when(pool.getResource()).thenReturn(jedis);
