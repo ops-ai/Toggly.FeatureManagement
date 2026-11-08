@@ -22,53 +22,92 @@ function Capture({
   return null;
 }
 
+const flagMap = { FlagOn: true, FlagOff: false };
+
+function renderClient(): { current: TogglyContextValue | undefined } {
+  const captured: { current: TogglyContextValue | undefined } = {
+    current: undefined,
+  };
+  render(
+    <TogglyProvider
+      config={{
+        appKey: 'contract-app',
+        environment: 'Production',
+        baseUrl: 'https://definitions.example.test',
+        enableUsageTracking: false,
+        enableMetrics: false,
+      }}
+      enableRefresh={false}
+    >
+      <Capture onContext={(ctx) => (captured.current = ctx)} />
+    </TogglyProvider>,
+  );
+  return captured;
+}
+
+function expectEvaluatedFlags(captured: TogglyContextValue | undefined): void {
+  expect(captured?.flags).toEqual(flagMap);
+  expect(captured?.isEnabled('FlagOn')).toBe(true);
+  expect(captured?.isDisabled('FlagOff')).toBe(true);
+  expect(captured?.isEnabled('Missing', true)).toBe(true);
+  expect(captured?.evaluateGate(['FlagOn', 'FlagOff'], 'any')).toBe(true);
+  expect(captured?.evaluateGate(['FlagOn', 'FlagOff'], 'all')).toBe(false);
+}
+
 describe('Client evaluated-signed API contract evaluation', () => {
   beforeEach(() => {
     mockFetch.mockReset();
   });
 
-  it('fetches evaluated-signed and evaluates returned flag map', async () => {
-    // Browser non-variants path treats the JSON body as a flat FeatureFlags map
-    // (same shape used across existing client unit tests).
+  it('unwraps an evaluated-signed defs envelope before evaluating flags', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
       json: async () => ({
-        FlagOn: true,
-        FlagOff: false,
+        defs: flagMap,
+        signature: 'synthetic-signature',
+        timestamp: 1,
+        kid: 'synthetic-kid',
       }),
       headers: { get: () => null },
     });
 
-    let captured: TogglyContextValue | undefined;
-    render(
-      <TogglyProvider
-        config={{
-          appKey: 'contract-app',
-          environment: 'Production',
-          baseUrl: 'https://definitions.example.test',
-          enableUsageTracking: false,
-          enableMetrics: false,
-        }}
-        enableRefresh={false}
-      >
-        <Capture onContext={(ctx) => (captured = ctx)} />
-      </TogglyProvider>,
-    );
-
-    await waitFor(() => expect(captured?.isReady).toBe(true));
+    const captured = renderClient();
+    await waitFor(() => expect(captured.current?.isReady).toBe(true));
 
     const calledUrl = String(mockFetch.mock.calls[0][0]);
     expect(calledUrl).toContain(
       '/evaluated-signed/contract-app/Production',
     );
     expect(calledUrl).not.toContain('/definitions-signed/');
+    expect(captured.current?.flags).not.toHaveProperty('signature');
+    expectEvaluatedFlags(captured.current);
+  });
 
-    expect(captured?.flags).toEqual({ FlagOn: true, FlagOff: false });
-    expect(captured?.isEnabled('FlagOn')).toBe(true);
-    expect(captured?.isDisabled('FlagOff')).toBe(true);
-    expect(captured?.isEnabled('Missing', true)).toBe(true);
-    expect(captured?.evaluateGate(['FlagOn', 'FlagOff'], 'any')).toBe(true);
-    expect(captured?.evaluateGate(['FlagOn', 'FlagOff'], 'all')).toBe(false);
+  it('evaluates a bare evaluated-signed flag map', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => flagMap,
+      headers: { get: () => null },
+    });
+
+    const captured = renderClient();
+    await waitFor(() => expect(captured.current?.isReady).toBe(true));
+    expectEvaluatedFlags(captured.current);
+  });
+
+  it('keeps prior flags when the body is an error envelope', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ error: 'unavailable' }),
+      headers: { get: () => null },
+    });
+
+    const captured = renderClient();
+    await waitFor(() => expect(captured.current?.isReady).toBe(true));
+    expect(captured.current?.flags).toEqual({});
+    expect(captured.current?.isEnabled('FlagOn')).toBe(false);
   });
 });

@@ -1,4 +1,11 @@
-## Unreleased
+## 1.5.2
+
+2026-11-08
+
+### Fixed
+- The browser client unwraps `evaluated-signed` `{ defs }` envelopes before
+  storing flags. A bare flag map still works. Previously the signed envelope
+  was stored as the flag map, so flag keys never matched [OPS-2064].
 
 ### Changed
 - `engines.node` floor raised from `>=18` to `>=22` (Node 18 and 20 are EOL).
@@ -9,7 +16,8 @@
 
 ### Tests
 - Added mocked HTTP API-contract evaluation coverage for `definitions-signed`
-  (local server eval) and `evaluated-signed` (browser client) response shapes.
+  (local server eval) and `evaluated-signed` (browser client) response shapes,
+  including a `{ defs }` envelope and a bare flag map.
 
 ## 1.5.1
 
