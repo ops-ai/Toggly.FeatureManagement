@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -47,6 +48,8 @@ class RedisRefreshListenerOrderingTest {
 
     private HttpServer server;
     private final AtomicInteger statusCode = new AtomicInteger(200);
+    private final AtomicBoolean notModifiedWhenEtagMatches = new AtomicBoolean();
+    private final AtomicReference<String> lastIfNoneMatch = new AtomicReference<>();
     private final AtomicReference<String> etag = new AtomicReference<>("\"rev-1\"");
     private final AtomicReference<String> body = new AtomicReference<>(
             "[{\"featureKey\":\"feature-a\",\"filters\":[{\"name\":\"AlwaysOn\"}]}]");
@@ -60,6 +63,8 @@ class RedisRefreshListenerOrderingTest {
         server.createContext("/", this::handle);
         server.start();
         statusCode.set(200);
+        notModifiedWhenEtagMatches.set(false);
+        lastIfNoneMatch.set(null);
         etag.set("\"rev-1\"");
         body.set("[{\"featureKey\":\"feature-a\",\"filters\":[{\"name\":\"AlwaysOn\"}]}]");
         redisStore.set(null);
@@ -85,8 +90,13 @@ class RedisRefreshListenerOrderingTest {
     }
 
     private void handle(HttpExchange exchange) throws IOException {
+        String ifNoneMatch = exchange.getRequestHeaders().getFirst("If-None-Match");
+        lastIfNoneMatch.set(ifNoneMatch);
         int code = statusCode.get();
         String tag = etag.get();
+        if (notModifiedWhenEtagMatches.get() && tag != null && tag.equals(ifNoneMatch)) {
+            code = 304;
+        }
         byte[] bytes = body.get().getBytes(StandardCharsets.UTF_8);
         if (tag != null) {
             exchange.getResponseHeaders().add("ETag", tag);
@@ -236,5 +246,24 @@ class RedisRefreshListenerOrderingTest {
         } finally {
             reader.close();
         }
+    }
+
+    @Test
+    void quotedEtagRoundTripKeeps304AndDoesNotNotify() {
+        RedisCachingSnapshotProvider provider = newRedis();
+        provider.refresh();
+
+        http.clear();
+        FeatureSnapshot loaded = provider.getSnapshot();
+        assertThat(loaded.getEtag()).isEqualTo("\"rev-1\"");
+
+        AtomicInteger calls = new AtomicInteger();
+        provider.addRefreshListener(snapshot -> calls.incrementAndGet());
+        notModifiedWhenEtagMatches.set(true);
+        provider.refresh();
+
+        assertThat(lastIfNoneMatch.get()).isEqualTo("\"rev-1\"");
+        assertThat(calls).hasValue(0);
+        assertThat(provider.getSnapshot().getFeature("feature-a")).isNotNull();
     }
 }

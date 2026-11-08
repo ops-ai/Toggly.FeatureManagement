@@ -670,8 +670,6 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     }
 
     private String extractStringValue(String json, String key) {
-        Pattern pattern = Pattern.compile("\"" + key + "\"\\s*:\\s*\"([^\"]*)\"");
-        Matcher matcher = pattern.matcher(json);
-        return matcher.find() ? matcher.group(1) : null;
+        return extractRawStringValue(json, key);
     }
 }
