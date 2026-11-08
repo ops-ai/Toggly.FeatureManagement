@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.1
+
+2026-11-02
+
+### Changed
+- Go module floor raised to **1.26** (Go 1.25 is EOL). CI tests Go 1.26 and
+  the latest stable (1.27).
+- Refresh transitive dependencies (`grpc` 1.85, `go-redis` 9.23,
+  `golang.org/x/*`) via `toggly-go` 0.13.2. After `toggly-go` 0.13.3 is
+  published, `go mod tidy` will pick up `github.com/coder/websocket` in place
+  of deprecated `nhooyr.io/websocket`.
+
 ## 0.2.0
 
 2026-09-17

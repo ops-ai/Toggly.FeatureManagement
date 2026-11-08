@@ -376,7 +376,7 @@ test('existing runtime consumer coverage database example and OWASP contracts ar
   assert.match(step(tests, 'Upload coverage artifact'), /name: go-coverage/);
   assert.match(job('smoke-test'), /go test.*TestSmoke/);
   assert.match(job('current-runtime'), /go-version: '1.27.x'/);
-  assert.match(job('mongodb-v2'), /go-version: \['1.25.x', '1.27.x'\]/);
+  assert.match(job('mongodb-v2'), /go-version: \['1.26.x', '1.27.x'\]/);
   assert.match(job('mongodb-v2'), /go test -v -race/);
   assert.match(job('mongodb-v2'), /if \(\$3 <= 80\) exit 1/);
   for (const name of ['mongodb-v2-consumer', 'toggly-go-consumer']) {

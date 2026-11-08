@@ -7,7 +7,7 @@ without placing both driver majors in the Toggly core module's dependency graph.
 
 ## Requirements
 
-- Go 1.25 or later
+- Go 1.26 or later
 - Toggly Go SDK v0.8.1 or later
 - MongoDB Go Driver v2 (provided by this module)
 
