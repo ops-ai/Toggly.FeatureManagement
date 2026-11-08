@@ -1,7 +1,7 @@
 [versions]
 # Kotlin & Android
 kotlin = "2.4.21"
-agp = "9.5.0"
+agp = "9.5.1"
 # KSP 2.3.x is the stable line paired with Kotlin 2.4 (versioning decoupled from Kotlin).
 ksp = "2.3.13"
 
