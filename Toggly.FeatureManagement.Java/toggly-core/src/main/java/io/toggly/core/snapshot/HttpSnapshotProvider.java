@@ -258,21 +258,40 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
                             config.getAllowedKeyIds());
                 }
             }
-            FeatureSnapshot previous = currentSnapshot.get();
-            boolean startupFromDurable = previous.isEmpty();
-            boolean replacesLiveRevision = !startupFromDurable && !isSameRevision(previous, snapshot);
-            applySnapshot(snapshot, false);
-            // Startup served from durable snapshot before first network — count once.
-            if (startupFromDurable) {
-                recordDefinitionCacheHit();
-            }
-            if (replacesLiveRevision) {
-                notifyRefreshListeners(snapshot);
-            }
+            installCachedSnapshot(snapshot);
             return true;
         } catch (Exception e) {
             reportError("Failed to apply cached snapshot", e);
             return false;
+        }
+    }
+
+    private void installCachedSnapshot(FeatureSnapshot snapshot) {
+        FeatureSnapshot previous = currentSnapshot.get();
+        boolean startupFromDurable = previous.isEmpty();
+        // A cache read can lose the race with a newer poll. Keep the live copy.
+        if (!startupFromDurable && snapshot.getTimestamp().isBefore(previous.getTimestamp())) {
+            return;
+        }
+        boolean replacesLiveRevision = !startupFromDurable && !isSameRevision(previous, snapshot);
+        if (!startupFromDurable && !replacesLiveRevision) {
+            return;
+        }
+        if (!currentSnapshot.compareAndSet(previous, snapshot)) {
+            return;
+        }
+        if (snapshot.getEtag() != null) {
+            lastEtag.set(snapshot.getEtag());
+        }
+        if (snapshot.getSignedTimestamp() != null) {
+            lastSignedTimestamp.set(snapshot.getSignedTimestamp());
+        }
+        // Startup served from durable snapshot before first network — count once.
+        if (startupFromDurable) {
+            recordDefinitionCacheHit();
+        }
+        if (replacesLiveRevision) {
+            notifyRefreshListeners(snapshot);
         }
     }
 

@@ -266,4 +266,64 @@ class RedisRefreshListenerOrderingTest {
         assertThat(calls).hasValue(0);
         assertThat(provider.getSnapshot().getFeature("feature-a")).isNotNull();
     }
+
+    @Test
+    void filterParameterBackslashSurvivesRedisWithoutRenotify() {
+        body.set("[{\"featureKey\":\"feature-a\",\"filters\":[{\"name\":\"Targeting\","
+                + "\"parameters\":{\"path\":\"C:\\\\dir\"}}]}]");
+        RedisCachingSnapshotProvider provider = newRedis();
+        provider.refresh();
+        Object original = provider.getSnapshot()
+                .getFeature("feature-a").getFilters().get(0).getParameters().get("path");
+
+        http.clear();
+        AtomicInteger calls = new AtomicInteger();
+        provider.addRefreshListener(snapshot -> calls.incrementAndGet());
+        FeatureSnapshot loaded = provider.getSnapshot();
+
+        assertThat(loaded.getFeature("feature-a").getFilters().get(0).getParameters().get("path"))
+                .isEqualTo(original);
+        assertThat(calls).hasValue(0);
+        provider.getSnapshot();
+        assertThat(calls).hasValue(0);
+    }
+
+    @Test
+    void peerReadDoesNotBorrowTwoRedisConnections() {
+        AtomicInteger inflight = new AtomicInteger();
+        AtomicInteger maxInflight = new AtomicInteger();
+        when(pool.getResource()).thenAnswer(invocation -> {
+            int now = inflight.incrementAndGet();
+            maxInflight.accumulateAndGet(now, Math::max);
+            return jedis;
+        });
+        doAnswer(invocation -> {
+            inflight.decrementAndGet();
+            return null;
+        }).when(jedis).close();
+
+        RedisCachingSnapshotProvider writer = newRedis();
+        TogglyConfig readerConfig = TogglyConfig.builder()
+                .appKey("test-app")
+                .environment("Production")
+                .baseUrl("http://127.0.0.1:" + server.getAddress().getPort())
+                .refreshIntervalSeconds(0)
+                .enableLiveUpdates(false)
+                .build();
+        HttpSnapshotProvider readerHttp = new HttpSnapshotProvider(readerConfig);
+        RedisCachingSnapshotProvider reader = new RedisCachingSnapshotProvider(
+                readerHttp, pool, "toggly:order:", Duration.ofMinutes(5));
+        try {
+            writer.refresh();
+            reader.getSnapshot();
+            body.set("[{\"featureKey\":\"feature-b\",\"filters\":[{\"name\":\"AlwaysOn\"}]}]");
+            etag.set("\"rev-2\"");
+            writer.refresh();
+            reader.addRefreshListener(snapshot -> assertThat(snapshot.getFeature("feature-b")).isNotNull());
+            assertThat(reader.getSnapshot().getFeature("feature-b")).isNotNull();
+            assertThat(maxInflight).hasValue(1);
+        } finally {
+            reader.close();
+        }
+    }
 }

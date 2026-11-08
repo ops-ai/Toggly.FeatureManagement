@@ -139,21 +139,25 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
 
     @Override
     public FeatureSnapshot getSnapshot() {
-        // Try to get from cache first
-        try (Jedis jedis = pool.getResource()) {
-            String cached = jedis.get(cacheKey);
-            if (cached != null && !cached.isEmpty()) {
-                FeatureSnapshot snapshot = deserialize(cached);
-                if (snapshot != null) {
-                    return snapshot;
-                }
+        // Release the connection before deserialize. Adopting a peer revision
+        // notifies listeners, and the Redis bridge checks out another connection.
+        String cached = readCache();
+        if (cached != null && !cached.isEmpty()) {
+            FeatureSnapshot snapshot = deserialize(cached);
+            if (snapshot != null) {
+                return snapshot;
             }
+        }
+        return refresh();
+    }
+
+    private String readCache() {
+        try (Jedis jedis = pool.getResource()) {
+            return jedis.get(cacheKey);
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Error reading from Redis cache", e);
+            return null;
         }
-
-        // Cache miss - fetch from delegate and cache
-        return refresh();
     }
 
     @Override
@@ -420,6 +424,7 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
                 if (!http.applyCachedSnapshot(snapshot)) {
                     return null;
                 }
+                return http.getSnapshot();
             } else if (durableStartupCounted.compareAndSet(false, true)) {
                 DefinitionCacheRecorder recorder = definitionCacheRecorder.get();
                 if (recorder != null) {
@@ -733,7 +738,7 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
             String value = matcher.group(2);
 
             if (value.startsWith("\"") && value.endsWith("\"")) {
-                parameters.put(key, value.substring(1, value.length() - 1));
+                parameters.put(key, unescapeJson(value.substring(1, value.length() - 1)));
             } else if ("true".equals(value)) {
                 parameters.put(key, Boolean.TRUE);
             } else if ("false".equals(value)) {

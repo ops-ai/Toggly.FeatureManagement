@@ -291,4 +291,22 @@ class RefreshListenerTest {
         sdk.refresh();
         assertThat(etags).containsExactly("\"cached-etag\"");
     }
+
+    @Test
+    void applyCachedSnapshotKeepsNewerLiveRevision() {
+        HttpSnapshotProvider sdk = newProvider();
+        sdk.refresh();
+        AtomicInteger calls = new AtomicInteger();
+        sdk.addRefreshListener(snapshot -> calls.incrementAndGet());
+
+        FeatureSnapshot older = new FeatureSnapshot(
+                Map.of("old", FeatureDefinition.builder().featureKey("old").build()),
+                Map.of(),
+                java.time.Instant.now().minusSeconds(60),
+                "\"old\"");
+        assertThat(sdk.applyCachedSnapshot(older)).isTrue();
+        assertThat(calls).hasValue(0);
+        assertThat(sdk.getSnapshot().getFeature("feature-a")).isNotNull();
+        assertThat(sdk.getSnapshot().getFeature("old")).isNull();
+    }
 }
