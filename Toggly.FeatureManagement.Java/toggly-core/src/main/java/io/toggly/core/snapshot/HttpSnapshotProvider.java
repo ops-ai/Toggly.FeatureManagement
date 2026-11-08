@@ -260,10 +260,6 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
             }
             FeatureSnapshot previous = currentSnapshot.get();
             boolean startupFromDurable = previous.isEmpty();
-            // Startup restore is not a change. Same definitions must stay silent so a
-            // listener that reads features cannot recurse through Redis getSnapshot.
-            // A different definition set replacing a live snapshot is a peer write;
-            // notify, or the next poll can be a 304 and onRefresh never runs.
             boolean replacesLiveRevision = !startupFromDurable && !isSameRevision(previous, snapshot);
             applySnapshot(snapshot, false);
             // Startup served from durable snapshot before first network — count once.
@@ -293,11 +289,7 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         }
     }
 
-    /**
-     * Definitions and metrics identify a revision. Quoted ETags do not survive the Redis
-     * serializer (the value collapses to a single backslash), so an ETag compare treats
-     * distinct peer writes as the same revision and drops {@code onRefresh}.
-     */
+    /** True when feature and metric maps match. ETag text is not a stable Redis revision. */
     private static boolean isSameRevision(FeatureSnapshot previous, FeatureSnapshot incoming) {
         return Objects.equals(previous.getFeatures(), incoming.getFeatures())
                 && Objects.equals(previous.getMetrics(), incoming.getMetrics());
