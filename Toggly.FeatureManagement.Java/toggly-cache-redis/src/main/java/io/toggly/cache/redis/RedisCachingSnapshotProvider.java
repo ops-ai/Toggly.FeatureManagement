@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -361,6 +362,12 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
         if (metric.getName() != null) {
             sb.append(",\"name\":\"").append(escapeJson(metric.getName())).append("\"");
         }
+        if (metric.getType() != null) {
+            sb.append(",\"type\":\"").append(escapeJson(metric.getType())).append("\"");
+        }
+        if (metric.getUnit() != null) {
+            sb.append(",\"unit\":\"").append(escapeJson(metric.getUnit())).append("\"");
+        }
         sb.append("}");
         return sb.toString();
     }
@@ -387,6 +394,11 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
                 return null;
             }
             parseFeatures(featuresJson, features);
+
+            String metricsJson = extractObjectByKey(json, "metrics");
+            if (metricsJson != null && !metricsJson.isBlank()) {
+                parseMetrics(metricsJson, metrics);
+            }
 
             // Parse timestamp
             String timestampStr = extractStringValue(json, "timestamp");
@@ -509,16 +521,49 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
                 .replace("\\t", "\t");
     }
 
+    private void parseMetrics(String json, Map<String, MetricDefinition> metrics) {
+        parseKeyedObjects(json, (key, body) -> {
+            String name = extractStringValue(body, "name");
+            if (name == null) {
+                name = extractStringValue(body, "metricKey");
+            }
+            if (name == null) {
+                name = key;
+            }
+            metrics.put(key, MetricDefinition.of(
+                    name,
+                    extractStringValue(body, "type"),
+                    extractStringValue(body, "unit")));
+        });
+    }
+
     private void parseFeatures(String json, Map<String, FeatureDefinition> features) {
-        // Only top-level "featureKey":{...} entries — nested filter "parameters":{} must not
-        // become phantom features.
+        // Only top-level "key":{...} entries. Nested filter objects must not become features.
+        parseKeyedObjects(json, (key, body) -> features.put(key, parseFeatureDefinition(body, key)));
+    }
+
+    private void parseKeyedObjects(String json, BiConsumer<String, String> consumer) {
         int cursor = skipFeatureSeparators(json, 0);
         while (cursor < json.length()) {
-            int next = parseFeatureAt(json, cursor, features);
-            if (next <= cursor) {
-                throw new IllegalArgumentException("Invalid cached feature entry");
+            if (json.charAt(cursor) != '"') {
+                throw new IllegalArgumentException("Invalid cached object entry");
             }
-            cursor = skipFeatureSeparators(json, next);
+            int[] position = {cursor};
+            String key = (String) SimpleJson.parseValue(json, position);
+            int colon = skipFeatureWhitespace(json, position[0]);
+            if (colon >= json.length() || json.charAt(colon) != ':') {
+                throw new IllegalArgumentException("Invalid cached object entry");
+            }
+            int valueStart = skipFeatureWhitespace(json, colon + 1);
+            if (valueStart >= json.length() || json.charAt(valueStart) != '{') {
+                throw new IllegalArgumentException("Invalid cached object entry");
+            }
+            int end = findMatchingBrace(json, valueStart);
+            if (end <= valueStart) {
+                throw new IllegalArgumentException("Invalid cached object entry");
+            }
+            consumer.accept(key, json.substring(valueStart, end + 1));
+            cursor = skipFeatureSeparators(json, end + 1);
         }
     }
 
@@ -528,29 +573,6 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
             cursor++;
         }
         return cursor;
-    }
-
-    private int parseFeatureAt(String json, int start, Map<String, FeatureDefinition> features) {
-        if (json.charAt(start) != '"') {
-            return -1;
-        }
-        int[] position = {start};
-        String key = (String) SimpleJson.parseValue(json, position);
-        int colon = skipFeatureWhitespace(json, position[0]);
-        if (colon >= json.length() || json.charAt(colon) != ':') {
-            return -1;
-        }
-        int valueStart = skipFeatureWhitespace(json, colon + 1);
-        if (valueStart >= json.length() || json.charAt(valueStart) != '{') {
-            return -1;
-        }
-        int end = findMatchingBrace(json, valueStart);
-        if (end <= valueStart) {
-            return -1;
-        }
-        FeatureDefinition definition = parseFeatureDefinition(json.substring(valueStart, end + 1), key);
-        features.put(key, definition);
-        return end + 1;
     }
 
     private int skipFeatureWhitespace(String json, int cursor) {

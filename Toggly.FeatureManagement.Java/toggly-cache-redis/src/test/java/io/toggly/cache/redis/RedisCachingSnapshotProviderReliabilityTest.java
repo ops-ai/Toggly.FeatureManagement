@@ -18,12 +18,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -158,10 +160,36 @@ class RedisCachingSnapshotProviderReliabilityTest {
         verify(jedis).setex(eq("unit:snapshot"), eq(2L), serialized.capture());
         assertThat(serialized.getValue())
                 .contains("\"metrics\":{\"checkout-count\"")
+                .contains("\"type\":\"counter\"")
+                .contains("\"unit\":\"count\"")
                 .contains("\"signature\":\"signature-1\"")
                 .contains("\"keyId\":\"key-1\"")
                 .contains("\"signedTimestamp\":1727000000")
                 .contains("\"signedDefsJson\":\"[{\\\"featureKey\\\":\\\"checkout\\\"}]\"");
+    }
+
+    @Test
+    void redisRoundTripRestoresMetrics() {
+        FeatureSnapshot signed = new FeatureSnapshot(
+                Map.of("checkout", FeatureDefinition.builder().featureKey("checkout").build()),
+                Map.of("checkout-count", MetricDefinition.of("Checkout count", "counter", "count")),
+                Instant.parse("2026-09-29T00:00:00Z"),
+                "etag-1");
+        RedisCachingSnapshotProvider provider = provider(Duration.ofSeconds(2));
+        AtomicReference<String> store = new AtomicReference<>();
+        when(pool.getResource()).thenReturn(jedis);
+        when(jedis.get(anyString())).thenAnswer(invocation -> store.get());
+        doAnswer(invocation -> {
+            store.set(invocation.getArgument(2));
+            return null;
+        }).when(jedis).setex(anyString(), anyLong(), anyString());
+        when(delegate.refresh()).thenReturn(signed);
+
+        provider.refresh();
+        FeatureSnapshot loaded = provider.getSnapshot();
+
+        assertThat(loaded.getMetrics()).isEqualTo(
+                Map.of("checkout-count", MetricDefinition.of("Checkout count", "counter", "count")));
     }
 
     @Test
