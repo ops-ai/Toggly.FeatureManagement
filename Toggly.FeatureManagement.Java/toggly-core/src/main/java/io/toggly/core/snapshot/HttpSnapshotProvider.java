@@ -178,8 +178,6 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
             if (config.isEnableLiveUpdates() && !wsConnected && webSocket == null) {
                 startWebSocket();
             }
-
-            return currentSnapshot.get();
         } catch (TogglySignatureException e) {
             reportError("Invalid signature", e);
             LOGGER.log(Level.WARNING, "Signature verification failed", e);
