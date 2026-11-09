@@ -141,6 +141,8 @@ function assertScanners(source = workflow) {
   }
   assert.match(step(job('sonar', source), 'SonarQube Server Scan'), /-Dsonar.dart.analyzer.options.override=false/);
   assert.match(step(job('sonar', source), 'SonarQube Server Scan'), /-Dsonar.dependencyCheck.reportPath=\.\.\/\.\.\/dependency-check-reports\/dependency-check-report.xml/);
+  assert.match(step(job('analyze-providers', source), 'SonarQube Server Scan'), /-Dsonar.dart.analyzer.options.override=false/);
+  assert.match(step(job('provider-server-main', source), 'SonarQube Server main analysis'), /-Dsonar.dart.analyzer.options.override=false/);
   const providers = job('analyze-providers', source).split('    steps:')[0];
   assert.equal((providers.match(/sonarKey:/g) ?? []).length, 4);
   for (const key of ['secure-storage', 'disk', 'sqlite', 'isar']) assert.ok(providers.includes(`sonarKey: toggly-sdks-flutter-${key}`));
@@ -294,7 +296,7 @@ function assertPreservedWorkflow(source = workflow) {
   // Independently derived from the original OPS-1773 base a0535a5, applying
   // only the remote-action-ref normalization above to the bounded job bodies.
   for (const [name, expected] of [
-    ['provider-server-main', 'b93385e2f5d3a04f0b7403de9467ed50100614df79b63e208d21037661f5ab94'],
+    ['provider-server-main', 'd86f3f95c30a9b952368c275c80abea079b619ae4e0f146096deeacf36417cf5'],
     ['build-platforms', '61ac8fe87975f67986f441a00c0d4931855ccea0a80884aeafcdebba11b699c2'],
     ['smoke-test', 'c9dc0174462a463076a0063da63b6a382ed24673ded0d674eebfac0996916c6b'],
     ['secure-storage-version-matrix', 'fb86ba49fd636243e4a148bfb0a5ac8aaa34755513aeb1172e21da3f95c73e8d'],
@@ -334,6 +336,7 @@ test('preservation rejects changed action identities and protected workflow sema
     ['provider-server-main', 'SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}', 'SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}'],
     ['provider-server-main', 'SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}', 'SONAR_HOST_URL: https://unexpected.example'],
     ['provider-server-main', '-Dsonar.dart.lcov.reportPaths=coverage/lcov.info', '-Dsonar.dart.lcov.reportPaths=wrong/lcov.info'],
+    ['provider-server-main', '-Dsonar.dart.analyzer.options.override=false', '-Dsonar.dart.analyzer.options.override=true'],
     ['provider-server-main', 'ref: develop', 'ref: main'],
     ['provider-server-main', '-Dsonar.scm.revision=${{ steps.baseline.outputs.sha }}', '-Dsonar.scm.revision=${{ github.sha }}'],
     ['provider-server-main', '-Dsonar.branch.name=main', '-Dsonar.branch.name=develop'],

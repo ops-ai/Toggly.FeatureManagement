@@ -535,6 +535,7 @@ jobs:
             -Dsonar.tests=test
             -Dsonar.exclusions=**/.*/**,**/example/**,**/*.g.dart,**/*.freezed.dart
             -Dsonar.dart.lcov.reportPaths=coverage/lcov.info
+            -Dsonar.dart.analyzer.options.override=false
             -Dsonar.qualitygate.wait=true
 
   secure-storage-version-matrix:
@@ -715,6 +716,8 @@ jobs:
           # A manual run may start from the PR ref; the checked-out source and
           # SCM revision above are develop, while these new Sonar projects
           # expect a main baseline before accepting PR analysis.
+          # Match core Server scans: keep the package flutter_lints config instead
+          # of Sonar's profile-generated analyzer options (OPS-1521 / OPS-2054).
           args: >
             -Dsonar.projectKey=${{ matrix.sonarKey }}
             -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
@@ -723,6 +726,7 @@ jobs:
             -Dsonar.tests=test
             -Dsonar.exclusions=**/.*/**,**/example/**,**/*.g.dart,**/*.freezed.dart
             -Dsonar.dart.lcov.reportPaths=coverage/lcov.info
+            -Dsonar.dart.analyzer.options.override=false
             -Dsonar.branch.name=main
             -Dsonar.scm.revision=${{ steps.baseline.outputs.sha }}
             -Dsonar.qualitygate.wait=true

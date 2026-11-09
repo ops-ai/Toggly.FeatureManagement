@@ -189,7 +189,7 @@ class Feature extends StatelessWidget {
         context: context,
         kind: kind,
         variant: variant,
-        builder: _builder!,
+        builder: _builder,
       );
     }
 
