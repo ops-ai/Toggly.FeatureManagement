@@ -111,6 +111,19 @@ export function parseVariantDefsPayload(
   return asVariantDefsRecord<EvaluatedVariantDef>(unwrapDefsPayload(parsed));
 }
 
+/**
+ * Parse an evaluated-signed HTTP body into a flag map.
+ * Unwraps a `{ defs }` envelope (the signed response) or accepts a bare map.
+ * Rejects error envelopes. Non-map shapes become `{}`.
+ */
+export function parseEvaluatedFlagsPayload(parsed: unknown): FeatureFlags {
+  const body = unwrapDefsPayload(parsed);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return {};
+  }
+  return body as FeatureFlags;
+}
+
 /** Derive a boolean feature map from evaluated variant defs. */
 export function variantDefsToFlags(
   defs: Record<string, EvaluatedVariantDef>,
