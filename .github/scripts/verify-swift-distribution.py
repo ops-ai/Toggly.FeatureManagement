@@ -5,6 +5,7 @@ import copy
 import json
 import os
 from pathlib import Path
+import re
 import signal
 import subprocess
 import tempfile
@@ -13,6 +14,39 @@ import time
 ROOT = Path(__file__).resolve().parents[2]
 SDK = 'Toggly.FeatureManagement.iOS'
 PRODUCTS = ('TogglyCore', 'TogglySwiftUI', 'TogglyUIKit', 'TogglyCombine')
+# Declared SDK floor; used when no platform consumer triple is supplied.
+DEFAULT_CONSUMER_IOS_MAJOR = 14
+# Darwin SwiftPM prefers Package.swift platforms over --triple, so the
+# verification consumer must declare an iOS floor the selected Xcode accepts.
+CONSUMER_TARGET_IOS = re.compile(r'-ios(\d+)(?:\.\d+)?(?:-|$)')
+
+
+def consumer_ios_major(consumer_target=None):
+    """iOS major for the Git-consumer Package.swift platforms entry.
+
+    The SDK package keeps its public iOS 14 floor. Only this disposable
+    consumer manifest is raised when --consumer-target asks for a newer
+    simulator (e.g. Xcode 27's iPhoneSimulator SDK, which rejects 14.0).
+    """
+    if not consumer_target:
+        return DEFAULT_CONSUMER_IOS_MAJOR
+    match = CONSUMER_TARGET_IOS.search(consumer_target)
+    if not match:
+        raise ValueError(
+            'consumer-target must include an iosN or iosN.M segment, got: '
+            + repr(consumer_target)
+        )
+    return int(match.group(1))
+
+
+def consumer_package_manifest(repository, revision, products, ios_major):
+    """Package.swift text for the disposable Git consumer."""
+    return '''// swift-tools-version:5.5
+import PackageDescription
+let package = Package(name: "DistributionConsumer", platforms: [.macOS(.v11), .iOS(.v%d), .tvOS(.v14), .watchOS(.v7)],
+ dependencies: [.package(url: %s, revision: %s)],
+ targets: [.executableTarget(name: "DistributionConsumer", dependencies: [%s])])
+''' % (ios_major, json.dumps(repository), json.dumps(revision), products)
 
 
 def retire_process_group(process):
@@ -105,12 +139,10 @@ def consume(repository, revision, temporary, consumer_target=None, consumer_sdk=
     # SwiftPM derives this identity from the Git URL, including file:// mirrors.
     identity = repository.rstrip('/').split('/')[-1].removesuffix('.git').lower()
     products = ', '.join('.product(name: ' + json.dumps(p) + ', package: ' + json.dumps(identity) + ')' for p in PRODUCTS)
-    (consumer / 'Package.swift').write_text('''// swift-tools-version:5.5
-import PackageDescription
-let package = Package(name: "DistributionConsumer", platforms: [.macOS(.v11), .iOS(.v14), .tvOS(.v14), .watchOS(.v7)],
- dependencies: [.package(url: %s, revision: %s)],
- targets: [.executableTarget(name: "DistributionConsumer", dependencies: [%s])])
-''' % (json.dumps(repository), json.dumps(revision), products))
+    ios_major = consumer_ios_major(consumer_target)
+    (consumer / 'Package.swift').write_text(
+        consumer_package_manifest(repository, revision, products, ios_major)
+    )
     source = consumer / 'Sources/DistributionConsumer'
     source.mkdir(parents=True)
     (source / 'main.swift').write_text('''import TogglyCore
@@ -138,7 +170,7 @@ print("Four Git products imported at " + togglyVersion)
         run(['swift', 'build', '--disable-sandbox', '-j', '2', '--triple', consumer_target,
              '--sdk', consumer_sdk, '--scratch-path', str(temporary / 'consumer-platform')], consumer)
     print(json.dumps({'repository': repository, 'requested': revision, 'resolved': resolved,
-                      'products': PRODUCTS}), flush=True)
+                      'products': PRODUCTS, 'consumer_ios_major': ios_major}), flush=True)
     return resolved
 
 
