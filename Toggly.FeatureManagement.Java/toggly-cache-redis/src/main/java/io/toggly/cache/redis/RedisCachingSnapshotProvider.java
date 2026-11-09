@@ -581,14 +581,16 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
 
     private String unescapeJson(String value) {
         StringBuilder decoded = new StringBuilder(value.length());
-        for (int index = 0; index < value.length(); index++) {
+        int index = 0;
+        while (index < value.length()) {
             char current = value.charAt(index);
             if (current != '\\' || index + 1 >= value.length()) {
                 decoded.append(current);
-                continue;
+                index++;
+            } else {
+                decoded.append(unescaped(value.charAt(index + 1)));
+                index += 2;
             }
-            index++;
-            decoded.append(unescaped(value.charAt(index)));
         }
         return decoded.toString();
     }
