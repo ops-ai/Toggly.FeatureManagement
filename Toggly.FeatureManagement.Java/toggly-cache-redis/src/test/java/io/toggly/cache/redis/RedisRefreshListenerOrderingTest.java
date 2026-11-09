@@ -270,7 +270,7 @@ class RedisRefreshListenerOrderingTest {
     @Test
     void filterParameterBackslashSurvivesRedisWithoutRenotify() {
         body.set("[{\"featureKey\":\"feature-a\",\"filters\":[{\"name\":\"Targeting\","
-                + "\"parameters\":{\"path\":\"C:\\\\dir\"}}]}]");
+                + "\"parameters\":{\"path\":\"C:\\\\temp\",\"note\":null}}]}]");
         RedisCachingSnapshotProvider provider = newRedis();
         provider.refresh();
         Object original = provider.getSnapshot()
@@ -281,8 +281,9 @@ class RedisRefreshListenerOrderingTest {
         provider.addRefreshListener(snapshot -> calls.incrementAndGet());
         FeatureSnapshot loaded = provider.getSnapshot();
 
-        assertThat(loaded.getFeature("feature-a").getFilters().get(0).getParameters().get("path"))
-                .isEqualTo(original);
+        assertThat(loaded.getFeature("feature-a").getFilters().get(0).getParameters())
+                .containsEntry("path", original)
+                .containsEntry("note", null);
         assertThat(calls).hasValue(0);
         provider.getSnapshot();
         assertThat(calls).hasValue(0);

@@ -580,11 +580,36 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     }
 
     private String unescapeJson(String value) {
-        return value.replace("\\\"", "\"")
-                .replace("\\\\", "\\")
-                .replace("\\n", "\n")
-                .replace("\\r", "\r")
-                .replace("\\t", "\t");
+        StringBuilder decoded = new StringBuilder(value.length());
+        for (int index = 0; index < value.length(); index++) {
+            char current = value.charAt(index);
+            if (current != '\\' || index + 1 >= value.length()) {
+                decoded.append(current);
+                continue;
+            }
+            index++;
+            decoded.append(unescaped(value.charAt(index)));
+        }
+        return decoded.toString();
+    }
+
+    private static char unescaped(char escaped) {
+        if (escaped == '"') {
+            return '"';
+        }
+        if (escaped == '\\') {
+            return '\\';
+        }
+        if (escaped == 'n') {
+            return '\n';
+        }
+        if (escaped == 'r') {
+            return '\r';
+        }
+        if (escaped == 't') {
+            return '\t';
+        }
+        return escaped;
     }
 
     private void parseMetrics(String json, Map<String, MetricDefinition> metrics) {
@@ -743,7 +768,9 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
                 parameters.put(key, Boolean.TRUE);
             } else if ("false".equals(value)) {
                 parameters.put(key, Boolean.FALSE);
-            } else if (!"null".equals(value)) {
+            } else if ("null".equals(value)) {
+                parameters.put(key, null);
+            } else {
                 try {
                     if (value.contains(".")) {
                         parameters.put(key, Double.parseDouble(value));

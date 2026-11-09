@@ -5,6 +5,7 @@ import com.sun.net.httpserver.HttpServer;
 import io.toggly.core.TogglyClient;
 import io.toggly.core.config.TogglyConfig;
 import io.toggly.core.model.FeatureDefinition;
+import io.toggly.core.model.VariantDefinition;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -308,5 +309,42 @@ class RefreshListenerTest {
         assertThat(calls).hasValue(0);
         assertThat(sdk.getSnapshot().getFeature("feature-a")).isNotNull();
         assertThat(sdk.getSnapshot().getFeature("old")).isNull();
+    }
+
+    @Test
+    void applyCachedSnapshotNotifiesWhenVariantOrContextChanges() {
+        HttpSnapshotProvider sdk = newProvider();
+        sdk.refresh();
+        FeatureDefinition live = sdk.getSnapshot().getFeature("feature-a");
+        AtomicInteger calls = new AtomicInteger();
+        sdk.addRefreshListener(snapshot -> calls.incrementAndGet());
+
+        FeatureDefinition withContext = FeatureDefinition.builder()
+                .featureKey(live.getFeatureKey())
+                .filters(live.getFilters())
+                .requirementType(live.getRequirementType())
+                .contextKind("account")
+                .build();
+        assertThat(sdk.applyCachedSnapshot(snapshotOf(withContext))).isTrue();
+        assertThat(calls).hasValue(1);
+
+        FeatureDefinition withVariant = FeatureDefinition.builder()
+                .featureKey(live.getFeatureKey())
+                .filters(live.getFilters())
+                .requirementType(live.getRequirementType())
+                .contextKind("account")
+                .variants(List.of(new VariantDefinition("A", "on", null)))
+                .build();
+        assertThat(sdk.applyCachedSnapshot(snapshotOf(withVariant))).isTrue();
+        assertThat(calls).hasValue(2);
+        assertThat(sdk.getSnapshot().getFeature("feature-a").getVariants()).hasSize(1);
+    }
+
+    private static FeatureSnapshot snapshotOf(FeatureDefinition definition) {
+        return new FeatureSnapshot(
+                Map.of(definition.getFeatureKey(), definition),
+                Map.of(),
+                java.time.Instant.now(),
+                "\"changed\"");
     }
 }
