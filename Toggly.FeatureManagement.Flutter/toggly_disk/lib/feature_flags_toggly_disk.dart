@@ -2,6 +2,6 @@
 ///
 /// Provides [DiskCacheProvider], a [TogglyCacheProvider] that stores cache
 /// entries as JSON files under the app documents directory.
-library feature_flags_toggly_disk;
+library;
 
 export 'src/disk_cache_provider.dart';
