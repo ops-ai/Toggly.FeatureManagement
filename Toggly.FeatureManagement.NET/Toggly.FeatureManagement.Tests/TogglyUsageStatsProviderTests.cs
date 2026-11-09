@@ -1884,6 +1884,121 @@ public class TogglyUsageStatsProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task SendStats_TransientRpcFailure_LogsWarningAndRetainsStats()
+    {
+        var logger = new Mock<ILogger>();
+        _loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(logger.Object);
+        var packets = new List<FeatureStat>();
+        var callCount = 0;
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(), It.IsAny<Metadata>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .Returns<FeatureStat, Metadata, DateTime?, CancellationToken>((packet, _, _, _) =>
+            {
+                packets.Add(packet);
+                callCount++;
+                if (callCount == 1)
+                {
+                    return new AsyncUnaryCall<StatResult>(
+                        Task.FromException<StatResult>(new RpcException(new Status(StatusCode.Unavailable, "HTTP 502"))),
+                        Task.FromResult(new Metadata()),
+                        () => new Status(StatusCode.Unavailable, "HTTP 502"),
+                        () => new Metadata(),
+                        () => { });
+                }
+
+                return new AsyncUnaryCall<StatResult>(
+                    Task.FromResult(new StatResult { FeatureCount = packet.Stats.Count }),
+                    Task.FromResult(new Metadata()),
+                    () => Status.DefaultSuccess,
+                    () => new Metadata(),
+                    () => { });
+            });
+
+        _provider = CreateProvider();
+        await _provider.RecordUsageAsync("TransientFeature");
+
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+        await (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+
+        logger.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("Transient error sending stats")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+        logger.Verify(
+            x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Never);
+
+        await (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+        packets.Should().HaveCount(2);
+        packets[1].Stats.Should().Contain(s => s.Feature == "TransientFeature");
+        _provider.GetDebugInfo().LastSend.Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task SendStats_NonTransientRpcFailure_LogsErrorAndRetainsStats()
+    {
+        var logger = new Mock<ILogger>();
+        _loggerFactoryMock.Setup(x => x.CreateLogger(It.IsAny<string>())).Returns(logger.Object);
+        var packets = new List<FeatureStat>();
+        var callCount = 0;
+        _usageClientMock.Setup(x => x.SendStatsAsync(
+            It.IsAny<FeatureStat>(), It.IsAny<Metadata>(), It.IsAny<DateTime?>(), It.IsAny<CancellationToken>()))
+            .Returns<FeatureStat, Metadata, DateTime?, CancellationToken>((packet, _, _, _) =>
+            {
+                packets.Add(packet);
+                callCount++;
+                if (callCount == 1)
+                {
+                    return new AsyncUnaryCall<StatResult>(
+                        Task.FromException<StatResult>(new RpcException(new Status(StatusCode.PermissionDenied, "denied"))),
+                        Task.FromResult(new Metadata()),
+                        () => new Status(StatusCode.PermissionDenied, "denied"),
+                        () => new Metadata(),
+                        () => { });
+                }
+
+                return new AsyncUnaryCall<StatResult>(
+                    Task.FromResult(new StatResult { FeatureCount = packet.Stats.Count }),
+                    Task.FromResult(new Metadata()),
+                    () => Status.DefaultSuccess,
+                    () => new Metadata(),
+                    () => { });
+            });
+
+        _provider = CreateProvider();
+        await _provider.RecordUsageAsync("DeniedFeature");
+
+        var sendStatsMethod = typeof(TogglyUsageStatsProvider)
+            .GetMethod("SendStats", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                new[] { typeof(bool) });
+        await (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+
+        logger.Verify(
+            x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("Error sending stats to toggly")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+
+        await (Task)sendStatsMethod!.Invoke(_provider, new object[] { false })!;
+        packets.Should().HaveCount(2);
+        packets[1].Stats.Should().Contain(s => s.Feature == "DeniedFeature");
+    }
+
+    [Fact]
     public async Task SendStats_WithViewedStats_IncludesVariantStats()
     {
         // Arrange

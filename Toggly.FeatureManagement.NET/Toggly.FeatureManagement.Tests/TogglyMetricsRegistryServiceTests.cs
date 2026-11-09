@@ -301,6 +301,60 @@ public class TogglyMetricsRegistryServiceTests
         result.Should().ContainKey("obs");
     }
 
+    [Fact]
+    public void Merge_WithNullMetricKey_SkipsBadEntryAndKeepsSiblingObservations()
+    {
+        // Reproduce the production ArgumentNullException('key') path: a null observation name
+        // must not abort aggregation of the remaining entries from the same handler.
+        var logger = new Mock<ILogger>();
+        logger.Setup(x => x.IsEnabled(LogLevel.Debug)).Returns(true);
+        var now = DateTime.UtcNow;
+        var results = new Dictionary<string, (DateTime, double)>();
+        var entries = new List<KeyValuePair<string, (DateTime, double)>>
+        {
+            new("good-before", (now, 1.5)),
+            new(null!, (now, 99)),
+            new(string.Empty, (now, 98)),
+            new("good-after", (now, 2.5)),
+        };
+
+        MetricsRegistryMerge.Merge(results, entries, logger.Object, "observation");
+
+        results.Should().HaveCount(2);
+        results.Should().ContainKey("good-before");
+        results.Should().ContainKey("good-after");
+        results["good-before"].Item2.Should().Be(1.5);
+        results["good-after"].Item2.Should().Be(2.5);
+        logger.Verify(
+            x => x.Log(
+                LogLevel.Debug,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("without a metric key")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Exactly(2));
+    }
+
+    [Fact]
+    public void Merge_WithNullHandlerResults_DoesNotThrow()
+    {
+        var logger = new Mock<ILogger>();
+        logger.Setup(x => x.IsEnabled(LogLevel.Debug)).Returns(true);
+        var results = new Dictionary<string, double> { ["existing"] = 1 };
+
+        MetricsRegistryMerge.Merge(results, null, logger.Object, "measurement");
+
+        results.Should().ContainKey("existing");
+        logger.Verify(
+            x => x.Log(
+                LogLevel.Debug,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((state, _) => state.ToString()!.Contains("returned null results")),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
     #endregion
 
     #region GetCounterValuesAsync Tests
