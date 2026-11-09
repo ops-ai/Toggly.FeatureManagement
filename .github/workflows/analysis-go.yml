@@ -195,20 +195,22 @@ jobs:
           go test -v -race -timeout 5m ./...
 
   mongodb-v2:
-    name: MongoDB Driver v2 (Go ${{ matrix.go-version }})
+    name: MongoDB Driver v2 (Go ${{ matrix.go-version }}, MongoDB ${{ matrix.mongodb-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         go-version: ['1.26.x', '1.27.x']
+        # mongo:8 is the current LTS line used by toggly-go; mongo:9 is the latest stable server.
+        mongodb-version: ['8', '9']
     defaults:
       run:
         working-directory: toggly-go-mongodb-v2
     services:
       mongodb:
-        image: mongo:8
+        image: mongo:${{ matrix.mongodb-version }}
         env:
-          # SERVER-121912: mongo:8 refuses to start on Linux kernel 6.19–7.0.13 without this tunable.
+          # SERVER-121912: mongo:8+ refuses to start on Linux kernel 6.19–7.0.13 without this tunable.
           GLIBC_TUNABLES: glibc.pthread.rseq=1
         ports:
           - 27017:27017
@@ -265,7 +267,7 @@ jobs:
           go tool cover -func=coverage.out | awk '/^total:/ {gsub(/%/, "", $3); if ($3 <= 80) exit 1; found=1} END {if (!found) exit 1}'
 
       - name: Upload MongoDB v2 coverage artifact
-        if: matrix.go-version == '1.26.x'
+        if: matrix.go-version == '1.26.x' && matrix.mongodb-version == '8'
         uses: actions/upload-artifact@v7
         with:
           name: go-mongodb-v2-coverage
