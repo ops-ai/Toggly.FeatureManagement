@@ -6,6 +6,7 @@ import io.toggly.core.model.MetricDefinition;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /**
  * Simple in-memory snapshot provider for testing or static configurations.
@@ -13,6 +14,8 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class InMemorySnapshotProvider implements SnapshotProvider {
 
     private final AtomicReference<FeatureSnapshot> snapshot;
+    private final RefreshListenerSupport refreshListeners =
+            new RefreshListenerSupport(InMemorySnapshotProvider.class);
 
     /**
      * Creates an empty provider.
@@ -68,7 +71,7 @@ public final class InMemorySnapshotProvider implements SnapshotProvider {
      */
     public void setFeatures(Map<String, FeatureDefinition> features) {
         FeatureSnapshot current = snapshot.get();
-        snapshot.set(new FeatureSnapshot(
+        FeatureSnapshot updated = new FeatureSnapshot(
                 features,
                 current.getMetrics(),
                 Instant.now(),
@@ -76,7 +79,9 @@ public final class InMemorySnapshotProvider implements SnapshotProvider {
                 current.getSignature(),
                 current.getKeyId(),
                 current.getSignedTimestamp(),
-                current.getSignedDefsJson()));
+                current.getSignedDefsJson());
+        snapshot.set(updated);
+        refreshListeners.notifyListeners(updated);
     }
 
     /**
@@ -85,6 +90,18 @@ public final class InMemorySnapshotProvider implements SnapshotProvider {
      * @param newSnapshot the new snapshot
      */
     public void setSnapshot(FeatureSnapshot newSnapshot) {
-        snapshot.set(newSnapshot != null ? newSnapshot : FeatureSnapshot.empty());
+        FeatureSnapshot updated = newSnapshot != null ? newSnapshot : FeatureSnapshot.empty();
+        snapshot.set(updated);
+        refreshListeners.notifyListeners(updated);
+    }
+
+    @Override
+    public void addRefreshListener(Consumer<FeatureSnapshot> listener) {
+        refreshListeners.add(listener);
+    }
+
+    @Override
+    public void removeRefreshListener(Consumer<FeatureSnapshot> listener) {
+        refreshListeners.remove(listener);
     }
 }

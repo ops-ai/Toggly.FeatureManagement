@@ -42,6 +42,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -78,6 +79,9 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
     private final AtomicBoolean refreshInFlight = new AtomicBoolean(false);
     private final AtomicBoolean pendingWebSocketRefresh = new AtomicBoolean(false);
     private final AtomicReference<DefinitionCacheRecorder> definitionCacheRecorder = new AtomicReference<>();
+    private final RefreshListenerSupport refreshListeners = new RefreshListenerSupport(HttpSnapshotProvider.class);
+    /** Set while listeners run so a callback that re-enters apply cannot notify again. */
+    private final ThreadLocal<Boolean> refreshNotificationInProgress = new ThreadLocal<>();
 
     /**
      * Creates an HTTP snapshot provider.
@@ -174,8 +178,6 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
             if (config.isEnableLiveUpdates() && !wsConnected && webSocket == null) {
                 startWebSocket();
             }
-
-            return currentSnapshot.get();
         } catch (TogglySignatureException e) {
             reportError("Invalid signature", e);
             LOGGER.log(Level.WARNING, "Signature verification failed", e);
@@ -206,11 +208,11 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
 
     private void applyFetchResult(FetchResult result) {
         if (result.outcome == CacheOutcome.MISS) {
-            applySnapshot(result.snapshot);
+            applySnapshot(result.snapshot, true);
             recordDefinitionCacheMiss();
         } else {
             if (result.snapshot != null && result.applySnapshot) {
-                applySnapshot(result.snapshot);
+                applySnapshot(result.snapshot, true);
             }
             recordDefinitionCacheHit();
         }
@@ -254,12 +256,7 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
                             config.getAllowedKeyIds());
                 }
             }
-            boolean startupFromDurable = currentSnapshot.get().isEmpty();
-            applySnapshot(snapshot);
-            // Startup served from durable snapshot before first network — count once.
-            if (startupFromDurable) {
-                recordDefinitionCacheHit();
-            }
+            installCachedSnapshot(snapshot);
             return true;
         } catch (Exception e) {
             reportError("Failed to apply cached snapshot", e);
@@ -267,7 +264,36 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         }
     }
 
-    private void applySnapshot(FeatureSnapshot snapshot) {
+    private void installCachedSnapshot(FeatureSnapshot snapshot) {
+        FeatureSnapshot previous = currentSnapshot.get();
+        boolean startupFromDurable = previous.isEmpty();
+        // A cache read can lose the race with a newer poll. Keep the live copy.
+        if (!startupFromDurable && snapshot.getTimestamp().isBefore(previous.getTimestamp())) {
+            return;
+        }
+        boolean replacesLiveRevision = !startupFromDurable && !isSameRevision(previous, snapshot);
+        if (!startupFromDurable && !replacesLiveRevision) {
+            return;
+        }
+        if (!currentSnapshot.compareAndSet(previous, snapshot)) {
+            return;
+        }
+        if (snapshot.getEtag() != null) {
+            lastEtag.set(snapshot.getEtag());
+        }
+        if (snapshot.getSignedTimestamp() != null) {
+            lastSignedTimestamp.set(snapshot.getSignedTimestamp());
+        }
+        // Startup served from durable snapshot before first network — count once.
+        if (startupFromDurable) {
+            recordDefinitionCacheHit();
+        }
+        if (replacesLiveRevision) {
+            notifyRefreshListeners(snapshot);
+        }
+    }
+
+    private void applySnapshot(FeatureSnapshot snapshot, boolean notifyListeners) {
         currentSnapshot.set(snapshot);
         if (snapshot.getEtag() != null) {
             lastEtag.set(snapshot.getEtag());
@@ -275,6 +301,37 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         if (snapshot.getSignedTimestamp() != null) {
             lastSignedTimestamp.set(snapshot.getSignedTimestamp());
         }
+        if (notifyListeners) {
+            notifyRefreshListeners(snapshot);
+        }
+    }
+
+    /** True when feature and metric maps match. ETag text is not a stable Redis revision. */
+    private static boolean isSameRevision(FeatureSnapshot previous, FeatureSnapshot incoming) {
+        return Objects.equals(previous.getFeatures(), incoming.getFeatures())
+                && Objects.equals(previous.getMetrics(), incoming.getMetrics());
+    }
+
+    private void notifyRefreshListeners(FeatureSnapshot snapshot) {
+        if (Boolean.TRUE.equals(refreshNotificationInProgress.get())) {
+            return;
+        }
+        refreshNotificationInProgress.set(Boolean.TRUE);
+        try {
+            refreshListeners.notifyListeners(snapshot);
+        } finally {
+            refreshNotificationInProgress.remove();
+        }
+    }
+
+    @Override
+    public void addRefreshListener(Consumer<FeatureSnapshot> listener) {
+        refreshListeners.add(listener);
+    }
+
+    @Override
+    public void removeRefreshListener(Consumer<FeatureSnapshot> listener) {
+        refreshListeners.remove(listener);
     }
 
     @Override

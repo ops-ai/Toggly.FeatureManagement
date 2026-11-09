@@ -277,7 +277,8 @@ class DefinitionCacheHitsTest {
         // Keep returning rev-1 until the held poll is released.
         etag.set("\"rev-1\"");
 
-        Thread poll = new Thread(provider::refresh);
+        AtomicReference<FeatureSnapshot> returned = new AtomicReference<>();
+        Thread poll = new Thread(() -> returned.set(provider.refresh()));
         poll.start();
         assertThat(requestStarted.await(5, TimeUnit.SECONDS)).isTrue();
 
@@ -293,8 +294,10 @@ class DefinitionCacheHitsTest {
         holdRequest.countDown();
         poll.join(5000);
 
-        // Pending forced refresh should apply rev-2 after the in-flight poll finishes.
+        // Pending forced refresh should apply rev-2 after the in-flight poll finishes,
+        // and that same snapshot is what refresh() returns to cache wrappers.
         assertThat(provider.getSnapshot().getFeature("feature-b")).isNotNull();
+        assertThat(returned.get().getFeature("feature-b")).isNotNull();
 
         runtime.flushUsage();
         assertThat(sent).hasSize(1);

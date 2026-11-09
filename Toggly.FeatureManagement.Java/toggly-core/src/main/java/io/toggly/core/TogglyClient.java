@@ -932,11 +932,14 @@ public final class TogglyClient implements AutoCloseable {
     /**
      * Registers a listener for snapshot changes.
      *
+     * <p>Delegates to {@link SnapshotProvider#addRefreshListener(Consumer)}. Listeners run on
+     * the thread that applied the snapshot (caller of {@link #refresh()}, a scheduled poll
+     * thread, or a WebSocket callback thread, depending on the provider).</p>
+     *
      * @param listener the listener to register
      */
     public void onRefresh(Consumer<FeatureSnapshot> listener) {
-        // Would require observer pattern implementation in snapshot provider
-        // Left as extension point
+        snapshotProvider.addRefreshListener(listener);
     }
 
     // ========== Lifecycle ==========

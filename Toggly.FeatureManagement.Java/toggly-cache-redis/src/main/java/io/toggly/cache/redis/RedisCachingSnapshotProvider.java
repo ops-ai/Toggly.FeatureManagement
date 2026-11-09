@@ -8,6 +8,7 @@ import io.toggly.core.model.VariantAllocation;
 import io.toggly.core.model.VariantDefinition;
 import io.toggly.core.snapshot.FeatureSnapshot;
 import io.toggly.core.snapshot.HttpSnapshotProvider;
+import io.toggly.core.snapshot.RefreshListenerSupport;
 import io.toggly.core.snapshot.SnapshotProvider;
 import io.toggly.core.telemetry.DefinitionCacheRecorder;
 import io.toggly.core.util.SimpleJson;
@@ -25,6 +26,8 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -62,6 +65,13 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     private final String cacheKey;
     private final AtomicReference<DefinitionCacheRecorder> definitionCacheRecorder = new AtomicReference<>();
     private final AtomicBoolean durableStartupCounted = new AtomicBoolean(false);
+    private final RefreshListenerSupport refreshListeners =
+            new RefreshListenerSupport(RedisCachingSnapshotProvider.class);
+    /**
+     * Receives underlying apply-on-change notifications, persists to Redis first, then
+     * notifies wrapper listeners so onRefresh callbacks observe the updated cache.
+     */
+    private final Consumer<FeatureSnapshot> delegateRefreshBridge = this::onDelegateSnapshotApplied;
 
     /**
      * Creates a Redis caching provider with default configuration.
@@ -83,6 +93,7 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
         this.config = config;
         this.cacheKey = config.getKeyPrefix() + SNAPSHOT_KEY;
         this.pool = createPool(config);
+        this.delegate.addRefreshListener(delegateRefreshBridge);
     }
 
     /**
@@ -102,6 +113,7 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
                 .build();
         this.cacheKey = keyPrefix + SNAPSHOT_KEY;
         this.pool = pool;
+        this.delegate.addRefreshListener(delegateRefreshBridge);
     }
 
     private JedisPool createPool(RedisCacheConfig config) {
@@ -127,21 +139,25 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
 
     @Override
     public FeatureSnapshot getSnapshot() {
-        // Try to get from cache first
-        try (Jedis jedis = pool.getResource()) {
-            String cached = jedis.get(cacheKey);
-            if (cached != null && !cached.isEmpty()) {
-                FeatureSnapshot snapshot = deserialize(cached);
-                if (snapshot != null) {
-                    return snapshot;
-                }
+        // Release the connection before deserialize. Adopting a peer revision
+        // notifies listeners, and the Redis bridge checks out another connection.
+        String cached = readCache();
+        if (cached != null && !cached.isEmpty()) {
+            FeatureSnapshot snapshot = deserialize(cached);
+            if (snapshot != null) {
+                return snapshot;
             }
+        }
+        return refresh();
+    }
+
+    private String readCache() {
+        try (Jedis jedis = pool.getResource()) {
+            return jedis.get(cacheKey);
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Error reading from Redis cache", e);
+            return null;
         }
-
-        // Cache miss - fetch from delegate and cache
-        return refresh();
     }
 
     @Override
@@ -152,8 +168,20 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     @Override
     public FeatureSnapshot refresh() {
         FeatureSnapshot snapshot = delegate.refresh();
+        // Persist even on unchanged/304 refreshes (bridge only runs when the delegate applies).
+        persistSnapshot(snapshot);
+        return snapshot;
+    }
 
-        // Store in Redis
+    private void onDelegateSnapshotApplied(FeatureSnapshot snapshot) {
+        persistSnapshot(snapshot);
+        refreshListeners.notifyListeners(snapshot);
+    }
+
+    private void persistSnapshot(FeatureSnapshot snapshot) {
+        if (snapshot == null) {
+            return;
+        }
         try (Jedis jedis = pool.getResource()) {
             String serialized = serialize(snapshot);
             long ttlSeconds = config.getTtl().toSeconds();
@@ -165,8 +193,6 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Error writing to Redis cache", e);
         }
-
-        return snapshot;
     }
 
     @Override
@@ -204,7 +230,18 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     }
 
     @Override
+    public void addRefreshListener(Consumer<FeatureSnapshot> listener) {
+        refreshListeners.add(listener);
+    }
+
+    @Override
+    public void removeRefreshListener(Consumer<FeatureSnapshot> listener) {
+        refreshListeners.remove(listener);
+    }
+
+    @Override
     public void close() {
+        delegate.removeRefreshListener(delegateRefreshBridge);
         if (pool != null && !pool.isClosed()) {
             pool.close();
         }
@@ -329,6 +366,12 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
         if (metric.getName() != null) {
             sb.append(",\"name\":\"").append(escapeJson(metric.getName())).append("\"");
         }
+        if (metric.getType() != null) {
+            sb.append(",\"type\":\"").append(escapeJson(metric.getType())).append("\"");
+        }
+        if (metric.getUnit() != null) {
+            sb.append(",\"unit\":\"").append(escapeJson(metric.getUnit())).append("\"");
+        }
         sb.append("}");
         return sb.toString();
     }
@@ -356,6 +399,11 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
             }
             parseFeatures(featuresJson, features);
 
+            String metricsJson = extractObjectByKey(json, "metrics");
+            if (metricsJson != null && !metricsJson.isBlank()) {
+                parseMetrics(metricsJson, metrics);
+            }
+
             // Parse timestamp
             String timestampStr = extractStringValue(json, "timestamp");
             Instant timestamp = timestampStr != null ? Instant.parse(timestampStr) : Instant.now();
@@ -376,6 +424,7 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
                 if (!http.applyCachedSnapshot(snapshot)) {
                     return null;
                 }
+                return http.getSnapshot();
             } else if (durableStartupCounted.compareAndSet(false, true)) {
                 DefinitionCacheRecorder recorder = definitionCacheRecorder.get();
                 if (recorder != null) {
@@ -418,33 +467,94 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     }
 
     /**
-     * Extracts the raw object body (without surrounding braces) for a top-level JSON key.
+     * Extracts the raw object body (without surrounding braces) for a root JSON key.
+     * A feature key or string value with the same name is not a match.
      */
     private String extractObjectByKey(String json, String key) {
-        String search = "\"" + key + "\"";
-        int idx = json.indexOf(search);
-        if (idx < 0) {
+        int index = skipFeatureWhitespace(json, 0);
+        if (index >= json.length() || json.charAt(index) != '{') {
             return null;
         }
-        idx += search.length();
-        while (idx < json.length() && Character.isWhitespace(json.charAt(idx))) {
-            idx++;
+        return objectBodyAtRoot(json, key, index + 1);
+    }
+
+    private String objectBodyAtRoot(String json, String key, int index) {
+        int[] cursor = {index};
+        while (cursor[0] >= 0 && cursor[0] < json.length()) {
+            cursor[0] = skipFeatureSeparators(json, cursor[0]);
+            if (cursor[0] >= json.length() || json.charAt(cursor[0]) == '}') {
+                return null;
+            }
+            String name = readRootName(json, cursor);
+            if (name == null || !moveToRootValue(json, cursor)) {
+                return null;
+            }
+            if (key.equals(name)) {
+                return objectInterior(json, cursor[0]);
+            }
+            cursor[0] = skipJsonValue(json, cursor[0]);
         }
-        if (idx >= json.length() || json.charAt(idx) != ':') {
+        return null;
+    }
+
+    private String readRootName(String json, int[] cursor) {
+        if (json.charAt(cursor[0]) != '"') {
             return null;
         }
-        idx++;
-        while (idx < json.length() && Character.isWhitespace(json.charAt(idx))) {
-            idx++;
+        Object parsedKey = SimpleJson.parseValue(json, cursor);
+        if (parsedKey instanceof String name) {
+            return name;
         }
-        if (idx >= json.length() || json.charAt(idx) != '{') {
+        return null;
+    }
+
+    private boolean moveToRootValue(String json, int[] cursor) {
+        int index = skipFeatureWhitespace(json, cursor[0]);
+        if (index >= json.length() || json.charAt(index) != ':') {
+            return false;
+        }
+        index = skipFeatureWhitespace(json, index + 1);
+        if (index >= json.length()) {
+            return false;
+        }
+        cursor[0] = index;
+        return true;
+    }
+
+    private String objectInterior(String json, int index) {
+        if (index >= json.length() || json.charAt(index) != '{') {
             return null;
         }
-        int end = findMatchingBrace(json, idx);
-        if (end <= idx) {
+        int end = findMatchingBrace(json, index);
+        if (end <= index) {
             return null;
         }
-        return json.substring(idx + 1, end);
+        return json.substring(index + 1, end);
+    }
+
+    private int skipJsonValue(String json, int index) {
+        char current = json.charAt(index);
+        if (current == '{') {
+            int end = findMatchingBrace(json, index);
+            return end < 0 ? -1 : end + 1;
+        }
+        if (current == '[') {
+            int end = SimpleJson.findMatchingBracket(json, index);
+            return end < 0 ? -1 : end + 1;
+        }
+        if (current == '"') {
+            int[] position = {index};
+            SimpleJson.parseValue(json, position);
+            return position[0];
+        }
+        while (index < json.length()) {
+            char currentChar = json.charAt(index);
+            if (currentChar == ',' || currentChar == '}' || Character.isWhitespace(currentChar)) {
+                break;
+            }
+            index++;
+        }
+        return index;
     }
 
     private Long extractLongValue(String json, String key) {
@@ -470,23 +580,83 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     }
 
     private String unescapeJson(String value) {
-        return value.replace("\\\"", "\"")
-                .replace("\\\\", "\\")
-                .replace("\\n", "\n")
-                .replace("\\r", "\r")
-                .replace("\\t", "\t");
+        StringBuilder decoded = new StringBuilder(value.length());
+        int index = 0;
+        while (index < value.length()) {
+            char current = value.charAt(index);
+            if (current != '\\' || index + 1 >= value.length()) {
+                decoded.append(current);
+                index++;
+            } else {
+                decoded.append(unescaped(value.charAt(index + 1)));
+                index += 2;
+            }
+        }
+        return decoded.toString();
+    }
+
+    private static char unescaped(char escaped) {
+        if (escaped == '"') {
+            return '"';
+        }
+        if (escaped == '\\') {
+            return '\\';
+        }
+        if (escaped == 'n') {
+            return '\n';
+        }
+        if (escaped == 'r') {
+            return '\r';
+        }
+        if (escaped == 't') {
+            return '\t';
+        }
+        return escaped;
+    }
+
+    private void parseMetrics(String json, Map<String, MetricDefinition> metrics) {
+        parseKeyedObjects(json, (key, body) -> {
+            String name = extractStringValue(body, "name");
+            if (name == null) {
+                name = extractStringValue(body, "metricKey");
+            }
+            if (name == null) {
+                name = key;
+            }
+            metrics.put(key, MetricDefinition.of(
+                    name,
+                    extractStringValue(body, "type"),
+                    extractStringValue(body, "unit")));
+        });
     }
 
     private void parseFeatures(String json, Map<String, FeatureDefinition> features) {
-        // Only top-level "featureKey":{...} entries — nested filter "parameters":{} must not
-        // become phantom features.
+        // Only top-level "key":{...} entries. Nested filter objects must not become features.
+        parseKeyedObjects(json, (key, body) -> features.put(key, parseFeatureDefinition(body, key)));
+    }
+
+    private void parseKeyedObjects(String json, BiConsumer<String, String> consumer) {
         int cursor = skipFeatureSeparators(json, 0);
         while (cursor < json.length()) {
-            int next = parseFeatureAt(json, cursor, features);
-            if (next <= cursor) {
-                throw new IllegalArgumentException("Invalid cached feature entry");
+            if (json.charAt(cursor) != '"') {
+                throw new IllegalArgumentException("Invalid cached object entry");
             }
-            cursor = skipFeatureSeparators(json, next);
+            int[] position = {cursor};
+            String key = (String) SimpleJson.parseValue(json, position);
+            int colon = skipFeatureWhitespace(json, position[0]);
+            if (colon >= json.length() || json.charAt(colon) != ':') {
+                throw new IllegalArgumentException("Invalid cached object entry");
+            }
+            int valueStart = skipFeatureWhitespace(json, colon + 1);
+            if (valueStart >= json.length() || json.charAt(valueStart) != '{') {
+                throw new IllegalArgumentException("Invalid cached object entry");
+            }
+            int end = findMatchingBrace(json, valueStart);
+            if (end <= valueStart) {
+                throw new IllegalArgumentException("Invalid cached object entry");
+            }
+            consumer.accept(key, json.substring(valueStart, end + 1));
+            cursor = skipFeatureSeparators(json, end + 1);
         }
     }
 
@@ -496,29 +666,6 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
             cursor++;
         }
         return cursor;
-    }
-
-    private int parseFeatureAt(String json, int start, Map<String, FeatureDefinition> features) {
-        if (json.charAt(start) != '"') {
-            return -1;
-        }
-        int[] position = {start};
-        String key = (String) SimpleJson.parseValue(json, position);
-        int colon = skipFeatureWhitespace(json, position[0]);
-        if (colon >= json.length() || json.charAt(colon) != ':') {
-            return -1;
-        }
-        int valueStart = skipFeatureWhitespace(json, colon + 1);
-        if (valueStart >= json.length() || json.charAt(valueStart) != '{') {
-            return -1;
-        }
-        int end = findMatchingBrace(json, valueStart);
-        if (end <= valueStart) {
-            return -1;
-        }
-        FeatureDefinition definition = parseFeatureDefinition(json.substring(valueStart, end + 1), key);
-        features.put(key, definition);
-        return end + 1;
     }
 
     private int skipFeatureWhitespace(String json, int cursor) {
@@ -618,12 +765,14 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
             String value = matcher.group(2);
 
             if (value.startsWith("\"") && value.endsWith("\"")) {
-                parameters.put(key, value.substring(1, value.length() - 1));
+                parameters.put(key, unescapeJson(value.substring(1, value.length() - 1)));
             } else if ("true".equals(value)) {
                 parameters.put(key, Boolean.TRUE);
             } else if ("false".equals(value)) {
                 parameters.put(key, Boolean.FALSE);
-            } else if (!"null".equals(value)) {
+            } else if ("null".equals(value)) {
+                parameters.put(key, null);
+            } else {
                 try {
                     if (value.contains(".")) {
                         parameters.put(key, Double.parseDouble(value));
@@ -638,8 +787,6 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
     }
 
     private String extractStringValue(String json, String key) {
-        Pattern pattern = Pattern.compile("\"" + key + "\"\\s*:\\s*\"([^\"]*)\"");
-        Matcher matcher = pattern.matcher(json);
-        return matcher.find() ? matcher.group(1) : null;
+        return extractRawStringValue(json, key);
     }
 }

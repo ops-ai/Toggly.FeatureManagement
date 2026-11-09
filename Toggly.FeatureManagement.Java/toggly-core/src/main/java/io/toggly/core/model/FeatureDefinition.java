@@ -177,12 +177,26 @@ public final class FeatureDefinition {
         return securedFeature == that.securedFeature &&
                 Objects.equals(featureKey, that.featureKey) &&
                 Objects.equals(filters, that.filters) &&
-                requirementType == that.requirementType;
+                requirementType == that.requirementType &&
+                Objects.equals(contextKind, that.contextKind) &&
+                contextRequirementType == that.contextRequirementType &&
+                Objects.equals(metrics, that.metrics) &&
+                Objects.equals(variants, that.variants) &&
+                Objects.equals(allocation, that.allocation);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(featureKey, filters, requirementType, securedFeature);
+        return Objects.hash(
+                featureKey,
+                filters,
+                requirementType,
+                securedFeature,
+                contextKind,
+                contextRequirementType,
+                metrics,
+                variants,
+                allocation);
     }
 
     @Override
