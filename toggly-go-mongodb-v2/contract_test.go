@@ -17,23 +17,34 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
+const (
+	featureAlwaysOn         = "always-on"
+	featureAlwaysOff        = "always-off"
+	featurePercentageOpen   = "percentage-open"
+	featurePercentageClosed = "percentage-closed"
+	featureTargetingAlice   = "targeting-alice"
+	featureClaimsAdmin      = "claims-admin"
+	featureAllFilters       = "all-filters"
+	contractUserID          = "user-1"
+)
+
 // contractDefinitions mirrors the Toggly /definitions API shape exercised by
 // toggly-go's own filter and IsEnabled tests: AlwaysOn/Off, Percentage,
 // Targeting, and UserClaims with RequirementAny/All.
 func contractDefinitions() []definitions.FeatureDefinitionModel {
 	return []definitions.FeatureDefinitionModel{
 		{
-			FeatureKey:      "always-on",
+			FeatureKey:      featureAlwaysOn,
 			Filters:         []definitions.FeatureFilter{{Name: "AlwaysOn"}},
 			RequirementType: definitions.RequirementAny,
 		},
 		{
-			FeatureKey:      "always-off",
+			FeatureKey:      featureAlwaysOff,
 			Filters:         []definitions.FeatureFilter{{Name: "AlwaysOff"}},
 			RequirementType: definitions.RequirementAny,
 		},
 		{
-			FeatureKey: "percentage-open",
+			FeatureKey: featurePercentageOpen,
 			Filters: []definitions.FeatureFilter{{
 				Name:       "Percentage",
 				Parameters: map[string]any{"Value": float64(100)},
@@ -41,7 +52,7 @@ func contractDefinitions() []definitions.FeatureDefinitionModel {
 			RequirementType: definitions.RequirementAny,
 		},
 		{
-			FeatureKey: "percentage-closed",
+			FeatureKey: featurePercentageClosed,
 			Filters: []definitions.FeatureFilter{{
 				Name:       "Percentage",
 				Parameters: map[string]any{"Value": float64(0)},
@@ -49,7 +60,7 @@ func contractDefinitions() []definitions.FeatureDefinitionModel {
 			RequirementType: definitions.RequirementAny,
 		},
 		{
-			FeatureKey: "targeting-alice",
+			FeatureKey: featureTargetingAlice,
 			Filters: []definitions.FeatureFilter{{
 				Name: "Targeting",
 				Parameters: map[string]any{
@@ -60,7 +71,7 @@ func contractDefinitions() []definitions.FeatureDefinitionModel {
 			RequirementType: definitions.RequirementAny,
 		},
 		{
-			FeatureKey: "claims-admin",
+			FeatureKey: featureClaimsAdmin,
 			Filters: []definitions.FeatureFilter{{
 				Name: "UserClaims",
 				Parameters: map[string]any{
@@ -72,7 +83,7 @@ func contractDefinitions() []definitions.FeatureDefinitionModel {
 			RequirementType: definitions.RequirementAny,
 		},
 		{
-			FeatureKey: "all-filters",
+			FeatureKey: featureAllFilters,
 			Filters: []definitions.FeatureFilter{
 				{Name: "AlwaysOn"},
 				{
@@ -116,6 +127,68 @@ func connectContractMongo(t *testing.T, collectionName string) (*mongo.Client, *
 	return client, collection
 }
 
+func assertContractSnapshotRoundTrip(t *testing.T, loaded *snapshot.DefinitionsSnapshot, input snapshot.DefinitionsSnapshot, defs []definitions.FeatureDefinitionModel) {
+	t.Helper()
+	if loaded == nil {
+		t.Fatal("LoadDefinitions returned nil snapshot")
+	}
+	if loaded.ETag != input.ETag || loaded.Signature != input.Signature || loaded.Kid != input.Kid || loaded.Timestamp != input.Timestamp {
+		t.Fatalf("loaded metadata = %#v, want %#v", loaded, input)
+	}
+	if string(loaded.RawDefs) != string(input.RawDefs) {
+		t.Fatalf("raw defs round-trip mismatch:\n got %s\nwant %s", loaded.RawDefs, input.RawDefs)
+	}
+	if len(loaded.Defs) != len(defs) {
+		t.Fatalf("loaded %d defs, want %d", len(loaded.Defs), len(defs))
+	}
+}
+
+func contractEvaluationCases() []struct {
+	key  string
+	ctx  eval.Context
+	want bool
+} {
+	return []struct {
+		key  string
+		ctx  eval.Context
+		want bool
+	}{
+		{key: featureAlwaysOn, want: true},
+		{key: featureAlwaysOff, want: false},
+		{key: featurePercentageOpen, ctx: eval.Context{Identity: contractUserID}, want: true},
+		{key: featurePercentageClosed, ctx: eval.Context{Identity: contractUserID}, want: false},
+		{key: featureTargetingAlice, ctx: eval.Context{Identity: "alice"}, want: true},
+		{key: featureTargetingAlice, ctx: eval.Context{Identity: "bob"}, want: false},
+		{key: featureClaimsAdmin, ctx: eval.Context{Identity: "u", Claims: map[string]string{"role": "admin"}}, want: true},
+		{key: featureClaimsAdmin, ctx: eval.Context{Identity: "u", Claims: map[string]string{"role": "user"}}, want: false},
+		{key: featureAllFilters, ctx: eval.Context{Identity: "u", Claims: map[string]string{"role": "admin"}}, want: true},
+		{key: featureAllFilters, ctx: eval.Context{Identity: "u", Claims: map[string]string{"role": "user"}}, want: false},
+	}
+}
+
+func assertContractEvaluations(t *testing.T, defs []definitions.FeatureDefinitionModel) {
+	t.Helper()
+	engine := eval.NewEngine(eval.DefaultRegistry())
+	byKey := make(map[string]definitions.FeatureDefinitionModel, len(defs))
+	for _, def := range defs {
+		byKey[def.FeatureKey] = def
+	}
+
+	for _, tc := range contractEvaluationCases() {
+		def, ok := byKey[tc.key]
+		if !ok {
+			t.Fatalf("missing loaded definition %q", tc.key)
+		}
+		got, err := engine.Evaluate(def, tc.ctx)
+		if err != nil {
+			t.Fatalf("Evaluate(%q): %v", tc.key, err)
+		}
+		if got != tc.want {
+			t.Errorf("Evaluate(%q) = %v, want %v", tc.key, got, tc.want)
+		}
+	}
+}
+
 func TestMongoDBProvider_StoreLoadEvaluateContract(t *testing.T) {
 	_, collection := connectContractMongo(t, "mongodb_v2_contract_eval")
 	provider := NewMongoDBProvider(MongoDBOptions{Collection: collection})
@@ -142,54 +215,8 @@ func TestMongoDBProvider_StoreLoadEvaluateContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadDefinitions: %v", err)
 	}
-	if loaded == nil {
-		t.Fatal("LoadDefinitions returned nil snapshot")
-	}
-	if loaded.ETag != input.ETag || loaded.Signature != input.Signature || loaded.Kid != input.Kid || loaded.Timestamp != input.Timestamp {
-		t.Fatalf("loaded metadata = %#v, want %#v", loaded, input)
-	}
-	if string(loaded.RawDefs) != string(input.RawDefs) {
-		t.Fatalf("raw defs round-trip mismatch:\n got %s\nwant %s", loaded.RawDefs, input.RawDefs)
-	}
-	if len(loaded.Defs) != len(defs) {
-		t.Fatalf("loaded %d defs, want %d", len(loaded.Defs), len(defs))
-	}
-
-	engine := eval.NewEngine(eval.DefaultRegistry())
-	byKey := make(map[string]definitions.FeatureDefinitionModel, len(loaded.Defs))
-	for _, def := range loaded.Defs {
-		byKey[def.FeatureKey] = def
-	}
-
-	cases := []struct {
-		key  string
-		ctx  eval.Context
-		want bool
-	}{
-		{key: "always-on", want: true},
-		{key: "always-off", want: false},
-		{key: "percentage-open", ctx: eval.Context{Identity: "user-1"}, want: true},
-		{key: "percentage-closed", ctx: eval.Context{Identity: "user-1"}, want: false},
-		{key: "targeting-alice", ctx: eval.Context{Identity: "alice"}, want: true},
-		{key: "targeting-alice", ctx: eval.Context{Identity: "bob"}, want: false},
-		{key: "claims-admin", ctx: eval.Context{Identity: "u", Claims: map[string]string{"role": "admin"}}, want: true},
-		{key: "claims-admin", ctx: eval.Context{Identity: "u", Claims: map[string]string{"role": "user"}}, want: false},
-		{key: "all-filters", ctx: eval.Context{Identity: "u", Claims: map[string]string{"role": "admin"}}, want: true},
-		{key: "all-filters", ctx: eval.Context{Identity: "u", Claims: map[string]string{"role": "user"}}, want: false},
-	}
-	for _, tc := range cases {
-		def, ok := byKey[tc.key]
-		if !ok {
-			t.Fatalf("missing loaded definition %q", tc.key)
-		}
-		got, err := engine.Evaluate(def, tc.ctx)
-		if err != nil {
-			t.Fatalf("Evaluate(%q): %v", tc.key, err)
-		}
-		if got != tc.want {
-			t.Errorf("Evaluate(%q) = %v, want %v", tc.key, got, tc.want)
-		}
-	}
+	assertContractSnapshotRoundTrip(t, loaded, input, defs)
+	assertContractEvaluations(t, loaded.Defs)
 }
 
 func TestMongoDBProvider_ClientLoadsSnapshotAndEvaluates(t *testing.T) {
@@ -239,12 +266,12 @@ func TestMongoDBProvider_ClientLoadsSnapshotAndEvaluates(t *testing.T) {
 	deadline := time.Now().Add(5 * time.Second)
 	var enabled bool
 	for {
-		enabled, err = client.IsEnabled(ctx, "always-on", toggly.Context{Identity: "contract-user"})
+		enabled, err = client.IsEnabled(ctx, featureAlwaysOn, toggly.Context{Identity: "contract-user"})
 		if err == nil && enabled {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("client never loaded MongoDB snapshot: IsEnabled(always-on)=%v, err=%v", enabled, err)
+			t.Fatalf("client never loaded MongoDB snapshot: IsEnabled(%s)=%v, err=%v", featureAlwaysOn, enabled, err)
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
@@ -260,14 +287,14 @@ func TestMongoDBProvider_ClientLoadsSnapshotAndEvaluates(t *testing.T) {
 		}
 	}
 
-	assertClientFlag("always-on", toggly.Context{}, true)
-	assertClientFlag("always-off", toggly.Context{}, false)
-	assertClientFlag("percentage-open", toggly.Context{Identity: "user-1"}, true)
-	assertClientFlag("percentage-closed", toggly.Context{Identity: "user-1"}, false)
-	assertClientFlag("targeting-alice", toggly.Context{Identity: "alice"}, true)
-	assertClientFlag("targeting-alice", toggly.Context{Identity: "bob"}, false)
-	assertClientFlag("claims-admin", toggly.Context{Identity: "u", Claims: map[string]string{"role": "admin"}}, true)
-	assertClientFlag("claims-admin", toggly.Context{Identity: "u", Claims: map[string]string{"role": "user"}}, false)
-	assertClientFlag("all-filters", toggly.Context{Identity: "u", Claims: map[string]string{"role": "admin"}}, true)
-	assertClientFlag("all-filters", toggly.Context{Identity: "u", Claims: map[string]string{"role": "user"}}, false)
+	assertClientFlag(featureAlwaysOn, toggly.Context{}, true)
+	assertClientFlag(featureAlwaysOff, toggly.Context{}, false)
+	assertClientFlag(featurePercentageOpen, toggly.Context{Identity: contractUserID}, true)
+	assertClientFlag(featurePercentageClosed, toggly.Context{Identity: contractUserID}, false)
+	assertClientFlag(featureTargetingAlice, toggly.Context{Identity: "alice"}, true)
+	assertClientFlag(featureTargetingAlice, toggly.Context{Identity: "bob"}, false)
+	assertClientFlag(featureClaimsAdmin, toggly.Context{Identity: "u", Claims: map[string]string{"role": "admin"}}, true)
+	assertClientFlag(featureClaimsAdmin, toggly.Context{Identity: "u", Claims: map[string]string{"role": "user"}}, false)
+	assertClientFlag(featureAllFilters, toggly.Context{Identity: "u", Claims: map[string]string{"role": "admin"}}, true)
+	assertClientFlag(featureAllFilters, toggly.Context{Identity: "u", Claims: map[string]string{"role": "user"}}, false)
 }
