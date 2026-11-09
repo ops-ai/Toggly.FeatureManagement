@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFrameworks>net8.0;net9.0;net10.0;net11.0</TargetFrameworks>
     <Description>Scoped Blazor feature gates and trusted server integration for Toggly.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>

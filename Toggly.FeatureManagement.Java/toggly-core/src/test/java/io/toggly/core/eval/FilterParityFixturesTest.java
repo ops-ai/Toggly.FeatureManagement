@@ -48,6 +48,8 @@ class FilterParityFixturesTest {
             "user-claims-match",
             "user-claims-miss",
             "targeting-groups-match",
+            "targeting-rollout-100-anonymous",
+            "targeting-rollout-partial-anonymous",
             "percentage-missing-fail-closed",
             "percentage-zero-fail-closed",
             "unknown-filter-fail-closed");

@@ -1,3 +1,10 @@
+## Unreleased
+
+### Changed
+- Prove current Docusaurus `3.10.2` packed hosts on React `18.3.1` and `19.3.1`
+  across Node 22/24/26 in CI. Peer floors remain `@docusaurus/core ^3` and
+  `react`/`react-dom` `^18 || ^19`.
+
 ## 0.10.2
 
 2026-09-28

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.13.3
+
+2026-11-02
+
+### Changed
+- Go module floor raised to **1.26** (Go 1.25 is EOL). CI tests Go 1.26 and
+  the latest stable (1.27).
+- Replace deprecated `nhooyr.io/websocket` with `github.com/coder/websocket`
+  (same API lineage; live-update behavior unchanged).
+- Bump `google.golang.org/grpc` to 1.85.0 and refresh other direct/indirect
+  dependencies to current stable releases (`go-redis` 9.23, `golang.org/x/*`).
+- User-Agent and live-update `sdkVersion` report `toggly-go/0.13.3`.
+- Parse ES256 JWKs with `ecdsa.ParseUncompressedPublicKey` (Go 1.26
+  deprecates composing `ecdsa.PublicKey` via raw `X`/`Y` fields).
+
+### Added
+- Golden filter-parity fixture tests loading `docs/filter-parity/fixtures/`
+  against `toggly/eval` (known-failure skip hook if a fixture diverges).
+- Segment membership contract smoke loading
+  `tests/segment-membership/contract.json` against `SegmentMembershipClient`.
+
 ## 0.13.2
 
 2026-10-19

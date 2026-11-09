@@ -303,12 +303,18 @@ class TargetingEvaluator(FilterEvaluator):
         if groups and context.groups and any(g in groups for g in context.groups):
             return True
 
+        # Parity with toggly-eval / filter-parity fixtures:
+        # pct >= 100 enables even without identity; 0 < pct < 100 fails closed
+        # when anonymous; pct <= 0 stays off.
         default_percentage = self._get_default_percentage(params)
-        if default_percentage > 0 and context.identity:
-            bucket = PercentageEvaluator()._calculate_bucket(context.identity, feature_key)
-            return bucket < default_percentage
-
-        return False
+        if default_percentage <= 0:
+            return False
+        if default_percentage >= 100:
+            return True
+        if not context.identity:
+            return False
+        bucket = PercentageEvaluator()._calculate_bucket(context.identity, feature_key)
+        return bucket < default_percentage
 
     def _get_users(self, params: dict[str, Any]) -> set[str]:
         """Extract user list from parameters."""
