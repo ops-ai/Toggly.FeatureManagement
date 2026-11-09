@@ -72,7 +72,7 @@ jobs:
           fetch-depth: 0  # Full history for SonarCloud
       
       - name: Setup Node for workflow tests
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
 
@@ -421,7 +421,7 @@ jobs:
         run: test -n "${SONAR_TOKEN}" || { echo "SonarCloud token is required"; exit 1; }
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@v8.3.0
+        uses: SonarSource/sonarqube-scan-action@v8.4.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -458,7 +458,7 @@ jobs:
 
       - name: SonarQube Server Scan
         if: ${{ !cancelled() && (success() || failure()) && steps.validate-sonarqube-server-credentials.outcome == 'success' }}
-        uses: SonarSource/sonarqube-scan-action@v8.3.0
+        uses: SonarSource/sonarqube-scan-action@v8.4.1
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
@@ -544,7 +544,7 @@ jobs:
           suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
 
       - name: SonarCloud Scan - MongoDB Driver v2
-        uses: SonarSource/sonarqube-scan-action@v8.3.0
+        uses: SonarSource/sonarqube-scan-action@v8.4.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -565,7 +565,7 @@ jobs:
             ${{ github.event_name != 'pull_request' && (github.event_name == 'workflow_call' || github.ref == 'refs/heads/develop') && format('-Dsonar.branch.name=master -Dsonar.scm.revision={0}', github.sha) || '' }}
 
       - name: SonarQube Server Scan - MongoDB Driver v2
-        uses: SonarSource/sonarqube-scan-action@v8.3.0
+        uses: SonarSource/sonarqube-scan-action@v8.4.1
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}

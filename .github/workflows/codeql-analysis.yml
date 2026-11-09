@@ -51,7 +51,7 @@ jobs:
         # queries: ./path/to/local/query, your-org/your-repo/queries@main
 
     - name: Setup .NET SDKs
-      uses: actions/setup-dotnet@v6
+      uses: actions/setup-dotnet@v6.1.0
       with:
         # Exact versions skip aka.ms. Floating channels resolve through
         # aka.ms to dotnetorigin.blob.core.windows.net, which returns 409
