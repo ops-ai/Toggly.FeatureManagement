@@ -354,17 +354,26 @@ test('MongoDB v2 fatal scanners wait on main-branch analysis outside pull reques
 
 test('mongo service containers set the SERVER-121912 glibc tunable on every Go workflow leg', () => {
   const tunable = 'GLIBC_TUNABLES: glibc.pthread.rseq=1';
-  for (const name of ['test', 'mongodb-v2']) {
-    const source = job(name);
-    const header = '\n      mongodb:\n';
-    const start = source.indexOf(header);
-    assert.notEqual(start, -1, `${name}: mongodb service`);
-    const body = source.slice(start + header.length);
-    const nextService = body.search(/\n      [a-z][a-z0-9_-]*:\n/);
-    const block = nextService === -1 ? body : body.slice(0, nextService);
-    assert.match(block, /image: mongo:8/);
-    assert.ok(block.includes(tunable), `${name}: ${tunable}`);
-  }
+  const testJob = job('test');
+  const testHeader = '\n      mongodb:\n';
+  const testStart = testJob.indexOf(testHeader);
+  assert.notEqual(testStart, -1, 'test: mongodb service');
+  const testBody = testJob.slice(testStart + testHeader.length);
+  const testNext = testBody.search(/\n      [a-z][a-z0-9_-]*:\n/);
+  const testBlock = testNext === -1 ? testBody : testBody.slice(0, testNext);
+  assert.match(testBlock, /image: mongo:8/);
+  assert.ok(testBlock.includes(tunable), `test: ${tunable}`);
+
+  const adapter = job('mongodb-v2');
+  const adapterHeader = '\n      mongodb:\n';
+  const adapterStart = adapter.indexOf(adapterHeader);
+  assert.notEqual(adapterStart, -1, 'mongodb-v2: mongodb service');
+  const adapterBody = adapter.slice(adapterStart + adapterHeader.length);
+  const adapterNext = adapterBody.search(/\n      [a-z][a-z0-9_-]*:\n/);
+  const adapterBlock = adapterNext === -1 ? adapterBody : adapterBody.slice(0, adapterNext);
+  assert.match(adapterBlock, /image: mongo:\$\{\{ matrix\.mongodb-version \}\}/);
+  assert.ok(adapterBlock.includes(tunable), `mongodb-v2: ${tunable}`);
+  assert.match(adapter, /mongodb-version: \['8', '9'\]/);
 });
 
 test('existing runtime consumer coverage database example and OWASP contracts are retained', () => {
@@ -377,8 +386,10 @@ test('existing runtime consumer coverage database example and OWASP contracts ar
   assert.match(job('smoke-test'), /go test.*TestSmoke/);
   assert.match(job('current-runtime'), /go-version: '1.27.x'/);
   assert.match(job('mongodb-v2'), /go-version: \['1.26.x', '1.27.x'\]/);
+  assert.match(job('mongodb-v2'), /mongodb-version: \['8', '9'\]/);
   assert.match(job('mongodb-v2'), /go test -v -race/);
   assert.match(job('mongodb-v2'), /if \(\$3 <= 80\) exit 1/);
+  assert.match(job('mongodb-v2'), /matrix\.go-version == '1\.26\.x' && matrix\.mongodb-version == '8'/);
   for (const name of ['mongodb-v2-consumer', 'toggly-go-consumer']) {
     const consumer = job(name);
     assert.match(consumer, /git archive --format=tar HEAD:/);

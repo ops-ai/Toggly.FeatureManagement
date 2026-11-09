@@ -8,8 +8,8 @@ without placing both driver majors in the Toggly core module's dependency graph.
 ## Requirements
 
 - Go 1.26 or later
-- Toggly Go SDK v0.8.1 or later
-- MongoDB Go Driver v2 (provided by this module)
+- Toggly Go SDK v0.13.3 or later
+- MongoDB Go Driver v2.10+ (provided by this module)
 
 The retained v1 adapter remains available from:
 
