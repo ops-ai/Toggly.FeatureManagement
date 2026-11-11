@@ -560,6 +560,30 @@ jobs:
           flutter pub publish --force
           show_analysis_rewrites
 
+      - name: Resolve Dart/Flutter requirements from pubspec.yaml
+        if: needs.validate.outputs.is_provider != 'true'
+        id: runtime_req
+        run: |
+          pubspec="${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}/pubspec.yaml"
+          python3 - "$pubspec" <<'PY'
+          import os, re, sys
+          path = sys.argv[1]
+          text = open(path, encoding='utf-8').read()
+          match = re.search(r'^environment:\n((?:[ \t]+.+\n)+)', text, re.M)
+          if not match:
+              raise SystemExit(f'::error::Missing environment block in {path}')
+          block = match.group(1)
+          sdk = re.search(r"""sdk:\s*['\"]([^'\"]+)['\"]""", block)
+          flutter = re.search(r"""flutter:\s*['\"]([^'\"]+)['\"]""", block)
+          if not sdk:
+              raise SystemExit(f'::error::Missing environment.sdk in {path}')
+          if not flutter:
+              raise SystemExit(f'::error::Missing environment.flutter in {path}')
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as out:
+              out.write(f'dart_requirement=Dart SDK {sdk.group(1)}\n')
+              out.write(f'flutter_requirement=Flutter {flutter.group(1)}\n')
+          PY
+
       - name: Create GitHub Release (core)
         if: needs.validate.outputs.is_provider != 'true'
         uses: softprops/action-gh-release@v3
@@ -586,8 +610,8 @@ jobs:
 
             ### Requirements
 
-            - Dart SDK >=3.4.0 <4.0.0
-            - Flutter >=3.22.0
+            - ${{ steps.runtime_req.outputs.dart_requirement }}
+            - ${{ steps.runtime_req.outputs.flutter_requirement }}
 
             ### Links
 

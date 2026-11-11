@@ -230,6 +230,17 @@ jobs:
           git tag -s -m "Java SDK v${{ needs.validate.outputs.version }}" "java-sdk-v${{ needs.validate.outputs.version }}"
           git push origin "java-sdk-v${{ needs.validate.outputs.version }}"
 
+      - name: Resolve Java requirement from pom.xml
+        id: runtime_req
+        run: |
+          pom="${{ env.SDK_ROOT }}/pom.xml"
+          java_ver=$(sed -nE 's|.*<java\.version>([^<]+)</java\.version>.*|\1|p' "$pom" | head -1)
+          if [ -z "$java_ver" ]; then
+            echo "::error::Missing java.version in $pom"
+            exit 1
+          fi
+          echo "java_requirement=Java ${java_ver}+" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -265,7 +276,7 @@ jobs:
 
             ### Requirements
 
-            - Java 17+
+            - ${{ steps.runtime_req.outputs.java_requirement }}
           prerelease: ${{ github.event.inputs.prerelease }}
           generate_release_notes: true
         env:
