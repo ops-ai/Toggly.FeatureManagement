@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: toggly-cache
-Version: 0.1.0
+Version: 0.1.2
 Summary: Caching providers for Toggly feature flag management (Redis, Memcached)
 Author-email: Toggly <support@toggly.io>
 Maintainer-email: Toggly <support@toggly.io>
@@ -20,12 +20,14 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: 3.15
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Classifier: Typing :: Typed
 Requires-Python: >=3.8
 Description-Content-Type: text/markdown
 License-File: LICENSE
-Requires-Dist: toggly>=0.1.0
+Requires-Dist: toggly>=0.2.0
 Provides-Extra: redis
 Requires-Dist: redis>=4.0.0; extra == "redis"
 Provides-Extra: memcached

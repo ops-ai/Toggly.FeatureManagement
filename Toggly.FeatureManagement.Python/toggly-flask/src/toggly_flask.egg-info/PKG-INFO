@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: toggly-flask
-Version: 0.1.0
+Version: 0.4.0
 Summary: Flask integration for Toggly feature flag management
 Author-email: Toggly <support@toggly.io>
 Maintainer-email: Toggly <support@toggly.io>
@@ -21,14 +21,45 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: 3.15
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Classifier: Typing :: Typed
 Requires-Python: >=3.8
 Description-Content-Type: text/markdown
-Requires-Dist: toggly>=0.1.0
+Requires-Dist: toggly>=1.0.0
 Requires-Dist: flask>=2.0
 Provides-Extra: dev
 Requires-Dist: pytest>=7.0.0; extra == "dev"
 Requires-Dist: pytest-cov>=4.0.0; extra == "dev"
 Requires-Dist: mypy>=1.0.0; extra == "dev"
 Requires-Dist: ruff>=0.1.0; extra == "dev"
+
+# toggly-flask
+
+## Feature variants
+
+Requires **toggly 1.0.0+**. Feature variants are assigned locally from the
+same cached definitions used for `is_enabled` — there is no separate
+"variants mode" to enable.
+
+```python
+from flask import Flask
+from toggly_flask import Toggly, get_client
+
+app = Flask(__name__)
+app.config.update(
+    TOGGLY_APP_KEY="your-app-key",
+    TOGGLY_IDENTITY="user-123",  # Default identity used when a request/user_id isn't supplied.
+)
+Toggly(app)
+
+client = get_client()
+variant = client.get_variant("checkout-flow", user_id="user-123")
+if variant is not None and variant.enabled and variant.name == "B":
+    ...
+```
+
+See the core `toggly` package README for the full `get_variant` /
+`get_variant_value` API and the Microsoft.FeatureManagement-parity assignment
+rules.

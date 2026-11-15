@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Compatibility
+- Declare Python 3.15 support and add it to the FastAPI CI matrix. Packed-host
+  current row validates FastAPI 0.162.x. Declared floor remains Python 3.9+ /
+  FastAPI `>=0.100`.
+
 ## 0.4.0 - 2026-09-23
 
 ### Changed

@@ -1,3 +1,9 @@
+## Unreleased
+
+### Changed
+- Declare Node `>=22` (Node 18/20 dropped per owner support policy).
+- Vitest forks on Node 25+ pass `--no-webstorage` via `poolOptions.forks.execArgv` (Vitest 3 ignores top-level `test.execArgv`), with a MemoryStorage setup fallback so happy-dom owns `localStorage`.
+
 ## 1.6.0
 
 2026-10-11

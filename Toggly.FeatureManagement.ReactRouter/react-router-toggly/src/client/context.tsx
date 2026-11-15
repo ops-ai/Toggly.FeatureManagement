@@ -23,6 +23,7 @@ import {
   normalizeEntityContext,
   registerContext as registerEntityContext,
   parseVariantDefsPayload,
+  parseEvaluatedFlagsPayload,
   variantDefsToFlags,
   decodeVariantValue,
   type TogglyEntityContext,
@@ -352,10 +353,7 @@ function TogglyProviderOwner({
         }
 
         variantsRef.current = null;
-        const newFlags =
-          payload && typeof payload === 'object'
-            ? (payload as FeatureFlags)
-            : {};
+        const newFlags = parseEvaluatedFlagsPayload(payload);
         logger.debug(`Fetched ${Object.keys(newFlags).length} flags.`);
 
         return newFlags;

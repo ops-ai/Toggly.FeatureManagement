@@ -143,9 +143,9 @@ jobs:
 
             ### Requirements
 
-            - Go 1.25+
-            - Toggly Go SDK v0.8.1+
-            - MongoDB Go Driver v2
+            - Go 1.26+
+            - Toggly Go SDK v0.13.3+
+            - MongoDB Go Driver v2.10+
 
             ### Links
 

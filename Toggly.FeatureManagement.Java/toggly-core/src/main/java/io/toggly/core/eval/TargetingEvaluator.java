@@ -34,14 +34,20 @@ public final class TargetingEvaluator implements FilterEvaluator {
             return true;
         }
 
-        // Check default rollout percentage
+        // Check default rollout percentage (parity with toggly-eval / filter-parity fixtures):
+        // pct >= 100 enables even without identity; 0 < pct < 100 fails closed when anonymous.
         double defaultPercentage = getDefaultPercentage(params);
-        if (defaultPercentage > 0 && identity != null && !identity.isEmpty()) {
-            double bucket = PercentageEvaluator.INSTANCE.calculateBucket(identity, featureKey);
-            return bucket < defaultPercentage;
+        if (defaultPercentage <= 0) {
+            return false;
         }
-
-        return false;
+        if (defaultPercentage >= 100) {
+            return true;
+        }
+        if (identity == null || identity.isEmpty()) {
+            return false;
+        }
+        double bucket = PercentageEvaluator.INSTANCE.calculateBucket(identity, featureKey);
+        return bucket < defaultPercentage;
     }
 
     private Set<String> getUsers(Map<String, Object> params) {

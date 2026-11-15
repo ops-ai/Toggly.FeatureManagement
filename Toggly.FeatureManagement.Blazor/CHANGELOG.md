@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Multi-target `net8.0`, `net9.0`, `net10.0`, and `net11.0` with matching `Microsoft.AspNetCore.Components.*` package versions per TFM (`net11.0` uses RC packages until GA).
+- Bump test and Components servicing dependencies; keep FluentAssertions on 6.12.x.
+
+### Added
+- bUnit contract tests that evaluate Feature gates against a mocked Toggly definitions HTTP envelope.
+
 ## 3.10.0 — 2026-09-19
 
 ### Added

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Declare Node `>=22` (Node 18/20 dropped per owner support policy).
+- Keep optional `h3` peer at `^1.0.0`: Nuxt 4.6 still ships `h3@^1.15` via Nitro; do not widen to `h3@2` until Nuxt/Nitro adopt it.
+
 ## 1.10.2
 
 2026-10-23

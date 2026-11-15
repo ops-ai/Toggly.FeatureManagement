@@ -109,11 +109,11 @@ import (
 db, _ := sql.Open("postgres", "postgres://user:pass@localhost/dbname?sslmode=disable")
 
 provider := snapshot.NewPostgresProvider(snapshot.PostgresOptions{
-    DB:              db,
-    TableName:       "toggly_snapshots", // Default
-    DefinitionsID:   "toggly_definitions",
-    JWKSID:          "toggly_jwks",
-    AutoCreateTable: true, // Default
+    DB:            db,
+    TableName:     "toggly_snapshots", // Default
+    DefinitionsID: "toggly_definitions",
+    JWKSID:        "toggly_jwks",
+    // DisableAutoCreateTable: true, // opt out of CREATE TABLE IF NOT EXISTS (default: create)
 })
 ```
 
@@ -144,11 +144,11 @@ import (
 db, _ := sql.Open("sqlite3", "./toggly.db")
 
 provider := snapshot.NewSQLiteProvider(snapshot.SQLiteOptions{
-    DB:              db,
-    TableName:       "toggly_snapshots", // Default
-    DefinitionsID:   "toggly_definitions",
-    JWKSID:          "toggly_jwks",
-    AutoCreateTable: true, // Default
+    DB:            db,
+    TableName:     "toggly_snapshots", // Default
+    DefinitionsID: "toggly_definitions",
+    JWKSID:        "toggly_jwks",
+    // DisableAutoCreateTable: true, // opt out of CREATE TABLE IF NOT EXISTS (default: create)
 })
 ```
 
