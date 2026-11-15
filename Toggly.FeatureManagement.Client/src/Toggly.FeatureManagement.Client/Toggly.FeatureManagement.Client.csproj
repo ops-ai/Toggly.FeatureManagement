@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- net6.0 / netstandard2.1 omitted: require BCL shims (CancelAsync, ObjectDisposedException.ThrowIf,
+         Enumerable.Order, System.Text.Json inbox APIs) that would change more than TFM metadata. -->
+    <TargetFrameworks>net7.0;net8.0;net9.0;net10.0;net11.0</TargetFrameworks>
+    <LangVersion>12.0</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <Authors>Toggly</Authors>

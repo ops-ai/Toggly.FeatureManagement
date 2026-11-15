@@ -46,7 +46,7 @@ jobs:
         uses: ./.github/actions/build-shared-js-deps
         with:
           packages: signed-defs,eval,segments
-          node-version: '20.x'
+          node-version: '22.x'
 
       - name: Upload shared package dist artifacts
         uses: ./.github/actions/upload-shared-js-deps
@@ -58,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [18.x, 20.x, 22.x]
+        node-version: [22.x, 24.x, 26.x]
 
     steps:
       - name: Checkout code
@@ -121,7 +121,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '20.x'
+          node-version: '22.x'
           cache: 'pnpm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
 
@@ -163,7 +163,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '20.x'
+          node-version: '22.x'
           cache: 'pnpm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
 
@@ -214,7 +214,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '20.x'
+          node-version: '22.x'
           cache: 'pnpm'
           cache-dependency-path: ${{ env.SDK_ROOT }}/pnpm-lock.yaml
 
@@ -257,7 +257,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '20.x'
+          node-version: '22.x'
 
       - name: Restore shared JS deps
         if: needs.build-shared-js-deps.result == 'success'
@@ -464,7 +464,7 @@ jobs:
             echo "- @ops-ai/nextjs-toggly-edge"
             echo ""
             echo "### Node.js Versions Tested"
-            echo "- 18.x, 20.x, 22.x"
+            echo "- 22.x, 24.x, 26.x"
             echo ""
             echo "Check SonarCloud for detailed results: https://sonarcloud.io/project/overview?id=toggly-sdks-next"
           } >> "$GITHUB_STEP_SUMMARY"

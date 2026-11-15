@@ -88,12 +88,15 @@ class TestNativeGrpcPath:
         from toggly.telemetry.pb import metrics_pb2_grpc, usage_pb2_grpc
 
         parts = [int(p) for p in grpc_mod.__version__.split(".")[:3]]
-        # Stubs declare a floor that Python 3.8 can install; Python ≥3.9
-        # installs grpcio≥1.80 from the telemetry extra.
-        if sys.version_info >= (3, 9):
+        # Telemetry extras keep wide floors: 3.8 stays on grpcio<1.71, 3.9 on
+        # the last 1.80.x line, and Python ≥3.10 resolves to current grpcio.
+        if sys.version_info >= (3, 10):
             assert parts >= [1, 80, 0]
+        elif sys.version_info >= (3, 9):
+            assert parts[:2] == [1, 80]
         else:
             assert parts >= [1, 62, 0]
+            assert parts < [1, 71, 0]
         assert usage_pb2_grpc.GRPC_GENERATED_VERSION == "1.62.0"
         assert metrics_pb2_grpc.GRPC_GENERATED_VERSION == "1.62.0"
 
