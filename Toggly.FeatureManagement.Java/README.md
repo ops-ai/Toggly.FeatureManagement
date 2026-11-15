@@ -53,10 +53,10 @@ Official Java SDK for [Toggly](https://toggly.io) feature flags and experimentat
 <dependency>
     <groupId>com.google.protobuf</groupId>
     <artifactId>protobuf-java</artifactId>
-    <version>3.25.5</version>
+    <version>4.36.2</version>
 </dependency>
 
-<!-- Spring Boot 3.x (recommended on Boot 3.2+) -->
+<!-- Spring Boot 3.x (recommended on Boot 3.5.x) -->
 <dependency>
     <groupId>io.toggly</groupId>
     <artifactId>toggly-spring-boot-starter</artifactId>
@@ -369,9 +369,9 @@ When using Spring Boot Actuator:
 
 ## Requirements
 
-- Java 17+
-- Spring Boot 3.2+ (for Spring modules; CI tests against the Boot version pinned in `pom.xml`)
-- Spring Framework 6.1+ (for Spring MVC/WebFlux)
+- Java 17+ (CI also tests JDK 21 and 25)
+- Spring Boot 3.5.x via `toggly-spring-boot-starter`, or Boot 4.1.x via `toggly-spring-boot4-starter`
+- Spring Framework 6.2+ or 7.0.x for MVC/WebFlux (`provided` scope; CI proves both)
 
 ## Documentation
 

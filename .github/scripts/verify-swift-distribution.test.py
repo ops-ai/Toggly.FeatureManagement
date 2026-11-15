@@ -70,6 +70,33 @@ class DistributionTests(unittest.TestCase):
         analysis = (ROOT / '.github/workflows/analysis-ios.yml').read_text()
         self.assertIn('--repository "https://github.com/${{ github.repository }}.git" --revision "$(git rev-parse HEAD)"', analysis)
         self.assertIn('python3 .github/scripts/verify-swift-distribution.test.py', analysis)
+        self.assertIn("arm64-apple-ios${{ matrix.consumer_ios }}-simulator", analysis)
+        self.assertRegex(analysis, r"consumer_ios: '14\.0'")
+        self.assertRegex(analysis, r"xcode: '27\.1'[\s\S]*consumer_ios: '15\.0'")
+
+    def test_consumer_ios_major_follows_triple_without_raising_sdk_floor(self):
+        self.assertEqual(distribution.consumer_ios_major(None), 14)
+        self.assertEqual(distribution.consumer_ios_major('arm64-apple-ios14.0-simulator'), 14)
+        self.assertEqual(distribution.consumer_ios_major('arm64-apple-ios15.0-simulator'), 15)
+        self.assertEqual(distribution.consumer_ios_major('arm64-apple-ios15-simulator'), 15)
+        with self.assertRaisesRegex(ValueError, 'iosN'):
+            distribution.consumer_ios_major('arm64-apple-macosx14.0')
+        # Public SDK Package.swift must keep the declared iOS 14 floor.
+        root_manifest = (ROOT / 'Package.swift').read_text()
+        nested_manifest = (ROOT / distribution.SDK / 'Package.swift').read_text()
+        self.assertIn('.iOS(.v14)', root_manifest)
+        self.assertIn('.iOS(.v14)', nested_manifest)
+        self.assertNotIn('.iOS(.v15)', root_manifest)
+        self.assertNotIn('.iOS(.v15)', nested_manifest)
+        # Disposable consumer manifest alone tracks the verify triple.
+        text = distribution.consumer_package_manifest(
+            'https://example.invalid/Toggly.FeatureManagement.git',
+            'abc',
+            '.product(name: "TogglyCore", package: "toggly.featuremanagement")',
+            15,
+        )
+        self.assertIn('.iOS(.v15)', text)
+        self.assertNotIn('.iOS(.v14)', text)
 
     def test_deadline_reaps_owned_child_processes(self):
         with tempfile.TemporaryDirectory(prefix='toggly-swift-deadline-') as directory:
