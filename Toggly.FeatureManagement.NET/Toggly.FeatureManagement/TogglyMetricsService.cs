@@ -46,6 +46,13 @@ namespace Toggly.FeatureManagement
 
         private readonly Timer _timer;
 
+        /// <summary>
+        /// Earliest UTC time the periodic timer may transmit. Collection keeps running on
+        /// <see cref="DefaultSendInterval"/> while this is in the future; only the network send waits.
+        /// Explicit sends (shutdown, tests) ignore it.
+        /// </summary>
+        private DateTime _nextSendUtc = DateTime.MinValue;
+
         private readonly string userAgent;
 
         private readonly IFeatureExperimentProvider _featureExperimentProvider;
@@ -167,12 +174,13 @@ namespace Toggly.FeatureManagement
             // Skip if shutting down or disposed
             if (_shuttingDown || _disposed) return;
             
-            // Fire and forget with proper error handling
+            // Fire and forget with proper error handling.
+            // Honor send backoff here only: registry collection still runs every interval.
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await SendMetrics().ConfigureAwait(false);
+                    await SendMetrics(suppressLogging: false, honorBackoff: true).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -196,9 +204,11 @@ namespace Toggly.FeatureManagement
                 StoreObservationInstance(m.Value.Item1, m.Key, null, m.Value.Item2, true);
         }
 
-        private Task SendMetrics() => SendMetrics(suppressLogging: false);
+        private Task SendMetrics() => SendMetrics(suppressLogging: false, honorBackoff: false);
 
-        private async Task SendMetrics(bool suppressLogging)
+        private Task SendMetrics(bool suppressLogging) => SendMetrics(suppressLogging, honorBackoff: false);
+
+        private async Task SendMetrics(bool suppressLogging, bool honorBackoff)
         {
             // Prevent concurrent send operations (timer and ApplicationStopping could overlap)
             if (!await _sendMetricsSemaphore.WaitAsync(0).ConfigureAwait(false))
@@ -214,6 +224,13 @@ namespace Toggly.FeatureManagement
             try
             {
                 await BeforeSendMetrics().ConfigureAwait(false);
+
+                if (honorBackoff && DateTime.UtcNow < _nextSendUtc)
+                {
+                    if (!suppressLogging)
+                        TryLog(LogLevel.Debug, "Metrics send backoff active; retained registry observations for a later send");
+                    return;
+                }
 
                 if (_stats.IsEmpty && _counters.IsEmpty && _observations.IsEmpty)
                 {
@@ -330,15 +347,16 @@ namespace Toggly.FeatureManagement
             if (!suppressLogging && shouldLog)
                 TryLog(LogLevel.Warning, ex, message);
 
+            // Keep the timer on DefaultSendInterval so registry snapshots keep accumulating.
+            // Only the transmit step waits.
             if (!_shuttingDown && !_disposed)
-                _timer.Change(delay, DefaultSendInterval);
+                _nextSendUtc = DateTime.UtcNow.Add(delay);
         }
 
         private void ResetTransientBackoff()
         {
             _transientBackoff.Reset();
-            if (!_shuttingDown && !_disposed)
-                _timer.Change(DefaultSendInterval, DefaultSendInterval);
+            _nextSendUtc = DateTime.MinValue;
         }
 
         private void DrainMeasurements(
@@ -586,17 +604,54 @@ namespace Toggly.FeatureManagement
             return true;
         }
 
+        /// <summary>
+        /// Enqueues every entry in <paramref name="observations"/> or none of them, so one
+        /// logical sample is not split when the pending cap is reached mid-call.
+        /// </summary>
+        private bool TryEnqueueObservationGroup(List<(DateTime Date, string MetricKey, string? FeatureKey, string Variant, double Value)> observations)
+        {
+            if (observations.Count == 0)
+                return true;
+
+            while (true)
+            {
+                var current = Volatile.Read(ref _pendingObservationCount);
+                var next = current + observations.Count;
+                if (next > MaxPendingObservations)
+                    return false;
+
+                if (Interlocked.CompareExchange(ref _pendingObservationCount, next, current) == current)
+                {
+                    foreach (var observation in observations)
+                        _observations.Add(observation);
+                    return true;
+                }
+            }
+        }
+
         /// <inheritdoc/>
         public async Task ObserveAsync(string metricKey, double value)
         {
             var date = DateTime.UtcNow;
             TryLog(LogLevel.Trace, "Record observed value: {metricKey}", metricKey);
-            StoreObservationInstance(date, metricKey, null, value, true);
+            if (string.IsNullOrEmpty(metricKey))
+            {
+                TryLog(LogLevel.Debug, "Skipping observation without a metric key");
+                return;
+            }
+
+            var batch = new List<(DateTime Date, string MetricKey, string? FeatureKey, string Variant, double Value)>
+            {
+                (date, metricKey, null, "enabled", value)
+            };
 
             var features = _featureExperimentProvider.GetFeaturesForMetric(metricKey);
             if (features != null)
                 foreach (var feature in features)
-                    StoreObservationInstance(date, metricKey, feature, value, await _featureManager.IsEnabledAsync(feature));
+                    batch.Add((date, metricKey, feature, (await _featureManager.IsEnabledAsync(feature).ConfigureAwait(false)) ? "enabled" : "disabled", value));
+
+            if (!TryEnqueueObservationGroup(batch))
+                TryLog(LogLevel.Debug, "Pending metrics observations cap ({Cap}) reached; dropping observation {MetricKey}", MaxPendingObservations, metricKey);
         }
 
         /// <inheritdoc/>
@@ -604,12 +659,24 @@ namespace Toggly.FeatureManagement
         {
             var date = DateTime.UtcNow;
             TryLog(LogLevel.Trace, "Record observed value: {metricKey}", metricKey);
-            StoreObservationInstance(date, metricKey, null, value, true);
+            if (string.IsNullOrEmpty(metricKey))
+            {
+                TryLog(LogLevel.Debug, "Skipping observation without a metric key");
+                return;
+            }
+
+            var batch = new List<(DateTime Date, string MetricKey, string? FeatureKey, string Variant, double Value)>
+            {
+                (date, metricKey, null, "enabled", value)
+            };
 
             var features = _featureExperimentProvider.GetFeaturesForMetric(metricKey);
             if (features != null)
                 foreach (var feature in features)
-                    StoreObservationInstance(date, metricKey, feature, value, await _featureManager.IsEnabledAsync(feature, context));
+                    batch.Add((date, metricKey, feature, (await _featureManager.IsEnabledAsync(feature, context).ConfigureAwait(false)) ? "enabled" : "disabled", value));
+
+            if (!TryEnqueueObservationGroup(batch))
+                TryLog(LogLevel.Debug, "Pending metrics observations cap ({Cap}) reached; dropping observation {MetricKey}", MaxPendingObservations, metricKey);
         }
 
         #endregion
