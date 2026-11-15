@@ -1,5 +1,5 @@
 /// Client-side entity-gate evaluation (fail closed).
-library entity_gate;
+library;
 
 typedef EntityContextMapper = TogglyEntityContext Function(dynamic entity);
 

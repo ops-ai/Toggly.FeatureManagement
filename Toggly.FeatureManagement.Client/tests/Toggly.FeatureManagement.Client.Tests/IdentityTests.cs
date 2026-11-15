@@ -76,7 +76,7 @@ public class IdentityTests
                 }
             }
             await client.FlushTelemetryAsync();
-            Assert.True(System.Text.Json.Nodes.JsonNode.DeepEquals(System.Text.Json.Nodes.JsonNode.Parse(scenario.GetProperty("envelopes").GetRawText()),
+            Assert.True(TestCompat.JsonDeepEquals(System.Text.Json.Nodes.JsonNode.Parse(scenario.GetProperty("envelopes").GetRawText()),
                 new System.Text.Json.Nodes.JsonArray(capture.Bodies.Select(body => System.Text.Json.Nodes.JsonNode.Parse(body)).ToArray())), scenario.GetProperty("name").GetString());
         }
     }

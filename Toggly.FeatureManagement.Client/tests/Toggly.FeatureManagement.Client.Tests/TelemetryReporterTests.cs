@@ -67,7 +67,7 @@ public class TelemetryReporterTests
                 }
             }
             await reporter.FlushTelemetryAsync();
-            Assert.True(JsonNode.DeepEquals(JsonNode.Parse(scenario.GetProperty("envelopes").GetRawText()), new JsonArray(capture.Bodies.Select(x => JsonNode.Parse(x)).ToArray())), scenario.GetProperty("name").GetString());
+            Assert.True(TestCompat.JsonDeepEquals(JsonNode.Parse(scenario.GetProperty("envelopes").GetRawText()), new JsonArray(capture.Bodies.Select(x => JsonNode.Parse(x)).ToArray())), scenario.GetProperty("name").GetString());
         }
         foreach (var row in Contract.GetProperty("endpointScenarios").EnumerateArray())
         {
@@ -239,7 +239,7 @@ public class TelemetryReporterTests
     [Fact]
     public async Task NativeTransportIsPrivateAndCallerHttpClientRemainsOwnedByCaller()
     {
-        using var portProbe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        var portProbe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
         portProbe.Start(); var port = ((System.Net.IPEndPoint)portProbe.LocalEndpoint).Port; portProbe.Stop();
         using var listener = new System.Net.HttpListener(); listener.Prefixes.Add($"http://127.0.0.1:{port}/"); listener.Start();
         var received = Task.Run(async () =>

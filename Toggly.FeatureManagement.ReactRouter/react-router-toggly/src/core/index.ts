@@ -72,6 +72,7 @@ export {
   registerContext,
   clearRegisteredContexts,
   parseVariantDefsPayload,
+  parseEvaluatedFlagsPayload,
   variantDefsToFlags,
   decodeVariantValue,
   normalizeFeatureKeys,
