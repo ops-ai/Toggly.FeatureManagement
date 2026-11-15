@@ -322,3 +322,17 @@ test('reporting false skips only dependency reporting and allows that exact summ
   assert.equal(calls.length, 0);
   assert.equal(result.stderr.trim(), 'SONAR_TOKEN');
 });
+
+test('shared analyze and pack-packages provision .NET 11 RC for Blazor net11.0 TFM', () => {
+  for (const [start, end] of [
+    ['  analyze:', '  dependency-check:'],
+    ['  pack-packages:', '  embedded-consumer:'],
+  ]) {
+    const job = workflow.slice(workflow.indexOf(start), workflow.indexOf(end));
+    assert.match(
+      job,
+      /- name: Setup \.NET 11 RC \(Blazor preview TFM\)[\s\S]*dotnet-version: '11\.0\.x'[\s\S]*dotnet-quality: 'preview'/,
+      `${start.trim()} must install .NET 11 RC so unconditional Blazor net11.0 restores succeed`,
+    );
+  }
+});

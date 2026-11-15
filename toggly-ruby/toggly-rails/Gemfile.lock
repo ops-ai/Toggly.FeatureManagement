@@ -322,11 +322,11 @@ DEPENDENCIES
   rspec-rails (~> 6.0)
   rubocop (~> 1.90)
   rubocop-rspec (~> 2.24)
-  simplecov (~> 1.2)
-  sqlite3 (~> 2.9)
+  simplecov (~> 1.3)
+  sqlite3 (~> 2.10)
   toggly!
   toggly-rails!
-  webmock (~> 3.26)
+  webmock (~> 3.34)
 
 BUNDLED WITH
    2.7.2

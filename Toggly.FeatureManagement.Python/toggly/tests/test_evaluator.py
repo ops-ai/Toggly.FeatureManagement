@@ -261,6 +261,40 @@ class TestTargetingEvaluator:
         result = evaluator.evaluate(filter_, "test-feature", context)
         assert result is True
 
+    def test_anonymous_enabled_at_100_percent_rollout(self) -> None:
+        """100% default rollout enables without identity (filter-parity)."""
+        evaluator = TargetingEvaluator()
+        filter_ = FeatureFilter(
+            name="Targeting",
+            parameters={"Audience.DefaultRolloutPercentage": 100},
+        )
+
+        assert evaluator.evaluate(filter_, "test-feature", EvaluationContext()) is True
+        assert (
+            evaluator.evaluate(filter_, "test-feature", EvaluationContext.anonymous())
+            is True
+        )
+
+    def test_anonymous_disabled_at_0_percent_rollout(self) -> None:
+        """0% default rollout stays off for anonymous callers."""
+        evaluator = TargetingEvaluator()
+        filter_ = FeatureFilter(
+            name="Targeting",
+            parameters={"Audience.DefaultRolloutPercentage": 0},
+        )
+
+        assert evaluator.evaluate(filter_, "test-feature", EvaluationContext()) is False
+
+    def test_anonymous_fail_closed_on_partial_rollout(self) -> None:
+        """Partial default rollout fails closed without identity."""
+        evaluator = TargetingEvaluator()
+        filter_ = FeatureFilter(
+            name="Targeting",
+            parameters={"Audience.DefaultRolloutPercentage": 50},
+        )
+
+        assert evaluator.evaluate(filter_, "test-feature", EvaluationContext()) is False
+
     def test_indexed_users_format(self) -> None:
         """Test indexed Audience.Users:N format."""
         evaluator = TargetingEvaluator()

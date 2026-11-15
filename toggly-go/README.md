@@ -49,7 +49,7 @@ the feature argument when you need correlation.
 ## Get started
 
 1. Create a free app at [toggly.io](https://toggly.io).
-2. Install the module (Go 1.25+):
+2. Install the module (Go 1.26+):
 
 ```bash
 go get github.com/ops-ai/Toggly.FeatureManagement/toggly-go@latest

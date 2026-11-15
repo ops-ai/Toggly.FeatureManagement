@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.2.2
+
+2026-11-09
+
+### Changed
+- MongoDB Go Driver v2 **2.10.0** (from 2.8.2).
+- `toggly-go` **0.13.3** (from 0.13.2), which switches the websocket
+  dependency to `github.com/coder/websocket` and drops deprecated
+  `nhooyr.io/websocket`.
+- CI `mongodb-v2` job now matrices MongoDB server **8** and **9** (latest
+  stable) alongside Go 1.26.x / 1.27.x.
+
+### Added
+- End-to-end contract tests that store/load Toggly API definition snapshots
+  in MongoDB and evaluate flags with `toggly-go` (`eval.Engine` and
+  `toggly.Client` snapshot startup path).
+
+## 0.2.1
+
+2026-11-02
+
+### Changed
+- Go module floor raised to **1.26** (Go 1.25 is EOL). CI tests Go 1.26 and
+  the latest stable (1.27).
+- Refresh transitive dependencies (`grpc` 1.85, `go-redis` 9.23,
+  `golang.org/x/*`) via `toggly-go` 0.13.2. After `toggly-go` 0.13.3 is
+  published, `go mod tidy` will pick up `github.com/coder/websocket` in place
+  of deprecated `nhooyr.io/websocket`.
+
 ## 0.2.0
 
 2026-09-17

@@ -12,7 +12,10 @@ protobuf>=4.25.0
 [dev:python_version < "3.9"]
 grpcio<1.71,>=1.62.0
 
-[dev:python_version >= "3.9"]
+[dev:python_version == "3.9"]
+grpcio<1.81,>=1.80.0
+
+[dev:python_version >= "3.10"]
 grpcio>=1.80.0
 
 [telemetry]
@@ -21,7 +24,10 @@ protobuf>=4.25.0
 [telemetry:python_version < "3.9"]
 grpcio<1.71,>=1.62.0
 
-[telemetry:python_version >= "3.9"]
+[telemetry:python_version == "3.9"]
+grpcio<1.81,>=1.80.0
+
+[telemetry:python_version >= "3.10"]
 grpcio>=1.80.0
 
 [websocket]

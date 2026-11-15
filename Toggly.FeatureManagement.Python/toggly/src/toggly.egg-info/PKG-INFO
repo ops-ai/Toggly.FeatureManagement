@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: toggly
-Version: 1.1.1
+Version: 1.3.2
 Summary: Feature flag management SDK for Python - zero dependencies core library
 Author-email: Toggly <support@toggly.io>
 Maintainer-email: Toggly <support@toggly.io>
@@ -22,6 +22,7 @@ Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: 3.15
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Classifier: Typing :: Typed
 Requires-Python: >=3.8
@@ -31,7 +32,8 @@ Provides-Extra: websocket
 Requires-Dist: websocket-client>=1.6.0; extra == "websocket"
 Provides-Extra: telemetry
 Requires-Dist: grpcio<1.71,>=1.62.0; python_version < "3.9" and extra == "telemetry"
-Requires-Dist: grpcio>=1.80.0; python_version >= "3.9" and extra == "telemetry"
+Requires-Dist: grpcio<1.81,>=1.80.0; python_version == "3.9" and extra == "telemetry"
+Requires-Dist: grpcio>=1.80.0; python_version >= "3.10" and extra == "telemetry"
 Requires-Dist: protobuf>=4.25.0; extra == "telemetry"
 Provides-Extra: dev
 Requires-Dist: pytest>=7.0.0; extra == "dev"
@@ -42,7 +44,8 @@ Requires-Dist: ruff>=0.1.0; extra == "dev"
 Requires-Dist: websockets>=12.0; extra == "dev"
 Requires-Dist: websocket-client>=1.6.0; extra == "dev"
 Requires-Dist: grpcio<1.71,>=1.62.0; python_version < "3.9" and extra == "dev"
-Requires-Dist: grpcio>=1.80.0; python_version >= "3.9" and extra == "dev"
+Requires-Dist: grpcio<1.81,>=1.80.0; python_version == "3.9" and extra == "dev"
+Requires-Dist: grpcio>=1.80.0; python_version >= "3.10" and extra == "dev"
 Requires-Dist: protobuf>=4.25.0; extra == "dev"
 Dynamic: license-file
 
@@ -180,6 +183,7 @@ client.flush_telemetry()  # optional; also runs on close()
 |--------|---------|-------------|
 | `enable_usage_tracking` | `True` | Record checks / usage / views via `Usage.SendStats` |
 | `enable_metrics` | `True` | `measure` / `increment_counter` / `observe` via `Metrics.SendMetrics` |
+| `system_metrics` | `False` | Opt-in process metrics (`CpuUsage`, `MemoryWorkingSet`, …) every 10s when metrics are enabled |
 | `metrics_base_url` | `https://app.toggly.io` | gRPC endpoint (separate from definitions `base_url`) |
 | `usage_flush_interval` / `metrics_flush_interval` | `60` | Seconds; `0` disables the timer |
 
@@ -322,6 +326,7 @@ client.registry.register("CustomFilter", CustomEvaluator())
 | `snapshot_provider` | `SnapshotProvider` | `None` | Cache provider |
 | `enable_usage_tracking` | `bool` | `True` | Track feature usage via gRPC |
 | `enable_metrics` | `bool` | `True` | Send business metrics via gRPC |
+| `system_metrics` | `bool` | `False` | Opt-in process metrics when metrics are enabled |
 | `metrics_base_url` | `str` | `"https://app.toggly.io"` | Usage/metrics gRPC base URL |
 | `usage_flush_interval` | `float` | `60.0` | Usage flush interval (seconds) |
 | `metrics_flush_interval` | `float` | `60.0` | Metrics flush interval (seconds) |

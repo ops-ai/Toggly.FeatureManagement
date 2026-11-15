@@ -1,4 +1,4 @@
-toggly>=0.1.0
+toggly>=1.0.0
 django>=4.2
 
 [dev]

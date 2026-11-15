@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- Protobuf runtime/codegen **4.36.2** (was 3.25.x); JUnit Jupiter **6.1.3**.
+- Spring Boot **4** starter tracks **4.1.2**; Boot **3** starter remains on **3.5.16**.
+- Spring MVC / WebFlux keep a Spring Framework **6.2.19** compile baseline and are
+  proven on **7.0.10** via CI matrix + `host-fixtures/webflux-spring7`.
+- Java CI path filters include `docs/filter-parity/**` so golden-fixture changes
+  re-run the suite.
+- **Behavior:** Targeting default rollout of **100%** now enables for anonymous
+  (no identity) callers, matching `toggly-eval` and
+  `targeting-rollout-100-anonymous`. Partial rollouts remain fail-closed without
+  identity; 0% stays off (approved by Alexandru, 2026-11-01).
+
 ## 2.3.0
 
 2026-10-12
