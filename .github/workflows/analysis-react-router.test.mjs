@@ -223,10 +223,10 @@ test('summary renders truthful outcomes and discloses unchecked authenticated ga
   }
 });
 
-test('React Router contract checks execute in the existing Node 20 job and trigger on changes', () => {
+test('React Router contract checks execute in the existing Node 22 job and trigger on changes', () => {
   const contract = step(job('build-and-test'), 'Verify React Router analysis workflow contract');
   assert.match(contract, /run: node --test \.github\/workflows\/analysis-react-router\.test\.mjs/);
-  for (const [node, want] of [['18.x', false], ['20.x', true], ['22.x', false]]) {
+  for (const [node, want] of [['22.x', true], ['24.x', false], ['26.x', false]]) {
     assert.equal(evaluate(expression(contract, 'if'), { matrix: { 'node-version': node } }), want);
   }
   assert.match(workflow.split('permissions:')[0], /'\.github\/workflows\/analysis-react-router\.test\.mjs'/);
@@ -247,14 +247,14 @@ test('cancellation blocks Server diagnostics even if an earlier step failed', ()
 
 test('preserves Node tests, both packed Router hosts, shared dependencies and coverage classification', () => {
   const tests = job('build-and-test');
-  assert.match(tests, /node-version: \[18\.x, 20\.x, 22\.x\]/);
+  assert.match(tests, /node-version: \[22\.x, 24\.x, 26\.x\]/);
   const hosts = job('packed-host');
-  assert.match(hosts, /host: router7-react18\n\s+node-version: '20'/);
-  assert.match(hosts, /host: router8-react19\n\s+node-version: '22'/);
+  assert.match(hosts, /host: router7-react18\n\s+node-version: '24'/);
+  assert.match(hosts, /host: router8-react19\n\s+node-version: '24'/);
   assert.match(step(hosts, 'Verify packed host'), /run: npm run test:hosts/);
   assert.match(step(job('build-shared-js-deps'), 'Build shared packages'), /packages: signed-defs,eval,hooks-types,local-gates,segments/);
   assert.match(step(tests, 'Run tests with coverage'), /run: npm run test:coverage/);
-  assert.match(step(tests, 'Upload coverage (Node 20 only)'), /name: coverage-react-router/);
+  assert.match(step(tests, 'Upload coverage (Node 22 only)'), /name: coverage-react-router/);
   assert.match(
     step(tests, 'Install dependencies with local client-telemetry'),
     /uses: \.\/\.github\/actions\/install-local-client-telemetry/,
