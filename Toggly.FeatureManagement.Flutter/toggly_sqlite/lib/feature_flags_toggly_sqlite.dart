@@ -1,6 +1,6 @@
 /// SQLite persistence backend for the Toggly Flutter SDK.
 ///
 /// Provides [SqliteCacheProvider], a [TogglyCacheProvider] backed by `sqflite`.
-library feature_flags_toggly_sqlite;
+library;
 
 export 'src/sqlite_cache_provider.dart';

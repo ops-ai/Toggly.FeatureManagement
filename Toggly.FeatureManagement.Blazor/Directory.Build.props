@@ -4,5 +4,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>12</LangVersion>
+    <!-- .NET 11 RC introduces BL0016 (unguarded JS interop). Existing adapters already
+         handle JSDisconnectedException on dispose; do not widen catch surfaces yet. -->
+    <NoWarn Condition="'$(TargetFramework)' == 'net11.0'">$(NoWarn);BL0016</NoWarn>
   </PropertyGroup>
 </Project>
