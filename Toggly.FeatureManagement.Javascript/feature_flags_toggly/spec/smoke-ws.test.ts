@@ -1,3 +1,4 @@
+/** @jest-environment node */
 import WebSocket = require('ws');
 
 const appKey = process.env.TOGGLY_SMOKE_APP_KEY_FRONTEND;
