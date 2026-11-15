@@ -205,8 +205,8 @@ jobs:
           npm install --prefix "$NPM_PIN_PREFIX" npm@10.2.3
           export PATH="${NPM_PIN_PREFIX}/node_modules/.bin:${PATH}"
           npx --yes playwright install-deps chromium
-          node tests/hosts/run.mjs 3.21.1 locked
-          node tests/hosts/run.mjs 4.5.2 locked
+          node tests/hosts/run.mjs 3.21.11 locked
+          node tests/hosts/run.mjs 4.6.3 locked
 
       - name: Verify packed tarballs
         if: steps.packages.outputs.list != ''

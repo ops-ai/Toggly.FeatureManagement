@@ -118,12 +118,15 @@ export const FULL_TEST_MATRIX = [
     'has-lint': false,
     'skip-coverage-upload': true,
   },
-  {
+  // Vanilla JS SDK: exercise Node 22 (floor), 24, and 26 (latest current).
+  // Coverage artifact uploads only from the 22.x row (see analysis-javascript.yml).
+  ...['22.x', '24.x', '26.x'].map((nodeVersion) => ({
     sdk: 'JavaScript',
     path: 'Toggly.FeatureManagement.Javascript/feature_flags_toggly',
     'test-cmd': 'npm test -- --coverage && npm run test:browser-host',
+    'node-version': nodeVersion,
     'has-lint': false,
-  },
+  })),
   {
     sdk: 'Docusaurus',
     path: 'toggly-docusaurus-edge-sdk/libs/docusaurus-plugin',

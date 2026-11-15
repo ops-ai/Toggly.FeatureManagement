@@ -28,8 +28,9 @@ const sdk = join(
   repository,
   'toggly-docusaurus-edge-sdk/libs/docusaurus-plugin'
 );
-const currentDocusaurus = '3.10.2';
-const currentReact = '19.3.0';
+const currentDocusaurus = process.env.TOGGLY_DOCUSAURUS_VERSION || '3.10.2';
+const currentReact = process.env.TOGGLY_DOCUSAURUS_REACT || '19.3.1';
+const reactTypesMajor = currentReact.startsWith('18.') ? '18' : '19';
 
 function assertCaretRangeContains(range, version, label) {
   const base = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(range);
@@ -299,8 +300,8 @@ if (!process.env.TOGGLY_DOCUSAURUS_WORKER) {
     `react-dom@${currentReact}`,
     '@mdx-js/react@3.1.1',
     'typescript@5.9.3',
-    '@types/react@19.3.0',
-    '@types/react-dom@19.3.0',
+    `@types/react@${reactTypesMajor}`,
+    `@types/react-dom@${reactTypesMajor}`,
     'playwright@1.62.1',
     tarball,
   ]);
