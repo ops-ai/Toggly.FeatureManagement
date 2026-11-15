@@ -49,7 +49,10 @@ test("client packages inherit the common version, changelog and release inventor
       "utf8",
     );
     assert.doesNotMatch(project, /<(?:Version|PackageVersion)>/);
-    assert.match(project, /<TargetFramework>net8\.0<\/TargetFramework>/);
+    assert.match(
+      project,
+      /<TargetFrameworks>net7\.0;net8\.0;net9\.0;net10\.0;net11\.0<\/TargetFrameworks>/,
+    );
     assert.doesNotMatch(project, /Microsoft.AspNetCore/);
   }
 });
