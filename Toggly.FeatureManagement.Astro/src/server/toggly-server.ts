@@ -259,6 +259,145 @@ export class TogglyServer implements TogglyClient {
     };
   }
 
+  private lastKnownGoodCache(): CachedFlags {
+    return {
+      flags: { ...this.cache!.flags },
+      definitions: this.cache!.definitions,
+      variantDefs: this.cache!.variantDefs,
+      timestamp: this.cache!.timestamp,
+      fromNetwork: true,
+    };
+  }
+
+  private async loadDefinitionsPayload(url: string): Promise<unknown> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.config.connectTimeout);
+
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: buildDefinitionFetchHeaders({
+          Accept: 'application/json',
+        }),
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new TogglyFetchError(
+          `Failed to fetch flags from Toggly API: ${response.status} ${response.statusText}`,
+          { status: response.status },
+        );
+      }
+
+      const bodyText = await readResponseBody(response);
+      return parseEvaluatedResponseBody(bodyText, {
+        verifySignatures: this.config.verifySignatures,
+        baseURI: this.config.baseURI!,
+        allowedKeyIds: this.config.allowedKeyIds,
+        maxSignatureAgeSeconds: this.config.maxSignatureAgeSeconds,
+        // Public JWKS does not need SDK definition-request headers.
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  private materializeNetworkCache(
+    payload: unknown,
+    enableVariants: boolean,
+  ): CachedFlags {
+    let flags: Flags;
+    let definitions: Map<string, FeatureDefinitionModel> = new Map();
+    let variantDefs: Record<string, EvaluatedVariantDef> | null;
+
+    if (enableVariants) {
+      // Verified path returns raw defs; unverified may still be `{ defs }`.
+      variantDefs = parseVariantDefsPayload(
+        this.config.verifySignatures ? { defs: payload } : payload,
+      );
+      flags = variantDefsToFlags(variantDefs);
+    } else {
+      definitions = parseDefinitionsPayload(payload);
+      flags = {
+        ...this.config.flagDefaults!,
+        ...snapshotEvaluatedBooleans(definitions, this.buildEvalContext()),
+      };
+      variantDefs = null;
+    }
+
+    // If allFeaturesEnabledDuringBuild is true and we're in build time,
+    // override all flags to true
+    if (this.config.allFeaturesEnabledDuringBuild && this.isBuildTime) {
+      if (this.config.isDebug) {
+        console.log('[Toggly Server] Build mode: Enabling all features');
+      }
+      flags = Object.keys(flags).reduce((acc, key) => {
+        acc[key] = true;
+        return acc;
+      }, {} as Flags);
+    }
+
+    if (this.config.isDebug) {
+      console.log('[Toggly Server] Fetched flags:', flags);
+      if (enableVariants && variantDefs) {
+        console.log('[Toggly Server] Fetched variant defs:', variantDefs);
+      }
+    }
+
+    return {
+      flags,
+      definitions,
+      variantDefs,
+      timestamp: Date.now(),
+      fromNetwork: true,
+    };
+  }
+
+  private reportFetchFailure(fetchError: TogglyFetchError): void {
+    // Always surface fetch failures in logs — silent empty flags caused
+    // SSG builds to ship every gated page/feature as off.
+    console.error('[Toggly Server] Error fetching flags:', fetchError);
+    try {
+      this.config.onError?.('Error fetching feature flags', fetchError);
+    } catch {
+      // Host diagnostics cannot replace evaluation.
+    }
+  }
+
+  private resolveFetchFailure(
+    fetchError: TogglyFetchError,
+    enableVariants: boolean,
+  ): { cache: CachedFlags; outcome: 'hit' | 'none' } {
+    this.reportFetchFailure(fetchError);
+
+    // On error, try to use cached flags from a prior network apply — cache hit.
+    // flagDefaults-only (no prior network cache) is not a hit (Nuxt Seer lesson).
+    if (this.cache?.fromNetwork) {
+      console.warn('[Toggly Server] Using cached flags after fetch failure');
+      if (this.config.isDebug) {
+        console.log('[Toggly Server] Using cached flags:', this.cache.flags);
+      }
+      return { cache: this.lastKnownGoodCache(), outcome: 'hit' };
+    }
+
+    // No last-known-good: default is to throw so SSG/build and cold starts
+    // cannot silently evaluate every flag as off. Opt out with
+    // failOnFetchError: false for the historical soft fail-closed path.
+    if (this.config.failOnFetchError !== false) {
+      throw fetchError;
+    }
+
+    console.warn(
+      '[Toggly Server] Using flag defaults after fetch failure (no last-known-good cache)',
+    );
+    if (this.config.isDebug) {
+      console.log('[Toggly Server] Using flag defaults:', this.config.flagDefaults);
+    }
+
+    return { cache: this.defaultsOnlyCache(enableVariants), outcome: 'none' };
+  }
+
   /**
    * Fetch flags (and optional variant defs) from Toggly API.
    * Returns a result plus whether this call applied a new network revision (miss)
@@ -280,130 +419,13 @@ export class TogglyServer implements TogglyClient {
     }
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.config.connectTimeout);
-
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: buildDefinitionFetchHeaders({
-          Accept: 'application/json',
-        }),
-        cache: 'no-store',
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new TogglyFetchError(
-          `Failed to fetch flags from Toggly API: ${response.status} ${response.statusText}`,
-          { status: response.status },
-        );
-      }
-
-      const bodyText = await readResponseBody(response);
-      const payload = await parseEvaluatedResponseBody(bodyText, {
-        verifySignatures: this.config.verifySignatures,
-        baseURI: this.config.baseURI!,
-        allowedKeyIds: this.config.allowedKeyIds,
-        maxSignatureAgeSeconds: this.config.maxSignatureAgeSeconds,
-        // Public JWKS does not need SDK definition-request headers.
-      });
-
-      let flags: Flags;
-      let definitions: Map<string, FeatureDefinitionModel> = new Map();
-      let variantDefs: Record<string, EvaluatedVariantDef> | null;
-
-      if (enableVariants) {
-        // Verified path returns raw defs; unverified may still be `{ defs }`.
-        variantDefs = parseVariantDefsPayload(
-          this.config.verifySignatures ? { defs: payload } : payload
-        );
-        flags = variantDefsToFlags(variantDefs);
-      } else {
-        definitions = parseDefinitionsPayload(payload);
-        flags = {
-          ...this.config.flagDefaults!,
-          ...snapshotEvaluatedBooleans(definitions, this.buildEvalContext()),
-        };
-        variantDefs = null;
-      }
-
-      // If allFeaturesEnabledDuringBuild is true and we're in build time,
-      // override all flags to true
-      if (this.config.allFeaturesEnabledDuringBuild && this.isBuildTime) {
-        if (this.config.isDebug) {
-          console.log('[Toggly Server] Build mode: Enabling all features');
-        }
-        flags = Object.keys(flags).reduce((acc, key) => {
-          acc[key] = true;
-          return acc;
-        }, {} as Flags);
-      }
-
-      if (this.config.isDebug) {
-        console.log('[Toggly Server] Fetched flags:', flags);
-        if (enableVariants && variantDefs) {
-          console.log('[Toggly Server] Fetched variant defs:', variantDefs);
-        }
-      }
-
+      const payload = await this.loadDefinitionsPayload(url);
       return {
-        cache: {
-          flags,
-          definitions,
-          variantDefs,
-          timestamp: Date.now(),
-          fromNetwork: true,
-        },
+        cache: this.materializeNetworkCache(payload, enableVariants),
         outcome: 'miss',
       };
     } catch (error) {
-      const fetchError = toTogglyFetchError(error);
-
-      // Always surface fetch failures in logs — silent empty flags caused
-      // SSG builds to ship every gated page/feature as off.
-      console.error('[Toggly Server] Error fetching flags:', fetchError);
-      try {
-        this.config.onError?.('Error fetching feature flags', fetchError);
-      } catch {
-        // Host diagnostics cannot replace evaluation.
-      }
-
-      // On error, try to use cached flags from a prior network apply — cache hit.
-      // flagDefaults-only (no prior network cache) is not a hit (Nuxt Seer lesson).
-      if (this.cache?.fromNetwork) {
-        console.warn('[Toggly Server] Using cached flags after fetch failure');
-        if (this.config.isDebug) {
-          console.log('[Toggly Server] Using cached flags:', this.cache.flags);
-        }
-        return {
-          cache: {
-            flags: { ...this.cache.flags },
-            definitions: this.cache.definitions,
-            variantDefs: this.cache.variantDefs,
-            timestamp: this.cache.timestamp,
-            fromNetwork: true,
-          },
-          outcome: 'hit',
-        };
-      }
-
-      // No last-known-good: default is to throw so SSG/build and cold starts
-      // cannot silently evaluate every flag as off. Opt out with
-      // failOnFetchError: false for the historical soft fail-closed path.
-      if (this.config.failOnFetchError !== false) {
-        throw fetchError;
-      }
-
-      console.warn(
-        '[Toggly Server] Using flag defaults after fetch failure (no last-known-good cache)',
-      );
-      if (this.config.isDebug) {
-        console.log('[Toggly Server] Using flag defaults:', this.config.flagDefaults);
-      }
-
-      return { cache: this.defaultsOnlyCache(enableVariants), outcome: 'none' };
+      return this.resolveFetchFailure(toTogglyFetchError(error), enableVariants);
     }
   }
 
