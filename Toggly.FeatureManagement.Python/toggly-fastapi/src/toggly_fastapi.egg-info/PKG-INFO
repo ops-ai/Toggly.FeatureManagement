@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: toggly-fastapi
-Version: 0.1.0
+Version: 0.4.0
 Summary: FastAPI integration for Toggly feature flag management
 Author-email: Toggly <support@toggly.io>
 Maintainer-email: Toggly <support@toggly.io>
@@ -20,11 +20,13 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
+Classifier: Programming Language :: Python :: 3.15
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Classifier: Typing :: Typed
 Requires-Python: >=3.9
 Description-Content-Type: text/markdown
-Requires-Dist: toggly>=0.1.0
+Requires-Dist: toggly>=1.0.0
 Requires-Dist: fastapi>=0.100
 Provides-Extra: dev
 Requires-Dist: pytest>=7.0.0; extra == "dev"
@@ -33,3 +35,29 @@ Requires-Dist: pytest-asyncio>=0.21.0; extra == "dev"
 Requires-Dist: httpx>=0.24.0; extra == "dev"
 Requires-Dist: mypy>=1.0.0; extra == "dev"
 Requires-Dist: ruff>=0.1.0; extra == "dev"
+
+# toggly-fastapi
+
+## Feature variants
+
+Requires **toggly 1.0.0+**. Feature variants are assigned locally from the
+same cached definitions used for `is_enabled` — there is no separate
+"variants mode" to enable.
+
+```python
+from toggly_fastapi import configure_toggly, get_toggly_client
+
+configure_toggly(
+    app_key="your-app-key",
+    identity="user-123",  # Default identity used when a request/user_id isn't supplied.
+)  # Call during application startup.
+
+client = get_toggly_client()
+variant = client.get_variant("checkout-flow", user_id="user-123")
+if variant is not None and variant.enabled and variant.name == "B":
+    ...
+```
+
+See the core `toggly` package README for the full `get_variant` /
+`get_variant_value` API and the Microsoft.FeatureManagement-parity assignment
+rules.

@@ -39,7 +39,7 @@ function packAdapter() {
   return { destination, tarball: join(destination, filename) }
 }
 
-function writeHostFixture(directory) {
+function writeHostFixture(directory, { skipLibCheck = false } = {}) {
   writeFileSync(join(directory, 'package.json'), JSON.stringify({ private: true, type: 'module' }, null, 2))
   writeFileSync(join(directory, 'tsconfig.json'), JSON.stringify({
     compilerOptions: {
@@ -47,7 +47,7 @@ function writeHostFixture(directory) {
       moduleResolution: 'NodeNext',
       target: 'ES2022',
       strict: true,
-      skipLibCheck: false,
+      skipLibCheck,
       noEmit: true,
     },
     include: ['types.ts'],
@@ -212,26 +212,39 @@ const packedSegments = packSegments()
 const hostDirectory = mkdtempSync(join(tmpdir(), 'toggly-hono-host-'))
 try {
   verifyPackedFile(packed.tarball)
-  writeHostFixture(hostDirectory)
-  run('npm', [
-    'install', '--no-package-lock',
-    'hono@4.13.7',
-    '@hono/node-server@2.1.1',
-    '@types/node@22.19.11',
-    'typescript@5.9.3',
-    packedCore.tarball,
-    packedEval.tarball,
+  // Peer is ^4: prove oldest published 4.0.0 and latest stable 4.x.
+  // Hono 4.0.0: Context types error under TypeScript 5.9 (Duplicate
+  // identifier 'render'), and @hono/node-server 2.x needs hono/ws from
+  // 4.7+, so pair 4.0.0 with node-server 1.14 + skipLibCheck. Latest
+  // keeps a strict declaration check with current node-server.
+  for (const host of [
+    { hono: '4.0.0', nodeServer: '1.14.0', skipLibCheck: true },
+    { hono: '4.13.16', nodeServer: '2.1.5', skipLibCheck: false },
+  ]) {
+    writeHostFixture(hostDirectory, { skipLibCheck: host.skipLibCheck })
+    run('npm', [
+      'install', '--no-package-lock',
+      `hono@${host.hono}`,
+      `@hono/node-server@${host.nodeServer}`,
+      '@types/node@22.20.5',
+      'typescript@5.9.3',
+      packedCore.tarball,
+      packedEval.tarball,
       packedSegments.tarball,
-    packed.tarball,
-  ], {
-    cwd: hostDirectory,
-    env: { npm_config_cache: join(hostDirectory, '.npm-cache') },
-  })
-  run(join(hostDirectory, 'node_modules', '.bin', 'tsc'), ['--noEmit'], { cwd: hostDirectory })
-  run(process.execPath, ['require.cjs'], { cwd: hostDirectory })
-  const output = run(process.execPath, ['host.mjs'], { cwd: hostDirectory, env: { HONO_VERSION: '4.13.7' } })
-  assert.match(output, /PACKED_HONO_HOST_PASS.*4\.13\.7/)
-  process.stdout.write(output)
+      packed.tarball,
+    ], {
+      cwd: hostDirectory,
+      env: { npm_config_cache: join(hostDirectory, '.npm-cache') },
+    })
+    run(join(hostDirectory, 'node_modules', '.bin', 'tsc'), ['--noEmit'], { cwd: hostDirectory })
+    run(process.execPath, ['require.cjs'], { cwd: hostDirectory })
+    const output = run(process.execPath, ['host.mjs'], {
+      cwd: hostDirectory,
+      env: { HONO_VERSION: host.hono },
+    })
+    assert.match(output, new RegExp(`PACKED_HONO_HOST_PASS.*${host.hono.replaceAll('.', '\\.')}`))
+    process.stdout.write(output)
+  }
 } finally {
   rmSync(hostDirectory, { recursive: true, force: true })
   rmSync(packed.destination, { recursive: true, force: true })

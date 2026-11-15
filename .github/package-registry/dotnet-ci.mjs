@@ -113,17 +113,9 @@ if (command === "validate") {
     }
 
     const results = `TestResults/${family.name}`;
-    const frameworks = readTestFrameworks(
-      resolveTestProjectFile(family.testProject),
-    ).filter(
-      (framework) =>
-        /^(netstandard|netcoreapp|net)\d/.test(framework) &&
-        !framework.includes("$("),
-    );
-    const targets = frameworks.length > 0 ? frameworks : [null];
-    // Sequential per TFM keeps timing-sensitive live-update tests stable under CI load.
-    for (const framework of targets) {
-      const args = [
+    if (family.name === "blazor") {
+      // Blazor multi-TFMs are proven in blazor-runtime; analysis covers the net8.0 floor once.
+      run("dotnet", [
         "test",
         family.testProject,
         "-c",
@@ -133,11 +125,35 @@ if (command === "validate") {
         family.coverageSettings,
         "--results-directory",
         results,
-      ];
-      if (framework) {
-        args.push("--framework", framework);
+        "-p:TestFramework=net8.0",
+      ]);
+    } else {
+      const frameworks = readTestFrameworks(
+        resolveTestProjectFile(family.testProject),
+      ).filter(
+        (framework) =>
+          /^(netstandard|netcoreapp|net)\d/.test(framework) &&
+          !framework.includes("$("),
+      );
+      const targets = frameworks.length > 0 ? frameworks : [null];
+      // Sequential per TFM keeps timing-sensitive live-update tests stable under CI load.
+      for (const framework of targets) {
+        const args = [
+          "test",
+          family.testProject,
+          "-c",
+          "Release",
+          "--collect:XPlat Code Coverage",
+          "--settings",
+          family.coverageSettings,
+          "--results-directory",
+          results,
+        ];
+        if (framework) {
+          args.push("--framework", framework);
+        }
+        run("dotnet", args);
       }
-      run("dotnet", args);
     }
     run("python3", [family.coverageCheck, results]);
     if (family.browserTests) {

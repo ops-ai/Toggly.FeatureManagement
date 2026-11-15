@@ -9,7 +9,7 @@ export default defineConfig({
   splitting: false,
   treeshake: true,
   minify: false,
-  target: 'node18',
+  target: 'node22',
   outDir: 'dist',
   external: ['express', '@ops-ai/toggly-node-core'],
 })

@@ -18,6 +18,7 @@ import {
   isClient,
   fetchWithTimeout,
   createTimeout,
+  parseEvaluatedFlagsPayload,
   DEFAULT_CONFIG,
   registerContext,
   clearRegisteredContexts,
@@ -629,5 +630,31 @@ describe('utils', () => {
         expect.objectContaining({ signal: expect.any(AbortSignal) })
       );
     });
+  });
+});
+
+describe('parseEvaluatedFlagsPayload', () => {
+  it('unwraps a defs envelope and leaves a bare map unchanged', () => {
+    expect(
+      parseEvaluatedFlagsPayload({
+        defs: { FlagOn: true, FlagOff: false },
+        signature: 'synthetic-signature',
+        timestamp: 1,
+        kid: 'synthetic-kid',
+      }),
+    ).toEqual({ FlagOn: true, FlagOff: false });
+    expect(parseEvaluatedFlagsPayload({ FlagOn: true })).toEqual({ FlagOn: true });
+  });
+
+  it('returns an empty map for non-map bodies', () => {
+    expect(parseEvaluatedFlagsPayload(null)).toEqual({});
+    expect(parseEvaluatedFlagsPayload(['FlagOn'])).toEqual({});
+    expect(parseEvaluatedFlagsPayload({ defs: null })).toEqual({});
+  });
+
+  it('rejects an error envelope', () => {
+    expect(() => parseEvaluatedFlagsPayload({ error: 'unavailable' })).toThrow(
+      /error envelope/,
+    );
   });
 });
