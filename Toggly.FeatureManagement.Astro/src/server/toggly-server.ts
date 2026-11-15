@@ -54,6 +54,32 @@ interface CachedFlags {
 }
 
 /**
+ * Thrown when a definitions (or evaluated-variants) fetch fails and there is no
+ * last-known-good network cache to fall back to (see {@link TogglyConfig.failOnFetchError}).
+ */
+export class TogglyFetchError extends Error {
+  readonly status?: number;
+  override readonly cause?: unknown;
+
+  constructor(message: string, options?: { cause?: unknown; status?: number }) {
+    super(message);
+    this.name = 'TogglyFetchError';
+    this.status = options?.status;
+    this.cause = options?.cause;
+  }
+}
+
+function toTogglyFetchError(error: unknown): TogglyFetchError {
+  if (error instanceof TogglyFetchError) {
+    return error;
+  }
+  if (error instanceof Error) {
+    return new TogglyFetchError(error.message, { cause: error });
+  }
+  return new TogglyFetchError(String(error), { cause: error });
+}
+
+/**
  * Server-side Toggly client implementation
  */
 export class TogglyServer implements TogglyClient {
@@ -77,6 +103,9 @@ export class TogglyServer implements TogglyClient {
       flagDefaults: {},
       featureFlagsRefreshInterval: 3 * 60 * 1000, // 3 minutes
       isDebug: false,
+      // Default true: cold-start / build-time fetch failures must not silently
+      // render every flag off. Opt out with failOnFetchError: false.
+      failOnFetchError: true,
       connectTimeout: 5 * 1000, // 5 seconds
       allFeaturesEnabledDuringBuild: false,
       enableVariants: false,
@@ -266,8 +295,9 @@ export class TogglyServer implements TogglyClient {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(
-          `Failed to fetch flags from Toggly API: ${response.status} ${response.statusText}`
+        throw new TogglyFetchError(
+          `Failed to fetch flags from Toggly API: ${response.status} ${response.statusText}`,
+          { status: response.status },
         );
       }
 
@@ -329,13 +359,21 @@ export class TogglyServer implements TogglyClient {
         outcome: 'miss',
       };
     } catch (error) {
-      if (this.config.isDebug) {
-        console.error('[Toggly Server] Error fetching flags:', error);
+      const fetchError = toTogglyFetchError(error);
+
+      // Always surface fetch failures in logs — silent empty flags caused
+      // SSG builds to ship every gated page/feature as off.
+      console.error('[Toggly Server] Error fetching flags:', fetchError);
+      try {
+        this.config.onError?.('Error fetching feature flags', fetchError);
+      } catch {
+        // Host diagnostics cannot replace evaluation.
       }
 
       // On error, try to use cached flags from a prior network apply — cache hit.
       // flagDefaults-only (no prior network cache) is not a hit (Nuxt Seer lesson).
       if (this.cache?.fromNetwork) {
+        console.warn('[Toggly Server] Using cached flags after fetch failure');
         if (this.config.isDebug) {
           console.log('[Toggly Server] Using cached flags:', this.cache.flags);
         }
@@ -351,6 +389,16 @@ export class TogglyServer implements TogglyClient {
         };
       }
 
+      // No last-known-good: default is to throw so SSG/build and cold starts
+      // cannot silently evaluate every flag as off. Opt out with
+      // failOnFetchError: false for the historical soft fail-closed path.
+      if (this.config.failOnFetchError !== false) {
+        throw fetchError;
+      }
+
+      console.warn(
+        '[Toggly Server] Using flag defaults after fetch failure (no last-known-good cache)',
+      );
       if (this.config.isDebug) {
         console.log('[Toggly Server] Using flag defaults:', this.config.flagDefaults);
       }
