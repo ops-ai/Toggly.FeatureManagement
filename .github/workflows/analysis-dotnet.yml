@@ -69,6 +69,14 @@ jobs:
             9.0.x
             10.0.x
 
+      # Blazor (and peer net11-RC packages, including Client) declare net11.0; shared
+      # analyze/pack/build-families must restore that TFM (NETSDK1045 without this SDK).
+      - name: Setup .NET 11 RC (Blazor preview TFM)
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
+
       - name: Setup Node.js for shared package governance
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -616,6 +624,12 @@ jobs:
             9.0.x
             10.0.x
 
+      - name: Setup .NET 11 RC (Blazor preview TFM)
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
+
       - name: Setup Node.js for shared package governance
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -701,6 +715,27 @@ jobs:
           TOGGLY_SMOKE_APP_KEY_BACKEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_BACKEND }}
         run: dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.SmokeTests/Toggly.FeatureManagement.SmokeTests.csproj -c Release --logger "trx;LogFileName=smoke-test-results.trx" --blame-hang-timeout 90s --blame-hang-dump-type none
 
+  client-net11-preview:
+    name: Client net11.0 preview (allow failure)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
+      - name: Test Client / Desktop on net11.0 RC
+        run: |
+          dotnet test Toggly.FeatureManagement.Client/tests/Toggly.FeatureManagement.Client.Tests \
+            -c Release -p:IncludeNet11=true --framework net11.0 \
+            --logger "trx;LogFileName=client-net11-test-results.trx"
+
   blazor-runtime:
     name: Blazor .NET runtime ${{ matrix.framework }}
     runs-on: ubuntu-latest
@@ -709,6 +744,8 @@ jobs:
         include:
           - sdk: '8.0.x'
             framework: net8.0
+          - sdk: '9.0.x'
+            framework: net9.0
           - sdk: '10.0.x'
             framework: net10.0
     steps:
@@ -717,8 +754,15 @@ jobs:
         with:
           dotnet-version: |
             8.0.x
+            9.0.x
             10.0.x
             ${{ matrix.sdk }}
+      # Pack step multi-targets Blazor including net11.0; need preview SDK even on net8/9/10 matrix cells.
+      - name: Setup .NET 11 RC (Blazor preview TFM)
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
@@ -728,6 +772,7 @@ jobs:
       - run: |
           # Package internal dependencies from the same source/version before the isolated consumer restore.
           # Core enables GeneratePackageOnBuild, so pack alone does not build its other target frameworks.
+          # Pack includes net11.0 (RC Components packages); stable CI matrix still proves net8/9/10.
           dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement -c Release -p:GeneratePackageOnBuild=false -p:ContinuousIntegrationBuild=true
           dotnet pack Toggly.FeatureManagement.NET/Toggly.FeatureManagement -c Release --no-build -p:ContinuousIntegrationBuild=true -o blazor-pack
           dotnet pack Toggly.FeatureManagement.Client/src/Toggly.FeatureManagement.Client -c Release -p:ContinuousIntegrationBuild=true -o blazor-pack
@@ -755,7 +800,6 @@ jobs:
             TestResults/blazor
             blazor-pack
             Toggly.FeatureManagement.Blazor/coverage/
-
 
   test-net11-preview:
     name: Test net11.0 preview (allow-failure)
@@ -810,10 +854,36 @@ jobs:
       - name: Verify Embedded NuGet consumer on net11.0
         run: python3 Toggly.FeatureManagement.NET/scripts/verify-embedded-packages.py --feed nuget-net11-preview-feed --framework net11.0
 
+  # .NET 11 RC: preview SDK + RC Components packages. Allow failure until GA.
+  blazor-runtime-net11-preview:
+    name: Blazor .NET 11 RC (allow-failure)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+      - name: Setup .NET 11 RC (Blazor preview TFM)
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
+      - run: dotnet test Toggly.FeatureManagement.Blazor/tests/Toggly.FeatureManagement.Blazor.Tests -c Release -p:TestFramework=net11.0 --collect:"XPlat Code Coverage" --settings Toggly.FeatureManagement.Blazor/coverage.runsettings --results-directory TestResults/blazor-net11
+      - run: python3 Toggly.FeatureManagement.Blazor/check-coverage.py TestResults/blazor-net11
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        if: always()
+        with:
+          name: blazor-net11-preview
+          path: TestResults/blazor-net11
+
+
   summary:
     name: Analysis Summary
     runs-on: ubuntu-latest
-    needs: [analyze, dependency-check, build-cli, pack-packages, embedded-consumer, smoke-test, blazor-runtime, test-net11-preview]
+    needs: [analyze, dependency-check, build-cli, pack-packages, embedded-consumer, smoke-test, blazor-runtime, test-net11-preview, blazor-runtime-net11-preview]
     if: always()
 
     steps:

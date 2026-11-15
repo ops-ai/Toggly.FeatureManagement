@@ -326,7 +326,7 @@ test('reporting false skips only dependency reporting and allows that exact summ
 test('required analyze and pack jobs stay off net11; only the allow-failure preview job builds it', () => {
   const analyze = workflow.slice(workflow.indexOf('  analyze:'), workflow.indexOf('  dependency-check:'));
   const pack = workflow.slice(workflow.indexOf('  pack-packages:'), workflow.indexOf('  embedded-consumer:'));
-  const preview = workflow.slice(workflow.indexOf('  test-net11-preview:'), workflow.indexOf('  summary:'));
+  const preview = workflow.slice(workflow.indexOf('  test-net11-preview:'), workflow.indexOf('  blazor-runtime-net11-preview:'));
 
   assert.match(analyze, /ExcludeNet11Preview: 'true'/);
   assert.match(pack, /ExcludeNet11Preview: 'true'/);
@@ -348,4 +348,18 @@ test('required analyze and pack jobs stay off net11; only the allow-failure prev
     props,
     /TogglyNet11Tfm Condition="'\$\(ExcludeNet11Preview\)' == 'true' Or \('\$\(CI\)' == 'true' And '\$\(IncludeNet11Preview\)' != 'true'\)"/,
   );
+});
+
+test('shared analyze and pack-packages provision .NET 11 RC for Blazor net11.0 TFM', () => {
+  for (const [start, end] of [
+    ['  analyze:', '  dependency-check:'],
+    ['  pack-packages:', '  embedded-consumer:'],
+  ]) {
+    const job = workflow.slice(workflow.indexOf(start), workflow.indexOf(end));
+    assert.match(
+      job,
+      /- name: Setup \.NET 11 RC \(Blazor preview TFM\)[\s\S]*dotnet-version: '11\.0\.x'[\s\S]*dotnet-quality: 'preview'/,
+      `${start.trim()} must install .NET 11 RC so unconditional Blazor net11.0 restores succeed`,
+    );
+  }
 });
