@@ -1,7 +1,7 @@
 // Legacy interop intentionally matches the package Dart floor.
 // ignore_for_file: deprecated_member_use, avoid_web_libraries_in_flutter
 @TestOn('browser')
-library telemetry_browser_test;
+library;
 
 import 'dart:async';
 import 'dart:convert';

@@ -4,6 +4,7 @@ import io.toggly.core.crypto.JsonWebKeySet;
 
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 /**
  * Interface for providing feature snapshots.
@@ -91,6 +92,32 @@ public interface SnapshotProvider {
      * @param recorder hit/miss recorder, or null to clear
      */
     default void setDefinitionCacheRecorder(io.toggly.core.telemetry.DefinitionCacheRecorder recorder) {
+        // Default no-op
+    }
+
+    /**
+     * Registers a listener invoked when the provider applies a new feature snapshot.
+     *
+     * <p>Default is a no-op so third-party providers remain source-compatible. Caching
+     * wrappers should observe delegate updates, refresh their own cache, then notify
+     * their listeners so callbacks read the wrapper's snapshot.</p>
+     *
+     * <p>Listeners run on the thread that applied the snapshot (for example the caller of
+     * {@link #refresh()}, a scheduled poll thread, or a WebSocket callback thread). Listener
+     * exceptions should be caught by the provider so they cannot break the refresh path.</p>
+     *
+     * @param listener callback receiving the newly applied snapshot; null is ignored
+     */
+    default void addRefreshListener(Consumer<FeatureSnapshot> listener) {
+        // Default no-op
+    }
+
+    /**
+     * Removes a previously registered refresh listener.
+     *
+     * @param listener the listener to remove; null is ignored
+     */
+    default void removeRefreshListener(Consumer<FeatureSnapshot> listener) {
         // Default no-op
     }
 }

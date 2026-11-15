@@ -1,3 +1,4 @@
+README.md
 pyproject.toml
 src/toggly_django/__init__.py
 src/toggly_django/apps.py
@@ -13,6 +14,9 @@ src/toggly_django.egg-info/requires.txt
 src/toggly_django.egg-info/top_level.txt
 src/toggly_django/templatetags/__init__.py
 src/toggly_django/templatetags/toggly_tags.py
+tests/test_context_processors.py
 tests/test_decorators.py
+tests/test_initial_context.py
 tests/test_middleware.py
+tests/test_template_tags.py
 tests/test_utils.py

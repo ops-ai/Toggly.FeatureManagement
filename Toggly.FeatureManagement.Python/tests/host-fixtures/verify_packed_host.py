@@ -65,7 +65,7 @@ def bootstrap(args: argparse.Namespace) -> None:
                     str(wheel_for(wheel_dir, "toggly-fastapi")),
                     str(wheel_for(wheel_dir, "toggly-cache")),
                     "flask==3.1.*",
-                    "fastapi==0.141.1",
+                    "fastapi==0.162.*",
                     "httpx>=0.24.0",
                     "redis==8.1.*",
                     "websocket-client>=1.6.0",

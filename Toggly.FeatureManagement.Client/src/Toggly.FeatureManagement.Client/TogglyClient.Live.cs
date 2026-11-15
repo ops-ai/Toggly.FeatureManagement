@@ -70,7 +70,7 @@ public sealed partial class TogglyClient
             return;
         try
         {
-            await debounce.CancelAsync().ConfigureAwait(false);
+            await Compatibility.CancelAsync(debounce).ConfigureAwait(false);
             await pending.ConfigureAwait(false);
         }
         finally { debounce.Dispose(); }

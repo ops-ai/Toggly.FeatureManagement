@@ -30,7 +30,11 @@ type PostgresOptions struct {
 	DefinitionsID string
 	// JWKSID is the row ID for JWKS. Default: "toggly_jwks".
 	JWKSID string
-	// AutoCreateTable creates the table if it doesn't exist. Default: true.
+	// DisableAutoCreateTable skips CREATE TABLE IF NOT EXISTS. Default: false
+	// (table is created automatically).
+	DisableAutoCreateTable bool
+	// Deprecated: AutoCreateTable is ignored. Table creation defaults to on;
+	// set DisableAutoCreateTable to opt out. Kept so existing struct literals compile.
 	AutoCreateTable bool
 }
 
@@ -48,11 +52,7 @@ func NewPostgresProvider(opts PostgresOptions) *PostgresProvider {
 	if jwksID == "" {
 		jwksID = "toggly_jwks"
 	}
-	autoCreate := opts.AutoCreateTable
-	// Default to true if not explicitly set (Go zero value is false)
-	if opts.DB != nil && !opts.AutoCreateTable {
-		autoCreate = true
-	}
+	autoCreate := !opts.DisableAutoCreateTable
 	return &PostgresProvider{
 		db:            opts.DB,
 		tableName:     tableName,
