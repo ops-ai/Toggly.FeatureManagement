@@ -23,6 +23,16 @@ pub(crate) fn live_updates_tls_connector() -> Connector {
 }
 
 /// rustls client config with an explicit `aws-lc-rs` crypto provider and
+/// bundled webpki roots. HTTPS (reqwest) uses this directly: reqwest 0.13's
+/// `rustls` feature verifies with `rustls-platform-verifier`, which fails in
+/// images that ship no CA bundle.
+pub(crate) fn webpki_rustls_client_config() -> ClientConfig {
+    let mut roots = RootCertStore::empty();
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    rustls_client_config(roots)
+}
+
+/// rustls client config with an explicit `aws-lc-rs` crypto provider and
 /// webpki root store.
 pub(crate) fn live_updates_rustls_client_config() -> Arc<ClientConfig> {
     let mut roots = RootCertStore::empty();
@@ -35,14 +45,16 @@ pub(crate) fn live_updates_rustls_client_config() -> Arc<ClientConfig> {
 pub(crate) fn live_updates_rustls_client_config_with_roots(
     roots: RootCertStore,
 ) -> Arc<ClientConfig> {
+    Arc::new(rustls_client_config(roots))
+}
+
+fn rustls_client_config(roots: RootCertStore) -> ClientConfig {
     let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
-    Arc::new(
-        ClientConfig::builder_with_provider(provider)
-            .with_safe_default_protocol_versions()
-            .expect("rustls safe default protocol versions")
-            .with_root_certificates(roots)
-            .with_no_client_auth(),
-    )
+    ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .expect("rustls safe default protocol versions")
+        .with_root_certificates(roots)
+        .with_no_client_auth()
 }
 
 #[cfg(test)]

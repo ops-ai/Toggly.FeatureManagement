@@ -27,6 +27,10 @@ time = ">=0.3.7, <0.3.56"
 # Core dependencies
 tokio = { version = "1.36", features = ["rt-multi-thread", "macros", "sync", "time"] }
 # reqwest 0.13 renames the rustls feature from `rustls-tls` → `rustls`.
+# That feature verifies with rustls-platform-verifier (the host CA store).
+# HTTPS clients override it with a webpki-roots ClientConfig so definition
+# and JWKS fetches work in images that do not ship a CA bundle. WebSocket
+# TLS already uses the same store.
 # `Error::Http(reqwest::Error)` / `From<reqwest::Error>` leak into the public
 # API, so this is a semver-major bump for `toggly` (0.11 → 0.12).
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }

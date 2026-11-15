@@ -108,6 +108,7 @@ pub async fn register_entity_contexts_at_startup(config: &TogglyConfig) {
     let payload = serde_json::json!({ "contexts": regs });
     let client = reqwest::Client::builder()
         .timeout(config.http_timeout)
+        .tls_backend_preconfigured(crate::ws_tls::webpki_rustls_client_config())
         .build();
     let Ok(client) = client else {
         return;

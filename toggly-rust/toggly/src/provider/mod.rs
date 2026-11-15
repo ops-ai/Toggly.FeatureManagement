@@ -70,6 +70,7 @@ impl DefinitionsProvider {
         let http_client = reqwest::Client::builder()
             .timeout(config.http_timeout)
             .user_agent(sdk_user_agent())
+            .tls_backend_preconfigured(crate::ws_tls::webpki_rustls_client_config())
             .build()?;
 
         Ok(Self {
