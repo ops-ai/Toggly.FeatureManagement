@@ -13,11 +13,16 @@
   remains fail-closed offline fallback (cached definitions) and still logs.
 
 ### Added
-- `TogglyConfig.failOnFetchError` (default `true`) to opt into the historical
-  soft fail-closed path (`flagDefaults` / `{}` when there is no cache) by
-  setting `failOnFetchError: false`. Exported `TogglyFetchError` (optional
-  `status` for HTTP failures). Server fetch failures also invoke `onError` when
-  configured.
+- `TogglyConfig.failOnFetchError` (default `true` on `createTogglyServerClient`)
+  to opt into the historical soft fail-closed path (`flagDefaults` / `{}` when
+  there is no cache) by setting `failOnFetchError: false`. Exported
+  `TogglyFetchError` (optional `status` for HTTP failures). Server fetch
+  failures also invoke `onError` when configured.
+- `createTogglyMiddleware` defaults request-scoped clients to
+  `failOnFetchError: false` (no cross-request LKG cache) so transient API
+  failures soft-fail with logged warnings instead of 500ing every request;
+  pass `failOnFetchError: true` to hard-fail. Prefetch and handler failures
+  always `close()` the owned client (no metrics-interval leak).
 
 ## 1.21.0
 

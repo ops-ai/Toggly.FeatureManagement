@@ -593,6 +593,12 @@ last-known-good cache (common at build time), `refreshFlags()` and
 key cannot silently bake every flag as off. When a last-known-good cache
 exists, the server keeps offline fallback to that cache and still logs.
 
+`createTogglyMiddleware` defaults request-scoped clients to
+`failOnFetchError: false` (soft fail-closed + always log) because those
+clients have no cross-request cache; pass `failOnFetchError: true` to fail
+the request on cold-start fetch errors. The middleware always `close()`s the
+owned client, including when prefetch throws.
+
 ```typescript
 import {
   createTogglyServerClient,
