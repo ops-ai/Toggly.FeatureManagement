@@ -5,8 +5,8 @@ homepage: https://docs.toggly.io/
 repository: https://github.com/ops-ai/Toggly.FeatureManagement
 
 environment:
-  sdk: '>=2.18.2 <4.0.0'
-  flutter: ">=1.17.0"
+  sdk: '>=3.4.0 <4.0.0'
+  flutter: ">=3.22.0"
 
 dependencies:
   flutter:
@@ -19,8 +19,8 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^2.0.0
-  lints: ^2.0.1
+  flutter_lints: '>=3.0.0 <7.0.0'
+  lints: '>=2.1.1 <7.0.0'
   sqflite_common_ffi: '>=2.2.0 <3.0.0'
 
 flutter:

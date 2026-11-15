@@ -132,7 +132,7 @@ test('Local Gates runs its coverage and packed consumer without shared dependenc
   assert.deepEqual(result.testMatrix, [{
     sdk: 'Local-Gates',
     path: 'toggly-local-gates',
-    'test-cmd': 'npm test',
+    'test-cmd': 'npm run test:coverage',
     'has-lint': false,
   }]);
   assert.equal(result.needSharedDeps, false);

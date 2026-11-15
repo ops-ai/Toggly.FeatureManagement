@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Compatibility
+- Declare Python 3.15 support and add it to the Flask CI matrix. Declared
+  floor remains Python 3.8+ / Flask `>=2.0`.
+
 ## 0.4.0 - 2026-09-23
 
 ### Changed

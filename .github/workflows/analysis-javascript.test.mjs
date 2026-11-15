@@ -326,21 +326,37 @@ test('classifies CJS files under tests as test code in both Sonar scans', () => 
   }
 });
 
-test('runs the Fastify 4 and 5 packed-host fixture on its valid Node 20 row', () => {
-  const packedHostStep = workflow.match(/- name: Run packed host compatibility fixture\n\s+if: ([^\n]+)/)?.[1];
+test('runs Express, Fastify, and Hono packed-host fixtures on every Node server matrix row', () => {
+  const nodeJob = workflow.match(/\n  test-node-server:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  assert.match(nodeJob, /node-version: \['22\.x', '24\.x', '26\.x'\]/);
+  assert.doesNotMatch(nodeJob, /'18\.x'|'20\.x'/);
 
+  const packedHostStep = workflow.match(/- name: Run packed host compatibility fixture\n\s+if: ([^\n]+)/)?.[1];
   assert.ok(packedHostStep, 'the packed-host fixture must keep an explicit matrix guard');
+  assert.match(packedHostStep, /matrix\.config\.package == 'Express'/);
   assert.match(packedHostStep, /matrix\.config\.package == 'Fastify'/);
-  assert.match(packedHostStep, /matrix\.node-version == '20\.x'/);
+  assert.match(packedHostStep, /matrix\.config\.package == 'Hono'/);
+  assert.doesNotMatch(packedHostStep, /matrix\.node-version == '20\.x'/);
 });
 
-test('requires the packed Docusaurus production host with a locked Node 24 install', () => {
+test('requires the packed Docusaurus production host across Node 22/24/26 and React 18/19', () => {
   const hostJob = workflow.match(/\n  test-docusaurus-host:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0];
   assert.ok(hostJob, 'the current Docusaurus host must run in CI');
+  assert.match(hostJob, /node-version: \$\{\{ matrix\.node-version \}\}/);
+  assert.match(hostJob, /node-version: '22\.x'/);
   assert.match(hostJob, /node-version: '24\.x'/);
+  assert.match(hostJob, /node-version: '26\.x'/);
+  assert.match(hostJob, /react: '19\.3\.1'/);
+  assert.match(hostJob, /react: '18\.3\.1'/);
+  assert.match(hostJob, /docusaurus: '3\.10\.2'/);
   assert.match(hostJob, /run: npm ci/);
   assert.match(hostJob, /run: npm run typecheck && npm run test:coverage/);
+  assert.match(hostJob, /Verify Worker types and Node \+ workerd tests/);
+  assert.match(hostJob, /working-directory: toggly-docusaurus-edge-sdk\/cloudflare\/worker/);
+  assert.match(hostJob, /run: npm run typecheck && npm test/);
   assert.match(hostJob, /CHROME_BIN: \/usr\/bin\/google-chrome/);
+  assert.match(hostJob, /TOGGLY_DOCUSAURUS_VERSION: \$\{\{ matrix\.docusaurus \}\}/);
+  assert.match(hostJob, /TOGGLY_DOCUSAURUS_REACT: \$\{\{ matrix\.react \}\}/);
   assert.match(hostJob, /run: node tests\/docusaurus-consumer-fixtures\/packed-host\.mjs/);
   assert.doesNotMatch(hostJob, /overlay-shared-js-deps|continue-on-error|npm ci \|\|/);
   assert.match(summary.match(/needs: \[([^\]]+)\]/)?.[1] ?? '', /\btest-docusaurus-host\b/);
@@ -354,7 +370,14 @@ test('requires the packed Docusaurus production host with a locked Node 24 insta
   assert.match(pullRequest, /'tests\/docusaurus-consumer-fixtures\/\*\*'/);
   assert.match(workflow, /push:\s+branches:\s+- develop/);
   assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
-  assert.match(docusaurusFixture, /const currentReact = '19\.3\.0'/);
+  assert.match(
+    docusaurusFixture,
+    /const currentReact = process\.env\.TOGGLY_DOCUSAURUS_REACT \|\| '19\.3\.1'/,
+  );
+  assert.match(
+    docusaurusFixture,
+    /const currentDocusaurus = process\.env\.TOGGLY_DOCUSAURUS_VERSION \|\| '3\.10\.2'/,
+  );
   assert.ok(docusaurusFixture.includes('`react@${currentReact}`'));
   assert.ok(docusaurusFixture.includes('`react-dom@${currentReact}`'));
   assert.match(docusaurusFixture, /page\.on\('console'/);
@@ -482,6 +505,15 @@ test('selects system Chrome before packed JavaScript browser host', () => {
   assert.match(workflow, /CHROME_BIN=\/usr\/bin\/google-chrome/);
 });
 
+test('pins Vue, Svelte, and Astro unit rows off Node 26 jsdom localStorage gap', () => {
+  for (const sdk of ['Vue', 'Svelte', 'Astro']) {
+    const matched = selectAnalysis(sdk).testMatrix.include.filter((row) => row.sdk === sdk);
+    assert.ok(matched.length >= 1, `${sdk} must appear in its filtered matrix`);
+    for (const row of matched) {
+      assert.equal(row['node-version'], '24.x', `${sdk} unit row must pin Node 24.x`);
+    }
+  }
+});
 
 test('classifies the JavaScript packed browser harness as test code in both scanners', () => {
   const harness = 'Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs';

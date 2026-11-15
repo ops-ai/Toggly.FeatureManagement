@@ -57,28 +57,28 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@ops-ai/toggly-eval": "^2.1.0",
-    "@ops-ai/toggly-hooks-types": "^1.4.3",
+    "@ops-ai/toggly-eval": "^2.1.1",
+    "@ops-ai/toggly-hooks-types": "^1.4.6",
     "@ops-ai/toggly-segments": "^0.1.0",
-    "ws": "^8.0.0"
+    "ws": "^8.22.1"
   },
   "optionalDependencies": {
-    "@grpc/grpc-js": "^1.12.6",
-    "@grpc/proto-loader": "^0.7.13"
+    "@grpc/grpc-js": "^1.14.7",
+    "@grpc/proto-loader": "^0.7.15"
   },
   "devDependencies": {
-    "@grpc/grpc-js": "^1.12.6",
-    "@grpc/proto-loader": "^0.7.13",
-    "@types/node": "^20.17.12",
-    "@types/ws": "^8.0.0",
-    "@vitest/coverage-v8": "^3.0.4",
-    "eslint": "^9.18.0",
-    "tsup": "^8.3.5",
-    "typescript": "^5.7.3",
-    "vitest": "^3.0.4"
+    "@grpc/grpc-js": "^1.14.7",
+    "@grpc/proto-loader": "^0.7.15",
+    "@types/node": "^22.20.5",
+    "@types/ws": "^8.18.2",
+    "@vitest/coverage-v8": "^3.2.7",
+    "eslint": "^9.39.5",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "publishConfig": {
     "access": "public",

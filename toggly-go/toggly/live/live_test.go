@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/identity"
-	"nhooyr.io/websocket"
 )
 
 func TestStart_CallsOnUpdate(t *testing.T) {
