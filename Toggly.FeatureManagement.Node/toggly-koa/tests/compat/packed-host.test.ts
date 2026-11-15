@@ -79,7 +79,7 @@ function installAndVerify(koaVersion: string) {
 }
 
 test('packed release installs, typechecks, and handles Koa 2 requests', () => {
-  installAndVerify('2.16.3')
+  installAndVerify('2.16.4')
 }, 120000)
 
 test('packed release installs, typechecks, and handles Koa 3 requests', () => {

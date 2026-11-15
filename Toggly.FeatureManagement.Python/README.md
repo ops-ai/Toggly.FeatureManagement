@@ -139,11 +139,17 @@ The declared floors remain unchanged: core, Django, Flask, and cache packages
 support Python 3.8+; FastAPI supports Python 3.9+. `toggly-django` supports
 Django 4.2+.
 
-The release workflow retains Python 3.8–3.13 regression coverage and adds
-Python 3.14. Its packed-consumer hosts test Django 4.2, 5.0, 5.1, 5.2.17,
-6.0.8, and 6.1.1 using framework-valid Python versions. The Python 3.14 /
-Django 6.1.1 host also validates Flask 3.1.3, FastAPI 0.141.1, redis-py
-8.1.0, and the optional WebSocket and gRPC transports.
+The analysis workflow retains Python 3.8–3.14 regression coverage and adds
+Python 3.15 for core, Flask, FastAPI, and cache. Its packed-consumer hosts
+test Django 4.2, 5.0, 5.1, 5.2.18, 6.0.9, and 6.1.2 using framework-valid
+Python versions. The Python 3.14 / Django 6.1.2 host also validates Flask
+3.1.x, FastAPI 0.162.x, redis-py 8.1.x, and the optional WebSocket and gRPC
+transports (including current protobuf 7.x / grpcio on Python ≥3.10).
+
+Django unit CI keeps the 4.2 floor (including Python 3.8/3.9) and exercises
+5.2 LTS, 6.0, and the latest 6.x line on every Python each upstream release
+declares. Django does not yet declare Python 3.15 support, so that runtime is
+not claimed for `toggly-django`.
 
 Use a Django version that supports the Python version selected for your host.
 The package constraints deliberately remain open above their declared floors;

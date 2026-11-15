@@ -30,7 +30,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        java: ['17', '21']
+        # AGP 9.5 supports JDK 17+; include 25 (Temurin) alongside LTS 17/21.
+        java: ['17', '21', '25']
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -144,10 +145,14 @@ jobs:
           python -m coverage report --omit='tool/test_*.py' --fail-under=80
           python -m coverage xml --omit='tool/test_*.py' -o coverage.xml
 
-      - name: Measure public acceptance Activity coverage on Android API 35
+      - name: Measure public acceptance Activity coverage on Android API 36
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          # compileSdk/targetSdk stay at 37. API 37.0 AVDs (default and
+          # aosp_atd) never reach boot_completed on macos-15-intel GHA runners
+          # (device offline for the full 600s window). API 36 is the Play
+          # target floor and boots reliably here.
+          api-level: 36
           arch: x86_64
           disable-animations: true
           working-directory: Toggly.FeatureManagement.Android/acceptance/public-telemetry-host
@@ -235,7 +240,7 @@ jobs:
   smoke-test:
     name: Smoke Test
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 12
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -258,11 +263,25 @@ jobs:
         run: ./gradlew :toggly-android-core:compileDebugUnitTestKotlin
 
       - name: Run smoke test
-        timeout-minutes: 2
+        timeout-minutes: 10
         working-directory: ${{ env.SDK_ROOT }}
         env:
           TOGGLY_SMOKE_APP_KEY_FRONTEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_FRONTEND }}
-        run: ./gradlew :toggly-android-core:testDebugUnitTest --tests "io.toggly.core.SmokeTest"
+        run: |
+          # Maven Central occasionally returns 429 for Robolectric nativeruntime jars.
+          # Gradle retries connection/5xx failures only, so wrap the smoke run with backoff.
+          for attempt in 1 2 3 4 5; do
+            if ./gradlew :toggly-android-core:testDebugUnitTest --tests "io.toggly.core.SmokeTest"; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "Smoke test failed after ${attempt} attempts"
+              exit 1
+            fi
+            sleep_seconds=$((attempt * 20))
+            echo "Smoke test failed (attempt ${attempt}), retrying in ${sleep_seconds}s..."
+            sleep "${sleep_seconds}"
+          done
 
   dependency-check:
     name: OWASP Dependency Check

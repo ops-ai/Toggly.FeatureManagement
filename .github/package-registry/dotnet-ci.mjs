@@ -73,7 +73,8 @@ if (command === "validate") {
     }
 
     const results = `TestResults/${family.name}`;
-    run("dotnet", [
+    // Blazor multi-TFMs are proven in blazor-runtime; analysis covers the net8.0 floor once.
+    const testArgs = [
       "test",
       family.testProject,
       "-c",
@@ -83,7 +84,11 @@ if (command === "validate") {
       family.coverageSettings,
       "--results-directory",
       results,
-    ]);
+    ];
+    if (family.name === "blazor") {
+      testArgs.push("-p:TestFramework=net8.0");
+    }
+    run("dotnet", testArgs);
     run("python3", [family.coverageCheck, results]);
     if (family.browserTests) {
       run("bash", [family.browserTests]);

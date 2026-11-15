@@ -8,8 +8,10 @@ import { fileURLToPath } from 'node:url'
 const packageDirectory = dirname(fileURLToPath(import.meta.url))
 const adapterDirectory = dirname(packageDirectory)
 const workspaceDirectory = dirname(adapterDirectory)
-const node18 = process.env.TOGGLY_FASTIFY_NODE18 ?? process.execPath
-const node20 = process.env.TOGGLY_FASTIFY_NODE20 ?? process.execPath
+// Optional overrides for local multi-binary matrices. Both Fastify 4 and 5
+// run on the SDK floor (Node 22+) so CI uses process.execPath for both.
+const nodeFastify4 = process.env.TOGGLY_FASTIFY_NODE_FASTIFY4 ?? process.execPath
+const nodeFastify5 = process.env.TOGGLY_FASTIFY_NODE_FASTIFY5 ?? process.execPath
 
 function runPnpm(args, options = {}) {
   const execPath = process.env.npm_execpath
@@ -227,19 +229,20 @@ try {
   verifyPackedFile(tarball)
   writeHostFixture(hostDirectory)
 
+  // Upstream still publishes Fastify 4 (dist-tag "four"); keep proving both majors.
   for (const host of [
-    { fastify: '4.29.1', node: node18, minimumNode: 18 },
-    { fastify: '5.12.4', node: node20, minimumNode: 20 },
+    { fastify: '4.29.1', node: nodeFastify4, minimumNode: 22 },
+    { fastify: '5.12.7', node: nodeFastify5, minimumNode: 22 },
   ]) {
     assert.ok(
       nodeMajor(host.node) >= host.minimumNode,
-      `Fastify ${host.fastify} requires Node ${host.minimumNode}+; configure a valid host binary`
+      `Fastify ${host.fastify} requires Node ${host.minimumNode}+ for this SDK floor; configure a valid host binary`
     )
     run('npm', [
       'install', '--no-package-lock',
       `fastify@${host.fastify}`,
       'typescript@5.9.3',
-      '@types/node@22.19.11',
+      '@types/node@22.20.5',
       packedCore.tarball,
       packedEval.tarball,
       packedSegments.tarball,

@@ -100,13 +100,16 @@ require('@ops-ai/feature-flags-toggly');await import('@ops-ai/feature-flags-togg
     response.setHeader('Content-Type','text/html');response.end('<!doctype html><script src="/sdk.js"></script><p>JavaScript packed host</p>');
   });
   const {chromium}=await import(pathToFileURL(join(host,'node_modules/playwright/index.mjs')).href);
-  // `install --with-deps` can exceed 3m on CI when apt mirrors are slow (ETIMEDOUT).
-  run(
-    join(host, 'node_modules/.bin/playwright'),
-    ['install', ...(process.platform === 'linux' ? ['--with-deps'] : []), 'chromium'],
-    host,
-    600000,
-  );
+  // Prefer system Chrome when provided (CI); skip Playwright's Chromium download.
+  // `install --with-deps` can ETIMEDOUT on slow apt/CDN mirrors (seen on Node 26 CI).
+  if (!process.env.CHROME_BIN) {
+    run(
+      join(host, 'node_modules/.bin/playwright'),
+      ['install', ...(process.platform === 'linux' ? ['--with-deps'] : []), 'chromium'],
+      host,
+      600000,
+    );
+  }
   browser=await chromium.launch({headless:true,...(process.env.CHROME_BIN?{executablePath:process.env.CHROME_BIN}:{})});
   const page=await browser.newPage();page.setDefaultTimeout(10000);
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
