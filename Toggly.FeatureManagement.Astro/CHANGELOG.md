@@ -23,6 +23,8 @@
   failures soft-fail with logged warnings instead of 500ing every request;
   pass `failOnFetchError: true` to hard-fail. Prefetch and handler failures
   always `close()` the owned client (no metrics-interval leak).
+- Last-known-good offline fallback refreshes the cache TTL clock so long-lived
+  clients do not retry/log on every evaluate during an outage.
 
 ## 1.21.0
 

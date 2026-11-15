@@ -130,6 +130,13 @@ describe('TogglyServer fetch error surfacing', () => {
       expect.stringContaining('Using cached flags after fetch failure'),
     );
 
+    // LKG fallback refreshes the TTL clock so the next evaluate does not
+    // immediately re-fetch / re-log during the outage window.
+    errorSpy.mockClear();
+    await server.getFlags();
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(errorSpy).not.toHaveBeenCalled();
+
     errorSpy.mockRestore();
     warnSpy.mockRestore();
   });

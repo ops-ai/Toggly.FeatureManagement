@@ -260,11 +260,13 @@ export class TogglyServer implements TogglyClient {
   }
 
   private lastKnownGoodCache(): CachedFlags {
+    // Refresh the TTL clock on offline fallback so a long-lived client does not
+    // retry the network (and re-log) on every subsequent evaluate during an outage.
     return {
       flags: { ...this.cache!.flags },
       definitions: this.cache!.definitions,
       variantDefs: this.cache!.variantDefs,
-      timestamp: this.cache!.timestamp,
+      timestamp: Date.now(),
       fromNetwork: true,
     };
   }
