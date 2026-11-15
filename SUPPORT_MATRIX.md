@@ -7,7 +7,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 
 | SDK | Declared | Proven CI majors | Newest stable | Gap / action |
 | --- | --- | --- | --- | --- |
-| Next (`@ops-ai/nextjs-toggly-*`) | `next >=14` | 14.2.35, 15.5.25, 16.3.6 (webpack+turbopack) | 16.3.6 | Wave 1 done |
+| Next (`@ops-ai/nextjs-toggly-*`) | `next >=14` | 14.2.35, 15.5.28, 16.4.3 (webpack+turbopack) | 16.4.3 | Maintain; Next 14 EOL upstream but retained while Node 22+ host still proves |
 | Nuxt | `^3 \|\| ^4` | 3.21.11 + 4.6.3 (Node 22/24/26) | 4.6.3 | Maintain |
 | Astro | `^5 \|\| ^6 \|\| ^7` | 5 / 6 / 7 (OPS-1179) | 7.3.x | Maintain |
 | NestJS | `^10 \|\| ^11 \|\| ^12` | release matrix 10, 11, 12 | 12.1.x | Wave 2 (separate SDK) |
@@ -23,13 +23,14 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Svelte | `^4 \|\| ^5` | 4 + 5 | 5.x | Maintain |
 | SvelteKit | kit `^2 \|\| ^3` | 2.x, 3.1.0 packed host | 3.1.x | Maintain |
 | .NET core family | netstandard2.1…net9 + **net10** | multi-TFM build | net10 | Wave 2 |
-| Blazor (`Toggly.FeatureManagement.Blazor` / `.Server`) | **net8–net11** | CI matrix net8/9/10 + net11 RC allow-failure | net10 stable; net11 RC | Maintain; net6/7 skipped (Client is net8-only) |
+| .NET Client / Desktop | net7–net10 + **net11** (RC) | per-TFM tests (net11 allow-failure) | net10 (+ net11 RC) | net6 / netstandard2.1 omitted (BCL shims) |
+| Blazor (`Toggly.FeatureManagement.Blazor` / `.Server`) | **net8–net11** | CI matrix net8/9/10 + net11 RC allow-failure | net10 stable; net11 RC | Maintain; net6/7 not in the Blazor TFM matrix |
 | .NET Mongo/Dapper/EF | includes net10 | net8/net10 consumers | net10 | Maintain |
 | Java Spring | Boot 3.5 + Boot 4.1 / Spring 6.2+7 / Java 17 | Boot 3.5.16 + Boot 4.1.2 starters; Spring 6.2.19 + 7.0.10 (Security 6.5.11 / 7.1.2) MVC/WebFlux CI + `webflux` / `webflux-spring7` hosts; JDK 17/21/25 | Boot 4.1 / Spring 7.0 | Dual Boot starters; single MVC/WebFlux artifacts (provided Spring) |
 | Java Redis | Jedis 5 + Jedis 8 | dual artifacts | Jedis 8 | No Lettuce 7 |
 | Android | AGP 9.5 / Kotlin 2.4 / compileSdk 37 / minSdk 24 | Java 17+21+25; unit tests + API 36 emulator | AGP 9.5.0 / Kotlin 2.4.21 | Wave 3; AVD 37 blocked on GHA macos-intel |
 | Flutter | Dart `>=3.4.0 <4` / Flutter `>=3.22.0` | Flutter **3.22.0** (Dart 3.4) + stable | Flutter 3.47.x / Dart 3.13 | Dart 2 dropped; floor set by `crypto` ^3.0.6 (Dart ≥3.4) + `equatable` ^3 |
-| iOS | iOS 14 / macOS 11 | Xcode 16.x matrix | Xcode 16.4 | Keep floor |
+| iOS | iOS 14 / macOS 11 / tvOS 14 / watchOS 7 / swift-tools 5.5 | Xcode 16.1+16.2+16.4 (macos-15), 26.6 (macos-26), 27.1 (xcode-27; consumer sim iOS 15 — Xcode 27 SDK floor) | Xcode 27.1 | Keep declared iOS 14; Xcode 27 sim SDK min is 15 |
 | Rust axum | axum 0.7 + axum08 | dual crates | 0.8 | `toggly-axum08` 0.1.1+ accepts workspace `toggly` range |
 | Go | Go 1.26; grpc 1.85 | CI 1.26 + 1.27 | — | Floor Go 1.26; CI also runs latest stable |
 

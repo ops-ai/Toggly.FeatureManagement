@@ -66,7 +66,7 @@ jobs:
             8.0.x
             9.0.x
             10.0.x
-      # Blazor packages declare net11.0; validate pack/test must restore that TFM.
+      # Client and Blazor packages declare net11.0; validate pack/test must restore that TFM.
       - name: Setup .NET 11 RC (Blazor preview TFM)
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:

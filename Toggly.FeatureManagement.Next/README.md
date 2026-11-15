@@ -20,12 +20,12 @@ npm install @ops-ai/nextjs-toggly-core @ops-ai/nextjs-toggly-client
 
 ## Compatibility
 
-The packages retain Next.js 14 and 15 and support Next.js 16. Use a valid
-Next.js/Node.js pairing for the host major:
+SDK packages require **Node.js 22+** (18/20 dropped as EOL). Peer range remains
+`next >=14`. Use a valid Next.js/Node.js pairing for the host major:
 
-| Next.js | Node.js requirement | Integration |
+| Next.js | Upstream Node.js requirement | Integration |
 | --- | --- | --- |
-| 14 | `>=18.17` | `middleware.ts` + `@ops-ai/nextjs-toggly-edge` |
+| 14 (EOL upstream; retained while CI host proves) | `>=18.17` | `middleware.ts` + `@ops-ai/nextjs-toggly-edge` |
 | 15 | `^18.18 \|\| ^19.8 \|\| >=20` | `middleware.ts` + server/client packages |
 | 16 | `>=20.9` | `proxy.ts` (`createFeatureProxy`), server/client packages, and optional Cache Components |
 
