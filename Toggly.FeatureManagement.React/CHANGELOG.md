@@ -1,3 +1,9 @@
+## Unreleased
+
+### Changed
+- CI unit and packed-consumer matrix expanded from Node **24 (lts/\*)** to **22 / 24 / 26**.
+- Packed React 19 consumer fixture bumped from React / React DOM **19.3.0** → **19.3.1** (latest stable; `@types/react` / `@types/react-dom` remain **19.3.0**, newest published types line).
+
 ## 1.14.1
 
 2026-10-23
