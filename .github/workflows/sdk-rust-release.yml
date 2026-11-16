@@ -217,6 +217,16 @@ jobs:
           git tag -s -m "Rust SDK v${{ needs.validate.outputs.version }}" "rust-sdk-v${{ needs.validate.outputs.version }}"
           git push origin "rust-sdk-v${{ needs.validate.outputs.version }}"
 
+      - name: Resolve Rust requirement from Cargo.toml
+        id: runtime_req
+        run: |
+          rust_ver=$(awk -F'"' '/^rust-version[[:space:]]*=/ { print $2; exit }' "${{ env.SDK_ROOT }}/Cargo.toml")
+          if [ -z "$rust_ver" ]; then
+            echo "::error::Missing rust-version in ${{ env.SDK_ROOT }}/Cargo.toml"
+            exit 1
+          fi
+          echo "rust_requirement=Rust ${rust_ver}+" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -250,7 +260,7 @@ jobs:
 
             ### Requirements
 
-            - Rust 1.88+
+            - ${{ steps.runtime_req.outputs.rust_requirement }}
 
             ### Links
 

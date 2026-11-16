@@ -220,6 +220,19 @@ jobs:
           git tag -s -m "Python SDK v${{ needs.validate.outputs.version }}" "python-sdk-v${{ needs.validate.outputs.version }}"
           git push origin "python-sdk-v${{ needs.validate.outputs.version }}"
 
+      - name: Resolve Python requirement from pyproject.toml
+        id: runtime_req
+        run: |
+          pyproject="${{ env.SDK_ROOT }}/toggly/pyproject.toml"
+          py_req=$(sed -nE 's/^requires-python[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "$pyproject" | head -1)
+          if [ -z "$py_req" ]; then
+            echo "::error::Missing requires-python in $pyproject"
+            exit 1
+          fi
+          # Normalize ">=3.8" -> ">= 3.8" for release-note readability
+          py_fmt=$(echo "$py_req" | sed -E 's/(>=|<=|==|!=|>|<)[[:space:]]*/\1 /g')
+          echo "python_requirement=Python ${py_fmt}" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -253,7 +266,7 @@ jobs:
 
             ### Requirements
 
-            - Python >= 3.8
+            - ${{ steps.runtime_req.outputs.python_requirement }}
 
             ### Links
 

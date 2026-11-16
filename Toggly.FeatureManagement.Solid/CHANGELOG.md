@@ -14,6 +14,14 @@
 
 - Filter-parity fixture `targeting-rollout-partial-anonymous`: `@ops-ai/toggly-node-core` sticky-buckets an anonymous UUID when identity is omitted, so 50% Targeting rollout is not fail-closed (unlike `@ops-ai/toggly-eval` / the golden fixture). Empty-string identity does fail closed. Owner decision needed; Solid does not change evaluation to mask this.
 
+## 0.6.1
+
+2026-11-15
+
+### Fixed
+
+- Published Solid entry types and JSX now import `./client.js`, so `createClient`, `decodeVariantValue`, `TogglyOptions`, and the other client re-exports resolve under TypeScript `moduleResolution` `node16` and `nodenext`.
+
 ## 0.6.0
 
 2026-10-11

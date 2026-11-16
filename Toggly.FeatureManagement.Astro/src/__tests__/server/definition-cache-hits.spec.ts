@@ -95,6 +95,8 @@ describe('Astro server definition cache hit telemetry', () => {
   })
 
   it('records a hit when network fails and last-good defs are kept', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     mockFetch
       .mockResolvedValueOnce(createDefsResponse({ Feature1: true }))
       .mockRejectedValueOnce(new Error('network down'))
@@ -116,21 +118,30 @@ describe('Astro server definition cache hit telemetry', () => {
     }
     expect(payload.definitionCacheMisses).toBe(1)
     expect(payload.definitionCacheHits).toBe(1)
+    errorSpy.mockRestore()
+    warnSpy.mockRestore()
     await server.close()
   })
 
   it('does not record a hit on network failure when only flagDefaults exist', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     mockFetch.mockRejectedValueOnce(new Error('network down'))
     const sendStats = vi.fn().mockResolvedValue({ ok: true })
     const server = new TogglyServer({
       ...telemetryOptions(sendStats),
       flagDefaults: { Feature1: true },
+      // Soft fail-closed so this path still returns defaults without a LKG cache.
+      failOnFetchError: false,
     })
 
     await server.getFlags()
     await server.flushTelemetry()
 
     expect(sendStats).not.toHaveBeenCalled()
+    expect(errorSpy).toHaveBeenCalled()
+    errorSpy.mockRestore()
+    warnSpy.mockRestore()
     await server.close()
   })
 
@@ -188,7 +199,7 @@ describe('Astro server definition cache hit telemetry', () => {
       'User-Agent': sdkUserAgent(),
     })
     expect(sdkUserAgent()).toBe(`toggly-astro/${SDK_VERSION}`)
-    expect(SDK_VERSION).toBe('1.21.0')
+    expect(SDK_VERSION).toBe('1.22.0')
 
     const body = JSON.parse(String((init as RequestInit).body))
     expect(body.definitionCacheMisses).toBe(1)

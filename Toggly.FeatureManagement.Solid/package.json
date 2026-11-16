@@ -1,6 +1,6 @@
 {
   "name": "@ops-ai/solid-feature-flags-toggly",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Native reactive feature flags for SolidJS with signed definitions, targeting and declarative gates.",
   "type": "module",
   "main": "./dist/index.js",
@@ -26,8 +26,8 @@
   "scripts": {
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/npm-cli.test.mjs && vitest run",
-    "test:coverage": "node --test tests/npm-cli.test.mjs && vitest run --coverage",
+    "test": "node --test tests/npm-cli.test.mjs tests/declaration-extensions.test.mjs && vitest run",
+    "test:coverage": "node --test tests/npm-cli.test.mjs tests/declaration-extensions.test.mjs && vitest run --coverage",
     "test:host": "npm run build && node tests/offline-process.mjs && node tests/install-host.mjs",
     "format": "npm exec --yes --package=prettier@3.9.10 -- prettier --no-error-on-unmatched-pattern --write \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,tsx,mjs,json,css,html}\" \"*.{ts,mjs,json,md,html}\"",
     "format:check": "npm exec --yes --package=prettier@3.9.10 -- prettier --no-error-on-unmatched-pattern --check \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,tsx,mjs,json,css,html}\" \"*.{ts,mjs,json,md,html}\"",

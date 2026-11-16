@@ -356,6 +356,11 @@ function convertFilePathToRoute(filePath: string, isPages: boolean): string {
  * Creates a request-scoped server client (process handlers off, no flush timer
  * by default) and closes it when the request finishes so usage telemetry does
  * not accumulate Node listeners or intervals across requests.
+ *
+ * Request-scoped clients have no cross-request last-known-good cache, so this
+ * helper soft-fails fetch errors by default (`failOnFetchError: false`) while
+ * still always logging. Pass `failOnFetchError: true` to fail the request on
+ * cold-start fetch errors. Prefetch and handler failures always run `close()`.
  */
 export function createTogglyMiddleware(config: TogglyConfig) {
   return async function togglyMiddleware(
@@ -365,31 +370,38 @@ export function createTogglyMiddleware(config: TogglyConfig) {
     // Create or reuse Toggly client
     // In middleware (runtime), we never enable all features - we use actual flags
     const ownsClient = !locals.toggly;
-    if (ownsClient) {
-      const client = createTogglyServerClient(
-        {
-          ...config,
-          // Request-scoped: no process signal handlers / no periodic timer unless
-          // the caller opts in. close() flushes remaining usage at end of request.
-          telemetryAttachProcessHandlers:
-            config.telemetryAttachProcessHandlers ?? false,
-          usageFlushInterval: config.usageFlushInterval ?? 0,
-        },
-        false,
-      );
-      // Pre-fetch flags before page rendering starts so Feature components
-      // have cached flags available immediately
-      await client.refreshFlags();
-      locals.toggly = client;
-    }
+    let ownedClient: ReturnType<typeof createTogglyServerClient> | null = null;
 
     try {
+      if (ownsClient) {
+        ownedClient = createTogglyServerClient(
+          {
+            ...config,
+            // Request-scoped: no process signal handlers / no periodic timer unless
+            // the caller opts in. close() flushes remaining usage at end of request.
+            telemetryAttachProcessHandlers:
+              config.telemetryAttachProcessHandlers ?? false,
+            usageFlushInterval: config.usageFlushInterval ?? 0,
+            // Soft fail-closed for per-request clients (no LKG across requests).
+            // Package default for createTogglyServerClient remains true (SSG/build).
+            failOnFetchError: config.failOnFetchError ?? false,
+          },
+          false,
+        );
+        // Pre-fetch flags before page rendering starts so Feature components
+        // have cached flags available immediately. Keep a local reference so
+        // close() still runs if refreshFlags rejects (failOnFetchError: true).
+        await ownedClient.refreshFlags();
+        locals.toggly = ownedClient;
+      }
+
       return await next();
     } finally {
       if (ownsClient) {
+        const client = ownedClient ?? locals.toggly;
         try {
           // Bound wait: hung usage flush must not delay the HTTP response.
-          await locals.toggly?.close?.({
+          await client?.close?.({
             timeoutMs: REQUEST_SCOPED_CLOSE_TIMEOUT_MS,
           });
         } catch {

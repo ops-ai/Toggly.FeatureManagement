@@ -113,9 +113,25 @@ export const FULL_TEST_MATRIX = [
   {
     sdk: 'Gatsby',
     path: 'Toggly.FeatureManagement.Gatsby',
-    'test-cmd': 'npm run test:coverage && node tests/packed-host.mjs',
+    'test-cmd': 'npm run test:coverage',
+    'node-version': '22.x',
+    'has-lint': false,
+    'skip-coverage-upload': true,
+  },
+  {
+    sdk: 'Gatsby',
+    path: 'Toggly.FeatureManagement.Gatsby',
+    'test-cmd': 'npm run test:coverage',
     'node-version': '24.x',
     'has-lint': false,
+  },
+  {
+    sdk: 'Gatsby',
+    path: 'Toggly.FeatureManagement.Gatsby',
+    'test-cmd': 'npm run test:coverage',
+    'node-version': '26.x',
+    'has-lint': false,
+    'skip-coverage-upload': true,
   },
   // Vanilla JS SDK: exercise Node 22 (floor), 24, and 26 (latest current).
   // Coverage artifact uploads only from the 22.x row (see analysis-javascript.yml).
@@ -165,6 +181,7 @@ const EXTRA_JOBS_BY_SDK = {
   SvelteKit: ['test-current-browser-hosts'],
   SolidJS: ['solidstart-host'],
   Astro: ['test-astro-hosts'],
+  Gatsby: ['test-gatsby-hosts'],
   Docusaurus: ['test-docusaurus-host'],
 };
 
@@ -188,6 +205,7 @@ const ALL_REQUIRED_DEFAULT = [
   'test-current-browser-hosts',
   'test-docusaurus-host',
   'test-astro-hosts',
+  'test-gatsby-hosts',
   'sonar',
   'dependency-check',
 ];
@@ -240,6 +258,7 @@ export function filterAnalysisJs(sdksInput = 'all') {
       runTestCurrentBrowserHosts: true,
       runTestDocusaurusHost: true,
       runTestAstroHosts: true,
+      runTestGatsbyHosts: true,
       requiredJobs: ALL_REQUIRED_DEFAULT.join(','),
     };
   }
@@ -295,6 +314,7 @@ export function filterAnalysisJs(sdksInput = 'all') {
       jobSet.has('test-current-browser-hosts') && browserHosts.length > 0,
     runTestDocusaurusHost: jobSet.has('test-docusaurus-host'),
     runTestAstroHosts: jobSet.has('test-astro-hosts'),
+    runTestGatsbyHosts: jobSet.has('test-gatsby-hosts'),
     requiredJobs: requiredJobs.join(','),
   };
 }
@@ -314,6 +334,7 @@ function main() {
       `run_test_current_browser_hosts=${result.runTestCurrentBrowserHosts}`,
       `run_test_docusaurus_host=${result.runTestDocusaurusHost}`,
       `run_test_astro_hosts=${result.runTestAstroHosts}`,
+      `run_test_gatsby_hosts=${result.runTestGatsbyHosts}`,
       `required_jobs=${result.requiredJobs}`,
     ];
     fs.appendFileSync(process.env.GITHUB_OUTPUT, `${lines.join('\n')}\n`);

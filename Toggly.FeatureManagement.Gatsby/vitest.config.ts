@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    setupFiles: ['./src/__tests__/setup-jsdom-storage.ts'],
     include: ['src/**/*.spec.{ts,tsx}'],
     coverage: {
       provider: 'v8',

@@ -18,7 +18,11 @@ export { default as togglyIntegration, createTogglyMiddleware } from './integrat
 export type { TogglyIntegrationOptions } from './integration/index.js';
 
 // Server-side
-export { createTogglyServerClient, TogglyServer } from './server/toggly-server.js';
+export {
+  createTogglyServerClient,
+  TogglyServer,
+  TogglyFetchError,
+} from './server/toggly-server.js';
 export {
   createSegmentMembershipClient,
   SegmentMembershipError,

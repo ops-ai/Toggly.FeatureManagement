@@ -127,6 +127,33 @@ jobs:
           GOPROXY=https://proxy.golang.org GO111MODULE=on \
             go list -m "${{ env.MODULE_PATH }}@v${{ needs.validate.outputs.version }}"
 
+      - name: Resolve requirements from go.mod
+        id: runtime_req
+        run: |
+          mod="${{ env.SDK_ROOT }}/go.mod"
+          go_line=$(awk '/^go / { print $2; exit }' "$mod")
+          if [ -z "$go_line" ]; then
+            echo "::error::Missing go directive in $mod"
+            exit 1
+          fi
+          major_minor=$(echo "$go_line" | sed -E 's/^([0-9]+\.[0-9]+)(\..*)?$/\1/')
+          echo "go_requirement=Go ${major_minor}+" >> "$GITHUB_OUTPUT"
+
+          toggly_ver=$(awk '/Toggly\.FeatureManagement\/toggly-go / { print $2; exit }' "$mod" | sed 's/^v//')
+          if [ -z "$toggly_ver" ]; then
+            echo "::error::Missing toggly-go require in $mod"
+            exit 1
+          fi
+          echo "toggly_requirement=Toggly Go SDK v${toggly_ver}+" >> "$GITHUB_OUTPUT"
+
+          mongo_ver=$(awk '/mongo-driver\/v2 / { print $2; exit }' "$mod" | sed 's/^v//')
+          if [ -z "$mongo_ver" ]; then
+            echo "::error::Missing mongo-driver/v2 require in $mod"
+            exit 1
+          fi
+          mongo_mm=$(echo "$mongo_ver" | sed -E 's/^([0-9]+\.[0-9]+)(\..*)?$/\1/')
+          echo "mongo_requirement=MongoDB Go Driver v${mongo_mm}+" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -143,9 +170,9 @@ jobs:
 
             ### Requirements
 
-            - Go 1.26+
-            - Toggly Go SDK v0.13.3+
-            - MongoDB Go Driver v2.10+
+            - ${{ steps.runtime_req.outputs.go_requirement }}
+            - ${{ steps.runtime_req.outputs.toggly_requirement }}
+            - ${{ steps.runtime_req.outputs.mongo_requirement }}
 
             ### Links
 

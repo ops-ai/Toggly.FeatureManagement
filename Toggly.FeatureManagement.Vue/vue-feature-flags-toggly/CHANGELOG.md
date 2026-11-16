@@ -1,3 +1,20 @@
+## Unreleased
+
+### Changed
+- Declare `vue` `^3.2.45` as a peer dependency (and keep it as a pinned
+  `3.2.45` devDependency for builds) so consumers do not get a second Vue copy.
+- Prove packed hosts on Vue **3.2.45** (declared floor) and **3.5.44** (current
+  latest) across Node **22 / 24 / 26**; require Node.js `>=22`.
+- Bump package toolchain devDependencies (Vite 8, Vitest 5, `@vitejs/plugin-vue`
+  6, TypeScript 5.4, jsdom 30, `@types/node` 22) while keeping `vue-tsc` 1.x for
+  declaration emit against the Vue 3.2.45 floor. Vitest 5 is required for Node
+  26 jsdom `localStorage` in unit tests.
+
+### Added
+- Mocked HTTP API-contract evaluation specs for public entry points against
+  realistic `/evaluated-signed` and `/evaluated-variants-signed` `{ defs }`
+  payloads (`isFeatureOn` / `evaluateFeatureGate` / composables / components).
+
 ## 1.12.0
 
 2026-10-11

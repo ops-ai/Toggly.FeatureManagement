@@ -9,7 +9,7 @@ import java.time.Duration;
 /**
  * Redis snapshot cache adapter for Jedis 8 hosts.
  *
- * <p>This artifact resolves Jedis {@code 8.0.1} and reuses the retained adapter's
+ * <p>This artifact resolves Jedis {@code 8.0.2} and reuses the retained adapter's
  * storage key and snapshot serialization format. Use this class when an application
  * has selected Jedis 8. Use {@code toggly-cache-redis} and
  * {@code io.toggly.cache.redis.RedisCachingSnapshotProvider} for the retained Jedis

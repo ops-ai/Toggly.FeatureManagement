@@ -418,6 +418,17 @@ interface TogglyConfig {
   
   /** Enable debug logging (default: false) */
   isDebug?: boolean;
+
+  /**
+   * When true (default), server `refreshFlags` / `getFlags` throw
+   * `TogglyFetchError` if a definitions fetch fails and there is no prior
+   * last-known-good cache. Fetch failures are always logged at error/warn
+   * level even when `isDebug` is false. With a last-known-good cache, the
+   * server still falls back to cached definitions (offline resilience).
+   * Set `false` only if you intentionally want soft fail-closed to
+   * `flagDefaults` / `{}` on cold-start fetch failures.
+   */
+  failOnFetchError?: boolean;
   
   /** Connection timeout in milliseconds (default: 5000) */
   connectTimeout?: number;
@@ -573,6 +584,52 @@ const isEnabled = await toggly.getFlag('feature-key');
 const allFlags = await toggly.getFlags();
 ```
 
+### Server fetch failures (SSG / cold start)
+
+`TogglyServer` always logs definitions fetch failures (`console.error` /
+`console.warn`), even when `isDebug` is false. When there is **no** prior
+last-known-good cache (common at build time), `refreshFlags()` and
+`getFlags()` **throw** `TogglyFetchError` by default so a bad or missing app
+key cannot silently bake every flag as off. When a last-known-good cache
+exists, the server keeps offline fallback to that cache and still logs.
+
+`createTogglyMiddleware` defaults request-scoped clients to
+`failOnFetchError: false` (soft fail-closed + always log) because those
+clients have no cross-request cache; pass `failOnFetchError: true` to fail
+the request on cold-start fetch errors. The middleware always `close()`s the
+owned client, including when prefetch throws.
+
+```typescript
+import {
+  createTogglyServerClient,
+  TogglyFetchError,
+} from '@ops-ai/astro-feature-flags-toggly'
+
+const client = createTogglyServerClient({
+  appKey: process.env.TOGGLY_APP_KEY,
+  environment: process.env.TOGGLY_ENVIRONMENT || 'Production',
+  // failOnFetchError: true is the default — omit unless you need soft fail-closed
+})
+
+try {
+  await client.refreshFlags()
+  const flags = await client.getFlags()
+} catch (error) {
+  if (error instanceof TogglyFetchError) {
+    // Build should fail: do not publish gated HTML with empty flags
+    throw error
+  }
+  throw error
+}
+
+// Opt into the pre-1.22 soft path only when intentional:
+createTogglyServerClient({
+  appKey: process.env.TOGGLY_APP_KEY,
+  failOnFetchError: false,
+  flagDefaults: { 'my-feature': false },
+})
+```
+
 ## Edge Enforcement (Optional)
 
 For true enforcement at the edge (prevents page access even if client-side JS is disabled):
@@ -616,8 +673,12 @@ Astro.locals.toggly; // Typed as TogglyClient
 
 1. Check that the integration is properly configured in `astro.config.mjs`
 2. Verify `appKey` and `environment` are correct
-3. Enable debug mode: `isDebug: true`
-4. Check browser console and server logs
+3. Check server logs for `[Toggly Server] Error fetching flags:` (always logged;
+   `isDebug` is not required)
+4. For SSG/build, ensure `refreshFlags()` / `getFlags()` errors are not swallowed
+   by the host — default `failOnFetchError: true` throws `TogglyFetchError` when
+   there is no last-known-good cache
+5. Enable debug mode for verbose success-path logs: `isDebug: true`
 
 ### TypeScript errors
 

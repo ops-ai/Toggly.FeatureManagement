@@ -95,6 +95,8 @@ describe('TogglyServer', () => {
     });
 
     it('reads text() and rejects invalid envelope when verifySignatures is true', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const invalidBody = JSON.stringify({ defs: { Feature1: true } });
       const text = vi.fn().mockResolvedValue(invalidBody);
       mockFetch.mockResolvedValueOnce({
@@ -109,12 +111,16 @@ describe('TogglyServer', () => {
         appKey: 'test-key',
         verifySignatures: true,
         flagDefaults: { Feature1: false },
+        failOnFetchError: false,
       });
 
-      // Invalid envelope throws inside fetchFlags; server falls back to defaults
+      // Invalid envelope throws inside fetchFlags; with failOnFetchError: false falls back to defaults
       const flags = await server.getFlags();
       expect(text).toHaveBeenCalled();
       expect(flags).toEqual({ Feature1: false });
+      expect(errorSpy).toHaveBeenCalled();
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
     });
 
     it('should construct the correct API URL', async () => {
@@ -264,20 +270,28 @@ describe('TogglyServer', () => {
   });
 
   describe('error handling', () => {
-    it('should return flagDefaults on fetch error when no cache', async () => {
+    it('should return flagDefaults on fetch error when no cache and failOnFetchError is false', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
       const server = new TogglyServer({
         appKey: 'test-key',
         environment: 'Production',
         flagDefaults: { Feature1: true },
+        failOnFetchError: false,
       });
 
       const flags = await server.getFlags();
       expect(flags).toEqual({ Feature1: true });
+      expect(errorSpy).toHaveBeenCalled();
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
     });
 
     it('should return cached flags on fetch error when cache exists', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       mockFetch
         .mockResolvedValueOnce(createDefsResponse({ Feature1: true, Feature2: true }))
         .mockRejectedValueOnce(new Error('Network error'));
@@ -297,32 +311,47 @@ describe('TogglyServer', () => {
       // Second fetch fails - should use cached flags
       const flags = await server.getFlags();
       expect(flags).toEqual({ Feature1: true, Feature2: true });
+      expect(errorSpy).toHaveBeenCalled();
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
     });
 
-    it('should throw-safe on non-ok response status', async () => {
+    it('should return flagDefaults on non-ok response when failOnFetchError is false', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       mockFetch.mockResolvedValueOnce(createMockResponse({}, 500));
 
       const server = new TogglyServer({
         appKey: 'test-key',
         environment: 'Production',
         flagDefaults: { Fallback: true },
+        failOnFetchError: false,
       });
 
       const flags = await server.getFlags();
       expect(flags).toEqual({ Fallback: true });
+      expect(errorSpy).toHaveBeenCalled();
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
     });
 
-    it('should return flagDefaults on 404', async () => {
+    it('should return flagDefaults on 404 when failOnFetchError is false', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       mockFetch.mockResolvedValueOnce(createMockResponse({}, 404));
 
       const server = new TogglyServer({
         appKey: 'test-key',
         environment: 'Production',
         flagDefaults: { Default: true },
+        failOnFetchError: false,
       });
 
       const flags = await server.getFlags();
       expect(flags).toEqual({ Default: true });
+      expect(errorSpy).toHaveBeenCalled();
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
     });
   });
 

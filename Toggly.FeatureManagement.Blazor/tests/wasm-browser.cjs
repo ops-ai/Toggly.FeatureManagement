@@ -70,8 +70,14 @@ const waitFor = async (condition) => {
     const before = packets.length;
     await page.locator("#record").click();
     await page.locator("#flush").click();
-    await waitFor(() => packets.length > before);
-    const ordinary = packets.at(-1);
+    // Wait for the recorded checkout packet specifically. Render-only flushes
+    // can arrive first (or after) and would make packets.at(-1) lack f.checkout.
+    await waitFor(() =>
+      packets.slice(before).some((packet) => packet.body.f?.checkout),
+    );
+    const ordinary = packets
+      .slice(before)
+      .find((packet) => packet.body.f?.checkout);
     assert.deepEqual(
       await page.evaluate(() => window.telemetryFetchOptions.at(-1)),
       { keepalive: false, encoding: "gzip" },

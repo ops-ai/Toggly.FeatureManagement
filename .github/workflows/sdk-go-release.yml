@@ -146,6 +146,18 @@ jobs:
             go list -m github.com/ops-ai/Toggly.FeatureManagement/toggly-go@v${{ needs.validate.outputs.version }} || true
         continue-on-error: true
 
+      - name: Resolve Go requirement from go.mod
+        id: runtime_req
+        run: |
+          go_line=$(awk '/^go / { print $2; exit }' "${{ env.SDK_ROOT }}/go.mod")
+          if [ -z "$go_line" ]; then
+            echo "::error::Missing go directive in ${{ env.SDK_ROOT }}/go.mod"
+            exit 1
+          fi
+          # go 1.26.0 -> Go 1.26+
+          major_minor=$(echo "$go_line" | sed -E 's/^([0-9]+\.[0-9]+)(\..*)?$/\1/')
+          echo "go_requirement=Go ${major_minor}+" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -169,7 +181,7 @@ jobs:
 
             ### Requirements
 
-            - Go 1.25+
+            - ${{ steps.runtime_req.outputs.go_requirement }}
 
             ### Links
 
