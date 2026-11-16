@@ -20,7 +20,11 @@ namespace Toggly.Metrics.SystemMetrics.Collectors
         private Guid? taskId;
         private readonly List<EventSource> preConstructorEvents = new List<EventSource>();
         private readonly bool constructed;
+#if NET9_0_OR_GREATER
+        private readonly Lock _lock = new();
+#else
         private readonly object _lock = new object();
+#endif
 
         /// <summary>
         /// Pending counter samples keyed by configured metric name.

@@ -83,6 +83,10 @@ namespace Toggly.FeatureManagement
 
         private static readonly TimeSpan DefaultSendInterval = TimeSpan.FromMinutes(1);
 
+        private const string EnabledVariant = "enabled";
+
+        private const string DisabledVariant = "disabled";
+
         public TogglyMetricsService(IOptions<TogglySettings> togglySettings, ILoggerFactory loggerFactory, IHttpClientFactory clientFactory, IHostApplicationLifetime applicationLifetime, IServiceProvider serviceProvider, IFeatureDefinitionProvider featureDefinitionProvider, IFeatureManager featureManager, Metrics.MetricsClient metricsClient)
         {
             _appKey = togglySettings.Value.AppKey;
@@ -203,8 +207,6 @@ namespace Toggly.FeatureManagement
             foreach (var m in observations)
                 StoreObservationInstance(m.Value.Item1, m.Key, null, m.Value.Item2, true);
         }
-
-        private Task SendMetrics() => SendMetrics(suppressLogging: false, honorBackoff: false);
 
         private Task SendMetrics(bool suppressLogging) => SendMetrics(suppressLogging, honorBackoff: false);
 
@@ -519,7 +521,7 @@ namespace Toggly.FeatureManagement
         private void IncrementMeasurement(string metricKey, string? featureKey, double value, bool enabled)
         {
             // Map boolean to variant name for backward compatibility
-            var variant = enabled ? "enabled" : "disabled";
+            var variant = enabled ? EnabledVariant : DisabledVariant;
             IncrementMeasurement(metricKey, featureKey, value, variant);
         }
         
@@ -570,7 +572,7 @@ namespace Toggly.FeatureManagement
         private void StoreObservationInstance(DateTime date, string metricKey, string? featureKey, double value, bool enabled)
         {
             // Map boolean to variant name for backward compatibility
-            var variant = enabled ? "enabled" : "disabled";
+            var variant = enabled ? EnabledVariant : DisabledVariant;
             StoreObservationInstance(date, metricKey, featureKey, value, variant);
         }
         
@@ -642,13 +644,13 @@ namespace Toggly.FeatureManagement
 
             var batch = new List<(DateTime Date, string MetricKey, string? FeatureKey, string Variant, double Value)>
             {
-                (date, metricKey, null, "enabled", value)
+                (date, metricKey, null, EnabledVariant, value)
             };
 
             var features = _featureExperimentProvider.GetFeaturesForMetric(metricKey);
             if (features != null)
                 foreach (var feature in features)
-                    batch.Add((date, metricKey, feature, (await _featureManager.IsEnabledAsync(feature).ConfigureAwait(false)) ? "enabled" : "disabled", value));
+                    batch.Add((date, metricKey, feature, (await _featureManager.IsEnabledAsync(feature).ConfigureAwait(false)) ? EnabledVariant : DisabledVariant, value));
 
             if (!TryEnqueueObservationGroup(batch))
                 TryLog(LogLevel.Debug, "Pending metrics observations cap ({Cap}) reached; dropping observation {MetricKey}", MaxPendingObservations, metricKey);
@@ -667,13 +669,13 @@ namespace Toggly.FeatureManagement
 
             var batch = new List<(DateTime Date, string MetricKey, string? FeatureKey, string Variant, double Value)>
             {
-                (date, metricKey, null, "enabled", value)
+                (date, metricKey, null, EnabledVariant, value)
             };
 
             var features = _featureExperimentProvider.GetFeaturesForMetric(metricKey);
             if (features != null)
                 foreach (var feature in features)
-                    batch.Add((date, metricKey, feature, (await _featureManager.IsEnabledAsync(feature, context).ConfigureAwait(false)) ? "enabled" : "disabled", value));
+                    batch.Add((date, metricKey, feature, (await _featureManager.IsEnabledAsync(feature, context).ConfigureAwait(false)) ? EnabledVariant : DisabledVariant, value));
 
             if (!TryEnqueueObservationGroup(batch))
                 TryLog(LogLevel.Debug, "Pending metrics observations cap ({Cap}) reached; dropping observation {MetricKey}", MaxPendingObservations, metricKey);
@@ -687,7 +689,7 @@ namespace Toggly.FeatureManagement
         private void IncrementMetricCounter(string metricKey, string? featureKey, double value, bool enabled)
         {
             // Map boolean to variant name for backward compatibility
-            var variant = enabled ? "enabled" : "disabled";
+            var variant = enabled ? EnabledVariant : DisabledVariant;
             IncrementMetricCounter(metricKey, featureKey, value, variant);
         }
         

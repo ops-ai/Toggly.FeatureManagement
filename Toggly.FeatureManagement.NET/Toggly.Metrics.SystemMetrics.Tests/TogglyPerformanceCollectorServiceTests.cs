@@ -590,7 +590,8 @@ public class TogglyPerformanceCollectorServiceTests
         using var service = new TestablePerformanceCollectorService(eventSources, _metricsRegistryServiceMock.Object);
         using var callbackEntered = new ManualResetEventSlim();
         using var resumeCallback = new ManualResetEventSlim();
-        var snapshotLock = typeof(TogglyPerformanceCollectorService)
+        // Production code uses System.Threading.Lock on net9+; Monitor does not synchronize with Lock.
+        var snapshotLock = (Lock)typeof(TogglyPerformanceCollectorService)
             .GetField("_lock", BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(service)!;
         var counterEvent = CreateCounterEvent(new SignalingCounterName(callbackEntered, resumeCallback));
@@ -599,7 +600,7 @@ public class TogglyPerformanceCollectorServiceTests
         var snapshotAcquired = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var snapshotHolder = Task.Run(() =>
         {
-            Monitor.Enter(snapshotLock);
+            snapshotLock.Enter();
             try
             {
                 snapshotAcquired.SetResult(true);
@@ -608,7 +609,7 @@ public class TogglyPerformanceCollectorServiceTests
             }
             finally
             {
-                Monitor.Exit(snapshotLock);
+                snapshotLock.Exit();
             }
         });
 
