@@ -148,7 +148,14 @@ public class LiveUpdateTests
         using var fixture = new SignedFixture();
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var http = new HttpClient(new Handler(async (request, ct) => { started.SetResult(); await release.Task; return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(fixture.Envelope("{}")) }; }));
+        var canceled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var http = new HttpClient(new Handler(async (request, ct) =>
+        {
+            using var registration = ct.Register(() => canceled.TrySetResult());
+            started.SetResult();
+            await release.Task;
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(fixture.Envelope("{}")) };
+        }));
         var client = new TogglyClient(new()
         {
             EnableTelemetry = false, AppKey = "public",
@@ -158,6 +165,7 @@ public class LiveUpdateTests
         var refresh = client.RefreshAsync();
         await started.Task;
         var disposal = client.DisposeAsync().AsTask();
+        await canceled.Task.WaitAsync(TimeSpan.FromSeconds(3));
         Assert.False(disposal.IsCompleted);
         release.SetResult();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => refresh);
