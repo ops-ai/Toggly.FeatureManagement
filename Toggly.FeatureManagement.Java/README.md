@@ -313,7 +313,7 @@ The SDK is compiled for Java 17 and is tested on Java 17, 21, and 25.
 - `toggly-cache-caffeine` uses Caffeine 3.2.4.
 - `toggly-cache-redis` retains the Jedis 5.1 line (currently 5.1.5) and its
   existing `io.toggly.cache.redis` imports.
-- `toggly-cache-redis-jedis8` resolves Jedis 8.0.1. Import
+- `toggly-cache-redis-jedis8` resolves Jedis 8.0.2. Import
   `io.toggly.cache.redis.jedis8.RedisCachingSnapshotProvider` when using it.
 
 Choose one Redis adapter artifact per application. Both use the same cache key

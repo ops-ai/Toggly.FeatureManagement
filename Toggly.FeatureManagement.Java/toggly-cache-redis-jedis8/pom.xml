@@ -16,7 +16,7 @@
     <description>Jedis 8 Redis caching adapter for Toggly feature flag definitions</description>
 
     <properties>
-        <jedis8.version>8.0.1</jedis8.version>
+        <jedis8.version>8.0.2</jedis8.version>
     </properties>
 
     <dependencies>
