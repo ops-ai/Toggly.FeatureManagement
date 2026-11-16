@@ -26,8 +26,8 @@ import {
   type TogglyEntityContext,
   type TogglyOptions,
   type VariantResult,
-} from './client';
-export * from './client';
+} from './client.js';
+export * from './client.js';
 export type { FeatureUsageScope } from '@ops-ai/toggly-client-telemetry';
 
 export interface Toggly {
