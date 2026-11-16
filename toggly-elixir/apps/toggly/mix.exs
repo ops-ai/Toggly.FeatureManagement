@@ -5,7 +5,7 @@ defmodule Toggly.MixProject do
     [
       app: :toggly,
       version: "0.7.1",
-      elixir: "~> 1.20",
+      elixir: "~> 1.18",
       description: "Toggly feature flags for Elixir OTP applications",
       package: [
         licenses: ["MIT"],
