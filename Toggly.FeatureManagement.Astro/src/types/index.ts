@@ -44,6 +44,21 @@ export interface TogglyConfig {
   enableLiveUpdates?: boolean;
   /** Enable debug logging (default: false) */
   isDebug?: boolean;
+  /**
+   * When true (default), `refreshFlags` / `getFlags` / `getFlag` / `evaluateGate`
+   * throw `TogglyFetchError` if a definitions fetch fails and there is no
+   * prior last-known-good (`fromNetwork`) cache. Fetch failures are always
+   * logged at error/warn level regardless of `isDebug`.
+   *
+   * When a last-known-good cache exists, the server always falls back to it
+   * (offline resilience) and still logs — this option does not force a throw
+   * in that case.
+   *
+   * Set `false` to restore the pre-1.22 soft fail-closed behavior (return
+   * `flagDefaults` / `{}` when there is no cache). Prefer leaving the default
+   * for SSG/build so a bad or missing app key fails the build loudly.
+   */
+  failOnFetchError?: boolean;
   /** Connection timeout in milliseconds (default: 5000) */
   connectTimeout?: number;
   /** Host-minted browser instance token. Takes precedence over identity/groups/claims; never minted by this SDK. */

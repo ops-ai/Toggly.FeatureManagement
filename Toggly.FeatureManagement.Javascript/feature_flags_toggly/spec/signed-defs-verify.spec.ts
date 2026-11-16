@@ -421,7 +421,8 @@ describe('signed-defs-verify', () => {
         const name =
           typeof algorithm === 'string' ? algorithm : (algorithm as Algorithm).name;
         const hashName = name.replace('-', '').toLowerCase(); // SHA-256 → sha256
-        return createHash(hashName).update(Buffer.from(data as ArrayBuffer)).digest();
+        const digest = createHash(hashName).update(Buffer.from(data as ArrayBuffer)).digest();
+        return digest.buffer.slice(digest.byteOffset, digest.byteOffset + digest.byteLength);
       });
       importKeySpy = jest.spyOn(subtle, 'importKey').mockResolvedValue({} as CryptoKey);
       verifySpy = jest.spyOn(subtle, 'verify').mockResolvedValue(true);

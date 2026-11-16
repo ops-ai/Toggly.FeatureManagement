@@ -59,13 +59,7 @@ namespace Toggly.FeatureManagement
                 try
                 {
                     var handlerResults = await handler().ConfigureAwait(false);
-                    foreach (var value in handlerResults)
-                    {
-                        if (results.ContainsKey(value.Key))
-                            results[value.Key] = value.Value;
-                        else
-                            results.Add(value.Key, value.Value);
-                    }
+                    MetricsRegistryMerge.Merge(results, handlerResults, _logger, "measurement");
                 }
                 catch (Exception ex)
                 {
@@ -86,13 +80,7 @@ namespace Toggly.FeatureManagement
                 try
                 {
                     var handlerResults = await handler().ConfigureAwait(false);
-                    foreach (var value in handlerResults)
-                    {
-                        if (results.ContainsKey(value.Key))
-                            results[value.Key] = value.Value;
-                        else
-                            results.Add(value.Key, value.Value);
-                    }
+                    MetricsRegistryMerge.Merge(results, handlerResults, _logger, "observation");
                 }
                 catch (Exception ex)
                 {
@@ -113,13 +101,7 @@ namespace Toggly.FeatureManagement
                 try
                 {
                     var handlerResults = await handler().ConfigureAwait(false);
-                    foreach (var value in handlerResults)
-                    {
-                        if (results.ContainsKey(value.Key))
-                            results[value.Key] = value.Value;
-                        else
-                            results.Add(value.Key, value.Value);
-                    }
+                    MetricsRegistryMerge.Merge(results, handlerResults, _logger, "counter");
                 }
                 catch (Exception ex)
                 {

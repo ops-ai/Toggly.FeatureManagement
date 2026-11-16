@@ -374,9 +374,11 @@ describe('Vue frontend telemetry', () => {
 
   it('restarts live updates after returning to a token with a cached 304 snapshot', async () => {
     const sockets:any[]=[];
-    vi.spyOn(globalThis,'WebSocket').mockImplementation((()=>{
-      const socket={close:vi.fn()}; sockets.push(socket); return socket;
-    }) as any);
+    // Vitest 5 requires a constructible mock for `new WebSocket(...)`.
+    vi.spyOn(globalThis,'WebSocket').mockImplementation(function MockWebSocket(this: any) {
+      this.close = vi.fn();
+      sockets.push(this);
+    } as any);
     const service=client({instanceId:'mint-a',persistCache:true,enableLiveUpdates:true}); await service._loadFeatures();
     (service as any)._cacheDefinitionsRevision('revision-a');
     const oldMessage = sockets[0].onmessage; const oldClose = sockets[0].onclose;

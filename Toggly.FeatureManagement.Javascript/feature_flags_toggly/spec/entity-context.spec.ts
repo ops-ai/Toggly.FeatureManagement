@@ -1,13 +1,14 @@
 import { Toggly } from '../lib/toggly';
 import { FeatureRequirement } from '../lib/models';
 import { clearRegisteredContexts, type EntityGate } from '@ops-ai/toggly-hooks-types';
-
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'mock-uuid-entity'),
-}));
+import { mockAnonymousIdentity } from './mock-identity';
 
 const mockFetch = jest.fn();
 (global as any).fetch = mockFetch;
+
+beforeEach(() => {
+  mockAnonymousIdentity('mock-uuid-entity');
+});
 
 const orderGate: EntityGate = {
   requirement: 'all',

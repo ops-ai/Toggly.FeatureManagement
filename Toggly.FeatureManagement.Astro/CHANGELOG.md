@@ -1,3 +1,31 @@
+## 1.22.0
+
+2026-11-15
+
+### Fixed
+- Server `TogglyServer.fetchFlags` no longer silently swallows definitions fetch
+  failures (HTTP errors, network errors, parse/signature errors). Failures are
+  always logged with `console.error` / `console.warn` regardless of `isDebug`.
+  When there is no prior last-known-good (`fromNetwork`) cache — typical at
+  SSG/build — `refreshFlags` / `getFlags` / `getFlag` / `evaluateGate` now throw
+  `TogglyFetchError` so callers' error handling can fail the build loudly
+  instead of rendering every flag off. With a last-known-good cache, behavior
+  remains fail-closed offline fallback (cached definitions) and still logs.
+
+### Added
+- `TogglyConfig.failOnFetchError` (default `true` on `createTogglyServerClient`)
+  to opt into the historical soft fail-closed path (`flagDefaults` / `{}` when
+  there is no cache) by setting `failOnFetchError: false`. Exported
+  `TogglyFetchError` (optional `status` for HTTP failures). Server fetch
+  failures also invoke `onError` when configured.
+- `createTogglyMiddleware` defaults request-scoped clients to
+  `failOnFetchError: false` (no cross-request LKG cache) so transient API
+  failures soft-fail with logged warnings instead of 500ing every request;
+  pass `failOnFetchError: true` to hard-fail. Prefetch and handler failures
+  always `close()` the owned client (no metrics-interval leak).
+- Last-known-good offline fallback refreshes the cache TTL clock so long-lived
+  clients do not retry/log on every evaluate during an outage.
+
 ## 1.21.0
 
 2026-10-12

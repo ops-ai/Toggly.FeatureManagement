@@ -1,9 +1,5 @@
 import { Toggly } from '../lib/toggly';
-
-// Mock uuid
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'mock-uuid-ws'),
-}));
+import { mockAnonymousIdentity } from './mock-identity';
 
 // Mock fetch
 const mockFetch = jest.fn();
@@ -72,6 +68,7 @@ describe('Toggly WebSocket', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.clearAllMocks();
+    mockAnonymousIdentity('mock-uuid-ws');
     localStorage.clear();
     instances = [];
     Toggly.cancelRefreshInterval();
