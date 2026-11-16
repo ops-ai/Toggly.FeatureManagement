@@ -128,10 +128,30 @@ jobs:
       - run: npm run build
       - run: npm pack --dry-run
 
+      - name: Detect already-published manifest version
+        id: npm_publish
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          if npm view "${NAME}@${VER}" version >/dev/null 2>&1; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            echo "Already published: ${NAME}@${VER}"
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish manifest version with provenance
+        if: steps.npm_publish.outputs.already_published != 'true'
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ''
+
+      - name: Skip publish when version already exists on npm
+        if: steps.npm_publish.outputs.already_published == 'true'
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VER=$(node -p "require('./package.json').version")
+          echo "::notice::Skipping npm publish; ${NAME}@${VER} is already on the registry."
 
       - name: Commit version bump
         if: needs.resolve.outputs.manifest_changed == 'true'
