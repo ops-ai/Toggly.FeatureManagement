@@ -1,11 +1,11 @@
 # Changelog
 
-## All .NET SDK packages 3.15.0 - 2026-11-02
+## All .NET SDK packages 3.15.0 - 2026-11-16
 
 ### Added
-- Target `net11.0` (RC) across the multi-TFM server SDK family; Dashboard and
-  Embedded now also target `net9.0`, `net10.0`, and `net11.0` (alongside
-  existing `net8.0`).
+- Target `net11.0` (GA) across the multi-TFM server SDK family; Dashboard and
+  Embedded also target `net9.0`, `net10.0`, and `net11.0` (alongside existing
+  `net8.0`).
 - Filter-parity and variant-allocator corpus evaluation tests
   (`Toggly.FeatureManagement.Parity.Tests`) that load shared fixtures and run
   them against the .NET evaluator on every runnable TFM.
@@ -13,19 +13,18 @@
 ### Changed
 - Bump `Microsoft.FeatureManagement` to 4.8.0, `Grpc.Net.*` to 2.85.0,
   `Google.Protobuf` to 3.36.2, `Hangfire.Core` to 1.8.25, and
-  `System.Net.Http.Json` to the latest compatible version per TFM.
+  `System.Net.Http.Json` to the latest compatible version per TFM (11.0.0 on
+  net11).
 - Upgrade `MongoDB.Driver` 2.x → 3.13.0 and `RavenDB.Client` 6.x → 7.2.7
   (both still provide `netstandard2.1` assets for older TFMs).
-- Use `Azure.Core` 1.64.0 (+ Hosting.Abstractions 10.0.10) only on net10.0 /
-  net11.0. netstandard2.1–net9.0 keep Azure.Core 1.50.0 / Hosting.Abstractions
-  3.1.0 so consumers pinning Extensions 6/7/8/9 do not hit NU1605 (Azure.Core
-  1.51+ pulls Hosting 10 via System.ClientModel).
+- Use `Azure.Core` 1.64.0 on net10/net11; Hosting.Abstractions 10.0.10 on net10
+  and 11.0.0 on net11. netstandard2.1–net9.0 keep Azure.Core 1.50.0 /
+  Hosting.Abstractions 3.1.0 so consumers pinning Extensions 6/7/8/9 do not hit
+  NU1605 (Azure.Core 1.51+ pulls Hosting 10 via System.ClientModel).
 - Stay on FluentAssertions 6.12.x (Apache-licensed); pin SystemMetrics tests
   back from 8.x.
-- CI installs SDKs/runtimes for every library TFM and runs the TFM × test
-  matrix; `net11.0` is an allow-failure preview job while GA is out.
-  Required analyze/pack jobs omit `net11.0` via `$(TogglyNet11Tfm)` in
-  `Directory.Build.props` unless `IncludeNet11Preview=true`.
+- CI installs SDKs/runtimes for every library TFM (including GA `11.0.x`) and
+  runs the full TFM × test matrix as required checks.
 
 ### Known filter-parity divergence
 - `unknown-filter-fail-closed`: production

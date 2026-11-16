@@ -20,7 +20,7 @@ ef_versions = {
     'net8.0': '8.0.0',
     'net9.0': '9.0.0',
     'net10.0': '10.0.0',
-    'net11.0': '11.0.0-rc.3.26522.148',
+    'net11.0': '11.0.0',
 }
 
 # Obtain versions from the artifacts being exercised; shared version consistency is checked during packing.

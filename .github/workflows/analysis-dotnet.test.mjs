@@ -335,43 +335,30 @@ test('reporting false skips only dependency reporting and allows that exact summ
   assert.equal(result.stderr.trim(), 'SONAR_TOKEN');
 });
 
-test('required analyze and pack jobs stay off net11; only the allow-failure preview job builds it', () => {
+test('required jobs install GA .NET 11 and exercise net11.0 in the TFM matrix', () => {
   const analyze = workflow.slice(workflow.indexOf('  analyze:'), workflow.indexOf('  dependency-check:'));
   const pack = workflow.slice(workflow.indexOf('  pack-packages:'), workflow.indexOf('  embedded-consumer:'));
-  const preview = workflow.slice(workflow.indexOf('  test-net11-preview:'), workflow.indexOf('  blazor-runtime-net11-preview:'));
+  const embedded = workflow.slice(workflow.indexOf('  embedded-consumer:'), workflow.indexOf('  smoke-test:'));
+  const blazor = workflow.slice(workflow.indexOf('  blazor-runtime:'), workflow.indexOf('  summary:'));
 
-  assert.match(analyze, /ExcludeNet11Preview: 'true'/);
-  assert.match(pack, /ExcludeNet11Preview: 'true'/);
-  assert.doesNotMatch(analyze, /11\.0\.100-rc/);
-  assert.doesNotMatch(pack, /11\.0\.100-rc/);
+  for (const [name, job] of [
+    ['analyze', analyze],
+    ['pack-packages', pack],
+  ]) {
+    assert.match(job, /11\.0\.x/, `${name} must install .NET 11 GA`);
+    assert.doesNotMatch(job, /dotnet-quality:\s*'preview'/, `${name} must not use preview quality`);
+    assert.doesNotMatch(job, /ExcludeNet11Preview/, `${name} must not strip net11`);
+  }
 
-  assert.match(preview, /continue-on-error: true/);
-  assert.match(preview, /IncludeNet11Preview: 'true'/);
-  assert.match(preview, /11\.0\.100-rc\.3\.26522\.148/);
-  assert.match(preview, /-f net11\.0/);
+  assert.match(analyze, /frameworks=\(.*net11\.0\)/);
+  assert.match(embedded, /framework: \[net8\.0, net9\.0, net10\.0, net11\.0\]/);
+  assert.match(blazor, /framework: net11\.0/);
+  assert.doesNotMatch(workflow, /test-net11-preview:|client-net11-preview:|blazor-runtime-net11-preview:/);
+  assert.doesNotMatch(workflow, /dotnet-quality:\s*'preview'/);
 
   const summary = workflow.slice(workflow.indexOf('  summary:'));
   assert.match(summary, /required-jobs: analyze,dependency-check,build-cli,pack-packages,embedded-consumer,smoke-test,blazor-runtime/);
-  assert.doesNotMatch(summary, /required-jobs:.*test-net11-preview/);
 
   const props = readFileSync(new URL('../../Toggly.FeatureManagement.NET/Directory.Build.props', import.meta.url), 'utf8');
-  assert.match(props, /TogglyNet11Tfm/);
-  assert.match(
-    props,
-    /TogglyNet11Tfm Condition="'\$\(ExcludeNet11Preview\)' == 'true' Or \('\$\(CI\)' == 'true' And '\$\(IncludeNet11Preview\)' != 'true'\)"/,
-  );
-});
-
-test('shared analyze and pack-packages provision .NET 11 RC for Blazor net11.0 TFM', () => {
-  for (const [start, end] of [
-    ['  analyze:', '  dependency-check:'],
-    ['  pack-packages:', '  embedded-consumer:'],
-  ]) {
-    const job = workflow.slice(workflow.indexOf(start), workflow.indexOf(end));
-    assert.match(
-      job,
-      /- name: Setup \.NET 11 RC \(Blazor preview TFM\)[\s\S]*dotnet-version: '11\.0\.x'[\s\S]*dotnet-quality: 'preview'/,
-      `${start.trim()} must install .NET 11 RC so unconditional Blazor net11.0 restores succeed`,
-    );
-  }
+  assert.doesNotMatch(props, /TogglyNet11Tfm|ExcludeNet11Preview|IncludeNet11Preview/);
 });
