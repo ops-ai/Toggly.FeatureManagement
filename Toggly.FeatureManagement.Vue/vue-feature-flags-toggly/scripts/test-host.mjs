@@ -22,7 +22,7 @@ if (telemetryArtifact) console.log(`LOCAL INTEGRATION ARTIFACT: ${telemetryArtif
 
 const hosts = [
   { directory: 'vue-3.2', version: '3.2.45' },
-  { directory: 'vue-3.5', version: '3.5.42' },
+  { directory: 'vue-3.5', version: '3.5.44' },
 ];
 
 try {

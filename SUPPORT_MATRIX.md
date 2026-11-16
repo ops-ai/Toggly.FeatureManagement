@@ -20,6 +20,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Docusaurus | `^3` + React `^18 \|\| ^19` | Docusaurus 3.10.2 × React 18.3.1 + 19.3.1; Node 22/24/26; Worker workerd + Pages Function | 3.10.2 / React 19.3.1 | No Docusaurus 4; Worker `compatibility_date` 2026-11-02 |
 | Angular | `>=15` | workspace hosts | 22.x | Prove latest under floor |
 | Electron | `>=28` | 28.3.3 + 45.2.1 packed hosts (Node 22/24/26 unit) | 45.2.1 | Maintain |
+| Vue (`@ops-ai/vue-feature-flags-toggly`) | `vue ^3.2.45` peer | 3.2.45 + 3.5.44 packed hosts (Node 22/24/26) | 3.5.44 | Maintain |
 | Svelte | `^4 \|\| ^5` | 4 + 5 | 5.x | Maintain |
 | SvelteKit | kit `^2 \|\| ^3` | 2.x, 3.1.0 packed host | 3.1.x | Maintain |
 | .NET core family | netstandard2.1…net9 + **net10** | multi-TFM build | net10 | Wave 2 |
