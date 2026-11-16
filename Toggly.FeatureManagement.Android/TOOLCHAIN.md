@@ -14,10 +14,12 @@ Programme: [OPS-1563](https://linear.app/opsai/issue/OPS-1563) / [OPS-1566](http
 | minSdk | 24 (floor; do not raise) |
 | Compose BOM | 2026.09.00 |
 | mockk | 1.14.11 |
+| OkHttp | 5.5.1 |
+| Retrofit | 3.0.0 |
 
 CI: `.github/workflows/analysis-android.yml` (Java 17 + 21 + 25).
 
-Built-in Kotlin is enabled (default for AGP 9). The legacy `org.jetbrains.kotlin.android` plugin is not applied. OkHttp stays on 4.x and Retrofit on 2.x by owner decision.
+Built-in Kotlin is enabled (default for AGP 9). The legacy `org.jetbrains.kotlin.android` plugin is not applied.
 
 ## Packaging
 

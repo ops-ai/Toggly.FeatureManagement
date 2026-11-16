@@ -9,8 +9,9 @@
 - Dependencies: Compose BOM 2024.12.01 → 2026.09.00, core-ktx 1.15.0 → 1.19.1,
   lifecycle 2.8.7 → 2.11.0, activity 1.9.3 → 1.13.0, Room 2.6.1 → 2.8.5,
   DataStore 1.1.1 → 1.3.0, coroutines 1.10.2 → 1.11.0, serialization 1.7.3 →
-  1.12.0, mockk 1.13.17 → 1.14.11, OkHttp 4.12.0 → 4.12.1, Retrofit 2.11.0 →
-  2.12.0 (majors unchanged).
+  1.12.0, mockk 1.13.17 → 1.14.11, OkHttp / logging-interceptor /
+  mockwebserver 4.12.0 → 5.5.1, Retrofit / converter-kotlinx-serialization
+  2.11.0 → 3.0.0 (minSdk 24 unchanged; OkHttp types remain internal).
 - CI Java matrix 17/21 → 17/21/25; acceptance emulator API 35 → 36
   (compileSdk 37; API 37.0 AVDs do not boot on GHA macos-15-intel).
 
