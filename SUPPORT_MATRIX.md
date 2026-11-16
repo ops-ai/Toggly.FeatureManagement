@@ -10,7 +10,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Next (`@ops-ai/nextjs-toggly-*`) | `next >=14` | 14.2.35, 15.5.28, 16.4.3 (webpack+turbopack) | 16.4.3 | Maintain; Next 14 EOL upstream but retained while Node 22+ host still proves |
 | Nuxt | `^3 \|\| ^4` | 3.21.11 + 4.6.3 (Node 22/24/26) | 4.6.3 | Maintain |
 | Astro | `^5 \|\| ^6 \|\| ^7` | 5 / 6 / 7 (OPS-1179) | 7.3.x | Maintain |
-| NestJS | `^10 \|\| ^11 \|\| ^12` | release matrix 10, 11, 12 | 12.1.x | Wave 2 (separate SDK) |
+| NestJS | `^10 \|\| ^11 \|\| ^12` | release matrix Nest 10.4.22 / 11.2.8 / 12.3.2 × Node 22.12.0 / 24 / 26 | 12.3.x | Maintain |
 | Express (Node server) | `>=4` | 4.22.3 + 5.3.0 (Node 22/24/26) | 5.3.0 | Maintain |
 | Koa (Node server) | `^2 \|\| ^3` | 2.16.4 + 3.2.1 | 3.2.1 | Maintain |
 | React Router | `^7 \|\| ^8` | 7.18.5 + 8.5.1 hosts (Node 24) | 8.5.1 | Maintain |
