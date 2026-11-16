@@ -515,7 +515,6 @@ test('pins Vue, Svelte, and Astro unit rows off Node 26 jsdom localStorage gap',
   }
 });
 
-
 test('classifies the JavaScript packed browser harness as test code in both scanners', () => {
   const harness = 'Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs';
   for (const property of ['exclusions', 'test.inclusions']) {

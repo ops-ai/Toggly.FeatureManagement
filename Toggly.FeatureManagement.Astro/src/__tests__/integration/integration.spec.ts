@@ -844,6 +844,67 @@ x-feature: AboutFeature
       );
     });
 
+    it('soft-fails fetch errors by default and still serves the request', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const fetchMock = vi.fn().mockRejectedValue(new Error('network down'));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const middleware = createTogglyMiddleware({
+        appKey: 'middleware-soft',
+        environment: 'Production',
+        flagDefaults: { F1: true },
+        enableUsageTracking: false,
+        enableMetrics: false,
+      });
+
+      try {
+        const locals: Record<string, any> = {};
+        const response = await middleware(
+          { locals },
+          async () => new Response('ok'),
+        );
+        expect(response.status).toBe(200);
+        expect(await locals.toggly.getFlags()).toEqual({ F1: true });
+        expect(errorSpy).toHaveBeenCalled();
+      } finally {
+        errorSpy.mockRestore();
+        warnSpy.mockRestore();
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('closes the owned client when refreshFlags throws with failOnFetchError', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const fetchMock = vi.fn().mockRejectedValue(new Error('network down'));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const { TogglyServer } = await import('../../server/toggly-server.js');
+      const close = vi.fn().mockResolvedValue(undefined);
+      const originalClose = TogglyServer.prototype.close;
+      TogglyServer.prototype.close = close;
+
+      const middleware = createTogglyMiddleware({
+        appKey: 'middleware-hard',
+        environment: 'Production',
+        failOnFetchError: true,
+        enableUsageTracking: false,
+        enableMetrics: false,
+      });
+
+      try {
+        const next = vi.fn().mockResolvedValue(new Response('ok'));
+        await expect(middleware({ locals: {} }, next)).rejects.toThrow();
+        expect(next).not.toHaveBeenCalled();
+        expect(close).toHaveBeenCalledTimes(1);
+        expect(errorSpy).toHaveBeenCalled();
+      } finally {
+        TogglyServer.prototype.close = originalClose;
+        errorSpy.mockRestore();
+        vi.unstubAllGlobals();
+      }
+    });
+
     it('still completes within a bound when usage flush hangs', async () => {
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,

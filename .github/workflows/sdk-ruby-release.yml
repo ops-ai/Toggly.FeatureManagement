@@ -203,6 +203,17 @@ jobs:
           git tag -s -m "Ruby SDK v${{ needs.validate.outputs.version }}" "ruby-sdk-v${{ needs.validate.outputs.version }}"
           git push origin "ruby-sdk-v${{ needs.validate.outputs.version }}"
 
+      - name: Resolve Ruby requirement from gemspec
+        id: runtime_req
+        run: |
+          gemspec="${{ env.SDK_ROOT }}/toggly/toggly.gemspec"
+          ruby_req=$(sed -nE 's/.*required_ruby_version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' "$gemspec" | head -1)
+          if [ -z "$ruby_req" ]; then
+            echo "::error::Missing required_ruby_version in $gemspec"
+            exit 1
+          fi
+          echo "ruby_requirement=Ruby ${ruby_req}" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -234,7 +245,7 @@ jobs:
 
             ### Requirements
 
-            - Ruby >= 3.0
+            - ${{ steps.runtime_req.outputs.ruby_requirement }}
 
             ### Links
 
