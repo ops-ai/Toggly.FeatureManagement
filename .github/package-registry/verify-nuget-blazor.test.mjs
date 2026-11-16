@@ -82,7 +82,7 @@ test("Blazor packages inherit the common version, changelog and release inventor
       );
       assert.match(
         project,
-        /Microsoft\.AspNetCore\.Components\.Web.*11\.0\.0-rc\./s,
+        /Microsoft\.AspNetCore\.Components\.Web.*11\.0\./s,
       );
     }
   }
