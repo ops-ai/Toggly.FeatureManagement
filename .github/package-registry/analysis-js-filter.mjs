@@ -91,7 +91,8 @@ export const FULL_TEST_MATRIX = [
     sdk: 'Astro',
     path: 'Toggly.FeatureManagement.Astro',
     'test-cmd': 'npm test -- --coverage',
-    // Same Node 26 + jsdom localStorage gap as Vue; Astro packed hosts cover 5/6/7.
+    // Unit stays on Node 24: Node 26 + older jsdom leaves localStorage undefined
+    // (jsdom/#3739 / experimental webstorage). Packed hosts prove 5/6/7 on 22/24/26.
     'node-version': '24.x',
     'has-lint': false,
   },
