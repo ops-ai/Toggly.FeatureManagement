@@ -392,7 +392,7 @@ jobs:
             )
           fi
 
-          for attempt in 1 2 3; do
+          for attempt in 1 2 3 4 5 6; do
             if dotnet sonarscanner begin \
               /k:"toggly-sdks-dotnet" \
               "/n:Toggly SDKs - .NET" \
@@ -414,12 +414,12 @@ jobs:
               break
             fi
 
-            if [ "$attempt" -eq 3 ]; then
-              echo "SonarQube Server scan initialization failed after 3 attempts"
+            if [ "$attempt" -eq 6 ]; then
+              echo "SonarQube Server scan initialization failed after 6 attempts"
               exit 1
             fi
 
-            sleep_seconds=$((attempt * 10))
+            sleep_seconds=$((attempt * 30))
             echo "SonarQube Server scan initialization failed (attempt ${attempt}), retrying in ${sleep_seconds}s..."
             sleep "${sleep_seconds}"
           done
@@ -435,7 +435,21 @@ jobs:
       - name: End SonarQube Server Scan
         env:
           SONAR_SERVER_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
-        run: dotnet sonarscanner end /d:sonar.token="${SONAR_SERVER_TOKEN}"
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            if dotnet sonarscanner end /d:sonar.token="${SONAR_SERVER_TOKEN}"; then
+              break
+            fi
+
+            if [ "$attempt" -eq 6 ]; then
+              echo "SonarQube Server scan finalization failed after 6 attempts"
+              exit 1
+            fi
+
+            sleep_seconds=$((attempt * 30))
+            echo "SonarQube Server scan finalization failed (attempt ${attempt}), retrying in ${sleep_seconds}s..."
+            sleep "${sleep_seconds}"
+          done
 
       - name: Report SonarQube Server quality gate
         if: ${{ failure() }}

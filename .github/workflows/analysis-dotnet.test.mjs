@@ -177,10 +177,22 @@ test('dispatch and call analyses wait for their branch gate without empty PR pro
 test('repeated Server scanner failure fails the job', () => {
   const { result, calls } = scan({ SCAN_FAIL: '1' });
   assert.notEqual(result.status, 0);
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 6);
   const end = step('End SonarQube Server Scan');
-  assert.match(end, /run: dotnet sonarscanner end /);
+  assert.match(end, /dotnet sonarscanner end /);
+  assert.match(end, /for attempt in 1 2 3 4 5 6/);
   assert.doesNotMatch(end, /continue-on-error: true|\|\| true/);
+});
+
+test('Server end retries a transient scanner failure then fails closed', () => {
+  const { result, calls } = scan({ SCAN_END_EXIT: '1' }, false, ['End SonarQube Server Scan']);
+  assert.equal(result.status, 1, result.stderr);
+  assert.equal(calls.length, 6);
+  assert.deepEqual(calls[0].slice(0, 3), ['sonarscanner', 'end', '/d:sonar.token=test-token']);
+
+  const passed = scan({ SCAN_END_EXIT: '0' }, false, ['End SonarQube Server Scan']);
+  assert.equal(passed.result.status, 0, passed.result.stderr);
+  assert.equal(passed.calls.length, 1);
 });
 
 test('.NET analysis scans and covers the CLI executable', () => {
