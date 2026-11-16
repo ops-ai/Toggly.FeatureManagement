@@ -45,13 +45,17 @@ export const FULL_TEST_MATRIX = [
     'test-cmd': 'npm run test:coverage && npm run test:packed',
     'has-lint': false,
   },
-  {
+  // Angular SDK: exercise Node 22 (floor), 24, and 26 (latest current).
+  // Coverage artifact uploads only from the 22.x row (see analysis-javascript.yml).
+  // Packed Angular hosts run in the same job after unit tests on each Node version.
+  ...['22.x', '24.x', '26.x'].map((nodeVersion) => ({
     sdk: 'Angular',
     path: 'Toggly.FeatureManagement.Angular',
     'test-cmd':
       "npm test -- ngx-feature-flags-toggly --watch=false --browsers=ChromeHeadless --code-coverage --exclude='**/smoke*.spec.ts'",
+    'node-version': nodeVersion,
     'has-lint': false,
-  },
+  })),
   {
     sdk: 'React',
     path: 'Toggly.FeatureManagement.React',

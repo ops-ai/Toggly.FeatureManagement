@@ -618,7 +618,29 @@ test('runs the vanilla JavaScript SDK on Node 22/24/26 and uploads coverage from
   const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   assert.match(
     testJob,
-    /matrix\.sdk != 'Docusaurus' && \(matrix\.sdk != 'JavaScript' \|\| matrix\.node-version == '22\.x'\)/,
+    /matrix\.sdk != 'Docusaurus' && \(\(matrix\.sdk != 'JavaScript' && matrix\.sdk != 'Angular'\) \|\| matrix\.node-version == '22\.x'\)/,
+  );
+});
+
+test('runs the Angular SDK on Node 22/24/26 and uploads coverage from 22.x', () => {
+  for (const sdks of ['all', 'Angular']) {
+    assert.deepEqual(
+      selectAnalysis(sdks).testMatrix.include.filter((row) => row.sdk === 'Angular'),
+      ['22.x', '24.x', '26.x'].map((nodeVersion) => ({
+        sdk: 'Angular',
+        path: 'Toggly.FeatureManagement.Angular',
+        'test-cmd':
+          "npm test -- ngx-feature-flags-toggly --watch=false --browsers=ChromeHeadless --code-coverage --exclude='**/smoke*.spec.ts'",
+        'node-version': nodeVersion,
+        'has-lint': false,
+      })),
+    );
+  }
+  const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  assert.match(testJob, /Verify packed Angular consumers in Chrome/);
+  assert.match(
+    testJob,
+    /matrix\.sdk != 'Docusaurus' && \(\(matrix\.sdk != 'JavaScript' && matrix\.sdk != 'Angular'\) \|\| matrix\.node-version == '22\.x'\)/,
   );
 });
 
