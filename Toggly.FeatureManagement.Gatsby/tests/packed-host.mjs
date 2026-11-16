@@ -21,6 +21,11 @@ if (reporterTarball) {
   console.log('LOCAL_TELEMETRY_TARBALL: registry acceptance pending');
 }
 const currentGatsby = '5.16.1';
+const reactMajor = process.env.GATSBY_REACT_MAJOR === '19' ? '19' : '18';
+const reactVersions = {
+  18: { react: '18.3.1', reactDom: '18.3.1', typesReact: '18.3.28' },
+  19: { react: '19.3.1', reactDom: '19.3.1', typesReact: '19.3.0' },
+}[reactMajor];
 
 function assertCaretRangeContains(range, version, label) {
   const base = /^\^(\d+)\.(\d+)\.(\d+)$/.exec(range);
@@ -463,16 +468,20 @@ try {
     [
       'install',
       `gatsby@${currentGatsby}`,
-      'react@18.3.1',
-      'react-dom@18.3.1',
+      `react@${reactVersions.react}`,
+      `react-dom@${reactVersions.reactDom}`,
       'typescript@5.3.3',
-      '@types/react@18.3.28',
+      `@types/react@${reactVersions.typesReact}`,
       'playwright@1.58.2',
       ...(reporterTarball ? [reporterTarball] : []),
       segmentsTarball,
       tarball,
     ],
     { cwd: host },
+  );
+  assert.equal(
+    (await run(process.execPath, ['-p', "require('react/package.json').version"], { cwd: host })).trim(),
+    reactVersions.react,
   );
   assert.equal(
     (await run(process.execPath, ['-p', "require('gatsby/package.json').version"], { cwd: host })).trim(),
@@ -743,8 +752,15 @@ try {
   await waitForTelemetry(8, 'committed warm hydration replay');
   assert.deepEqual(telemetryRequests[7].body, { k: 'gatsby-replacement-host', e: 'Preview', u: 'second-user', f: { warmOn: { enabled: [1] } } });
   assert.ok(browserErrors.length > 0, 'the warm probe actually exercised a discarded hydration render');
-  assert.deepEqual(browserErrors.map(message => message.match(/^Minified React error #(\d+);/)?.[1]), ['425', '423'], 'only the reproduced text-mismatch and hydration-recovery warnings are expected');
-  console.log('PACKED_GATSBY_WARM_HYDRATION_PASS', JSON.stringify({ committedChecks: 1, warnings: browserErrors }));
+  const hydrationCodes = browserErrors.map((message) => message.match(/^Minified React error #(\d+);/)?.[1]);
+  // React 18 reports text-mismatch (#425) then recovery (#423); React 19 collapses to #418.
+  const expectedHydrationCodes = reactMajor === '19' ? ['418'] : ['425', '423'];
+  assert.deepEqual(
+    hydrationCodes,
+    expectedHydrationCodes,
+    'only the reproduced discarded-hydration warnings for this React major are expected',
+  );
+  console.log('PACKED_GATSBY_WARM_HYDRATION_PASS', JSON.stringify({ committedChecks: 1, reactMajor, warnings: browserErrors }));
 
   async function renderSsr() {
     const response = await fetch(`http://127.0.0.1:${port}/ssr/`, { signal: AbortSignal.timeout(10_000) });
@@ -769,7 +785,8 @@ try {
   console.log(
     `PACKED_GATSBY_HOST_PASS ${JSON.stringify({
       gatsby: currentGatsby,
-      react: '18.3.1',
+      react: reactVersions.react,
+      reactMajor,
       reporter: reporter.version,
       reporterRange: installedSdk.dependencies['@ops-ai/toggly-client-telemetry'],
       reporterResolved: reporterProvenance.resolved,

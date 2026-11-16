@@ -16,7 +16,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | React Router | `^7 \|\| ^8` | 7.18.5 + 8.5.1 hosts (Node 24) | 8.5.1 | Maintain |
 | Fastify | `^4 \|\| ^5` | 4.29.1 + 5.12.7 (Node 22/24/26) | 5.12.7 | Maintain; Fastify 4 still published (`four` dist-tag) |
 | Hono | `^4` | 4.0.0 + 4.13.16 (Node 22/24/26) | 4.13.16 | No major gap; 4.0.0 runtime proved (TS 5.9 needs skipLibCheck on 4.0.0 types) |
-| Gatsby | `^5` | 5.x | 5.16.x | No Gatsby 6 |
+| Gatsby | `^5` (+ React `^18 \|\| ^19`) | Gatsby 5.16.1 × React 18.3.1 / 19.3.1; Node 22/24/26 | 5.16.x | No Gatsby 6 |
 | Docusaurus | `^3` + React `^18 \|\| ^19` | Docusaurus 3.10.2 × React 18.3.1 + 19.3.1; Node 22/24/26; Worker workerd + Pages Function | 3.10.2 / React 19.3.1 | No Docusaurus 4; Worker `compatibility_date` 2026-11-02 |
 | Angular | `>=15` | workspace hosts | 22.x | Prove latest under floor |
 | Electron | `>=28` | 28.3.3 + 45.2.1 packed hosts (Node 22/24/26 unit) | 45.2.1 | Maintain |
