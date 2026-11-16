@@ -230,11 +230,12 @@ async fn feature_guard_allows_known_features_and_negates_unknown_features() {
             .status()
             .is_success()
     );
+    // actix-web 4.18.2 answers 405 when a guard rejects a route whose path matched.
     assert_eq!(
         test::call_service(&app, test::TestRequest::get().uri("/unknown").to_request())
             .await
             .status(),
-        actix_web::http::StatusCode::NOT_FOUND
+        actix_web::http::StatusCode::METHOD_NOT_ALLOWED
     );
     assert!(
         test::call_service(&app, test::TestRequest::get().uri("/negated").to_request())
@@ -249,7 +250,7 @@ async fn feature_guard_allows_known_features_and_negates_unknown_features() {
         )
         .await
         .status(),
-        actix_web::http::StatusCode::NOT_FOUND
+        actix_web::http::StatusCode::METHOD_NOT_ALLOWED
     );
 
     drop(app);
