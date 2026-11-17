@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Raven.Client.Documents;
+using Raven.Client.Documents.Session;
 using Raven.Client.Exceptions;
 using Toggly.FeatureManagement.Catalog;
 
@@ -57,7 +58,7 @@ namespace Toggly.FeatureManagement.Storage.RavenDB
             var documentId = GetDocumentId(normalizedName);
 
             using var session = _documentStore.OpenAsyncSession();
-            session.Advanced.UseOptimisticConcurrency = true;
+            session.Advanced.OptimisticConcurrencyMode = OptimisticConcurrencyMode.Writes;
             var existing = await session.LoadAsync<CatalogStorageDocument>(documentId, cancellationToken).ConfigureAwait(false);
 
             if (existing == null)
