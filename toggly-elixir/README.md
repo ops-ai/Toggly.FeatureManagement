@@ -10,6 +10,6 @@ Read the core README for setup, runtime requirements, exact filter parameters, l
 
 Run `mix deps.get`, `mix format --check-formatted`, `mix compile --warnings-as-errors`, `mix test --cover`, `mix hex.audit`, and `python3 tools/build-packages.py` here. Coverage exceeds 90% per application; no coverage exclusions. Canonical fixture tests consume `../docs/filter-parity/fixtures` directly. Actual loopback HTTP/WebSocket and connected LiveView tests run without external keys.
 
-Elixir 1.20 / OTP 29 is the tested support floor. SonarCloud has no native Elixir analyzer: grouped native analysis is the enforced tool boundary. Optional Ecto/cache integrations and gRPC metrics export remain separate follow-ups.
+Elixir `~> 1.18` / OTP 27+ is the support floor. CI proves Elixir 1.18.6 / OTP 27, 1.19.7 / OTP 28, and 1.20.5 / OTP 29. Mix and client startup reject OTP < 27 because signed definitions and snapshots use OTP `:json`. SonarCloud has no native Elixir analyzer: grouped native analysis is the enforced tool boundary. Optional Ecto/cache integrations and gRPC metrics export remain separate follow-ups.
 
 `TOGGLY_HEX_BUILD=1` excludes repository-only umbrella paths when building each package. Built artifacts declare normal Hex version requirements; standalone installs never consult sibling source folders. `tools/verify-sample-artifacts.py` installs those built artifacts into an ephemeral sample copy for validation without changing the committed registry-only sample manifest.

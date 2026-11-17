@@ -36,5 +36,6 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | iOS | iOS 14 / macOS 11 / tvOS 14 / watchOS 7 / swift-tools 5.5 | Xcode 16.1+16.2+16.4 (macos-15), 26.6 (macos-26), 27.1 (xcode-27; consumer sim iOS 15 — Xcode 27 SDK floor) | Xcode 27.1 | Keep declared iOS 14; Xcode 27 sim SDK min is 15 |
 | Rust axum | axum 0.7 + axum08 | dual crates | 0.8 | `toggly-axum08` 0.1.1+ accepts workspace `toggly` range |
 | Go | Go 1.26; grpc 1.85 | CI 1.26 + 1.27 | — | Floor Go 1.26; CI also runs latest stable |
+| Elixir (`toggly` / `toggly_phoenix` / `toggly_live_view`) | Elixir `~> 1.18` / OTP 27+ | 1.18.6/OTP 27, 1.19.7/OTP 28, 1.20.5/OTP 29 | Elixir 1.20.5 / OTP 29 | Floor widened after deps+tests proved on 1.18/1.19 without behavior changes |
 
 Update this file in the same PR that changes peers, fixtures, or TFMs.
