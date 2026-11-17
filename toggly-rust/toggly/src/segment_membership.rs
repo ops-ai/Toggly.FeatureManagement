@@ -27,7 +27,10 @@ impl SegmentMembershipClient {
         Self {
             app_key: app_key.into(),
             base_url: base.to_string(),
-            http: Client::new(),
+            http: Client::builder()
+                .tls_backend_preconfigured(crate::ws_tls::webpki_rustls_client_config())
+                .build()
+                .expect("segment membership HTTP client"),
         }
     }
 
