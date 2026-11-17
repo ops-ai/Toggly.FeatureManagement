@@ -153,13 +153,21 @@ public class FilterParityFixturesTests
 
     private readonly struct DotNetExpectation
     {
-        public bool ExpectError { get; init; }
-        public bool ExpectedBoolean { get; init; }
-        public bool[]? AllowedOutcomes { get; init; }
+        // Avoid init accessors: netcoreapp3.1 lacks IsExternalInit without a polyfill.
+        public bool ExpectError { get; }
+        public bool ExpectedBoolean { get; }
+        public bool[]? AllowedOutcomes { get; }
 
-        public static DotNetExpectation Boolean(bool value) => new() { ExpectedBoolean = value };
-        public static DotNetExpectation Error() => new() { ExpectError = true };
-        public static DotNetExpectation Allowed(bool[] values) => new() { AllowedOutcomes = values };
+        private DotNetExpectation(bool expectError, bool expectedBoolean, bool[]? allowedOutcomes)
+        {
+            ExpectError = expectError;
+            ExpectedBoolean = expectedBoolean;
+            AllowedOutcomes = allowedOutcomes;
+        }
+
+        public static DotNetExpectation Boolean(bool value) => new(false, value, null);
+        public static DotNetExpectation Error() => new(true, false, null);
+        public static DotNetExpectation Allowed(bool[] values) => new(false, false, values);
     }
 
     private static async Task<(bool? Result, Exception? Error)> EvaluateFixtureAsync(JsonElement root)
