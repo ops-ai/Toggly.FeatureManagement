@@ -7,6 +7,9 @@ on:
       - main
     paths:
       - 'Toggly.FeatureManagement.NET/**'
+      - 'docs/filter-parity/**'
+      - 'variant-allocator-corpus/**'
+      - 'SUPPORT_MATRIX.md'
       - 'Toggly.CLI/**'
       - 'Toggly.FeatureManagement.Blazor/**'
       - 'Toggly.FeatureManagement.Client/**'
@@ -36,7 +39,7 @@ permissions:
 jobs:
   analyze:
     name: Build, Test & Analyze
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: [dependency-check]
     if: always()
 
@@ -50,20 +53,17 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
+          # Install every SDK/runtime needed to build+test library TFMs through net11.
+          # (netstandard2.1 is covered by concrete runtimes below).
           dotnet-version: |
+            3.1.x
+            5.0.x
             6.0.x
             7.0.x
             8.0.x
             9.0.x
             10.0.x
-
-      # Blazor (and peer net11-RC packages, including Client) declare net11.0; shared
-      # analyze/pack/build-families must restore that TFM (NETSDK1045 without this SDK).
-      - name: Setup .NET 11 RC (Blazor preview TFM)
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
-        with:
-          dotnet-version: '11.0.x'
-          dotnet-quality: 'preview'
+            11.0.x
 
       - name: Setup Node.js for shared package governance
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -129,6 +129,7 @@ jobs:
           dotnet restore Toggly.FeatureManagement.NET/Toggly.Storage.MongoDB.Tests/Toggly.Storage.MongoDB.Tests.csproj
           dotnet restore Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Storage.RavenDB.Tests/Toggly.FeatureManagement.Storage.RavenDB.Tests.csproj
           dotnet restore Toggly.FeatureManagement.NET/Toggly.Metrics.SystemMetrics.Tests/Toggly.Metrics.SystemMetrics.Tests.csproj
+          dotnet restore Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Parity.Tests/Toggly.FeatureManagement.Parity.Tests.csproj
           dotnet restore Toggly.CLI.Tests/Toggly.CLI.Tests.csproj
         continue-on-error: true
 
@@ -153,9 +154,9 @@ jobs:
             /d:sonar.cs.opencover.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/coverage.opencover.xml" \
             /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
             /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
-            /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**,**/Toggly.CLI/scripts/**,**/Toggly.CLI/packaging/**" \
-            /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**,**/Toggly.CLI/scripts/**,**/Toggly.CLI/packaging/**" \
-            /d:sonar.test.inclusions="**/*Tests*.cs,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,Toggly.FeatureManagement.Blazor/tests/**"
+            /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**,**/Toggly.FeatureManagement.NET/scripts/**,**/Toggly.CLI/scripts/**,**/Toggly.CLI/packaging/**" \
+            /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**,**/Toggly.FeatureManagement.Parity.Tests/**,**/Toggly.FeatureManagement.NET/scripts/**,**/Toggly.CLI/scripts/**,**/Toggly.CLI/packaging/**" \
+            /d:sonar.test.inclusions="**/*Tests*.cs,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.Parity.Tests/**,Toggly.FeatureManagement.Blazor/tests/**"
 
       - name: Build solution
         run: dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.sln --no-restore -c Release
@@ -171,6 +172,7 @@ jobs:
           dotnet build Toggly.FeatureManagement.NET/Toggly.Storage.MongoDB.Tests/Toggly.Storage.MongoDB.Tests.csproj -c Release
           dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Storage.RavenDB.Tests/Toggly.FeatureManagement.Storage.RavenDB.Tests.csproj -c Release
           dotnet build Toggly.FeatureManagement.NET/Toggly.Metrics.SystemMetrics.Tests/Toggly.Metrics.SystemMetrics.Tests.csproj -c Release
+          dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Parity.Tests/Toggly.FeatureManagement.Parity.Tests.csproj -c Release
           dotnet build Toggly.CLI.Tests/Toggly.CLI.Tests.csproj -c Release
 
       - name: Run core tests
@@ -181,6 +183,22 @@ jobs:
             --results-directory ./TestResults \
             --logger "trx;LogFileName=core-test-results.trx" \
             -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+
+
+      - name: Run filter-parity and variant-allocator corpus tests
+        run: |
+          set -euo pipefail
+          frameworks=(netcoreapp3.1 net5.0 net6.0 net7.0 net8.0 net9.0 net10.0 net11.0)
+          for framework in "${frameworks[@]}"; do
+            echo "::group::Parity tests ${framework}"
+            dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Parity.Tests/Toggly.FeatureManagement.Parity.Tests.csproj \
+              -c Release -f "${framework}" \
+              --collect:"XPlat Code Coverage" \
+              --results-directory ./TestResults \
+              --logger "trx;LogFileName=parity-${framework}.trx" \
+              -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+            echo "::endgroup::"
+          done
 
       - name: Run CLI tests
         run: |
@@ -274,11 +292,22 @@ jobs:
 
       - name: Run embedded catalog, runtime, and dashboard tests
         run: |
+          set -euo pipefail
+          # Catalog.Tests: net9–net11. Embedded/Dashboard.Tests: net8–net11.
           for project in Catalog Embedded Dashboard; do
-            dotnet test "Toggly.FeatureManagement.NET/Toggly.FeatureManagement.$project.Tests/Toggly.FeatureManagement.$project.Tests.csproj" \
-              --no-build -c Release --collect:"XPlat Code Coverage" \
-              --results-directory ./TestResults \
-              -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+            case "$project" in
+              Catalog) frameworks=(net9.0 net10.0 net11.0) ;;
+              *) frameworks=(net8.0 net9.0 net10.0 net11.0) ;;
+            esac
+            for framework in "${frameworks[@]}"; do
+              echo "::group::${project} tests ${framework}"
+              dotnet test "Toggly.FeatureManagement.NET/Toggly.FeatureManagement.$project.Tests/Toggly.FeatureManagement.$project.Tests.csproj" \
+                -c Release -f "${framework}" --collect:"XPlat Code Coverage" \
+                --results-directory ./TestResults \
+                --logger "trx;LogFileName=${project,,}-${framework}.trx" \
+                -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+              echo "::endgroup::"
+            done
           done
 
       - name: Run SQLite dashboard browser tests
@@ -350,7 +379,7 @@ jobs:
             )
           fi
 
-          for attempt in 1 2 3; do
+          for attempt in 1 2 3 4 5 6; do
             if dotnet sonarscanner begin \
               /k:"toggly-sdks-dotnet" \
               "/n:Toggly SDKs - .NET" \
@@ -366,18 +395,18 @@ jobs:
               /d:sonar.cs.vstest.reportsPaths="${GITHUB_WORKSPACE}/TestResults/**/*.trx" \
               /d:sonar.coverageReportPaths="${GITHUB_WORKSPACE}/coverage-report/SonarQube.xml" \
               /d:sonar.dependencyCheck.reportPath="${GITHUB_WORKSPACE}/dependency-check-reports/dependency-check-report.xml" \
-              /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**,**/Toggly.CLI/scripts/**,**/Toggly.CLI/packaging/**" \
-              /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**,**/Toggly.CLI/scripts/**,**/Toggly.CLI/packaging/**" \
-              /d:sonar.test.inclusions="**/*Tests*.cs,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,Toggly.FeatureManagement.Blazor/tests/**"; then
+              /d:sonar.exclusions="**/bin/**,**/obj/**,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**,**/Toggly.FeatureManagement.NET/scripts/**,**/Toggly.CLI/scripts/**,**/Toggly.CLI/packaging/**" \
+              /d:sonar.coverage.exclusions="**/*Tests*.cs,**/examples/**,**/Benchmarks/**,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.VariantOracle/**,**/Toggly.FeatureManagement.Parity.Tests/**,**/Toggly.FeatureManagement.NET/scripts/**,**/Toggly.CLI/scripts/**,**/Toggly.CLI/packaging/**" \
+              /d:sonar.test.inclusions="**/*Tests*.cs,**/Toggly.FeatureManagement.Dashboard.BrowserTests/**,**/Toggly.FeatureManagement.Parity.Tests/**,Toggly.FeatureManagement.Blazor/tests/**"; then
               break
             fi
 
-            if [ "$attempt" -eq 3 ]; then
-              echo "SonarQube Server scan initialization failed after 3 attempts"
+            if [ "$attempt" -eq 6 ]; then
+              echo "SonarQube Server scan initialization failed after 6 attempts"
               exit 1
             fi
 
-            sleep_seconds=$((attempt * 10))
+            sleep_seconds=$((attempt * 30))
             echo "SonarQube Server scan initialization failed (attempt ${attempt}), retrying in ${sleep_seconds}s..."
             sleep "${sleep_seconds}"
           done
@@ -393,7 +422,21 @@ jobs:
       - name: End SonarQube Server Scan
         env:
           SONAR_SERVER_TOKEN: ${{ secrets.SONAR_SERVER_TOKEN }}
-        run: dotnet sonarscanner end /d:sonar.token="${SONAR_SERVER_TOKEN}"
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            if dotnet sonarscanner end /d:sonar.token="${SONAR_SERVER_TOKEN}"; then
+              break
+            fi
+
+            if [ "$attempt" -eq 6 ]; then
+              echo "SonarQube Server scan finalization failed after 6 attempts"
+              exit 1
+            fi
+
+            sleep_seconds=$((attempt * 30))
+            echo "SonarQube Server scan finalization failed (attempt ${attempt}), retrying in ${sleep_seconds}s..."
+            sleep "${sleep_seconds}"
+          done
 
       - name: Report SonarQube Server quality gate
         if: ${{ failure() }}
@@ -576,12 +619,7 @@ jobs:
             8.0.x
             9.0.x
             10.0.x
-
-      - name: Setup .NET 11 RC (Blazor preview TFM)
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
-        with:
-          dotnet-version: '11.0.x'
-          dotnet-quality: 'preview'
+            11.0.x
 
       - name: Setup Node.js for shared package governance
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -617,14 +655,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        framework: [net8.0, net10.0]
+        framework: [net8.0, net9.0, net10.0, net11.0]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
           dotnet-version: |
             8.0.x
+            9.0.x
             10.0.x
+            11.0.x
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
@@ -665,27 +705,6 @@ jobs:
           TOGGLY_SMOKE_APP_KEY_BACKEND: ${{ secrets.TOGGLY_SMOKE_APP_KEY_BACKEND }}
         run: dotnet test Toggly.FeatureManagement.NET/Toggly.FeatureManagement.SmokeTests/Toggly.FeatureManagement.SmokeTests.csproj -c Release --logger "trx;LogFileName=smoke-test-results.trx" --blame-hang-timeout 90s --blame-hang-dump-type none
 
-  client-net11-preview:
-    name: Client net11.0 preview (allow failure)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
-        with:
-          dotnet-version: |
-            8.0.x
-            10.0.x
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
-        with:
-          dotnet-version: '11.0.x'
-          dotnet-quality: 'preview'
-      - name: Test Client / Desktop on net11.0 RC
-        run: |
-          dotnet test Toggly.FeatureManagement.Client/tests/Toggly.FeatureManagement.Client.Tests \
-            -c Release -p:IncludeNet11=true --framework net11.0 \
-            --logger "trx;LogFileName=client-net11-test-results.trx"
-
   blazor-runtime:
     name: Blazor .NET runtime ${{ matrix.framework }}
     runs-on: ubuntu-latest
@@ -698,6 +717,8 @@ jobs:
             framework: net9.0
           - sdk: '10.0.x'
             framework: net10.0
+          - sdk: '11.0.x'
+            framework: net11.0
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
@@ -706,13 +727,8 @@ jobs:
             8.0.x
             9.0.x
             10.0.x
+            11.0.x
             ${{ matrix.sdk }}
-      # Pack step multi-targets Blazor including net11.0; need preview SDK even on net8/9/10 matrix cells.
-      - name: Setup .NET 11 RC (Blazor preview TFM)
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
-        with:
-          dotnet-version: '11.0.x'
-          dotnet-quality: 'preview'
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
@@ -722,7 +738,6 @@ jobs:
       - run: |
           # Package internal dependencies from the same source/version before the isolated consumer restore.
           # Core enables GeneratePackageOnBuild, so pack alone does not build its other target frameworks.
-          # Pack includes net11.0 (RC Components packages); stable CI matrix still proves net8/9/10.
           dotnet build Toggly.FeatureManagement.NET/Toggly.FeatureManagement -c Release -p:GeneratePackageOnBuild=false -p:ContinuousIntegrationBuild=true
           dotnet pack Toggly.FeatureManagement.NET/Toggly.FeatureManagement -c Release --no-build -p:ContinuousIntegrationBuild=true -o blazor-pack
           dotnet pack Toggly.FeatureManagement.Client/src/Toggly.FeatureManagement.Client -c Release -p:ContinuousIntegrationBuild=true -o blazor-pack
@@ -751,30 +766,6 @@ jobs:
             blazor-pack
             Toggly.FeatureManagement.Blazor/coverage/
 
-  # .NET 11 RC: preview SDK + RC Components packages. Allow failure until GA.
-  blazor-runtime-net11-preview:
-    name: Blazor .NET 11 RC (allow-failure)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
-        with:
-          dotnet-version: |
-            8.0.x
-            10.0.x
-      - name: Setup .NET 11 RC (Blazor preview TFM)
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
-        with:
-          dotnet-version: '11.0.x'
-          dotnet-quality: 'preview'
-      - run: dotnet test Toggly.FeatureManagement.Blazor/tests/Toggly.FeatureManagement.Blazor.Tests -c Release -p:TestFramework=net11.0 --collect:"XPlat Code Coverage" --settings Toggly.FeatureManagement.Blazor/coverage.runsettings --results-directory TestResults/blazor-net11
-      - run: python3 Toggly.FeatureManagement.Blazor/check-coverage.py TestResults/blazor-net11
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        if: always()
-        with:
-          name: blazor-net11-preview
-          path: TestResults/blazor-net11
 
   summary:
     name: Analysis Summary

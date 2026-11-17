@@ -3,10 +3,10 @@
 ## Unreleased
 
 ### Compatibility
-- Keep Django `>=4.2` floor. CI now includes the Python 3.8/3.9 + Django 4.2
-  floor jobs and bumps proven rows to Django 5.2.18 (LTS), 6.0.9, and 6.1.2
-  on every Python each upstream release declares (through 3.14). Python 3.15
-  is not claimed until Django declares support.
+- Keep Django `>=4.2` floor. CI includes the Python 3.8/3.9 + Django 4.2
+  floor jobs and proves Django 5.2.19 (LTS), 6.0.10, and 6.1.3 on every
+  Python each upstream release declares (through 3.14). Python 3.15 is not
+  claimed until Django declares support.
 
 ## 0.5.0 - 2026-09-23
 

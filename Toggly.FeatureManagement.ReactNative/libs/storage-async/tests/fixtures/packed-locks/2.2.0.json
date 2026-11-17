@@ -1,5 +1,5 @@
 {
-  "name": "toggly-native-storage-2.2.0-VmETfB",
+  "name": "toggly-native-storage-2.2.0-iKDDdZ",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
@@ -2016,7 +2016,7 @@
     "node_modules/@ops-ai/react-native-toggly-core": {
       "version": "1.11.1",
       "resolved": "file:core.tgz",
-      "integrity": "sha512-3FGxzoiMoDBMkKvbRq16dtYqkxo9PFXZh9Yv1ZFmXNXYa47gX93SlrduXOwOuqy13ELn1Wqhqq9BME9YxrHpng==",
+      "integrity": "sha512-2Hvz2ny2Yo/n5BJN8uhwNaZJT34kWKUwc2Qmr13sff84MCkUV9ayKLgAvgsS1SGdbeUbrygcnvSTPtOAK8OIXg==",
       "license": "MIT",
       "dependencies": {
         "@ops-ai/toggly-client-telemetry": "^1.3.0",
@@ -2025,7 +2025,7 @@
         "@ops-ai/toggly-signed-defs": "^1.2.3"
       },
       "engines": {
-        "node": ">=18.0.0"
+        "node": ">=22.0.0"
       },
       "peerDependencies": {
         "react": ">=18.0.0"
@@ -2039,13 +2039,13 @@
     "node_modules/@ops-ai/react-native-toggly-storage-async": {
       "version": "1.1.3",
       "resolved": "file:storage.tgz",
-      "integrity": "sha512-hhQ4aS48kLuhV0bYbBQOLgTV4S07dx161pgW8Q1flqAKMucS34rq5XErPy4ZxAmnA7WbS9Zeed1g+Z+5W1/3Xg==",
+      "integrity": "sha512-csU7JU4oLYyJR1bD6tUXZA+s6+YgTMEIzGZRE5yLEhgDlIzD+pV7lqzSdXb7v5F3y58t7OCFkzrfjwcBM+AP3g==",
       "license": "MIT",
       "dependencies": {
         "@ops-ai/react-native-toggly-core": "^1.7.1"
       },
       "engines": {
-        "node": ">=18.0.0"
+        "node": ">=22.0.0"
       },
       "peerDependencies": {
         "@react-native-async-storage/async-storage": ">=1.17.0"

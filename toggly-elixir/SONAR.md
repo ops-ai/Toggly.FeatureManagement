@@ -22,7 +22,7 @@ The community [hpopp/sonar-elixir][elixir-plugin] has an MIT-licensed **v0.1.1**
 release (2026-03-08). Its README labels it early development, claims compatibility
 with SonarQube 2025.1+ and requires Elixir on the scanner host for parsing. Its
 release POM targets Java 17 and Sonar plugin API 11.0.0.2664. These declarations
-do not prove compatibility with this server, OTP 29, or Elixir 1.20.4. Its rule
+do not prove compatibility with this server, OTP 29, or Elixir 1.20.5. Its rule
 set is small and must not be represented as native SonarSource Elixir support.
 
 Installing this plugin is a shared-server change. Sonar's [installation guide]
@@ -35,7 +35,7 @@ analyzer remains to be tested. See [Sonar's branch documentation][branches].
 
 ## Generate reports and enforce native gates
 
-From `toggly-elixir`, with the committed runtime floor Elixir 1.20.4 / OTP 29:
+From `toggly-elixir`, with the primary CI runtime Elixir 1.20.5 / OTP 29 (matrix also proves 1.18.6 / OTP 27 and 1.19.7 / OTP 28):
 
 ```sh
 mix deps.get --check-locked
@@ -74,7 +74,7 @@ Before enabling a hosted job, the administrator and independent reviewer must:
 1. Validate the selected pinned analyzer in an isolated instance matching the
    current server and branch plugin. Check parser failures are visible failures,
    rules actually report a deliberate fixture defect, clean input clears it,
-   and the full Elixir 1.20.4 source is recognized. Review provenance/license and
+   and the full Elixir 1.20.5 source is recognized. Review provenance/license and
    the concrete installation/restart change before applying it to the shared
    instance. No claim of broad security analysis follows from this rule set.
 2. Provision `toggly-sdks-elixir` with the intended `develop` main branch, GitHub

@@ -2,10 +2,12 @@ defmodule Toggly.MixProject do
   use Mix.Project
 
   def project do
+    ensure_otp!()
+
     [
       app: :toggly,
       version: "0.7.1",
-      elixir: "~> 1.20",
+      elixir: "~> 1.18",
       description: "Toggly feature flags for Elixir OTP applications",
       package: [
         licenses: ["MIT"],
@@ -28,6 +30,18 @@ defmodule Toggly.MixProject do
   end
 
   def application, do: [extra_applications: [:logger, :crypto, :public_key]]
+
+  # Elixir ~> 1.18 can install on OTP 25/26; this package needs OTP 27+ (:json).
+  defp ensure_otp! do
+    otp = :erlang.system_info(:otp_release) |> List.to_integer()
+
+    if otp < 27 do
+      Mix.raise(
+        "toggly requires Erlang/OTP 27 or later (found OTP #{otp}); " <>
+          "the OTP :json module is required for signed definitions and snapshots"
+      )
+    end
+  end
 
   defp umbrella?,
     do:

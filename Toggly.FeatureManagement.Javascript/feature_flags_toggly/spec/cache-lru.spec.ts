@@ -1,6 +1,7 @@
 import { Toggly } from '../lib/toggly';
 import { StorageKeys } from '../lib/models';
 import { evaluationContextCacheKey } from '@ops-ai/toggly-hooks-types';
+import { mockAnonymousIdentity } from './mock-identity';
 
 function flagsCacheKeyForContext(
   appKey: string,
@@ -14,10 +15,6 @@ function flagsCacheKeyForContext(
   );
 }
 
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'mock-uuid-1234'),
-}));
-
 const mockFetch = jest.fn();
 (global as any).fetch = mockFetch;
 
@@ -27,6 +24,7 @@ describe('maxCacheKeys LRU', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAnonymousIdentity('mock-uuid-1234');
     localStorage.clear();
     Toggly.cancelRefreshInterval();
     mockFetch.mockReset();

@@ -149,6 +149,22 @@ jobs:
           git tag -s -m "PHP SDK v${{ needs.validate.outputs.version }}" "php-sdk-v${{ needs.validate.outputs.version }}"
           git push origin "php-sdk-v${{ needs.validate.outputs.version }}"
 
+      - name: Resolve PHP requirement from composer.json
+        id: runtime_req
+        run: |
+          composer_json="${{ env.SDK_ROOT }}/composer.json"
+          php_req=$(python3 - "$composer_json" <<'PY'
+          import json, sys
+          data = json.load(open(sys.argv[1], encoding='utf-8'))
+          req = (data.get('require') or {}).get('php')
+          if not req:
+              raise SystemExit(f'::error::Missing require.php in {sys.argv[1]}')
+          # Prefer spaced unions in release notes: a|b -> a | b
+          print(' | '.join(part.strip() for part in req.split('|')))
+          PY
+          )
+          echo "php_requirement=PHP ${php_req}" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
@@ -172,7 +188,7 @@ jobs:
 
             ### Requirements
 
-            - PHP ^7.4 | ^8.0 | ^8.1 | ^8.2 | ^8.3
+            - ${{ steps.runtime_req.outputs.php_requirement }}
 
             ### Links
 

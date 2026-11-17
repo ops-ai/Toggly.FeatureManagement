@@ -6,6 +6,7 @@ defmodule Toggly.Supervisor do
 
   @impl true
   def init(options) do
+    Toggly.Runtime.ensure_otp!()
     name = Keyword.fetch!(options, :name)
 
     if not is_atom(name) or is_nil(name),

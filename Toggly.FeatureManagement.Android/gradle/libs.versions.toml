@@ -25,9 +25,9 @@ coroutines = "1.11.0"
 # Serialization
 kotlinxSerialization = "1.12.0"
 
-# Networking — keep OkHttp 4.x / Retrofit 2.x majors (owner decision)
-okhttp = "4.12.1"
-retrofit = "2.12.0"
+# Networking
+okhttp = "5.5.1"
+retrofit = "3.0.0"
 
 # Storage
 room = "2.8.5"

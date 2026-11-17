@@ -38,6 +38,7 @@ function selectAnalysis(sdks) {
       requiredJobs: splitJobList(value('required_jobs')),
       runBrowserHosts: value('run_test_current_browser_hosts'),
       runDocusaurusHost: value('run_test_docusaurus_host'),
+      runAstroHosts: value('run_test_astro_hosts'),
       testMatrix: JSON.parse(text.match(/^test_matrix<<EOF\n([^\n]+)\nEOF$/m)?.[1] ?? 'null'),
     };
     selections.set(sdks, result);
@@ -108,6 +109,7 @@ test('all Sonar scans measure the complete Client Core and Docusaurus executable
       }
     }
     assert.ok(globs('exclusions').includes('toggly-docusaurus-edge-sdk/libs/docusaurus-plugin/src/test-setup.ts'));
+    assert.ok(globs('exclusions').includes('Toggly.FeatureManagement.Gatsby/src/__tests__/setup-jsdom-storage.ts'));
     assert.ok(globs('coverage.exclusions').includes('toggly-docusaurus-edge-sdk/cloudflare/worker/**'));
   }
 });
@@ -442,25 +444,54 @@ test('Gatsby packed host restores segments dist and isolates gatsby-worker diagn
   assert.match(diagnostics, /GATSBY_WORKER_ID/);
 });
 
-test('runs the current Gatsby packed host on Node 24', () => {
+test('runs Gatsby unit matrix on Node 22/24/26 and packed hosts for React 18/19', () => {
   assert.match(workflow, /'Toggly\.FeatureManagement\.Gatsby\/\*\*'/);
-  for (const sdks of ['all', 'Gatsby']) {
-    assert.deepEqual(selectAnalysis(sdks).testMatrix.include.filter(row => row.sdk === 'Gatsby'), [{
+  const gatsbyRows = [
+    {
       sdk: 'Gatsby', path: 'Toggly.FeatureManagement.Gatsby',
-      'test-cmd': 'npm run test:coverage && node tests/packed-host.mjs',
+      'test-cmd': 'npm run test:coverage',
+      'node-version': '22.x', 'has-lint': false, 'skip-coverage-upload': true,
+    },
+    {
+      sdk: 'Gatsby', path: 'Toggly.FeatureManagement.Gatsby',
+      'test-cmd': 'npm run test:coverage',
       'node-version': '24.x', 'has-lint': false,
-    }]);
+    },
+    {
+      sdk: 'Gatsby', path: 'Toggly.FeatureManagement.Gatsby',
+      'test-cmd': 'npm run test:coverage',
+      'node-version': '26.x', 'has-lint': false, 'skip-coverage-upload': true,
+    },
+  ];
+  for (const sdks of ['all', 'Gatsby']) {
+    assert.deepEqual(
+      selectAnalysis(sdks).testMatrix.include.filter((row) => row.sdk === 'Gatsby'),
+      gatsbyRows,
+    );
     assertRequiredHost(sdks, 'test');
+    assertRequiredHost(sdks, 'test-gatsby-hosts');
   }
   assert.match(prepare, /test_matrix: \$\{\{ steps\.filter\.outputs\.test_matrix \}\}/);
+  assert.match(prepare, /run_test_gatsby_hosts: \$\{\{ steps\.filter\.outputs\.run_test_gatsby_hosts \}\}/);
   const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   assert.match(testJob, /matrix: \$\{\{ fromJson\(needs\.prepare\.outputs\.test_matrix\) \}\}/);
   assert.match(testJob, /node-version: \$\{\{ matrix\.node-version \|\| 'lts\/\*' \}\}/);
   assert.match(testJob, /run: \$\{\{ matrix\.test-cmd \}\}/);
+  assert.match(testJob, /matrix\['skip-coverage-upload'\] != true/);
   const install = testJob.match(/- name: Install locked standalone package dependencies\n[\s\S]*?(?=\n\s+- name:)/)?.[0] ?? '';
   assert.match(install, /if: matrix\.sdk == 'Gatsby' \|\| matrix\.sdk == 'Client-Core'/);
   assert.match(install, /uses: \.\/\.github\/actions\/install-local-client-telemetry/);
   assert.doesNotMatch(install, /continue-on-error/);
+  const gatsbyHosts = workflow.match(/\n  test-gatsby-hosts:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  assert.match(gatsbyHosts, /react-major: \['18', '19'\]/);
+  assert.match(gatsbyHosts, /GATSBY_REACT_MAJOR: \$\{\{ matrix\.react-major \}\}/);
+  assert.match(gatsbyHosts, /run: node tests\/packed-host\.mjs/);
+  const packedHost = readFileSync(
+    new URL('../../Toggly.FeatureManagement.Gatsby/tests/packed-host.mjs', import.meta.url),
+    'utf8',
+  );
+  assert.match(packedHost, /GATSBY_REACT_MAJOR === '19'/);
+  assert.match(packedHost, /react: '19\.3\.1'/);
 });
 
 test('runs Vue packed browser telemetry checks with an explicit Chrome executable', () => {
@@ -468,6 +499,52 @@ test('runs Vue packed browser telemetry checks with an explicit Chrome executabl
   assert.ok(hostJob);
   assert.match(hostJob, /CHROME_BIN: \/usr\/bin\/google-chrome/);
   assert.match(hostJob, /run: npm run test:host/);
+});
+
+test('Vue declares vue as a peer and packed hosts prove floor plus latest', () => {
+  const manifest = JSON.parse(
+    readFileSync(
+      new URL('../../Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/package.json', import.meta.url),
+      'utf8',
+    ),
+  );
+  assert.equal(manifest.peerDependencies?.vue, '^3.2.45');
+  assert.equal(manifest.devDependencies?.vue, '3.2.45');
+  assert.equal(manifest.dependencies?.vue, undefined);
+  assert.equal(manifest.engines?.node, '>=22');
+  assert.equal(manifest.scripts['test:host'], 'node scripts/test-host.mjs');
+
+  const hostScript = readFileSync(
+    new URL('../../Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/scripts/test-host.mjs', import.meta.url),
+    'utf8',
+  );
+  assert.match(hostScript, /directory: 'vue-3\.2',\s*version: '3\.2\.45'/);
+  assert.match(hostScript, /directory: 'vue-3\.5',\s*version: '3\.5\.44'/);
+
+  const floorHost = JSON.parse(
+    readFileSync(
+      new URL(
+        '../../Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/vue-3.2/package.json',
+        import.meta.url,
+      ),
+      'utf8',
+    ),
+  );
+  const latestHost = JSON.parse(
+    readFileSync(
+      new URL(
+        '../../Toggly.FeatureManagement.Vue/vue-feature-flags-toggly/tests/host/vue-3.5/package.json',
+        import.meta.url,
+      ),
+      'utf8',
+    ),
+  );
+  assert.equal(floorHost.devDependencies.vue, '3.2.45');
+  assert.equal(latestHost.devDependencies.vue, '3.5.44');
+
+  const browserHosts = selectAnalysis('Vue');
+  assert.equal(browserHosts.runBrowserHosts, 'true');
+  assert.ok(browserHosts.requiredJobs.includes('test-current-browser-hosts'));
 });
 
 test('runs the complete packed Angular host matrix in the required test job', () => {
@@ -504,7 +581,6 @@ test('selects system Chrome before packed JavaScript browser host', () => {
   );
   assert.match(workflow, /CHROME_BIN=\/usr\/bin\/google-chrome/);
 });
-
 test('pins Vue, Svelte, and Astro unit rows off Node 26 jsdom localStorage gap', () => {
   for (const sdk of ['Vue', 'Svelte', 'Astro']) {
     const matched = selectAnalysis(sdk).testMatrix.include.filter((row) => row.sdk === sdk);
@@ -515,6 +591,26 @@ test('pins Vue, Svelte, and Astro unit rows off Node 26 jsdom localStorage gap',
   }
 });
 
+test('runs Astro packed hosts for majors 5/6/7 across Node 22/24/26', () => {
+  const hostJob = workflow.match(/\n  test-astro-hosts:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0];
+  assert.ok(hostJob, 'the Astro packed-host job must run in CI');
+  assert.match(hostJob, /astro-major: \['5', '6', '7'\]/);
+  assert.match(hostJob, /node-version: \['22\.x', '24\.x', '26\.x'\]/);
+  assert.match(hostJob, /node-version: \$\{\{ matrix\.node-version \}\}/);
+  assert.match(hostJob, /ASTRO_MAJOR: \$\{\{ matrix\.astro-major \}\}/);
+  assert.match(hostJob, /run: npm run test:host/);
+  assert.match(hostJob, /if: needs\.prepare\.outputs\.run_test_astro_hosts == 'true'/);
+  assert.match(prepare, /run_test_astro_hosts: \$\{\{ steps\.filter\.outputs\.run_test_astro_hosts \}\}/);
+  for (const sdks of ['all', 'Astro']) {
+    assertRequiredHost(sdks, 'test-astro-hosts');
+    assert.equal(selectAnalysis(sdks).runAstroHosts, 'true');
+  }
+  const packedHost = readFileSync(
+    new URL('../../Toggly.FeatureManagement.Astro/tests/run-packed-host.mjs', import.meta.url),
+    'utf8',
+  );
+  assert.match(packedHost, /astro: '7\.4\.12'/);
+});
 
 test('classifies the JavaScript packed browser harness as test code in both scanners', () => {
   const harness = 'Toggly.FeatureManagement.Javascript/feature_flags_toggly/tests/packed-browser-host.mjs';
@@ -544,7 +640,30 @@ test('runs the vanilla JavaScript SDK on Node 22/24/26 and uploads coverage from
   const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   assert.match(
     testJob,
-    /matrix\.sdk != 'Docusaurus' && \(matrix\.sdk != 'JavaScript' \|\| matrix\.node-version == '22\.x'\)/,
+    /matrix\.sdk != 'Docusaurus' && \(\(matrix\.sdk != 'JavaScript' && matrix\.sdk != 'React'\) \|\| matrix\.node-version == '22\.x'\)/,
+  );
+});
+
+test('runs the React SDK on Node 22/24/26 with packed consumers and uploads coverage from 22.x', () => {
+  for (const sdks of ['all', 'React']) {
+    assert.deepEqual(
+      selectAnalysis(sdks).testMatrix.include.filter((row) => row.sdk === 'React'),
+      ['22.x', '24.x', '26.x'].map((nodeVersion) => ({
+        sdk: 'React',
+        path: 'Toggly.FeatureManagement.React',
+        'test-cmd': 'npm test',
+        'node-version': nodeVersion,
+        'has-lint': false,
+      })),
+    );
+  }
+  const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  assert.match(testJob, /Verify packed React consumers in Chrome/);
+  assert.match(testJob, /if: matrix\.sdk == 'React'/);
+  assert.match(testJob, /npm run test:consumers/);
+  assert.match(
+    testJob,
+    /matrix\.sdk != 'Docusaurus' && \(\(matrix\.sdk != 'JavaScript' && matrix\.sdk != 'React'\) \|\| matrix\.node-version == '22\.x'\)/,
   );
 });
 

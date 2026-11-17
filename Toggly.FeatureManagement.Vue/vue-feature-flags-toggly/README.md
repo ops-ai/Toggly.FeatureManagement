@@ -25,8 +25,9 @@ $ npm i -s @ops-ai/vue-feature-flags-toggly
 
 ### Requirements
 
-Supports Vue `^3.2.45`. Packed consumer builds cover the declared 3.2.45
-minimum and the current Vue 3.5.42 release.
+Supports Vue `^3.2.45` as a peer dependency (install Vue in the host app).
+Packed consumer builds cover the declared 3.2.45 minimum and the current
+Vue 3.5.44 release. Requires Node.js 22 or newer.
 
 ## Basic Usage (with Toggly.io)
 

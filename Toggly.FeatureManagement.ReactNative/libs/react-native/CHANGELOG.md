@@ -1,3 +1,10 @@
+## Unreleased
+
+### Changed
+- `engines.node` floor raised from `>=18` to `>=22` (Node 18 and 20 are EOL).
+- CI unit matrix exercises Node 22, 24, and 26; packed native hosts prove React Native 0.70.15 (peer floor) and 0.88.1 (latest).
+- Peer floor remains `react-native >=0.70.0` (adapter unit-test pin stays on `^0.84.0` until RN 0.87+ strict TypeScript moduleResolution is adopted).
+
 ## 1.6.1 — 2026-09-27
 
 ### Fixed

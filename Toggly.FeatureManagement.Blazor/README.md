@@ -17,7 +17,7 @@ dotnet add package Toggly.FeatureManagement.Blazor --version 3.10.0
 dotnet add package Toggly.FeatureManagement.Blazor.Server --version 3.10.0
 ```
 
-The server package reuses trusted `Toggly.FeatureManagement`. The browser package reuses portable `Toggly.FeatureManagement.Client` and has no dependency on server evaluation or filesystem storage. Both packages multi-target `net8.0`, `net9.0`, `net10.0`, and `net11.0` (RC Components packages until .NET 11 GA); use a matching ASP.NET Core host and supported .NET runtime.
+The server package reuses trusted `Toggly.FeatureManagement`. The browser package reuses portable `Toggly.FeatureManagement.Client` and has no dependency on server evaluation or filesystem storage. Both packages multi-target `net8.0`, `net9.0`, `net10.0`, and `net11.0`; use a matching ASP.NET Core host and supported .NET runtime.
 
 ## Trusted server setup
 

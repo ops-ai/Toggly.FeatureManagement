@@ -1,3 +1,9 @@
+## Unreleased
+
+### Changed
+- `engines.node` floor raised from `>=18` to `>=22` (Node 18 and 20 are EOL).
+- CI unit matrix exercises Node 22, 24, and 26.
+
 ## 1.11.1 — 2026-10-18
 
 ### Fixed

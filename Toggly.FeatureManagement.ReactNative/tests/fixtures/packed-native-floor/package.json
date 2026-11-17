@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "dependencies": {
+    "@ops-ai/react-native-toggly": "file:adapter.tgz",
+    "@ops-ai/react-native-toggly-core": "file:core.tgz",
+    "@types/react": "18.0.38",
+    "esbuild": "0.25.5",
+    "react": "18.1.0",
+    "react-native": "0.70.15",
+    "typescript": "5.9.3"
+  }
+}

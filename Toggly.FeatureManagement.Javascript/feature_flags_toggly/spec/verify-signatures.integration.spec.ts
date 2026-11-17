@@ -1,16 +1,17 @@
 import { createHash, generateKeyPairSync, sign, webcrypto } from 'crypto';
 import { Toggly } from '../lib/toggly';
+import { mockAnonymousIdentity } from './mock-identity';
 
 if (!(globalThis as any).crypto?.subtle) {
   (globalThis as any).crypto = webcrypto as any;
 }
 
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'mock-uuid-verify'),
-}));
-
 const mockFetch = jest.fn();
 (global as any).fetch = mockFetch;
+
+beforeEach(() => {
+  mockAnonymousIdentity('mock-uuid-verify');
+});
 
 function computeKidSync(x: string, y: string): string {
   const xBytes = Buffer.from(x, 'base64url');
