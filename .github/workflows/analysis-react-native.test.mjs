@@ -222,8 +222,9 @@ test('summary renders truthful outcomes and discloses unchecked authenticated ga
 test('React Native contract checks execute in the existing test job and trigger on changes', () => {
   const contract = step(job('test'), 'Verify React Native analysis workflow contract');
   assert.match(contract, /run: node --test \.github\/workflows\/analysis-react-native\.test\.mjs/);
-  assert.equal(evaluate(expression(contract, 'if'), { matrix: { sdk: 'Core' } }), true);
-  assert.equal(evaluate(expression(contract, 'if'), { matrix: { sdk: 'React-Native' } }), false);
+  assert.equal(evaluate(expression(contract, 'if'), { matrix: { sdk: 'Core', 'node-version': '22.x' } }), true);
+  assert.equal(evaluate(expression(contract, 'if'), { matrix: { sdk: 'Core', 'node-version': '24.x' } }), false);
+  assert.equal(evaluate(expression(contract, 'if'), { matrix: { sdk: 'React-Native', 'node-version': '22.x' } }), false);
   assert.match(workflow.split('permissions:')[0], /'\.github\/workflows\/analysis-react-native\.test\.mjs'/);
 });
 
@@ -242,13 +243,19 @@ test('coverage artifact reader preserves literal backslashes in file paths', () 
 
 test('preserves all five packages, native consumers, coverage classification and project version', () => {
   const tests = job('test');
+  assert.match(tests, /node-version: \[22\.x, 24\.x, 26\.x\]/);
+  assert.match(tests, /sdk: \[Core, React-Native, Storage-Async, Storage-MMKV, Storage-MMKV4\]/);
   assert.deepEqual([...tests.matchAll(/- sdk: (.+)/g)].map(match => match[1]),
     ['Core', 'React-Native', 'Storage-Async', 'Storage-MMKV', 'Storage-MMKV4']);
-  for (const source of [tests, job('sonar'), job('smoke-test')]) assert.match(source, /node-version: 'lts\/\*'/);
-  assert.match(step(tests, 'Test packed native consumers'), /if: matrix.sdk == 'React-Native'/);
+  for (const source of [job('sonar'), job('smoke-test')]) assert.match(source, /node-version: '22\.x'/);
+  assert.match(step(tests, 'Test packed native consumers'), /if: matrix.sdk == 'React-Native' && matrix.node-version == '24\.x'/);
   assert.match(step(tests, 'Test packed native consumers'), /run: npm run test:packed/);
+  assert.match(step(tests, 'Upload coverage artifact'), /matrix\.node-version == '22\.x'/);
   assert.match(step(tests, 'Upload coverage artifact'), /name: coverage-\$\{\{ matrix.sdk \}\}/);
   assert.match(step(tests, 'Run tests with coverage'), /run: \$\{\{ matrix.test-cmd \}\}/);
+  const summary = step(job('summary'), 'Check test results');
+  assert.match(summary, /Node: 22\.x, 24\.x, 26\.x/);
+  assert.match(summary, /0\.70\.15 \(peer floor\), 0\.88\.1 \(latest\)/);
   const sonar = job('sonar');
   assert.match(step(sonar, 'Resolve Sonar project version'), /manifest: Toggly.FeatureManagement.ReactNative\/libs\/core\/package.json/);
   for (const name of ['SonarCloud Scan', 'SonarQube Server Scan']) {

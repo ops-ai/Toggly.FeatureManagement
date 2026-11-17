@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Microsoft.FeatureManagement;
 using Microsoft.FeatureManagement.FeatureFilters;
 using Moq;
@@ -209,10 +210,22 @@ public class FilterParityFixturesTests
 
             var httpContext = new DefaultHttpContext();
             if (!string.IsNullOrEmpty(userAgent))
+            {
+#if NET6_0_OR_GREATER
                 httpContext.Request.Headers.UserAgent = userAgent;
+#else
+                httpContext.Request.Headers["User-Agent"] = userAgent;
+#endif
+            }
 
             if (!string.IsNullOrEmpty(acceptLanguage))
+            {
+#if NET6_0_OR_GREATER
                 httpContext.Request.Headers.AcceptLanguage = acceptLanguage;
+#else
+                httpContext.Request.Headers["Accept-Language"] = acceptLanguage;
+#endif
+            }
 
             // CountryFilter reads CDN headers only. Map EvalContext.request.country the same way
             // other SDKs treat an already-resolved request.country (synthesize CF-IPCountry).

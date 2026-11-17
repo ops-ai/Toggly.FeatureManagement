@@ -5,7 +5,7 @@ defmodule TogglyPhoenix.MixProject do
     [
       app: :toggly_phoenix,
       version: "0.3.0",
-      elixir: "~> 1.20",
+      elixir: "~> 1.18",
       description: "Toggly feature flags for toggly phoenix",
       package: [
         licenses: ["MIT"],

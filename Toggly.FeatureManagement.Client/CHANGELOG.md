@@ -3,8 +3,8 @@
 ## Unreleased
 
 ### Changed
-- Multi-target `Toggly.FeatureManagement.Client` and `.Client.Desktop` to `net7.0;net8.0;net9.0;net10.0;net11.0` (RC). Omit `net6.0` / `netstandard2.1` (BCL gaps: `CancelAsync`, `ObjectDisposedException.ThrowIf`, `Enumerable.Order`, inbox `System.Text.Json`).
-- CI runs Client tests on every stable TFM; `net11.0` is a preview allow-failure job.
+- Multi-target `Toggly.FeatureManagement.Client` and `.Client.Desktop` to `net7.0;net8.0;net9.0;net10.0;net11.0` . Omit `net6.0` / `netstandard2.1` (BCL gaps: `CancelAsync`, `ObjectDisposedException.ThrowIf`, `Enumerable.Order`, inbox `System.Text.Json`).
+- CI runs Client tests on every stable TFM; `net11.0` is included in the required Client test matrix.
 - Bump Client test packages to current stable (`Microsoft.NET.Test.Sdk` 17.12.0, `xunit` 2.9.3, `coverlet.collector` 6.0.4); stay away from FluentAssertions 7+/8+.
 
 ### Added

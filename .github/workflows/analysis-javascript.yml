@@ -373,20 +373,20 @@ jobs:
         working-directory: ${{ matrix.path }}
         run: npm run test:host
 
-      # JavaScript runs on Node 22/24/26; upload coverage once from the floor row.
+      # JavaScript and React run on Node 22/24/26; upload coverage once from the floor row.
       - name: Require unit test coverage report
-        if: matrix.sdk != 'Docusaurus' && (matrix.sdk != 'JavaScript' || matrix.node-version == '22.x')
+        if: matrix.sdk != 'Docusaurus' && ((matrix.sdk != 'JavaScript' && matrix.sdk != 'React') || matrix.node-version == '22.x')
         working-directory: ${{ matrix.path }}
         run: find coverage -name lcov.info -size +0c -print -quit | grep -q .
 
       - name: Label coverage artifact
-        if: matrix.sdk != 'Docusaurus' && (matrix.sdk != 'JavaScript' || matrix.node-version == '22.x') && matrix['skip-coverage-upload'] != true
+        if: matrix.sdk != 'Docusaurus' && ((matrix.sdk != 'JavaScript' && matrix.sdk != 'React') || matrix.node-version == '22.x') && matrix['skip-coverage-upload'] != true
         working-directory: ${{ matrix.path }}
         run: printf '%s\n' 'coverage-${{ matrix.sdk }}' > coverage/artifact-name.txt
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
-        if: matrix.sdk != 'Docusaurus' && (matrix.sdk != 'JavaScript' || matrix.node-version == '22.x') && matrix['skip-coverage-upload'] != true
+        if: matrix.sdk != 'Docusaurus' && ((matrix.sdk != 'JavaScript' && matrix.sdk != 'React') || matrix.node-version == '22.x') && matrix['skip-coverage-upload'] != true
         with:
           name: coverage-${{ matrix.sdk }}
           path: ${{ matrix.path }}/coverage/
@@ -529,7 +529,7 @@ jobs:
         run: node tests/docusaurus-consumer-fixtures/packed-host.mjs
 
   test-astro-hosts:
-    name: Astro ${{ matrix.astro-major }} packed host (Node 24)
+    name: Astro ${{ matrix.astro-major }} packed host (Node ${{ matrix.node-version }})
     needs: [prepare]
     if: needs.prepare.outputs.run_test_astro_hosts == 'true'
     runs-on: ubuntu-24.04
@@ -538,6 +538,7 @@ jobs:
       fail-fast: false
       matrix:
         astro-major: ['5', '6', '7']
+        node-version: ['22.x', '24.x', '26.x']
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -548,7 +549,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '24.x'
+          node-version: ${{ matrix.node-version }}
           cache: npm
           cache-dependency-path: Toggly.FeatureManagement.Astro/package-lock.json
 
