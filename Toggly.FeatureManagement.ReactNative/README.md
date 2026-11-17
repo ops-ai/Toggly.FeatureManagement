@@ -314,7 +314,7 @@ const storage = createMMKVStorageAdapter({
 #### MMKV 4 / Nitro Adapter
 
 MMKV 4 uses a different native API. Use a development build for Expo rather
-than Expo Go. React Native 0.87 current hosts require the 0.37.1 Nitro line;
+than Expo Go. React Native 0.88 current hosts require the 0.37.1 Nitro line;
 installing the prior 0.35 line leaves the JSI hook uninstalled.
 
 ```tsx
