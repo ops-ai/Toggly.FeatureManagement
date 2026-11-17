@@ -20,7 +20,7 @@ In agile settings the feature flag is used in production, to switch on the featu
 Requires matching React and React DOM versions: React 18.2+ or React 19.x.
 The SDK uses your application's React and JSX runtimes as peer dependencies.
 React 18 applications can retain their existing React 18 setup.
-Packed consumer tests cover 18.2.0, 18.3.1, and 19.3.0, including provider,
+Packed consumer tests cover 18.2.0, 18.3.1, and 19.3.1, including provider,
 hooks, feature gates, context changes, refresh, and cleanup in a browser.
 
 ## Installation

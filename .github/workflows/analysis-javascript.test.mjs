@@ -640,7 +640,30 @@ test('runs the vanilla JavaScript SDK on Node 22/24/26 and uploads coverage from
   const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   assert.match(
     testJob,
-    /matrix\.sdk != 'Docusaurus' && \(matrix\.sdk != 'JavaScript' \|\| matrix\.node-version == '22\.x'\)/,
+    /matrix\.sdk != 'Docusaurus' && \(\(matrix\.sdk != 'JavaScript' && matrix\.sdk != 'React'\) \|\| matrix\.node-version == '22\.x'\)/,
+  );
+});
+
+test('runs the React SDK on Node 22/24/26 with packed consumers and uploads coverage from 22.x', () => {
+  for (const sdks of ['all', 'React']) {
+    assert.deepEqual(
+      selectAnalysis(sdks).testMatrix.include.filter((row) => row.sdk === 'React'),
+      ['22.x', '24.x', '26.x'].map((nodeVersion) => ({
+        sdk: 'React',
+        path: 'Toggly.FeatureManagement.React',
+        'test-cmd': 'npm test',
+        'node-version': nodeVersion,
+        'has-lint': false,
+      })),
+    );
+  }
+  const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  assert.match(testJob, /Verify packed React consumers in Chrome/);
+  assert.match(testJob, /if: matrix\.sdk == 'React'/);
+  assert.match(testJob, /npm run test:consumers/);
+  assert.match(
+    testJob,
+    /matrix\.sdk != 'Docusaurus' && \(\(matrix\.sdk != 'JavaScript' && matrix\.sdk != 'React'\) \|\| matrix\.node-version == '22\.x'\)/,
   );
 });
 

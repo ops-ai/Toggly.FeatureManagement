@@ -13,6 +13,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | NestJS | `^10 \|\| ^11 \|\| ^12` | release matrix Nest 10.4.22 / 11.2.8 / 12.3.2 × Node 22.12.0 / 24 / 26 | 12.3.x | Maintain |
 | Express (Node server) | `>=4` | 4.22.3 + 5.3.0 (Node 22/24/26) | 5.3.0 | Maintain |
 | Koa (Node server) | `^2 \|\| ^3` | 2.16.4 + 3.2.1 | 3.2.1 | Maintain |
+| React (`@ops-ai/react-feature-flags-toggly`) | `react` / `react-dom` `^18.2 \|\| ^19` | 18.2.0 + 18.3.1 + 19.3.1 packed hosts; Node 22/24/26 unit+consumers | 19.3.1 | Maintain |
 | React Router | `^7 \|\| ^8` | 7.18.5 + 8.5.1 hosts (Node 24) | 8.5.1 | Maintain |
 | Fastify | `^4 \|\| ^5` | 4.29.1 + 5.12.7 (Node 22/24/26) | 5.12.7 | Maintain; Fastify 4 still published (`four` dist-tag) |
 | Hono | `^4` | 4.0.0 + 4.13.16 (Node 22/24/26) | 4.13.16 | No major gap; 4.0.0 runtime proved (TS 5.9 needs skipLibCheck on 4.0.0 types) |

@@ -212,6 +212,19 @@ test('JavaScript requires coverage and the packed browser telemetry host on Node
   assert.ok(result.requiredJobs.split(',').includes('test'));
 });
 
+test('React requires unit and packed consumer coverage on Node 22/24/26', () => {
+  const result = filterAnalysisJs('React');
+  assert.deepEqual(result.testMatrix, ['22.x', '24.x', '26.x'].map((nodeVersion) => ({
+    sdk: 'React',
+    path: 'Toggly.FeatureManagement.React',
+    'test-cmd': 'npm test',
+    'node-version': nodeVersion,
+    'has-lint': false,
+  })));
+  assert.ok(result.requiredJobs.split(',').includes('test'));
+  assert.equal(result.needSharedDeps, true);
+});
+
 test('GA4 Hook runs coverage and its packed public consumer', () => {
   const result = filterAnalysisJs('GA4-Hook');
   assert.deepEqual(result.testMatrix, [{

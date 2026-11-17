@@ -52,12 +52,16 @@ export const FULL_TEST_MATRIX = [
       "npm test -- ngx-feature-flags-toggly --watch=false --browsers=ChromeHeadless --code-coverage --exclude='**/smoke*.spec.ts'",
     'has-lint': false,
   },
-  {
+  // React SDK: exercise Node 22 (floor), 24, and 26 (latest current).
+  // Unit + packed consumer fixtures run on each row; coverage uploads only
+  // from the 22.x row (see analysis-javascript.yml).
+  ...['22.x', '24.x', '26.x'].map((nodeVersion) => ({
     sdk: 'React',
     path: 'Toggly.FeatureManagement.React',
     'test-cmd': 'npm test',
+    'node-version': nodeVersion,
     'has-lint': false,
-  },
+  })),
   {
     sdk: 'Vue',
     path: 'Toggly.FeatureManagement.Vue/vue-feature-flags-toggly',
