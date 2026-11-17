@@ -289,7 +289,7 @@ test('preserves Python package matrices, host checks, coverage XML and precise S
   assert.match(job('test-packed-host'), /runs-on: \$\{\{ matrix\.os \|\| 'ubuntu-latest' \}\}/);
   assert.ok(job('test-django').includes('os: ubuntu-24.04'));
   assert.ok(job('test-packed-host').includes('os: ubuntu-24.04'));
-  for (const version of ['5.2.18', '6.0.9', '6.1.2']) {
+  for (const version of ['5.2.19', '6.0.10', '6.1.3']) {
     assert.ok(job('test-django').includes(`django-version: "${version}"`));
     assert.ok(job('test-packed-host').includes(`django-version: "${version}"`));
   }
