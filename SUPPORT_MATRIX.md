@@ -9,10 +9,11 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | --- | --- | --- | --- | --- |
 | Next (`@ops-ai/nextjs-toggly-*`) | `next >=14` | 14.2.35, 15.5.28, 16.4.3 (webpack+turbopack) | 16.4.3 | Maintain; Next 14 EOL upstream but retained while Node 22+ host still proves |
 | Nuxt | `^3 \|\| ^4` | 3.21.11 + 4.6.3 (Node 22/24/26) | 4.6.3 | Maintain |
-| Astro | `^5 \|\| ^6 \|\| ^7` | 5 / 6 / 7 (OPS-1179) | 7.3.x | Maintain |
+| Astro | `^5 \|\| ^6 \|\| ^7` | 5 / 6 / 7 × Node 22/24/26 (OPS-1179) | 7.4.x | Maintain |
 | NestJS | `^10 \|\| ^11 \|\| ^12` | release matrix Nest 10.4.22 / 11.2.8 / 12.3.2 × Node 22.12.0 / 24 / 26 | 12.3.x | Maintain |
 | Express (Node server) | `>=4` | 4.22.3 + 5.3.0 (Node 22/24/26) | 5.3.0 | Maintain |
 | Koa (Node server) | `^2 \|\| ^3` | 2.16.4 + 3.2.1 | 3.2.1 | Maintain |
+| React (`@ops-ai/react-feature-flags-toggly`) | `react` / `react-dom` `^18.2 \|\| ^19` | 18.2.0 + 18.3.1 + 19.3.1 packed hosts; Node 22/24/26 unit+consumers | 19.3.1 | Maintain |
 | React Router | `^7 \|\| ^8` | 7.18.5 + 8.5.1 hosts (Node 24) | 8.5.1 | Maintain |
 | Fastify | `^4 \|\| ^5` | 4.29.1 + 5.12.7 (Node 22/24/26) | 5.12.7 | Maintain; Fastify 4 still published (`four` dist-tag) |
 | Hono | `^4` | 4.0.0 + 4.13.16 (Node 22/24/26) | 4.13.16 | No major gap; 4.0.0 runtime proved (TS 5.9 needs skipLibCheck on 4.0.0 types) |
@@ -23,10 +24,11 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Vue (`@ops-ai/vue-feature-flags-toggly`) | `vue ^3.2.45` peer | 3.2.45 + 3.5.44 packed hosts (Node 22/24/26) | 3.5.44 | Maintain |
 | Svelte | `^4 \|\| ^5` | 4 + 5 | 5.x | Maintain |
 | SvelteKit | kit `^2 \|\| ^3` | 2.x, 3.1.0 packed host | 3.1.x | Maintain |
-| .NET core family | netstandard2.1…net9 + **net10** | multi-TFM build | net10 | Wave 2 |
-| .NET Client / Desktop | net7–net10 + **net11** (RC) | per-TFM tests (net11 allow-failure) | net10 (+ net11 RC) | net6 / netstandard2.1 omitted (BCL shims) |
-| Blazor (`Toggly.FeatureManagement.Blazor` / `.Server`) | **net8–net11** | CI matrix net8/9/10 + net11 RC allow-failure | net10 stable; net11 RC | Maintain; net6/7 not in the Blazor TFM matrix |
-| .NET Mongo/Dapper/EF | includes net10 | net8/net10 consumers | net10 | Maintain |
+| .NET core family | netstandard2.1…net11 | multi-TFM build + parity matrix | net11 | Maintain |
+| .NET Client / Desktop | net7–net11 | per-TFM tests | net11 | net6 / netstandard2.1 omitted (BCL shims) |
+| .NET Dashboard / Embedded | net8…net11 | unit + embedded consumer matrix | net11 | net8 floor (Razor) |
+| Blazor (`Toggly.FeatureManagement.Blazor` / `.Server`) | **net8–net11** | CI matrix net8/9/10/11 | net11 | Maintain; net6/7 not in the Blazor TFM matrix |
+| .NET Mongo/Dapper/EF | includes net10 + net11 | net8/net10/net11 consumers | net11 | Maintain |
 | Java Spring | Boot 3.5 + Boot 4.1 / Spring 6.2+7 / Java 17 | Boot 3.5.16 + Boot 4.1.2 starters; Spring 6.2.19 + 7.0.10 (Security 6.5.11 / 7.1.2) MVC/WebFlux CI + `webflux` / `webflux-spring7` hosts; JDK 17/21/25 | Boot 4.1 / Spring 7.0 | Dual Boot starters; single MVC/WebFlux artifacts (provided Spring) |
 | Java Redis | Jedis 5 + Jedis 8 | dual artifacts | Jedis 8 | No Lettuce 7 |
 | Android | AGP 9.5 / Kotlin 2.4 / compileSdk 37 / minSdk 24 | Java 17+21+25; unit tests + API 36 emulator | AGP 9.5.0 / Kotlin 2.4.21 | Wave 3; AVD 37 blocked on GHA macos-intel |
@@ -34,5 +36,6 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | iOS | iOS 14 / macOS 11 / tvOS 14 / watchOS 7 / swift-tools 5.5 | Xcode 16.1+16.2+16.4 (macos-15), 26.6 (macos-26), 27.1 (xcode-27; consumer sim iOS 15 — Xcode 27 SDK floor) | Xcode 27.1 | Keep declared iOS 14; Xcode 27 sim SDK min is 15 |
 | Rust axum | axum 0.7 + axum08 | dual crates | 0.8 | `toggly-axum08` 0.1.1+ accepts workspace `toggly` range |
 | Go | Go 1.26; grpc 1.85 | CI 1.26 + 1.27 | — | Floor Go 1.26; CI also runs latest stable |
+| Elixir (`toggly` / `toggly_phoenix` / `toggly_live_view`) | Elixir `~> 1.18` / OTP 27+ | 1.18.6/OTP 27, 1.19.7/OTP 28, 1.20.5/OTP 29 | Elixir 1.20.5 / OTP 29 | Floor widened after deps+tests proved on 1.18/1.19 without behavior changes |
 
 Update this file in the same PR that changes peers, fixtures, or TFMs.

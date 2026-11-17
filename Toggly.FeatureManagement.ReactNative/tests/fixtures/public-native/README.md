@@ -1,12 +1,12 @@
 # Public React Native telemetry consumer (OPS-1381 / OPS-1914)
 
-This bare React Native 0.87.1 app installs published npm packages:
+This bare React Native 0.88.1 app installs published npm packages:
 
 - `@ops-ai/react-native-toggly@1.6.1`
 - `@ops-ai/react-native-toggly-core@1.11.1` (requires `@ops-ai/toggly-client-telemetry@^1.3.0`; locked to `1.3.0`)
 - `@ops-ai/react-native-toggly-storage-mmkv4@1.0.0`
 
-plus React Native `0.87.1`, React `19.2.3`, MMKV `4.3.2`, and Nitro `0.37.1`.
+plus React Native `0.88.1`, React `19.3.0`, MMKV `4.3.2`, and Nitro `0.37.1`.
 The MMKV4 adapter stores definitions/device state only; Core owns the single
 in-memory telemetry reporter. The fixture uses sample keys and a loopback
 collector only. Do not substitute a production endpoint or real application key.

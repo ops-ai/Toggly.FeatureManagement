@@ -1,3 +1,10 @@
+## Unreleased
+
+### Changed
+- `engines.node` floor raised from `>=18` to `>=22` (Node 18 and 20 are EOL).
+- CI unit matrix exercises Node 22, 24, and 26.
+- Packed host fixture React Native pin refreshed from 0.87.1 to 0.88.1.
+
 # Changelog
 
 ## 1.1.3

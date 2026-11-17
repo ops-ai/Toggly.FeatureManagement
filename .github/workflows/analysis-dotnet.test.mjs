@@ -177,10 +177,22 @@ test('dispatch and call analyses wait for their branch gate without empty PR pro
 test('repeated Server scanner failure fails the job', () => {
   const { result, calls } = scan({ SCAN_FAIL: '1' });
   assert.notEqual(result.status, 0);
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 6);
   const end = step('End SonarQube Server Scan');
-  assert.match(end, /run: dotnet sonarscanner end /);
+  assert.match(end, /dotnet sonarscanner end /);
+  assert.match(end, /for attempt in 1 2 3 4 5 6/);
   assert.doesNotMatch(end, /continue-on-error: true|\|\| true/);
+});
+
+test('Server end retries a transient scanner failure then fails closed', () => {
+  const { result, calls } = scan({ SCAN_END_EXIT: '1' }, false, ['End SonarQube Server Scan']);
+  assert.equal(result.status, 1, result.stderr);
+  assert.equal(calls.length, 6);
+  assert.deepEqual(calls[0].slice(0, 3), ['sonarscanner', 'end', '/d:sonar.token=test-token']);
+
+  const passed = scan({ SCAN_END_EXIT: '0' }, false, ['End SonarQube Server Scan']);
+  assert.equal(passed.result.status, 0, passed.result.stderr);
+  assert.equal(passed.calls.length, 1);
 });
 
 test('.NET analysis scans and covers the CLI executable', () => {
@@ -323,16 +335,30 @@ test('reporting false skips only dependency reporting and allows that exact summ
   assert.equal(result.stderr.trim(), 'SONAR_TOKEN');
 });
 
-test('shared analyze and pack-packages provision .NET 11 RC for Blazor net11.0 TFM', () => {
-  for (const [start, end] of [
-    ['  analyze:', '  dependency-check:'],
-    ['  pack-packages:', '  embedded-consumer:'],
+test('required jobs install GA .NET 11 and exercise net11.0 in the TFM matrix', () => {
+  const analyze = workflow.slice(workflow.indexOf('  analyze:'), workflow.indexOf('  dependency-check:'));
+  const pack = workflow.slice(workflow.indexOf('  pack-packages:'), workflow.indexOf('  embedded-consumer:'));
+  const embedded = workflow.slice(workflow.indexOf('  embedded-consumer:'), workflow.indexOf('  smoke-test:'));
+  const blazor = workflow.slice(workflow.indexOf('  blazor-runtime:'), workflow.indexOf('  summary:'));
+
+  for (const [name, job] of [
+    ['analyze', analyze],
+    ['pack-packages', pack],
   ]) {
-    const job = workflow.slice(workflow.indexOf(start), workflow.indexOf(end));
-    assert.match(
-      job,
-      /- name: Setup \.NET 11 RC \(Blazor preview TFM\)[\s\S]*dotnet-version: '11\.0\.x'[\s\S]*dotnet-quality: 'preview'/,
-      `${start.trim()} must install .NET 11 RC so unconditional Blazor net11.0 restores succeed`,
-    );
+    assert.match(job, /11\.0\.x/, `${name} must install .NET 11 GA`);
+    assert.doesNotMatch(job, /dotnet-quality:\s*'preview'/, `${name} must not use preview quality`);
+    assert.doesNotMatch(job, /ExcludeNet11Preview/, `${name} must not strip net11`);
   }
+
+  assert.match(analyze, /frameworks=\(.*net11\.0\)/);
+  assert.match(embedded, /framework: \[net8\.0, net9\.0, net10\.0, net11\.0\]/);
+  assert.match(blazor, /framework: net11\.0/);
+  assert.doesNotMatch(workflow, /test-net11-preview:|client-net11-preview:|blazor-runtime-net11-preview:/);
+  assert.doesNotMatch(workflow, /dotnet-quality:\s*'preview'/);
+
+  const summary = workflow.slice(workflow.indexOf('  summary:'));
+  assert.match(summary, /required-jobs: analyze,dependency-check,build-cli,pack-packages,embedded-consumer,smoke-test,blazor-runtime/);
+
+  const props = readFileSync(new URL('../../Toggly.FeatureManagement.NET/Directory.Build.props', import.meta.url), 'utf8');
+  assert.doesNotMatch(props, /TogglyNet11Tfm|ExcludeNet11Preview|IncludeNet11Preview/);
 });

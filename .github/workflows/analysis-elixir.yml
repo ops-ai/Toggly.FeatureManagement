@@ -14,7 +14,31 @@ permissions:
   contents: read
   security-events: write
 jobs:
+  version-matrix:
+    name: Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { elixir: '1.18.6', otp: '27' }
+          - { elixir: '1.19.7', otp: '28' }
+          - { elixir: '1.20.5', otp: '29' }
+    defaults:
+      run:
+        working-directory: toggly-elixir
+    steps:
+      - uses: actions/checkout@v7
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
+      - run: mix deps.get --check-locked
+      - run: mix compile --warnings-as-errors
+      - run: mix test --cover
+
   native-analysis:
+    needs: version-matrix
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -24,7 +48,7 @@ jobs:
       - uses: erlef/setup-beam@v1
         with:
           otp-version: '29'
-          elixir-version: '1.20.4'
+          elixir-version: '1.20.5'
       - run: mix deps.get --check-locked
       - run: mix hex.audit
       - run: mix format --check-formatted
@@ -49,4 +73,4 @@ jobs:
             toggly-elixir/apps/*/cover/
             toggly-elixir/apps/*/*.tar
       - name: Analysis scope
-        run: echo 'Native Elixir format, compiler, ExUnit and >90% coverage gates passed. SonarCloud has no native Elixir analyzer; no Sonar verdict is claimed.' >> "$GITHUB_STEP_SUMMARY"
+        run: echo 'Native Elixir format, compiler, ExUnit and >90% coverage gates passed across Elixir 1.18.6/OTP 27, 1.19.7/OTP 28, and 1.20.5/OTP 29. SonarCloud has no native Elixir analyzer; no Sonar verdict is claimed.' >> "$GITHUB_STEP_SUMMARY"

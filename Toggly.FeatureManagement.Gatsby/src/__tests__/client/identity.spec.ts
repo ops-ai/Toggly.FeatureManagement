@@ -122,8 +122,8 @@ it('shares one admission budget across 2200 context transitions and recovers aft
   store.recordUsage('Recovered'); await store.flushTelemetry();
   expect(envelopes.at(-1)).toMatchObject({ u: 'user-2199', f: { Recovered: { enabled: [0, 1] } } });
   console.log('GATSBY_ADMISSION_TIMING', { admissionMs: admitted - started, totalMs: performance.now() - started });
-  // Full 2200-transition admission is CPU-bound under hosted coverage; keep a bounded per-case allowance.
-}, 15000);
+  // Full 2200-transition admission is CPU-bound under hosted coverage (Node 22 CI often ~15s+); keep a bounded per-case allowance.
+}, 30000);
 it('captures the complete gate snapshot before an entity mapper changes definitions and context', async () => {
   const { registerContext } = await import('@ops-ai/toggly-hooks-types');
   respond = async () => response({ F: true, G: true });

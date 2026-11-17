@@ -2,7 +2,7 @@
 
 LiveView feature assigns, update subscriptions and declarative HEEx gates for [Toggly](https://toggly.io). Usable with online definitions or offline defaults.
 
-Requires Elixir 1.20+, OTP 29+, Phoenix 1.8 / LiveView 1.2+. Add `{:toggly_live_view, "~> 0.1.0"}`. Supervise one named `Toggly` client; [core documentation](https://docs.toggly.io/sdks/elixir) covers configuration and filters.
+Requires Elixir 1.18+, OTP 27+, Phoenix 1.8 / LiveView 1.2+. Add `{:toggly_live_view, "~> 0.1.0"}`. Supervise one named `Toggly` client; [core documentation](https://docs.toggly.io/sdks/elixir) covers configuration and filters.
 
 ```elixir
 use Phoenix.LiveView

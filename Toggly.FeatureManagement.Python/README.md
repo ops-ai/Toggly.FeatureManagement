@@ -141,8 +141,8 @@ Django 4.2+.
 
 The analysis workflow retains Python 3.8–3.14 regression coverage and adds
 Python 3.15 for core, Flask, FastAPI, and cache. Its packed-consumer hosts
-test Django 4.2, 5.0, 5.1, 5.2.18, 6.0.9, and 6.1.2 using framework-valid
-Python versions. The Python 3.14 / Django 6.1.2 host also validates Flask
+test Django 4.2, 5.0, 5.1, 5.2.19, 6.0.10, and 6.1.3 using framework-valid
+Python versions. The Python 3.14 / Django 6.1.3 host also validates Flask
 3.1.x, FastAPI 0.162.x, redis-py 8.1.x, and the optional WebSocket and gRPC
 transports (including current protobuf 7.x / grpcio on Python ≥3.10).
 
