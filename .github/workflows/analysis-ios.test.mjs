@@ -45,6 +45,7 @@ test('iOS build-and-test keeps Xcode 16.1 floor and proves current 26.x / 27.x',
   assert.match(build, /os: macos-15[\s\S]*xcode: '16\.4'[\s\S]*consumer_ios: '14\.0'/);
   assert.match(build, /os: macos-26[\s\S]*xcode: '26\.6'[\s\S]*consumer_ios: '14\.0'/);
   assert.match(build, /os: xcode-27[\s\S]*xcode: '27\.1'[\s\S]*consumer_ios: '15\.0'/);
+  assert.match(build, /os: xcode-27[\s\S]*xcode: '27\.2'[\s\S]*consumer_ios: '15\.0'/);
   assert.match(build, /coverage: true/);
   assert.match(build, /if: matrix\.coverage/);
   assert.match(

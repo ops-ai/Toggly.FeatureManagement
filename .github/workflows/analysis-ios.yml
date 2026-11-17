@@ -60,6 +60,10 @@ jobs:
             xcode: '27.1'
             coverage: false
             consumer_ios: '15.0'
+          - os: xcode-27
+            xcode: '27.2'
+            coverage: false
+            consumer_ios: '15.0'
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
