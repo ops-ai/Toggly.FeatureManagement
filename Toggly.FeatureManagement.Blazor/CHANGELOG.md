@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Changed
-- Multi-target `net8.0`, `net9.0`, `net10.0`, and `net11.0` with matching `Microsoft.AspNetCore.Components.*` package versions per TFM (`net11.0` uses RC packages until GA).
+- Multi-target `net8.0`, `net9.0`, `net10.0`, and `net11.0` with matching `Microsoft.AspNetCore.Components.*` package versions per TFM (`net11.0` uses RC packages ).
 - Bump test and Components servicing dependencies; keep FluentAssertions on 6.12.x.
 
 ### Added

@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- Razor class library: net8 is the practical floor; add net9–net11 for support-window coverage. -->
+    <TargetFrameworks>net8.0;net9.0;net10.0;net11.0</TargetFrameworks>
     <AddRazorSupportForMvc>true</AddRazorSupportForMvc>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -20,7 +21,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="..\AssemblyInfo.cs" Link="Properties\AssemblyInfo.cs" />
-    <None Update="README.md" Pack="true" PackagePath="" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
     <EmbeddedResource Include="Assets\dashboard.css" />
     <EmbeddedResource Include="Assets\dashboard.js" />
     <EmbeddedResource Include="Assets\logo-light.svg" />

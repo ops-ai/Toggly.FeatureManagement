@@ -24,11 +24,14 @@ permissions:
 
 jobs:
   test:
-    name: Test ${{ matrix.sdk }}
+    name: Test ${{ matrix.sdk }} (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
+        # Owner decision: drop EOL Node 18/20; maintain 22 (LTS), 24 (LTS), 26 (Current).
+        node-version: [22.x, 24.x, 26.x]
+        sdk: [Core, React-Native, Storage-Async, Storage-MMKV, Storage-MMKV4]
         include:
           - sdk: Core
             path: Toggly.FeatureManagement.ReactNative/libs/core
@@ -52,15 +55,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v7
         with:
-          node-version: 'lts/*'
+          node-version: ${{ matrix.node-version }}
           cache: 'npm'
           cache-dependency-path: ${{ matrix.path }}/package-lock.json
 
       - name: Verify React Native analysis workflow contract
-        if: ${{ matrix.sdk == 'Core' }}
+        if: ${{ matrix.sdk == 'Core' && matrix.node-version == '22.x' }}
         run: node --test .github/workflows/analysis-react-native.test.mjs
 
       - name: Install core dependencies (for other packages)
@@ -117,13 +120,13 @@ jobs:
         run: ${{ matrix.test-cmd }}
 
       - name: Test packed native consumers
-        if: matrix.sdk == 'React-Native'
+        if: matrix.sdk == 'React-Native' && matrix.node-version == '24.x'
         working-directory: ${{ matrix.path }}
         run: npm run test:packed
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
-        if: always()
+        if: ${{ always() && matrix.node-version == '22.x' }}
         with:
           name: coverage-${{ matrix.sdk }}
           path: |
@@ -154,7 +157,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 'lts/*'
+          node-version: '22.x'
 
       - name: Install dependencies for TypeScript analysis
         run: |
@@ -325,7 +328,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 'lts/*'
+          node-version: '22.x'
           cache: 'npm'
           cache-dependency-path: Toggly.FeatureManagement.ReactNative/libs/core/package-lock.json
 
@@ -394,6 +397,10 @@ jobs:
             echo "- @ops-ai/react-native-toggly-storage-async"
             echo "- @ops-ai/react-native-toggly-storage-mmkv"
             echo "- @ops-ai/react-native-toggly-storage-mmkv4"
+            echo ""
+            echo "### Runtime matrix"
+            echo "- Node: 22.x, 24.x, 26.x"
+            echo "- Packed native hosts: React Native 0.70.15 (peer floor), 0.88.1 (latest)"
             echo ""
             echo "SonarCloud: https://sonarcloud.io/project/overview?id=toggly-sdks-react-native"
           } >> "$GITHUB_STEP_SUMMARY"

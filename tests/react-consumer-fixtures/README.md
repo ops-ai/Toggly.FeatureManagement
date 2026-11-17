@@ -15,7 +15,7 @@ account or live service is needed. Nothing is installed from SDK source.
 | --- | --- |
 | Declared minimum | 18.2.0 |
 | Retained React 18 patch | 18.3.1 |
-| React 19 current frozen patch (registry checked 2026-09-11) | 19.3.0 |
+| React 19 current frozen patch (registry checked 2026-11-16) | 19.3.1 |
 
 The mounted StrictMode example uses `createTogglyProvider`, `useContext`,
 `useFeatureFlag`, `useFeatureGate`, and `Feature` (children, negate, render).
