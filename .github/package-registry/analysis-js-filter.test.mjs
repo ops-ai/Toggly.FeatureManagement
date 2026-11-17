@@ -115,7 +115,7 @@ test('Svelte unit matrix pins Node 24.x (hosts cover 22/24/26)', () => {
   assert.equal(r.runTestCurrentBrowserHosts, true);
 });
 
-test('Astro unit matrix pins Node 24.x (packed hosts cover 5/6/7)', () => {
+test('Astro unit matrix pins Node 24.x (packed hosts cover 5/6/7 on Node 22/24/26)', () => {
   const r = filterAnalysisJs('Astro');
   assert.deepEqual(r.testMatrix, [{
     sdk: 'Astro',

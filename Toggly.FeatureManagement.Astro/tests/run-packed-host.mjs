@@ -20,7 +20,7 @@ const matrix = {
   '5-locked': { astro: '5.16.6', '@astrojs/node': '9.4.6', '@astrojs/react': '4.4.2', '@astrojs/vue': '5.1.4', '@astrojs/svelte': '7.2.5', '@nanostores/react': '1.1.0' },
   5: { astro: '5.18.2', '@astrojs/node': '9.5.5', '@astrojs/react': '4.4.2', '@astrojs/vue': '5.1.4', '@astrojs/svelte': '7.2.5', '@nanostores/react': '1.1.0' },
   6: { astro: '6.4.8', '@astrojs/node': '10.1.4', '@astrojs/react': '5.0.7', '@astrojs/vue': '6.0.1', '@astrojs/svelte': '8.1.2', '@nanostores/react': '2.0.1' },
-  7: { astro: '7.3.2', '@astrojs/node': '11.1.5', '@astrojs/react': '6.0.5', '@astrojs/vue': '7.0.2', '@astrojs/svelte': '9.0.1', '@nanostores/react': '2.0.1' },
+  7: { astro: '7.4.12', '@astrojs/node': '11.1.13', '@astrojs/react': '6.0.6', '@astrojs/vue': '7.1.6', '@astrojs/svelte': '9.1.6', '@nanostores/react': '2.0.1' },
 };
 const selected = matrix[process.env.ASTRO_MAJOR ?? '7'];
 assert.ok(selected, 'ASTRO_MAJOR must be 5, 6 or 7');

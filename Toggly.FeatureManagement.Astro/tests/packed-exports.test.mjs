@@ -20,7 +20,7 @@ test('packed artifact includes every public export implementation and type decla
     }
   }
 });
-for (const version of ['5.0.0', '5.18.2', '6.0.0', '6.4.8', '7.0.0', '7.3.2']) {
+for (const version of ['5.0.0', '5.18.2', '6.0.0', '6.4.8', '7.0.0', '7.4.12']) {
   test(`Astro ${version} can install the packed peer contract`, () => {
     assert.ok(semver.satisfies(version, manifest.peerDependencies.astro));
   });

@@ -38,6 +38,7 @@ function selectAnalysis(sdks) {
       requiredJobs: splitJobList(value('required_jobs')),
       runBrowserHosts: value('run_test_current_browser_hosts'),
       runDocusaurusHost: value('run_test_docusaurus_host'),
+      runAstroHosts: value('run_test_astro_hosts'),
       testMatrix: JSON.parse(text.match(/^test_matrix<<EOF\n([^\n]+)\nEOF$/m)?.[1] ?? 'null'),
     };
     selections.set(sdks, result);
@@ -588,6 +589,27 @@ test('pins Vue, Svelte, and Astro unit rows off Node 26 jsdom localStorage gap',
       assert.equal(row['node-version'], '24.x', `${sdk} unit row must pin Node 24.x`);
     }
   }
+});
+
+test('runs Astro packed hosts for majors 5/6/7 across Node 22/24/26', () => {
+  const hostJob = workflow.match(/\n  test-astro-hosts:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0];
+  assert.ok(hostJob, 'the Astro packed-host job must run in CI');
+  assert.match(hostJob, /astro-major: \['5', '6', '7'\]/);
+  assert.match(hostJob, /node-version: \['22\.x', '24\.x', '26\.x'\]/);
+  assert.match(hostJob, /node-version: \$\{\{ matrix\.node-version \}\}/);
+  assert.match(hostJob, /ASTRO_MAJOR: \$\{\{ matrix\.astro-major \}\}/);
+  assert.match(hostJob, /run: npm run test:host/);
+  assert.match(hostJob, /if: needs\.prepare\.outputs\.run_test_astro_hosts == 'true'/);
+  assert.match(prepare, /run_test_astro_hosts: \$\{\{ steps\.filter\.outputs\.run_test_astro_hosts \}\}/);
+  for (const sdks of ['all', 'Astro']) {
+    assertRequiredHost(sdks, 'test-astro-hosts');
+    assert.equal(selectAnalysis(sdks).runAstroHosts, 'true');
+  }
+  const packedHost = readFileSync(
+    new URL('../../Toggly.FeatureManagement.Astro/tests/run-packed-host.mjs', import.meta.url),
+    'utf8',
+  );
+  assert.match(packedHost, /astro: '7\.4\.12'/);
 });
 
 test('classifies the JavaScript packed browser harness as test code in both scanners', () => {
