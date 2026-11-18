@@ -55,8 +55,8 @@
   },
   {
     "fixture": "angular-20",
-    "angular": "20.3.31",
-    "cli": "20.3.37",
+    "angular": "20.3.35",
+    "cli": "20.3.43",
     "typescript": "5.9.3",
     "node": "24.18.0",
     "mode": "Zone.js OnPush",
@@ -64,8 +64,8 @@
   },
   {
     "fixture": "angular-21",
-    "angular": "21.2.23",
-    "cli": "21.2.24",
+    "angular": "21.2.26",
+    "cli": "21.2.30",
     "typescript": "5.9.3",
     "node": "24.18.0",
     "mode": "zoneless OnPush",
@@ -73,8 +73,8 @@
   },
   {
     "fixture": "angular-22",
-    "angular": "22.1.6",
-    "cli": "22.1.8",
+    "angular": "22.2.6",
+    "cli": "22.2.7",
     "typescript": "6.0.3",
     "node": "24.18.0",
     "mode": "zoneless OnPush",

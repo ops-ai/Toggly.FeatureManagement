@@ -212,6 +212,20 @@ test('JavaScript requires coverage and the packed browser telemetry host on Node
   assert.ok(result.requiredJobs.split(',').includes('test'));
 });
 
+test('Angular requires unit coverage and packed hosts on Node 22/24/26', () => {
+  const result = filterAnalysisJs('Angular');
+  assert.deepEqual(result.testMatrix, ['22.x', '24.x', '26.x'].map((nodeVersion) => ({
+    sdk: 'Angular',
+    path: 'Toggly.FeatureManagement.Angular',
+    'test-cmd':
+      "npm test -- ngx-feature-flags-toggly --watch=false --browsers=ChromeHeadless --code-coverage --exclude='**/smoke*.spec.ts'",
+    'node-version': nodeVersion,
+    'has-lint': false,
+  })));
+  assert.equal(result.needSharedDeps, true);
+  assert.ok(result.requiredJobs.split(',').includes('test'));
+});
+
 test('React requires unit and packed consumer coverage on Node 22/24/26', () => {
   const result = filterAnalysisJs('React');
   assert.deepEqual(result.testMatrix, ['22.x', '24.x', '26.x'].map((nodeVersion) => ({
