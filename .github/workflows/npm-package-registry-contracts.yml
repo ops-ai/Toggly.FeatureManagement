@@ -16,6 +16,8 @@ on:
       - '.github/workflows/javascript-aggregate-release-gate.yml'
       - '.github/scripts/organize-js-coverage*.mjs'
       - '.github/scripts/ensure-toggly-segments-dist*.mjs'
+      - '.github/scripts/wait-for-npm-version.sh'
+      - '.github/scripts/wait-for-npm-version.test.mjs'
       - '.github/workflows/analysis-nuxt.test.mjs'
       - '.github/workflows/analysis-python.test.mjs'
       - '.github/workflows/analysis-rust.test.mjs'
@@ -42,6 +44,8 @@ on:
       - '.github/workflows/javascript-aggregate-release-gate.yml'
       - '.github/scripts/organize-js-coverage*.mjs'
       - '.github/scripts/ensure-toggly-segments-dist*.mjs'
+      - '.github/scripts/wait-for-npm-version.sh'
+      - '.github/scripts/wait-for-npm-version.test.mjs'
       - '.github/workflows/analysis-nuxt.test.mjs'
       - '.github/workflows/analysis-python.test.mjs'
       - '.github/workflows/analysis-rust.test.mjs'
@@ -76,6 +80,9 @@ jobs:
         run: |
           node --test .github/scripts/refuse-publishable-lockfile-local-paths.test.mjs
           node .github/scripts/refuse-publishable-lockfile-local-paths.mjs --release-blocking
+
+      - name: Verify npm version wait covers registry replication lag
+        run: node --test .github/scripts/wait-for-npm-version.test.mjs
 
       - name: Verify npm trusted publishing contract
         run: node --test .github/package-registry/verify-npm-trusted-publishing.test.mjs
