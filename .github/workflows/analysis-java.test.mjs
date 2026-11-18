@@ -37,6 +37,10 @@ test('both Java scans use the pinned Maven scanner and await quality gates', () 
     assert.match(scan, /-Dsonar\.qualitygate\.wait=true/);
     assert.doesNotMatch(scan, /\|\| true|continue-on-error: true|-Pcoverage/);
   }
+  const cloud = step(sonar, 'Build and run SonarCloud analysis');
+  assert.match(cloud, /GITHUB_REF_NAME: \$\{\{ github\.event_name != 'pull_request' && github\.ref == 'refs\/heads\/develop' && 'master' \|\| github\.ref_name \}\}/);
+  assert.match(cloud, /-Dsonar\.branch\.name=master/);
+  assert.doesNotMatch(step(sonar, 'Run SonarQube Server analysis'), /sonar\.branch\.name/);
   assert.match(step(sonar, 'Run SonarQube Server analysis'), /if: \$\{\{ success\(\) \|\| failure\(\) \}\}/);
   assert.match(step(sonar, 'Download Dependency Check report (for SonarQube Server)'), /if: \$\{\{ success\(\) \|\| failure\(\) \}\}/);
 });

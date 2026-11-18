@@ -18,6 +18,8 @@ on:
       - '.github/scripts/ensure-toggly-segments-dist*.mjs'
       - '.github/scripts/wait-for-npm-version.sh'
       - '.github/scripts/wait-for-npm-version.test.mjs'
+      - '.github/scripts/npm-publish-if-absent.sh'
+      - '.github/scripts/npm-publish-if-absent.test.mjs'
       - '.github/workflows/analysis-nuxt.test.mjs'
       - '.github/workflows/analysis-python.test.mjs'
       - '.github/workflows/analysis-rust.test.mjs'
@@ -46,6 +48,8 @@ on:
       - '.github/scripts/ensure-toggly-segments-dist*.mjs'
       - '.github/scripts/wait-for-npm-version.sh'
       - '.github/scripts/wait-for-npm-version.test.mjs'
+      - '.github/scripts/npm-publish-if-absent.sh'
+      - '.github/scripts/npm-publish-if-absent.test.mjs'
       - '.github/workflows/analysis-nuxt.test.mjs'
       - '.github/workflows/analysis-python.test.mjs'
       - '.github/workflows/analysis-rust.test.mjs'
@@ -86,6 +90,9 @@ jobs:
 
       - name: Verify npm trusted publishing contract
         run: node --test .github/package-registry/verify-npm-trusted-publishing.test.mjs
+
+      - name: Verify npm publish skips versions already on the registry
+        run: node --test .github/scripts/npm-publish-if-absent.test.mjs
 
       - name: Install pnpm for release selection contracts
         uses: pnpm/action-setup@v6

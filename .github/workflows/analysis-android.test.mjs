@@ -289,6 +289,10 @@ test('preserves Android Java matrix, Gradle checks, native telemetry coverage an
       '-Dsonar.python.coverage.reportPaths=coverage-artifacts/**/coverage.xml',
     ]) assert.ok(scan.includes(arg), `${name}: ${arg}`);
   }
+  const cloud = step(sonar, 'SonarCloud Scan');
+  assert.match(cloud, /GITHUB_REF_NAME: \$\{\{ github\.event_name != 'pull_request' && github\.ref == 'refs\/heads\/develop' && 'master' \|\| github\.ref_name \}\}/);
+  assert.match(cloud, /-Dsonar\.branch\.name=master/);
+  assert.doesNotMatch(step(sonar, 'SonarQube Server Scan'), /sonar\.branch\.name/);
   assert.match(step(sonar, 'SonarQube Server Scan'), /-Dsonar.dependencyCheck.reportPath=dependency-check-reports\/dependency-check-report.xml/);
   const owasp = step(job('dependency-check'), 'Run OWASP Dependency Check');
   for (const arg of ['--disableAssembly', '--disableRubygems', '--disableBundleAudit', '--disableNodeJS', '--disableNodeAudit', '--disablePyPkg', '--disablePyDist']) assert.ok(owasp.includes(arg));

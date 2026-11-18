@@ -324,7 +324,11 @@ test('preserves Python package matrices, host checks, coverage XML and precise S
     ]) assert.ok(scan.includes(arg), `${name}: ${arg}`);
     assert.match(scan, /-Dsonar.exclusions=.*\*\*\/tests\/\*\*.*\*\*\/telemetry\/pb\/\*\*/);
   }
-  assert.match(step(sonar, 'SonarCloud Scan'), /-Dsonar.organization=ops-ai/);
+  const cloud = step(sonar, 'SonarCloud Scan');
+  assert.match(cloud, /-Dsonar.organization=ops-ai/);
+  assert.match(cloud, /GITHUB_REF_NAME: \$\{\{ github\.event_name != 'pull_request' && github\.ref == 'refs\/heads\/develop' && 'master' \|\| github\.ref_name \}\}/);
+  assert.match(cloud, /-Dsonar\.branch\.name=master/);
+  assert.doesNotMatch(step(sonar, 'SonarQube Server Scan'), /sonar\.branch\.name/);
   assert.match(step(sonar, 'SonarQube Server Scan'), /-Dsonar.dependencyCheck.reportPath=dependency-check-reports\/dependency-check-report.xml/);
   const owasp = step(job('dependency-check'), 'Run OWASP Dependency Check');
   for (const arg of ['--nvdApiKey ${{ secrets.NVD_API_KEY }}', '--enableExperimental', '--disableAssembly', '--disableRubygems', '--disableBundleAudit', '--disableNodeJS', '--disableNodeAudit']) assert.ok(owasp.includes(arg));
