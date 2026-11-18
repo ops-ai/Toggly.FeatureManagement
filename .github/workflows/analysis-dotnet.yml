@@ -196,7 +196,8 @@ jobs:
               --collect:"XPlat Code Coverage" \
               --results-directory ./TestResults \
               --logger "trx;LogFileName=parity-${framework}.trx" \
-              -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+              -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover \
+              RunConfiguration.TreatNoTestsAsError=true
             echo "::endgroup::"
           done
 
