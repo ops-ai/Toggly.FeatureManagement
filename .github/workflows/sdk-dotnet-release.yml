@@ -51,7 +51,9 @@ jobs:
   # rerun refuses the existing fixed-name candidate before signing or pushing;
   # start a new dispatch for new manifest/registry decisions.
   validate:
-    runs-on: ubuntu-latest
+    # ubuntu-latest is 26.04 and does not provide Microsoft.AspNetCore.App 3.1 or 5.0.
+    # Solution `dotnet test` still executes Parity.Tests on netcoreapp3.1 and net5.0.
+    runs-on: ubuntu-22.04
     outputs:
       publish: ${{ steps.plan.outputs.publish }}
     steps:
@@ -60,7 +62,10 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
         with:
+          # Match analysis-dotnet.yml: every SDK the solution tests and packs.
           dotnet-version: |
+            3.1.x
+            5.0.x
             6.0.x
             7.0.x
             8.0.x
