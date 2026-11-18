@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.3.3 - 2026-11-04
 
 ### Fixed
 - **Behavior:** Targeting default rollout of **100%** now enables for anonymous

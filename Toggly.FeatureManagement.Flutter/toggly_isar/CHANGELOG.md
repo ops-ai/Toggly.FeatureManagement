@@ -1,7 +1,10 @@
-## Unreleased
+## 0.6.0
+
+2026-11-04
 
 ### Changed
 - **Breaking:** drop Dart 2 / Flutter <3.22 support. Declared floors are now `sdk: '>=3.4.0 <4.0.0'` and `flutter: '>=3.22.0'` (matches `feature_flags_toggly`).
+- Depends on `feature_flags_toggly` `>=2.0.0 <3.0.0` (Dart 3.4 / Flutter 3.22 floor).
 - Transitive: resolves `equatable` `^3.0.0` via local `feature_flags_toggly` (no direct dependency).
 - Dev tooling: `flutter_lints`/`lints` span Dart 3.4 floor through 6.x (`>=3.0.0 <7.0.0` / `>=2.1.1 <7.0.0`).
 

@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 2.4.0
+
+2026-11-04
 
 ### Changed
 - `toggly-cache-redis-jedis8` and its packed host fixture resolve Jedis **8.0.2**

@@ -1,3 +1,13 @@
+## 0.14.0
+
+2026-11-04
+
+### Changed
+- Declare Node `>=22` (Node 18 and 20 dropped as EOL). CI unit matrix and packed
+  hosts now exercise Node 22, 24, and 26 (#857).
+- Add mocked evaluated-signed API-contract evaluation tests for public flag
+  evaluation (#857).
+
 ## 0.13.0
 
 2026-10-12

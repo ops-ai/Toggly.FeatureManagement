@@ -2,7 +2,7 @@
 
 ## 0.13.3
 
-2026-11-02
+2026-11-04
 
 ### Changed
 - Go module floor raised to **1.26** (Go 1.25 is EOL). CI tests Go 1.26 and
@@ -20,6 +20,12 @@
   against `toggly/eval` (known-failure skip hook if a fixture diverges).
 - Segment membership contract smoke loading
   `tests/segment-membership/contract.json` against `SegmentMembershipClient`.
+
+### Fixed
+- Snapshot `DisableAutoCreateTable` correctly skips `CREATE TABLE IF NOT EXISTS`
+  for Postgres and SQLite. `AutoCreateTable` remains a deprecated no-op for
+  struct-literal compatibility (#853).
+
 
 ## 0.13.2
 

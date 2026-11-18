@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.5.0
+
+2026-11-04
 
 ### Changed
 - Widen `@nuxt/kit` (and `@nuxt/schema` for local typing) to `^3.16.0 || ^4.0.0` so Nuxt 4 hosts resolve kit 4.x while Nuxt 3 keeps the 3.16+ floor.

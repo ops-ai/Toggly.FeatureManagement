@@ -1,4 +1,6 @@
-## Unreleased
+## 2.0.0
+
+2026-11-04
 
 ### Changed
 - **Breaking:** drop Dart 2 / Flutter &lt;3.22 support. Declared floors are now `sdk: '>=3.4.0 <4.0.0'` and `flutter: '>=3.22.0'`.

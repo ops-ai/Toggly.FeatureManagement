@@ -60,7 +60,11 @@ permissions:
   id-token: write
 
 concurrency:
-  group: flutter-sdk-release
+  # GitHub cancels older *pending* runs in a group even when
+  # cancel-in-progress is false. One shared group let a later provider tag
+  # push cancel the still-pending core publish. Tag publishes each get their
+  # own group; branch pushes stay serialized with each other.
+  group: ${{ github.ref_type == 'tag' && format('flutter-sdk-release-{0}', github.ref) || 'flutter-sdk-release' }}
   cancel-in-progress: false
 
 env:
@@ -448,7 +452,7 @@ jobs:
       needs.validate.outputs.action == 'publish' &&
       github.ref_type == 'tag'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Verify tag matches manifest version
         run: |
@@ -487,6 +491,25 @@ jobs:
           channel: 'stable'
 
       # Provider packages resolve feature_flags_toggly from pub.dev when publishing.
+      # Tag workflows run alongside each other, so wait until the core version
+      # in this checkout is actually on pub.dev before pub get.
+      - name: Wait for core SDK on pub.dev
+        if: needs.validate.outputs.is_provider == 'true'
+        run: |
+          set -euo pipefail
+          VERSION=$(awk '/^version:/ {print $2; exit}' "${FLUTTER_ROOT_DIR}/toggly/pubspec.yaml")
+          echo "Waiting for feature_flags_toggly ${VERSION}"
+          for attempt in $(seq 1 40); do
+            if curl -fsS "https://pub.dev/api/packages/feature_flags_toggly/versions/${VERSION}" >/dev/null; then
+              echo "feature_flags_toggly ${VERSION} is on pub.dev"
+              exit 0
+            fi
+            echo "attempt ${attempt}/40: not published yet"
+            sleep 15
+          done
+          echo "::error::feature_flags_toggly ${VERSION} was not on pub.dev before provider publish"
+          exit 1
+
       - name: Install dependencies
         working-directory: ${{ env.FLUTTER_ROOT_DIR }}/${{ needs.validate.outputs.dir }}
         run: |
