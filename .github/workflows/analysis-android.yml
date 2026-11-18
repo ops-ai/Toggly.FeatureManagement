@@ -123,14 +123,18 @@ jobs:
         working-directory: ${{ env.SDK_ROOT }}
         run: chmod +x gradlew
 
+      # Always invoke Kover directly. Do not probe with `gradlew tasks --all`:
+      # that task graph currently fails on toggly-compose release Compose Preview
+      # (`generateReleaseComposePreviewRunfiles` requires enableUnitTest), the
+      # probe exited non-zero, and CI silently fell back to `./gradlew test`
+      # without writing JaCoCo/Kover XML — Sonar then saw new_coverage=0.0.
       - name: Run tests with coverage
         working-directory: ${{ env.SDK_ROOT }}
         run: |
-          # Do not probe the task list first. Listing every task configures
-          # the release Compose preview task, which fails because release unit
-          # tests are disabled, and that hidden failure used to skip Kover.
-          # Debug reports are build/reports/kover/reportDebug.xml (Kover 0.9).
-          ./gradlew testDebugUnitTest koverXmlReportDebug
+          ./gradlew testDebugUnitTest koverXmlReport
+          echo "Kover XML reports:"
+          find . -path '*/build/reports/kover/report.xml' -type f -print
+          test -f build/reports/kover/report.xml
 
       - uses: actions/setup-python@v7
         with:
@@ -161,7 +165,7 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:
-          files: ${{ env.SDK_ROOT }}/**/build/reports/kover/reportDebug.xml
+          files: ${{ env.SDK_ROOT }}/build/reports/kover/report.xml
           flags: android-sdk
           fail_ci_if_error: false
         env:
@@ -169,16 +173,16 @@ jobs:
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
-        if: always()
         with:
           name: android-coverage
           path: |
-            ${{ env.SDK_ROOT }}/**/build/reports/kover/reportDebug.xml
+            ${{ env.SDK_ROOT }}/build/reports/kover/report.xml
+            ${{ env.SDK_ROOT }}/*/build/reports/kover/report.xml
             ${{ env.SDK_ROOT }}/acceptance/public-telemetry-host/app/build/reports/coverage/androidTest/debug/connected/report.xml
             ${{ env.SDK_ROOT }}/acceptance/public-telemetry-host/app/build/reports/androidTests/connected/device-diagnostics.txt
             ${{ env.SDK_ROOT }}/acceptance/public-telemetry-host/coverage.xml
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   build-samples:
     runs-on: ubuntu-latest
@@ -334,7 +338,18 @@ jobs:
         with:
           name: android-coverage
           path: coverage-artifacts/
-        continue-on-error: true
+
+      - name: Verify Kover coverage arrived for Sonar
+        run: |
+          shopt -s globstar nullglob
+          reports=(coverage-artifacts/**/build/reports/kover/report.xml)
+          if (( ${#reports[@]} == 0 )); then
+            echo "Missing Kover XML under coverage-artifacts/ (Sonar new_coverage would be 0.0)"
+            find coverage-artifacts -type f -print || true
+            exit 1
+          fi
+          printf 'Found Kover reports:\n'
+          printf '  %s\n' "${reports[@]}"
 
       - name: Rebase Python coverage paths for Sonar
         run: |
@@ -398,7 +413,7 @@ jobs:
             -Dsonar.sources=${{ env.SDK_ROOT }}
             -Dsonar.exclusions=**/build/**,**/test/**,**/androidTest/**,**/*.bak
             -Dsonar.test.inclusions=**/src/test/**,**/src/androidTest/**,**/tool/test_*.py
-            -Dsonar.coverage.jacoco.xmlReportPaths=coverage-artifacts/**/build/reports/kover/reportDebug.xml,coverage-artifacts/**/build/reports/coverage/androidTest/debug/connected/report.xml
+            -Dsonar.coverage.jacoco.xmlReportPaths=coverage-artifacts/**/build/reports/kover/report.xml,coverage-artifacts/**/build/reports/coverage/androidTest/debug/connected/report.xml
             -Dsonar.python.coverage.reportPaths=coverage-artifacts/**/coverage.xml
 
       - name: Validate SonarQube Server credentials
@@ -424,7 +439,7 @@ jobs:
             -Dsonar.sources=${{ env.SDK_ROOT }}
             -Dsonar.exclusions=**/build/**,**/test/**,**/androidTest/**,**/*.bak
             -Dsonar.test.inclusions=**/src/test/**,**/src/androidTest/**,**/tool/test_*.py
-            -Dsonar.coverage.jacoco.xmlReportPaths=coverage-artifacts/**/build/reports/kover/reportDebug.xml,coverage-artifacts/**/build/reports/coverage/androidTest/debug/connected/report.xml
+            -Dsonar.coverage.jacoco.xmlReportPaths=coverage-artifacts/**/build/reports/kover/report.xml,coverage-artifacts/**/build/reports/coverage/androidTest/debug/connected/report.xml
             -Dsonar.python.coverage.reportPaths=coverage-artifacts/**/coverage.xml
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
 
