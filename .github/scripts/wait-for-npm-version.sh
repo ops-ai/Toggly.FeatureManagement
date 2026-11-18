@@ -4,7 +4,7 @@
 set -euo pipefail
 
 SPEC="${1:?usage: wait-for-npm-version.sh <name@version> [max_retries] [sleep_seconds]}"
-MAX_RETRIES="${2:-30}"
+MAX_RETRIES="${2:-60}"
 SLEEP_SECONDS="${3:-6}"
 RETRY=0
 
