@@ -27,7 +27,9 @@ impl SegmentMembershipClient {
         Self {
             app_key: app_key.into(),
             base_url: base.to_string(),
-            http: Client::new(),
+            http: crate::ws_tls::apply_http_tls(Client::builder())
+                .build()
+                .expect("segment membership HTTP client"),
         }
     }
 

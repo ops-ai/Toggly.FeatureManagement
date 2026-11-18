@@ -230,11 +230,11 @@ async fn feature_guard_allows_known_features_and_negates_unknown_features() {
             .status()
             .is_success()
     );
-    assert_eq!(
+    // actix-web 4.7 answers 404; 4.18+ answers 405 when a guard rejects a matched path.
+    assert_guard_rejected(
         test::call_service(&app, test::TestRequest::get().uri("/unknown").to_request())
             .await
             .status(),
-        actix_web::http::StatusCode::NOT_FOUND
     );
     assert!(
         test::call_service(&app, test::TestRequest::get().uri("/negated").to_request())
@@ -242,16 +242,23 @@ async fn feature_guard_allows_known_features_and_negates_unknown_features() {
             .status()
             .is_success()
     );
-    assert_eq!(
+    assert_guard_rejected(
         test::call_service(
             &app,
-            test::TestRequest::get().uri("/double-negated").to_request()
+            test::TestRequest::get().uri("/double-negated").to_request(),
         )
         .await
         .status(),
-        actix_web::http::StatusCode::NOT_FOUND
     );
 
     drop(app);
     data.get_ref().close().await;
+}
+
+fn assert_guard_rejected(status: actix_web::http::StatusCode) {
+    assert!(
+        status == actix_web::http::StatusCode::NOT_FOUND
+            || status == actix_web::http::StatusCode::METHOD_NOT_ALLOWED,
+        "rejected feature guard should be 404 (actix-web 4.7) or 405 (actix-web 4.18+), got {status}"
+    );
 }

@@ -1,8 +1,8 @@
 use axum::{routing::get, Router};
-use toggly_axum08::TogglyLayer;
+use toggly_axum::TogglyLayer;
 
 async fn home() -> &'static str {
-    "Toggly Axum 0.8 host"
+    "Toggly Axum host"
 }
 
 async fn gated() -> &'static str {
@@ -16,5 +16,5 @@ async fn main() {
         get(gated).layer(TogglyLayer::require("example-feature")),
     );
 
-    println!("toggly-axum08 packaged host compiled");
+    println!("toggly-axum packaged host compiled");
 }

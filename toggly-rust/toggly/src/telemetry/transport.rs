@@ -72,7 +72,7 @@ mod native {
             let endpoint = format!("https://{target}");
             let channel = Channel::from_shared(endpoint)
                 .map_err(|e| format!("invalid metrics base URL: {e}"))?
-                .tls_config(ClientTlsConfig::new())
+                .tls_config(ClientTlsConfig::new().with_native_roots())
                 .map_err(|e| format!("TLS config failed: {e}"))?
                 .connect()
                 .await

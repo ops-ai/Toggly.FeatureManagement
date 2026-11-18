@@ -67,10 +67,12 @@ pub struct DefinitionsProvider {
 impl DefinitionsProvider {
     /// Create a new definitions provider.
     pub fn new(config: TogglyConfig) -> crate::Result<Self> {
-        let http_client = reqwest::Client::builder()
-            .timeout(config.http_timeout)
-            .user_agent(sdk_user_agent())
-            .build()?;
+        let http_client = crate::ws_tls::apply_http_tls(
+            reqwest::Client::builder()
+                .timeout(config.http_timeout)
+                .user_agent(sdk_user_agent()),
+        )
+        .build()?;
 
         Ok(Self {
             config,
@@ -194,7 +196,19 @@ impl DefinitionsProvider {
 
                     let ws_url = Self::build_ws_url(&ws_config, ws_etag.read().as_deref());
                     debug!(url = %ws_url, "Connecting WebSocket");
-                    match tokio_tungstenite::connect_async(&ws_url).await {
+                    // Name aws-lc-rs explicitly: with `telemetry` enabled, rustls
+                    // also compiles in `ring` (tonic tls-ring), and
+                    // `connect_async`'s default ClientConfig::builder() panics.
+                    // Do not install_default() — that would override the host app.
+                    let connector = crate::ws_tls::live_updates_tls_connector();
+                    match tokio_tungstenite::connect_async_tls_with_config(
+                        ws_url.as_str(),
+                        None,
+                        false,
+                        Some(connector),
+                    )
+                    .await
+                    {
                         Ok((ws_stream, _response)) => {
                             ws_connected_flag.store(true, Ordering::SeqCst);
                             *ws_last_fallback.write() = Instant::now();

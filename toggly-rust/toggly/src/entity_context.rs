@@ -106,9 +106,9 @@ pub async fn register_entity_contexts_at_startup(config: &TogglyConfig) {
     let base = config.base_url.trim_end_matches('/');
     let url = format!("{}/sdk/{}/contexts", base, config.app_key);
     let payload = serde_json::json!({ "contexts": regs });
-    let client = reqwest::Client::builder()
-        .timeout(config.http_timeout)
-        .build();
+    let client =
+        crate::ws_tls::apply_http_tls(reqwest::Client::builder().timeout(config.http_timeout))
+            .build();
     let Ok(client) = client else {
         return;
     };
