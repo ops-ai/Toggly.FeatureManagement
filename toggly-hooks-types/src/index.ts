@@ -103,6 +103,7 @@ export type {
   EntityGate,
   EntityGateRule,
   EvaluatedDefinitionValue,
+  EvaluatedEnabledEnvelope,
   EvaluatedDefinitions,
   TogglyEntityContext,
   EntityContextMapper,

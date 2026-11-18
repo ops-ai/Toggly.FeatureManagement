@@ -62,7 +62,7 @@ export type { TogglyEvaluationContext, EvaluationUrlMode, } from './evaluation-c
 export { MAX_EVALUATION_CLAIMS, appendEvaluationContext, buildEvaluatedSignedUrl, evaluationContextCacheKey, normalizeEvaluationClaims, } from './evaluation-context';
 export type { EvaluationContextChangeState, EvaluationContextChangeBindings, SetEvaluationContextSafelyOptions, TogglyServiceContextHost, BrowserSdkContextRunner, } from './set-evaluation-context';
 export { bindEvaluationContextChangeState, bindTogglyServiceContextState, setBrowserSdkEvaluationContext, setEvaluationContextSafely, } from './set-evaluation-context';
-export type { EntityGate, EntityGateRule, EvaluatedDefinitionValue, EvaluatedDefinitions, TogglyEntityContext, EntityContextMapper, } from './entity-gate';
+export type { EntityGate, EntityGateRule, EvaluatedDefinitionValue, EvaluatedEnabledEnvelope, EvaluatedDefinitions, TogglyEntityContext, EntityContextMapper, } from './entity-gate';
 export type { CacheLruEntry, CacheLruIndex, } from './cache-lru';
 export { emptyCacheLruIndex, isCacheLruEnabled, parseCacheLruIndex, removeCacheLruKeys, selectCacheLruKeysToEvict, serializeCacheLruIndex, touchCacheLruKey, } from './cache-lru';
 export { serializeJsonForInlineScript } from './serialize-for-inline-script';

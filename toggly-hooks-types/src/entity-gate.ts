@@ -10,7 +10,12 @@ export interface EntityGate {
   rules: EntityGateRule[]
 }
 
-export type EvaluatedDefinitionValue = boolean | EntityGate
+/** Evaluated-signed definition envelope (`{ enabled: boolean }`), not a bare boolean. */
+export interface EvaluatedEnabledEnvelope {
+  enabled: boolean
+}
+
+export type EvaluatedDefinitionValue = boolean | EvaluatedEnabledEnvelope | EntityGate
 
 export type EvaluatedDefinitions = Record<string, EvaluatedDefinitionValue>
 
@@ -60,6 +65,15 @@ export function resolveEvaluatedDefinition(
   }
   if (value === false) {
     return false
+  }
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    Object.prototype.hasOwnProperty.call(value, 'enabled') && // NOSONAR typescript:S6653 — Object.hasOwn is ES2022; package target is ES2020
+    typeof (value as EvaluatedEnabledEnvelope).enabled === 'boolean' &&
+    !isEntityGate(value)
+  ) {
+    return value.enabled
   }
   if (!isEntityGate(value)) {
     return false
@@ -126,7 +140,7 @@ function findAttributeKey(
   attributes: Record<string, unknown>,
   property: string,
 ): string | undefined {
-  if (Object.hasOwn(attributes, property)) {
+  if (Object.prototype.hasOwnProperty.call(attributes, property)) { // NOSONAR typescript:S6653 — Object.hasOwn is ES2022; package target is ES2020
     return property
   }
   const expected = property.toLowerCase()

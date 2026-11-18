@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.7] - 2026-11-05
+
+### Fixed
+
+- `resolveEvaluatedDefinition` / `toBooleanDefinitions` now treat evaluated-signed
+  `{ enabled: boolean }` envelopes as booleans instead of failing closed to
+  `false` [OPS-2052].
+
 ## [1.4.6] - 2026-09-27
 
 ### Fixed
