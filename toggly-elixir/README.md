@@ -2,9 +2,9 @@
 
 | Package | Purpose | Version |
 | --- | --- | --- |
-| [toggly](apps/toggly) | OTP client, ETS evaluation, catalog-local feature variants, signatures, snapshots, HTTP/WebSocket updates, usage and Telemetry | 0.4.0 |
-| [toggly_phoenix](apps/toggly_phoenix) | Request-local Plug context, route gates, and ambient `get_variant` | 0.2.0 |
-| [toggly_live_view](apps/toggly_live_view) | Socket-local assigns, update/restart hooks and HEEx feature/fallback component | 0.1.0 |
+| [toggly](apps/toggly) | OTP client, ETS evaluation, catalog-local feature variants, signatures, snapshots, HTTP/WebSocket updates, usage and Telemetry | 0.7.2 |
+| [toggly_phoenix](apps/toggly_phoenix) | Request-local Plug context, route gates, and ambient `get_variant` | 0.3.1 |
+| [toggly_live_view](apps/toggly_live_view) | Socket-local assigns, update/restart hooks and HEEx feature/fallback component | 0.1.2 |
 
 Read the core README for setup, runtime requirements, exact filter parameters, lifecycle and security behavior. The three packages use Hex registry dependencies when published; umbrella paths are only a repository development arrangement.
 

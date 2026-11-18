@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2 — 2026-11-18
+
+### Changed
+- Republish with Elixir requirement `~> 1.18` (OTP 27+) so Hex consumers pick up
+  the floor widened on develop in #913. Hex cannot overwrite 0.1.1, which still
+  declares `~> 1.20`. No public API or flag-evaluation behavior changes.
+
 ## 0.1.1 — 2026-09-16
 
 ### Changed

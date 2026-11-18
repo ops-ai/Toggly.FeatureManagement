@@ -4,7 +4,7 @@ defmodule TogglyLiveView.MixProject do
   def project do
     [
       app: :toggly_live_view,
-      version: "0.1.1",
+      version: "0.1.2",
       elixir: "~> 1.18",
       description: "Toggly feature flags for toggly live view",
       package: [

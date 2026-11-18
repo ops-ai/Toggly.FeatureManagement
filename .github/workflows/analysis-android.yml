@@ -123,14 +123,18 @@ jobs:
         working-directory: ${{ env.SDK_ROOT }}
         run: chmod +x gradlew
 
+      # Always invoke Kover directly. Do not probe with `gradlew tasks --all`:
+      # that task graph currently fails on toggly-compose release Compose Preview
+      # (`generateReleaseComposePreviewRunfiles` requires enableUnitTest), the
+      # probe exited non-zero, and CI silently fell back to `./gradlew test`
+      # without writing JaCoCo/Kover XML — Sonar then saw new_coverage=0.0.
       - name: Run tests with coverage
         working-directory: ${{ env.SDK_ROOT }}
         run: |
-          if ./gradlew tasks --all 2>/dev/null | grep -qE '( koverXmlReport|koverXmlReport )'; then
-            ./gradlew testDebugUnitTest koverXmlReport
-          else
-            ./gradlew test
-          fi
+          ./gradlew testDebugUnitTest koverXmlReport
+          echo "Kover XML reports:"
+          find . -path '*/build/reports/kover/report.xml' -type f -print
+          test -f build/reports/kover/report.xml
 
       - uses: actions/setup-python@v7
         with:
@@ -161,7 +165,7 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:
-          files: ${{ env.SDK_ROOT }}/**/build/reports/kover/report.xml
+          files: ${{ env.SDK_ROOT }}/build/reports/kover/report.xml
           flags: android-sdk
           fail_ci_if_error: false
         env:
@@ -169,16 +173,16 @@ jobs:
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
-        if: always()
         with:
           name: android-coverage
           path: |
-            ${{ env.SDK_ROOT }}/**/build/reports/kover/report.xml
+            ${{ env.SDK_ROOT }}/build/reports/kover/report.xml
+            ${{ env.SDK_ROOT }}/*/build/reports/kover/report.xml
             ${{ env.SDK_ROOT }}/acceptance/public-telemetry-host/app/build/reports/coverage/androidTest/debug/connected/report.xml
             ${{ env.SDK_ROOT }}/acceptance/public-telemetry-host/app/build/reports/androidTests/connected/device-diagnostics.txt
             ${{ env.SDK_ROOT }}/acceptance/public-telemetry-host/coverage.xml
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   build-samples:
     runs-on: ubuntu-latest
@@ -334,7 +338,18 @@ jobs:
         with:
           name: android-coverage
           path: coverage-artifacts/
-        continue-on-error: true
+
+      - name: Verify Kover coverage arrived for Sonar
+        run: |
+          shopt -s globstar nullglob
+          reports=(coverage-artifacts/**/build/reports/kover/report.xml)
+          if (( ${#reports[@]} == 0 )); then
+            echo "Missing Kover XML under coverage-artifacts/ (Sonar new_coverage would be 0.0)"
+            find coverage-artifacts -type f -print || true
+            exit 1
+          fi
+          printf 'Found Kover reports:\n'
+          printf '  %s\n' "${reports[@]}"
 
       - name: Rebase Python coverage paths for Sonar
         run: |
