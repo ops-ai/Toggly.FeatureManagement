@@ -99,6 +99,8 @@ if (command === "validate") {
           `${family.sdkRoot}/Toggly.FeatureManagement.sln`,
           "-c",
           "Release",
+          "--",
+          "RunConfiguration.TreatNoTestsAsError=true",
         ]);
       }
       continue;
