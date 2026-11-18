@@ -362,3 +362,34 @@ test('required jobs install GA .NET 11 and exercise net11.0 in the TFM matrix', 
   const props = readFileSync(new URL('../../Toggly.FeatureManagement.NET/Directory.Build.props', import.meta.url), 'utf8');
   assert.doesNotMatch(props, /TogglyNet11Tfm|ExcludeNet11Preview|IncludeNet11Preview/);
 });
+
+function jobBlock(text, id, nextId) {
+  const start = text.indexOf(`\n  ${id}:\n`);
+  assert.notEqual(start, -1, `missing job ${id}`);
+  const end = text.indexOf(`\n  ${nextId}:\n`, start + 1);
+  assert.notEqual(end, -1, `missing job ${nextId} after ${id}`);
+  return text.slice(start, end);
+}
+
+function sdkChannels(job) {
+  const match = job.match(/dotnet-version:\s*\|\n((?:[ \t]+\d+\.\d+\.x\n)+)/);
+  assert.ok(match, 'missing multiline SDK list');
+  return match[1].trim().split(/\s+/);
+}
+
+test('release validate installs the ASP.NET Core runtimes the solution tests execute', () => {
+  const release = readFileSync(new URL('./sdk-dotnet-release.yml', import.meta.url), 'utf8');
+  const validate = jobBlock(release, 'validate', 'sign');
+  const analyze = jobBlock(workflow, 'analyze', 'dependency-check');
+  // ubuntu-latest is 26.04 and has no Microsoft.AspNetCore.App 3.1 or 5.0.
+  // Parity.Tests still runs those TFMs via `dotnet test` on the solution.
+  assert.match(validate, /runs-on: ubuntu-22\.04/);
+  const installed = sdkChannels(validate);
+  for (const channel of sdkChannels(analyze)) {
+    assert.ok(installed.includes(channel), `validate missing analysis SDK ${channel}`);
+  }
+  assert.ok(installed.includes('3.1.x'));
+  assert.ok(installed.includes('5.0.x'));
+  assert.match(jobBlock(release, 'sign', 'publish'), /runs-on: ubuntu-latest/);
+  assert.match(jobBlock(release, 'publish', 'release'), /runs-on: ubuntu-latest/);
+});
