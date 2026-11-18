@@ -26,6 +26,7 @@ pub(crate) fn live_updates_tls_connector() -> Connector {
 /// bundled webpki roots. HTTPS (reqwest) uses this directly: reqwest 0.13's
 /// `rustls` feature verifies with `rustls-platform-verifier`, which fails in
 /// images that ship no CA bundle.
+#[cfg_attr(feature = "native-tls", allow(dead_code))]
 pub(crate) fn webpki_rustls_client_config() -> ClientConfig {
     let mut roots = RootCertStore::empty();
     roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
@@ -46,6 +47,21 @@ pub(crate) fn live_updates_rustls_client_config_with_roots(
     roots: RootCertStore,
 ) -> Arc<ClientConfig> {
     Arc::new(rustls_client_config(roots))
+}
+
+/// Apply the HTTPS TLS backend selected by Cargo features.
+///
+/// Default `rustls-tls` keeps bundled webpki roots. `native-tls` uses the OS
+/// or enterprise certificate store instead of overriding that choice.
+pub(crate) fn apply_http_tls(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
+    #[cfg(feature = "native-tls")]
+    {
+        builder.tls_backend_native()
+    }
+    #[cfg(not(feature = "native-tls"))]
+    {
+        builder.tls_backend_preconfigured(webpki_rustls_client_config())
+    }
 }
 
 fn rustls_client_config(roots: RootCertStore) -> ClientConfig {
