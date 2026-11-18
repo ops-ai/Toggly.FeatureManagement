@@ -247,10 +247,16 @@ jobs:
           manifest: Toggly.FeatureManagement.Java/pom.xml
           suffix: ${{ vars.SONAR_PROJECT_VERSION_SUFFIX }}
 
+      # toggly-sdks-java's main branch is still named master. A develop
+      # push is a short-lived branch, and the org cannot read quality-gate
+      # status for those. Publish develop pushes as master. Pull requests
+      # keep automatic PR analysis. The self-hosted server scan stays on develop.
       - name: Build and run SonarCloud analysis
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_REF: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' && 'refs/heads/master' || github.ref }}
+          GITHUB_REF_NAME: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' && 'master' || github.ref_name }}
         run: |
           test -n "${SONAR_TOKEN}" || { echo "SonarCloud token is required"; exit 1; }
           mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:5.5.0.6356:sonar \
@@ -260,6 +266,7 @@ jobs:
             -Dsonar.projectName="Toggly SDKs - Java" \
             -Dsonar.host.url=https://sonarcloud.io \
             -Dsonar.token="${SONAR_TOKEN}" \
+            ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' && format('-Dsonar.branch.name=master -Dsonar.scm.revision={0}', github.sha) || '' }} \
             -Dsonar.qualitygate.wait=true \
             -Dsonar.exclusions="**/target/**,**/test/**,**/host-fixtures/**" \
             -Dsonar.test.inclusions="**/test/**" \

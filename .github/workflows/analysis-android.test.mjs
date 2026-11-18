@@ -253,14 +253,15 @@ test('preserves Android Java matrix, Gradle checks, native telemetry coverage an
   assert.match(step(job('api-compatibility'), 'Check API compatibility'), /\.\/gradlew apiCheck/);
   const coverage = job('code-coverage');
   assert.match(coverage, /runs-on: macos-15-intel/);
-  assert.match(step(coverage, 'Run tests with coverage'), /\.\/gradlew testDebugUnitTest koverXmlReport/);
+  assert.match(step(coverage, 'Run tests with coverage'), /\.\/gradlew testDebugUnitTest koverXmlReportDebug/);
+  assert.doesNotMatch(step(coverage, 'Run tests with coverage'), /gradlew tasks/);
   const collector = step(coverage, 'Test the public acceptance collector with coverage');
   for (const command of ['coverage==7.10.7', '--source=tool -m unittest discover', "--omit='tool/test_*.py' --fail-under=80", "--omit='tool/test_*.py' -o coverage.xml"]) assert.ok(collector.includes(command));
   const native = step(coverage, 'Measure public acceptance Activity coverage on Android API 36');
   assert.match(native, /api-level: 36/);
   assert.match(native, /script: bash tool\/run_android_coverage.sh/);
   const artifact = step(coverage, 'Upload coverage artifact');
-  for (const path of ['name: android-coverage', '**/build/reports/kover/report.xml', 'app/build/reports/coverage/androidTest/debug/connected/report.xml', 'app/build/reports/androidTests/connected/device-diagnostics.txt', 'acceptance/public-telemetry-host/coverage.xml']) assert.ok(artifact.includes(path));
+  for (const path of ['name: android-coverage', '**/build/reports/kover/reportDebug.xml', 'app/build/reports/coverage/androidTest/debug/connected/report.xml', 'app/build/reports/androidTests/connected/device-diagnostics.txt', 'acceptance/public-telemetry-host/coverage.xml']) assert.ok(artifact.includes(path));
   const sonar = job('sonar');
   assert.match(step(sonar, 'Resolve Sonar project version'), /manifest: Toggly.FeatureManagement.Android\/build.gradle.kts/);
   assert.match(step(sonar, 'Rebase Python coverage paths for Sonar'), /roots\[0\]\.text = str\(source\)/);
@@ -270,10 +271,14 @@ test('preserves Android Java matrix, Gradle checks, native telemetry coverage an
       '-Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}', '-Dsonar.sources=${{ env.SDK_ROOT }}',
       '-Dsonar.exclusions=**/build/**,**/test/**,**/androidTest/**,**/*.bak',
       '-Dsonar.test.inclusions=**/src/test/**,**/src/androidTest/**,**/tool/test_*.py',
-      '-Dsonar.coverage.jacoco.xmlReportPaths=coverage-artifacts/**/build/reports/kover/report.xml,coverage-artifacts/**/build/reports/coverage/androidTest/debug/connected/report.xml',
+      '-Dsonar.coverage.jacoco.xmlReportPaths=coverage-artifacts/**/build/reports/kover/reportDebug.xml,coverage-artifacts/**/build/reports/coverage/androidTest/debug/connected/report.xml',
       '-Dsonar.python.coverage.reportPaths=coverage-artifacts/**/coverage.xml',
     ]) assert.ok(scan.includes(arg), `${name}: ${arg}`);
   }
+  const cloud = step(sonar, 'SonarCloud Scan');
+  assert.match(cloud, /GITHUB_REF_NAME: \$\{\{ github\.event_name != 'pull_request' && github\.ref == 'refs\/heads\/develop' && 'master' \|\| github\.ref_name \}\}/);
+  assert.match(cloud, /-Dsonar\.branch\.name=master/);
+  assert.doesNotMatch(step(sonar, 'SonarQube Server Scan'), /sonar\.branch\.name/);
   assert.match(step(sonar, 'SonarQube Server Scan'), /-Dsonar.dependencyCheck.reportPath=dependency-check-reports\/dependency-check-report.xml/);
   const owasp = step(job('dependency-check'), 'Run OWASP Dependency Check');
   for (const arg of ['--disableAssembly', '--disableRubygems', '--disableBundleAudit', '--disableNodeJS', '--disableNodeAudit', '--disablePyPkg', '--disablePyDist']) assert.ok(owasp.includes(arg));
