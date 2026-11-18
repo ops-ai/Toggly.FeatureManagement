@@ -10,6 +10,11 @@ import {
   type FeatureFilter,
 } from './index'
 
+type SdkExpectation = {
+  outcome?: boolean | 'error'
+  allowedOutcomes?: boolean[]
+}
+
 type ParityFixture = {
   id: string
   description: string
@@ -19,6 +24,8 @@ type ParityFixture = {
   context?: EvalContext
   httpHeaders?: Record<string, string>
   expected: boolean
+  /** Optional per-SDK contract outcomes; toggly-eval asserts canonical `expected` only. */
+  sdkExpectations?: Record<string, SdkExpectation>
 }
 
 const fixturesDir = join(
@@ -75,6 +82,8 @@ describe('filter-parity golden fixtures', () => {
         requirementType: fixture.requirementType,
         filters: fixture.filters,
       }
+      // Canonical harness: assert `expected` only. Per-SDK entries in
+      // `sdkExpectations` (dotnet / node-core) are covered by those SDK suites.
       const actual = evaluateDefinition(def, buildContext(fixture))
       expect(actual).toBe(fixture.expected)
     })
