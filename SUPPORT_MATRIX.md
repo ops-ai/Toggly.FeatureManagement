@@ -24,6 +24,7 @@ Design: `Toggly.wiki/Home/Engineering/Plans/2026-09-28-Dual-Major-Host-Support-D
 | Vue (`@ops-ai/vue-feature-flags-toggly`) | `vue ^3.2.45` peer | 3.2.45 + 3.5.44 packed hosts (Node 22/24/26) | 3.5.44 | Maintain |
 | Svelte | `^4 \|\| ^5` | 4 + 5 | 5.x | Maintain |
 | SvelteKit | kit `^2 \|\| ^3` | 2.x, 3.1.0 packed host | 3.1.x | Maintain |
+| Solid | solid-js `^1.9`; Node `>=22.12` | unit 22/24/26 + SolidStart packed host (Node 24) | solid-js 1.9.18; Node 26 | Maintain; host fixture requires Node >=24 |
 | .NET core family | netstandard2.1…net11 | multi-TFM build + parity matrix | net11 | Maintain |
 | .NET Client / Desktop | net7–net11 | per-TFM tests | net11 | net6 / netstandard2.1 omitted (BCL shims) |
 | .NET Dashboard / Embedded | net8…net11 | unit + embedded consumer matrix | net11 | net8 floor (Razor) |

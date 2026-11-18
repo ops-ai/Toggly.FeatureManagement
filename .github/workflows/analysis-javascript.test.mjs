@@ -581,6 +581,14 @@ test('selects system Chrome before packed JavaScript browser host', () => {
   );
   assert.match(workflow, /CHROME_BIN=\/usr\/bin\/google-chrome/);
 });
+test('uploads SolidJS and JavaScript coverage only from the Node 22.x matrix row', () => {
+  const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
+  assert.match(
+    testJob,
+    /matrix\.sdk != 'Docusaurus' && \(\(matrix\.sdk != 'JavaScript' && matrix\.sdk != 'Angular' && matrix\.sdk != 'SolidJS' && matrix\.sdk != 'React'\) \|\| matrix\.node-version == '22\.x'\) && matrix\['skip-coverage-upload'\] != true/,
+  );
+});
+
 test('pins Vue, Svelte, and Astro unit rows off Node 26 jsdom localStorage gap', () => {
   for (const sdk of ['Vue', 'Svelte', 'Astro']) {
     const matched = selectAnalysis(sdk).testMatrix.include.filter((row) => row.sdk === sdk);
@@ -640,7 +648,7 @@ test('runs the vanilla JavaScript SDK on Node 22/24/26 and uploads coverage from
   const testJob = workflow.match(/\n  test:[\s\S]*?(?=\n  [a-z][\w-]*:)/)?.[0] ?? '';
   assert.match(
     testJob,
-    /matrix\.sdk != 'Docusaurus' && \(\(matrix\.sdk != 'JavaScript' && matrix\.sdk != 'Angular' && matrix\.sdk != 'React'\) \|\| matrix\.node-version == '22\.x'\)/,
+    /matrix\.sdk != 'Docusaurus' && \(\(matrix\.sdk != 'JavaScript' && matrix\.sdk != 'Angular' && matrix\.sdk != 'SolidJS' && matrix\.sdk != 'React'\) \|\| matrix\.node-version == '22\.x'\) && matrix\['skip-coverage-upload'\] != true/,
   );
 });
 
@@ -662,7 +670,7 @@ test('runs the Angular SDK on Node 22/24/26 and uploads coverage from 22.x', () 
   assert.match(testJob, /Verify packed Angular consumers in Chrome/);
   assert.match(
     testJob,
-    /matrix\.sdk != 'Docusaurus' && \(\(matrix\.sdk != 'JavaScript' && matrix\.sdk != 'Angular' && matrix\.sdk != 'React'\) \|\| matrix\.node-version == '22\.x'\)/,
+    /matrix\.sdk != 'Docusaurus' && \(\(matrix\.sdk != 'JavaScript' && matrix\.sdk != 'Angular' && matrix\.sdk != 'SolidJS' && matrix\.sdk != 'React'\) \|\| matrix\.node-version == '22\.x'\) && matrix\['skip-coverage-upload'\] != true/,
   );
 });
 
@@ -685,7 +693,7 @@ test('runs the React SDK on Node 22/24/26 with packed consumers and uploads cove
   assert.match(testJob, /npm run test:consumers/);
   assert.match(
     testJob,
-    /matrix\.sdk != 'Docusaurus' && \(\(matrix\.sdk != 'JavaScript' && matrix\.sdk != 'Angular' && matrix\.sdk != 'React'\) \|\| matrix\.node-version == '22\.x'\)/,
+    /matrix\.sdk != 'Docusaurus' && \(\(matrix\.sdk != 'JavaScript' && matrix\.sdk != 'Angular' && matrix\.sdk != 'SolidJS' && matrix\.sdk != 'React'\) \|\| matrix\.node-version == '22\.x'\) && matrix\['skip-coverage-upload'\] != true/,
   );
 });
 

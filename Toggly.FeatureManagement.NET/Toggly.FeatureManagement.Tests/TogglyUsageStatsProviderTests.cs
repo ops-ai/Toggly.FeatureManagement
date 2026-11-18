@@ -2884,6 +2884,20 @@ public class TogglyUsageStatsProviderTests : IDisposable
         var stats = GetPendingStats(_provider);
         Assert.Equal(1, stats[("InstantFail", (byte)TogglyUsageStatsProvider.StatType.Used)]);
         Assert.Equal(1, stats[("InstantFail", (byte)TogglyUsageStatsProvider.StatType.Error)]);
+        // Scope timing starts before the throw. A busy runner can cross 1ms, so this
+        // path may record a duration. The zero-duration skip is asserted directly below.
+        if (GetErrorDurationSums(_provider).TryGetValue("InstantFail", out var durationMs))
+            Assert.True(durationMs > 0);
+    }
+
+    [Fact]
+    public void RecordUsageScopeFailure_SkipsZeroDuration()
+    {
+        _provider = CreateProvider();
+        _provider.RecordUsageScopeFailure("InstantFail", 0);
+
+        var stats = GetPendingStats(_provider);
+        Assert.Equal(1, stats[("InstantFail", (byte)TogglyUsageStatsProvider.StatType.Error)]);
         Assert.False(GetErrorDurationSums(_provider).ContainsKey("InstantFail"));
     }
 
