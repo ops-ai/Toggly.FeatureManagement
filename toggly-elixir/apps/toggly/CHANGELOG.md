@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.2 — 2026-11-18
+
+### Changed
+- Republish with Elixir requirement `~> 1.18` (OTP 27+) so Hex consumers pick up
+  the floor widened on develop in #913. Hex cannot overwrite 0.7.1, which still
+  declares `~> 1.20`. No public API or flag-evaluation behavior changes.
+
+## 0.7.1
+
+2026-10-15
+
+### Fixed
+- `with_usage` catches `:exit` and `:throw` so process exits and throws record
+  error duration instead of leaving a dangling attempt [OPS-1758].
+
 ## 0.7.0
 
 2026-10-12
@@ -14,13 +29,6 @@
   `CpuUsage`, `GCHeapSize`, `ProcessCount`, `ExceptionCount`, and Linux
   `MemoryWorkingSet` every 10s into the metrics batch. Override with
   `:system_metrics_sampler` for tests.
-## 0.7.1
-
-2026-10-15
-
-### Fixed
-- `with_usage` catches `:exit` and `:throw` so process exits and throws record
-  error duration instead of leaving a dangling attempt [OPS-1758].
 
 ## 0.7.0
 

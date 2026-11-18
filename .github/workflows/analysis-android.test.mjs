@@ -253,15 +253,30 @@ test('preserves Android Java matrix, Gradle checks, native telemetry coverage an
   assert.match(step(job('api-compatibility'), 'Check API compatibility'), /\.\/gradlew apiCheck/);
   const coverage = job('code-coverage');
   assert.match(coverage, /runs-on: macos-15-intel/);
-  assert.match(step(coverage, 'Run tests with coverage'), /\.\/gradlew testDebugUnitTest koverXmlReport/);
+  const coverageRun = step(coverage, 'Run tests with coverage');
+  assert.match(coverageRun, /\.\/gradlew testDebugUnitTest koverXmlReport/);
+  assert.match(coverageRun, /test -f build\/reports\/kover\/report\.xml/);
+  assert.doesNotMatch(coverageRun, /tasks --all|gradlew test\b(?!Debug)/);
   const collector = step(coverage, 'Test the public acceptance collector with coverage');
   for (const command of ['coverage==7.10.7', '--source=tool -m unittest discover', "--omit='tool/test_*.py' --fail-under=80", "--omit='tool/test_*.py' -o coverage.xml"]) assert.ok(collector.includes(command));
   const native = step(coverage, 'Measure public acceptance Activity coverage on Android API 36');
   assert.match(native, /api-level: 36/);
   assert.match(native, /script: bash tool\/run_android_coverage.sh/);
   const artifact = step(coverage, 'Upload coverage artifact');
-  for (const path of ['name: android-coverage', '**/build/reports/kover/report.xml', 'app/build/reports/coverage/androidTest/debug/connected/report.xml', 'app/build/reports/androidTests/connected/device-diagnostics.txt', 'acceptance/public-telemetry-host/coverage.xml']) assert.ok(artifact.includes(path));
+  for (const path of [
+    'name: android-coverage',
+    'build/reports/kover/report.xml',
+    '*/build/reports/kover/report.xml',
+    'app/build/reports/coverage/androidTest/debug/connected/report.xml',
+    'app/build/reports/androidTests/connected/device-diagnostics.txt',
+    'acceptance/public-telemetry-host/coverage.xml',
+    'if-no-files-found: error',
+  ]) assert.ok(artifact.includes(path), path);
+  assert.doesNotMatch(artifact, /if-no-files-found: ignore/);
   const sonar = job('sonar');
+  assert.match(step(sonar, 'Download coverage report'), /name: android-coverage/);
+  assert.doesNotMatch(step(sonar, 'Download coverage report'), /continue-on-error/);
+  assert.match(step(sonar, 'Verify Kover coverage arrived for Sonar'), /coverage-artifacts\/\*\*\/build\/reports\/kover\/report\.xml/);
   assert.match(step(sonar, 'Resolve Sonar project version'), /manifest: Toggly.FeatureManagement.Android\/build.gradle.kts/);
   assert.match(step(sonar, 'Rebase Python coverage paths for Sonar'), /roots\[0\]\.text = str\(source\)/);
   for (const name of ['SonarCloud Scan', 'SonarQube Server Scan']) {

@@ -1,3 +1,12 @@
+## 1.16.2
+
+2026-11-18
+
+### Changed
+- Declare `engines.node` as `>=22.0.0` (Node 18/20 EOL). No public API or
+  evaluation behavior changes. Publishing the engines field that landed with
+  the Node 22/24/26 CI matrix (#859).
+
 ## 1.16.1
 
 2026-10-16

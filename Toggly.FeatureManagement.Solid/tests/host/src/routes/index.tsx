@@ -55,7 +55,15 @@ function Status() {
               isEnabled: () => {
                 later.isEnabled = () => false;
                 const selected = client.state().definitions.Entity;
-                if (typeof selected !== 'boolean') selected.rules[0].value = 'retired';
+                if (
+                  typeof selected !== 'boolean' &&
+                  selected &&
+                  'rules' in selected &&
+                  Array.isArray(selected.rules) &&
+                  selected.rules[0]
+                ) {
+                  selected.rules[0].value = 'retired';
+                }
                 pending = client.setContext({ instanceId: 'B' });
                 return true;
               },
