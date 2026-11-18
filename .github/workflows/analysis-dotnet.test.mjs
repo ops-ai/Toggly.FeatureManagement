@@ -393,3 +393,17 @@ test('release validate installs the ASP.NET Core runtimes the solution tests exe
   assert.match(jobBlock(release, 'sign', 'publish'), /runs-on: ubuntu-latest/);
   assert.match(jobBlock(release, 'publish', 'release'), /runs-on: ubuntu-latest/);
 });
+
+test('legacy parity TFMs use an xunit adapter that actually loads and empty runs fail', () => {
+  const project = readFileSync(new URL('../../Toggly.FeatureManagement.NET/Toggly.FeatureManagement.Parity.Tests/Toggly.FeatureManagement.Parity.Tests.csproj', import.meta.url), 'utf8');
+  const legacy = project.slice(
+    project.indexOf("== 'netcoreapp3.1'"),
+    project.indexOf("!= 'netcoreapp3.1'"),
+  );
+  assert.match(legacy, /xunit\.runner\.visualstudio" Version="2\.4\.5"/);
+  assert.match(legacy, /Include="xunit" Version="2\.4\.2"/);
+  assert.doesNotMatch(legacy, /Version="2\.8\.2"/);
+  const ci = readFileSync(new URL('../package-registry/dotnet-ci.mjs', import.meta.url), 'utf8');
+  assert.match(ci, /Toggly\.FeatureManagement\.sln[\s\S]*RunConfiguration\.TreatNoTestsAsError=true/);
+  assert.match(step('Run filter-parity and variant-allocator corpus tests'), /RunConfiguration\.TreatNoTestsAsError=true/);
+});
