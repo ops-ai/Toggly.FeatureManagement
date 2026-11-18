@@ -10,6 +10,7 @@ on:
       - '.github/workflows/analysis-javascript.yml'
       - '.github/package-registry/analysis-js-filter.mjs'
       - '.github/actions/resolve-release-version/**'
+      - '.github/scripts/npm-publish-if-absent.sh'
   workflow_dispatch:
     inputs:
       release_mode:
