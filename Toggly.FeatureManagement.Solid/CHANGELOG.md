@@ -7,6 +7,10 @@
 - Widen `@ops-ai/toggly-node-core` dependency to `^0.11.0 || ^0.12.0 || ^0.13.0 || ^0.14.0` so apps can resolve current 0.14.x without overrides (lockfile pins 0.14.0).
 - CI unit matrix exercises Node 22.x, 24.x, and 26.x (engines remain `>=22.12.0`).
 
+### Fixed
+
+- SolidStart packed-host typecheck: narrow `EvaluatedDefinitionValue` before mutating `.rules` so `EvaluatedEnabledEnvelope` from `@ops-ai/toggly-hooks-types` ≥1.4.7 typechecks.
+
 ### Added
 
 - API-contract evaluation tests for browser `evaluated-signed` and server `definitions-signed` public entry points, plus shared `docs/filter-parity/fixtures` coverage through `createTogglyClient`.
