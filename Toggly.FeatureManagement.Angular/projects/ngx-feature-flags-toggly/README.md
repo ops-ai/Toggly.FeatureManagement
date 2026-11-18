@@ -245,9 +245,9 @@ export class MyComponent {
 | 17.3.12 | 17.3.17 | 5.4.5 | 18.20.8 | Zone.js OnPush |
 | 18.2.14 | 18.2.21 | 5.5.4 | 18.20.8 | Zone.js OnPush |
 | 19.2.25 | 19.2.27 | 5.8.3 | 22.23.2 | Zone.js OnPush |
-| 20.3.31 | 20.3.37 | 5.9.3 | 24.18.0 | Zone.js OnPush |
-| 21.2.23 | 21.2.24 | 5.9.3 | 24.18.0 | zoneless OnPush |
-| 22.1.6 | 22.1.8 | 6.0.3 | 24.18.0 | zoneless OnPush |
+| 20.3.35 | 20.3.43 | 5.9.3 | 24.18.0 | Zone.js OnPush |
+| 21.2.26 | 21.2.30 | 5.9.3 | 24.18.0 | zoneless OnPush |
+| 22.2.6 | 22.2.7 | 6.0.3 | 24.18.0 | zoneless OnPush |
 
 The peer minimum remains Angular 15.0.0. These exact packed fixtures verify
 public types with `skipLibCheck: false`, production builds, browser rendering,

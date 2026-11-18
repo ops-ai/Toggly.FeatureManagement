@@ -9,7 +9,6 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.FeatureManagement;
@@ -26,9 +25,12 @@ namespace Toggly.FeatureManagement.Parity.Tests;
 /// <summary>
 /// Loads golden fixtures from docs/filter-parity/fixtures and evaluates them with the
 /// registered .NET FeatureManager + Toggly/Web filters (production registration semantics).
+/// Honors optional <c>sdkExpectations.dotnet</c> from the shared contract (no KnownFailures list).
 /// </summary>
 public class FilterParityFixturesTests
 {
+    private const string SdkKey = "dotnet";
+
     private static readonly HashSet<string> RequiredIds = new(StringComparer.Ordinal)
     {
         "browser-family-match",
@@ -44,18 +46,6 @@ public class FilterParityFixturesTests
         "percentage-missing-fail-closed",
         "percentage-zero-fail-closed",
         "unknown-filter-fail-closed",
-    };
-
-    /// <summary>
-    /// Cases that diverge from the shared filter-parity contract under production .NET settings.
-    /// Do not change evaluation behavior to make these pass — document in the PR instead.
-    /// </summary>
-    private static readonly Dictionary<string, string> KnownFailures = new(StringComparer.Ordinal)
-    {
-        // Production AddTogglyFeatureManagement sets IgnoreMissingFeatureFilters=false, so unknown
-        // filters throw rather than returning false as the shared contract expects.
-        ["unknown-filter-fail-closed"] =
-            "Production IgnoreMissingFeatureFilters=false throws on unknown filters; shared contract expects fail-closed false.",
     };
 
     public static TheoryData<string, string> FixtureCases()
@@ -97,27 +87,87 @@ public class FilterParityFixturesTests
         using var document = JsonDocument.Parse(File.ReadAllText(fixturePath));
         var root = document.RootElement;
         var description = root.TryGetProperty("description", out var desc) ? desc.GetString() : fixtureId;
-        var expected = root.GetProperty("expected").GetBoolean();
+        var expectation = ResolveDotNetExpectation(root);
 
-        if (KnownFailures.TryGetValue(fixtureId, out var reason))
+        var (result, evaluateError) = await EvaluateFixtureAsync(root);
+
+        if (expectation.ExpectError)
         {
-            // Still exercise the evaluator so regressions elsewhere stay visible; assert the known divergence.
-            var (actual, error) = await EvaluateFixtureAsync(root);
-            if (error != null)
-            {
-                Assert.True(true, $"Known failure '{fixtureId}': {reason} (threw: {error.GetType().Name})");
-                return;
-            }
-
-            actual.Should().NotBe(expected,
-                "known failure '{0}' was expected to diverge ({1}), but matched expected={2}",
-                fixtureId, reason, expected);
+            evaluateError.Should().NotBeNull(
+                "fixture {0} ({1}): sdkExpectations.dotnet.outcome=error requires evaluation to throw",
+                fixtureId, description);
             return;
         }
 
-        var (result, evaluateError) = await EvaluateFixtureAsync(root);
-        evaluateError.Should().BeNull("fixture {0} ({1}) threw {2}: {3}", fixtureId, description, evaluateError?.GetType().Name, evaluateError?.Message);
-        result.Should().Be(expected, "fixture {0}: {1}", fixtureId, description);
+        evaluateError.Should().BeNull(
+            "fixture {0} ({1}) threw {2}: {3}",
+            fixtureId, description, evaluateError?.GetType().Name, evaluateError?.Message);
+
+        if (expectation.AllowedOutcomes is { Length: > 0 } allowed)
+        {
+            allowed.Should().Contain(result!.Value,
+                "fixture {0}: {1} (allowed outcomes [{2}])",
+                fixtureId, description, string.Join(", ", allowed));
+            return;
+        }
+
+        result.Should().Be(expectation.ExpectedBoolean, "fixture {0}: {1}", fixtureId, description);
+    }
+
+    private static DotNetExpectation ResolveDotNetExpectation(JsonElement root)
+    {
+        var expected = root.GetProperty("expected").GetBoolean();
+        if (!root.TryGetProperty("sdkExpectations", out var sdkMap)
+            || sdkMap.ValueKind != JsonValueKind.Object
+            || !sdkMap.TryGetProperty(SdkKey, out var sdk)
+            || sdk.ValueKind != JsonValueKind.Object)
+        {
+            return DotNetExpectation.Boolean(expected);
+        }
+
+        if (sdk.TryGetProperty("outcome", out var outcome))
+        {
+            if (outcome.ValueKind == JsonValueKind.String
+                && string.Equals(outcome.GetString(), "error", StringComparison.OrdinalIgnoreCase))
+            {
+                return DotNetExpectation.Error();
+            }
+
+            if (outcome.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                return DotNetExpectation.Boolean(outcome.GetBoolean());
+        }
+
+        if (sdk.TryGetProperty("allowedOutcomes", out var allowed)
+            && allowed.ValueKind == JsonValueKind.Array)
+        {
+            var values = allowed.EnumerateArray()
+                .Where(e => e.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                .Select(e => e.GetBoolean())
+                .ToArray();
+            if (values.Length > 0)
+                return DotNetExpectation.Allowed(values);
+        }
+
+        return DotNetExpectation.Boolean(expected);
+    }
+
+    private readonly struct DotNetExpectation
+    {
+        // Avoid init accessors: netcoreapp3.1 lacks IsExternalInit without a polyfill.
+        public bool ExpectError { get; }
+        public bool ExpectedBoolean { get; }
+        public bool[]? AllowedOutcomes { get; }
+
+        private DotNetExpectation(bool expectError, bool expectedBoolean, bool[]? allowedOutcomes)
+        {
+            ExpectError = expectError;
+            ExpectedBoolean = expectedBoolean;
+            AllowedOutcomes = allowedOutcomes;
+        }
+
+        public static DotNetExpectation Boolean(bool value) => new(false, value, null);
+        public static DotNetExpectation Error() => new(true, false, null);
+        public static DotNetExpectation Allowed(bool[] values) => new(false, false, values);
     }
 
     private static async Task<(bool? Result, Exception? Error)> EvaluateFixtureAsync(JsonElement root)

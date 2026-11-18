@@ -23,11 +23,11 @@ High-performance Ruby SDK for [Toggly](https://toggly.io) feature flag managemen
 - Rails 7.0+ (for `toggly-rails`)
 - Redis client gem 4.0+ (for `toggly-cache`)
 
-The retained host set resolves Ruby 3.3.12 and 3.4.10 with Rails
-7.0.10, 7.1.6, 7.2.3.2, and 8.0.5.1. Ruby 4.0.6 and Rails 8.1.3.1 are also
-verified. Packed gems are exercised with Redis client 4.8.1 and 6.0.0 against
-a Redis 8 server. Use a Ruby version supported by the Rails release you select
-and commit your application's `Gemfile.lock`.
+The retained host set resolves Ruby 3.3.13 and 3.4.12 with Rails
+7.0.10, 7.1.6, 7.2.4, and 8.0.5.1. Ruby 4.0.9 and Rails 8.1.4 are also
+verified. Packed gems are exercised with Redis client 4.8.1, 5.4.1, and 6.0.0
+against a Redis 8 server. Use a Ruby version supported by the Rails release you
+select and commit your application's `Gemfile.lock`.
 
 ## Installation
 

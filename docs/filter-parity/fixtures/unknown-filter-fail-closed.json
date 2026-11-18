@@ -1,6 +1,6 @@
 {
   "id": "unknown-filter-fail-closed",
-  "description": "Unknown filter names fail closed (IgnoreMissingFeatureFilters)",
+  "description": "Unknown filter names fail closed; .NET may throw when IgnoreMissingFeatureFilters is false",
   "featureKey": "parity-unknown-filter",
   "requirementType": "Any",
   "filters": [
@@ -12,5 +12,10 @@
   "context": {
     "identity": "u"
   },
-  "expected": false
+  "expected": false,
+  "sdkExpectations": {
+    "dotnet": {
+      "outcome": "error"
+    }
+  }
 }

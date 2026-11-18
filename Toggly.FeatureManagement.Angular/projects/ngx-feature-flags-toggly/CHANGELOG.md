@@ -1,3 +1,16 @@
+## Unreleased
+
+### Changed
+- CI unit and packed-host job matrix expanded from Node `lts/*` to Node **22.x / 24.x / 26.x**
+  (coverage uploads from the 22.x row).
+- Host fixtures: Angular **20.3.31 → 20.3.35**, **21.2.23 → 21.2.26**, **22.1.6 → 22.2.6**
+  (CLI/build aligned to latest matching patches). Peer floor remains Angular `>=15`;
+  Angular 15 floor fixtures unchanged.
+
+### Added
+- Mocked HTTP API-contract evaluation specs for public entry points against
+  realistic `/evaluated-signed` and `/evaluated-variants-signed` `{ defs }` payloads.
+
 ## 2.11.1
 
 2026-10-15

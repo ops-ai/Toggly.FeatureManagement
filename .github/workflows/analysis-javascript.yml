@@ -373,21 +373,21 @@ jobs:
         working-directory: ${{ matrix.path }}
         run: npm run test:host
 
-      # JavaScript, SolidJS, and React run on Node 22/24/26; upload coverage once
-      # from the floor row so coverage-${{ matrix.sdk }} does not collide.
+      # JavaScript, Angular, SolidJS, and React run on Node 22/24/26; upload
+      # coverage once from the floor row so coverage-${{ matrix.sdk }} does not collide.
       - name: Require unit test coverage report
-        if: matrix.sdk != 'Docusaurus' && ((matrix.sdk != 'JavaScript' && matrix.sdk != 'SolidJS' && matrix.sdk != 'React') || matrix.node-version == '22.x') && matrix['skip-coverage-upload'] != true
+        if: matrix.sdk != 'Docusaurus' && ((matrix.sdk != 'JavaScript' && matrix.sdk != 'Angular' && matrix.sdk != 'SolidJS' && matrix.sdk != 'React') || matrix.node-version == '22.x') && matrix['skip-coverage-upload'] != true
         working-directory: ${{ matrix.path }}
         run: find coverage -name lcov.info -size +0c -print -quit | grep -q .
 
       - name: Label coverage artifact
-        if: matrix.sdk != 'Docusaurus' && ((matrix.sdk != 'JavaScript' && matrix.sdk != 'SolidJS' && matrix.sdk != 'React') || matrix.node-version == '22.x') && matrix['skip-coverage-upload'] != true
+        if: matrix.sdk != 'Docusaurus' && ((matrix.sdk != 'JavaScript' && matrix.sdk != 'Angular' && matrix.sdk != 'SolidJS' && matrix.sdk != 'React') || matrix.node-version == '22.x') && matrix['skip-coverage-upload'] != true
         working-directory: ${{ matrix.path }}
         run: printf '%s\n' 'coverage-${{ matrix.sdk }}' > coverage/artifact-name.txt
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
-        if: matrix.sdk != 'Docusaurus' && ((matrix.sdk != 'JavaScript' && matrix.sdk != 'SolidJS' && matrix.sdk != 'React') || matrix.node-version == '22.x') && matrix['skip-coverage-upload'] != true
+        if: matrix.sdk != 'Docusaurus' && ((matrix.sdk != 'JavaScript' && matrix.sdk != 'Angular' && matrix.sdk != 'SolidJS' && matrix.sdk != 'React') || matrix.node-version == '22.x') && matrix['skip-coverage-upload'] != true
         with:
           name: coverage-${{ matrix.sdk }}
           path: ${{ matrix.path }}/coverage/
