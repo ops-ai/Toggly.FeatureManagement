@@ -143,7 +143,7 @@ jobs:
 
       - name: Publish to npm
         working-directory: ${{ env.SDK_ROOT }}/dist/ngx-feature-flags-toggly
-        run: npm publish --provenance --access public
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/npm-publish-if-absent.sh" "$(node -p "require('./package.json').name")" "$(node -p "require('./package.json').version")" -- npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ''
 
