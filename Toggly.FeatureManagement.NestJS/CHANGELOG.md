@@ -1,10 +1,15 @@
 ## Unreleased
 
+## 0.5.3
+
+2026-11-18
+
 ### Changed
 
 - Require Node `>=22.12.0` (drop Node 18/20). Release compat matrix now runs Node 22.12.0 (floor), 24, and 26 against Nest 10 / 11 / 12 latest releases.
 - Default/dev Nest host bumped to Nest 12.3.x; peer range remains `^10 || ^11 || ^12`.
 - Bump rxjs/devDependencies to current stable within supported majors (`rxjs` 7.8.2, Nest 12.3.2, vitest/tsup/typescript 3/8/5 lines, `ws` 8.22.1).
+- Widen `@ops-ai/toggly-node-core` dependency to `^0.11.0 || ^0.12.0 || ^0.13.0 || ^0.14.0` so apps can resolve published 0.14.x without npm overrides.
 
 ### Added
 
