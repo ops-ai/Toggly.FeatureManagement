@@ -378,4 +378,31 @@ mod tests {
         assert_eq!(request.accept_language.as_deref(), Some("en"));
         assert_eq!(request.country.as_deref(), Some("US"));
     }
+
+    #[test]
+    fn eval_context_type_rejects_numeric_identity_and_null_group_slot() {
+        let identity = serde_json::from_str::<EvalContext>(r#"{"identity":42}"#);
+        assert!(
+            identity.is_err(),
+            "EvalContext.identity is String and rejects a numeric id"
+        );
+
+        let groups = serde_json::from_str::<EvalContext>(r#"{"groups":["beta",null]}"#);
+        assert!(
+            groups.is_err(),
+            "a null group slot is rejected by Vec<String> without panic"
+        );
+
+        let country = serde_json::from_str::<RequestContext>(r#"{"country":42}"#);
+        assert!(
+            country.is_err(),
+            "RequestContext.country is String and rejects a numeric value"
+        );
+
+        let language = serde_json::from_str::<RequestContext>(r#"{"acceptLanguage":42}"#);
+        assert!(
+            language.is_err(),
+            "RequestContext.accept_language is String and rejects a numeric value"
+        );
+    }
 }

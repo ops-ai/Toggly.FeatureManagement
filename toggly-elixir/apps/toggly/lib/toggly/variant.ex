@@ -141,14 +141,46 @@ defmodule Toggly.Variant do
   # uint32, scaled to a `[0, 100]` percentage. `userId` is lowercased first
   # when `ignore_case` is set (MF lowercases the assigner's targeting id).
   defp percentile(identity, feature_key, seed, ignore_case) do
-    identity = if ignore_case, do: String.downcase(identity), else: identity
-    hint = seed || "allocation\n#{feature_key}"
-    <<value::little-unsigned-32, _::binary>> = :crypto.hash(:sha256, identity <> "\n" <> hint)
+    identity = identity_key(identity, ignore_case)
+    hint = seed_text(seed, feature_key)
+
+    <<value::little-unsigned-32, _::binary>> =
+      :crypto.hash(:sha256, identity <> "\n" <> hint)
+
     value / 0xFFFFFFFF * 100
   end
 
-  defp member?(candidates, value, true),
-    do: Enum.any?(candidates, &(String.downcase(to_string(&1)) == String.downcase(value)))
+  # Same decimal text as `Toggly.Evaluator.lower/1` (`to_string` then downcase).
+  # Anything that is not text or a finite number hashes as anonymous.
+  defp identity_key(identity, true), do: String.downcase(text_identity(identity))
+  defp identity_key(identity, false), do: text_identity(identity)
+
+  defp text_identity(value) when is_binary(value), do: value
+  defp text_identity(value) when is_integer(value), do: Integer.to_string(value)
+  defp text_identity(value) when is_float(value), do: to_string(value)
+  defp text_identity(value) when is_atom(value), do: to_string(value)
+  defp text_identity(_value), do: ""
+
+  defp seed_text(seed, _feature_key) when is_binary(seed), do: seed
+  defp seed_text(seed, feature_key) when seed in [nil, false], do: "allocation\n#{feature_key}"
+
+  defp seed_text(seed, feature_key) do
+    case text_identity(seed) do
+      "" -> "allocation\n#{feature_key}"
+      text -> text
+    end
+  end
+
+  # A nil group slot is not a name and must not raise. Non-strings fail closed
+  # for case-insensitive matching so a number is not invented as decimal text.
+  defp member?(_candidates, nil, _ignore_case), do: false
+
+  defp member?(candidates, value, true) when is_binary(value) do
+    folded = String.downcase(value)
+    Enum.any?(candidates, &(String.downcase(text_identity(&1)) == folded))
+  end
+
+  defp member?(_candidates, _value, true), do: false
 
   defp member?(candidates, value, false), do: value in candidates
 end

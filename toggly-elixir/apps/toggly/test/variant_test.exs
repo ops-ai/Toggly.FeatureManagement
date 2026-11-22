@@ -74,6 +74,47 @@ defmodule Toggly.VariantTest do
     assert assignment.assignment_reason == "Group"
   end
 
+  test "numeric identity is hashed as decimal text and does not disable assignment" do
+    definition =
+      def_(
+        [variant("A", %{"tier" => "all"})],
+        %{"percentile" => [%{"variant" => "A", "from" => 0, "to" => 100}]}
+      )
+
+    assignment = V.assign(definition, %{"identity" => 42})
+    assert assignment.enabled
+    assert assignment.variant_name == "A"
+    assert assignment.assignment_reason == "Percentile"
+
+    assignment = V.assign(definition, %{"identity" => 42}, ignore_case: true)
+    assert assignment.enabled
+    assert assignment.assignment_reason == "Percentile"
+  end
+
+  test "nil group slot does not raise and a real group still matches" do
+    definition =
+      def_(
+        [variant("A", %{}), variant("B", %{})],
+        %{
+          "defaultWhenEnabled" => "B",
+          "group" => [%{"variant" => "A", "groups" => ["beta"]}],
+          "percentile" => [%{"variant" => "B", "from" => 0, "to" => 100}]
+        }
+      )
+
+    assignment = V.assign(definition, %{"groups" => [nil, "beta"]}, ignore_case: true)
+    assert assignment.enabled
+    assert assignment.variant_name == "A"
+    assert assignment.assignment_reason == "Group"
+
+    assignment =
+      V.assign(definition, %{"identity" => "user", "groups" => [nil]}, ignore_case: true)
+
+    assert assignment.enabled
+    assert assignment.variant_name == "B"
+    assert assignment.assignment_reason == "Percentile"
+  end
+
   test "percentile to==100 edge always matches" do
     definition =
       def_(

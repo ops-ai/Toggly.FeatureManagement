@@ -5,6 +5,7 @@ import io.toggly.core.model.FeatureFilter;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -195,5 +196,47 @@ class TargetingEvaluatorTest {
                 .build();
 
         assertTrue(evaluator.evaluate(filter, "test-feature", context));
+    }
+
+    @Test
+    void stringIdentityTypeRejectsNumericIdAndNullGroupSlotDoesNotThrow() {
+        Map<String, Object> named = new HashMap<>();
+        named.put("Audience.Users:0", "alice");
+        named.put("Audience.DefaultRolloutPercentage", 0);
+        FeatureFilter users = FeatureFilter.of("Targeting", named);
+
+        assertFalse(evaluator.evaluate(users, "flag", EvaluationContext.empty()));
+        assertFalse(evaluator.evaluate(
+                users, "flag", EvaluationContext.builder().identity(null).build()));
+        assertFalse(evaluator.evaluate(
+                users, "flag", EvaluationContext.builder().identity("").build()));
+
+        Map<String, Object> groups = new HashMap<>();
+        groups.put("Audience.Groups:0", "beta");
+        groups.put("Audience.DefaultRolloutPercentage", 0);
+        FeatureFilter groupFilter = FeatureFilter.of("Targeting", groups);
+
+        Set<String> besideNull = new HashSet<>();
+        besideNull.add(null);
+        besideNull.add("beta");
+        assertTrue(evaluator.evaluate(
+                groupFilter,
+                "flag",
+                EvaluationContext.builder().groups(besideNull).build()));
+
+        Set<String> onlyNull = new HashSet<>();
+        onlyNull.add(null);
+        assertFalse(evaluator.evaluate(
+                groupFilter,
+                "flag",
+                EvaluationContext.builder().groups(onlyNull).build()));
+
+        Map<String, Object> rollout = new HashMap<>();
+        rollout.put("Audience.Groups:0", "beta");
+        rollout.put("Audience.DefaultRolloutPercentage", 100);
+        assertTrue(evaluator.evaluate(
+                FeatureFilter.of("Targeting", rollout),
+                "flag",
+                EvaluationContext.builder().groups(onlyNull).build()));
     }
 }

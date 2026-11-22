@@ -325,6 +325,71 @@ class TestTargetingEvaluator:
         result = evaluator.evaluate(filter_, "test-feature", context)
         assert result is True
 
+    def test_named_audience_non_string_identity_fails_closed(self) -> None:
+        """A numeric user id must not throw and must not match a saved name."""
+        evaluator = TargetingEvaluator()
+        named = FeatureFilter(
+            name="Targeting",
+            parameters={
+                "Audience.Users:0": "alice",
+                "Audience.DefaultRolloutPercentage": 0,
+            },
+        )
+        assert evaluator.evaluate(named, "flag", EvaluationContext(identity=42)) is False
+        # Decimal text is not coerced into a match.
+        same_digits = FeatureFilter(
+            name="Targeting",
+            parameters={
+                "Audience.Users:0": "42",
+                "Audience.DefaultRolloutPercentage": 0,
+            },
+        )
+        assert (
+            evaluator.evaluate(same_digits, "flag", EvaluationContext(identity=42))
+            is False
+        )
+
+    def test_null_group_slot_does_not_throw_and_real_group_matches(self) -> None:
+        """A null slot is not a match and does not hide a real group."""
+        evaluator = TargetingEvaluator()
+        named = FeatureFilter(
+            name="Targeting",
+            parameters={
+                "Audience.Groups:0": "beta",
+                "Audience.DefaultRolloutPercentage": 0,
+            },
+        )
+        assert (
+            evaluator.evaluate(
+                named, "flag", EvaluationContext(groups=[None, "beta"])
+            )
+            is True
+        )
+        assert (
+            evaluator.evaluate(named, "flag", EvaluationContext(groups=[None]))
+            is False
+        )
+        rollout = FeatureFilter(
+            name="Targeting",
+            parameters={
+                "Audience.Groups:0": "beta",
+                "Audience.DefaultRolloutPercentage": 100,
+            },
+        )
+        assert (
+            evaluator.evaluate(rollout, "flag", EvaluationContext(groups=[None]))
+            is True
+        )
+
+    def test_empty_audience_non_string_identity_does_not_throw(self) -> None:
+        """An empty audience stays off for a numeric id without raising."""
+        evaluator = TargetingEvaluator()
+        empty = FeatureFilter(
+            name="Targeting",
+            parameters={"Audience.DefaultRolloutPercentage": 0},
+        )
+        assert evaluator.evaluate(empty, "flag", EvaluationContext(identity=42)) is False
+
 
 class TestEvaluatorRegistry:
     """Tests for EvaluatorRegistry."""
@@ -734,6 +799,33 @@ class TestSegmentFilterEvaluators:
             )
             is True
         )
+        assert (
+            country.evaluate(
+                FeatureFilter(
+                    name="Country",
+                    parameters={"Percentage": 100, "Country:0": "US"},
+                ),
+                "feat",
+                EvaluationContext(
+                    identity="u", request=RequestContext(country=42)
+                ),
+            )
+            is False
+        )
+        assert (
+            lang.evaluate(
+                FeatureFilter(
+                    name="BrowserLanguage",
+                    parameters={"Percentage": 100, "BrowserLanguage:0": "en"},
+                ),
+                "feat",
+                EvaluationContext(
+                    identity="u", request=RequestContext(accept_language=42)
+                ),
+            )
+            is False
+        )
+        assert parse_user_agent(42) is None
         assert (
             country.evaluate(
                 FeatureFilter(

@@ -857,4 +857,43 @@ mod tests {
             .build();
         assert!(evaluator.evaluate("parity", &filter, &context).unwrap());
     }
+
+    #[test]
+    fn named_audience_empty_identity_returns_false_and_empty_group_slot_does_not_panic() {
+        let evaluator = TargetingEvaluator;
+        let named = make_filter(
+            "Targeting",
+            serde_json::json!({
+                "Audience.Users:0": "alice",
+                "Audience.Groups:0": "beta",
+                "Audience.DefaultRolloutPercentage": 0
+            }),
+        );
+        let empty = EvalContext::default();
+        assert!(!evaluator.evaluate("flag", &named, &empty).unwrap());
+
+        let blank_identity = EvalContext::with_identity("");
+        assert!(!evaluator.evaluate("flag", &named, &blank_identity).unwrap());
+
+        let beside_empty = EvalContext {
+            groups: vec![String::new(), "beta".to_string()],
+            ..EvalContext::default()
+        };
+        assert!(evaluator.evaluate("flag", &named, &beside_empty).unwrap());
+
+        let only_empty = EvalContext {
+            groups: vec![String::new()],
+            ..EvalContext::default()
+        };
+        assert!(!evaluator.evaluate("flag", &named, &only_empty).unwrap());
+
+        let rollout = make_filter(
+            "Targeting",
+            serde_json::json!({
+                "Audience.Groups:0": "beta",
+                "Audience.DefaultRolloutPercentage": 100
+            }),
+        );
+        assert!(evaluator.evaluate("flag", &rollout, &only_empty).unwrap());
+    }
 }

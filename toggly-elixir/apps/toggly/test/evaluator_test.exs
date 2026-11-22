@@ -63,6 +63,63 @@ defmodule Toggly.EvaluatorTest do
     refute E.evaluate(definition([filter("Percentage", %{"Value" => 50})]), %{})
   end
 
+  test "named audience accepts a numeric identity and a nil group slot" do
+    users =
+      definition([
+        filter("Targeting", %{
+          "Audience.Users:0" => "42",
+          "Audience.DefaultRolloutPercentage" => 0
+        })
+      ])
+
+    assert E.evaluate(users, %{"identity" => 42})
+    refute E.evaluate(users, %{"identity" => 7})
+
+    groups =
+      definition([
+        filter("Targeting", %{
+          "Audience.Groups:0" => "beta",
+          "Audience.DefaultRolloutPercentage" => 0
+        })
+      ])
+
+    assert E.evaluate(groups, %{"groups" => [nil, "beta"]})
+    refute E.evaluate(groups, %{"groups" => [nil]})
+
+    rollout =
+      definition([
+        filter("Targeting", %{
+          "Audience.Groups:0" => "beta",
+          "Audience.DefaultRolloutPercentage" => 100
+        })
+      ])
+
+    assert E.evaluate(rollout, %{"groups" => [nil]})
+
+    empty = definition([filter("Targeting", %{"Audience.DefaultRolloutPercentage" => 0})])
+    refute E.evaluate(empty, %{"identity" => 42})
+  end
+
+  test "numeric country and browser language fail closed without throwing" do
+    # Country is evaluated before AlwaysOn. A throw is rescued as false for the
+    # whole flag; a fail-closed comparison lets AlwaysOn still enable it.
+    country =
+      definition([
+        filter("Country", %{"Percentage" => 100, "Country:0" => "US"}),
+        filter("AlwaysOn")
+      ])
+
+    assert E.evaluate(country, %{"identity" => "u", "request" => %{"country" => 42}})
+
+    language =
+      definition([
+        filter("BrowserLanguage", %{"Percentage" => 100, "BrowserLanguage:0" => "en"}),
+        filter("AlwaysOn")
+      ])
+
+    assert E.evaluate(language, %{"identity" => "u", "request" => %{"acceptLanguage" => 42}})
+  end
+
   test "targeting exclusion wins and case behavior is explicit" do
     p = %{"Audience.Users:0" => "ALICE", "Audience.Exclusion.Groups:0" => "blocked"}
     d = definition([filter("Targeting", p)])
