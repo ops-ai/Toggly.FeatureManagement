@@ -65,10 +65,17 @@ function percentileIdentity(userId: unknown, ignoreCase: boolean): string | unde
   if (userId == null) {
     return ''
   }
+  if (typeof userId === 'number') {
+    if (!Number.isFinite(userId)) {
+      return undefined
+    }
+    // Decimal text, same bucket with or without ignoreCase. Objects are not
+    // stringified: that would hash "[object Object]".
+    const id = String(userId)
+    return ignoreCase ? id.toLowerCase() : id
+  }
   if (typeof userId !== 'string') {
-    // Case-sensitive hashing already coerced via the template string.
-    // Ignore-case must not call toLowerCase on a non-string; fail closed.
-    return ignoreCase ? undefined : String(userId)
+    return undefined
   }
   return ignoreCase ? userId.toLowerCase() : userId
 }

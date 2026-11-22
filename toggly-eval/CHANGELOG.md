@@ -7,8 +7,9 @@
 ### Fixed
 - A Targeting check no longer throws when the app passes a non-string user
   id, or a group list with an empty slot, after a name is saved on that
-  flag's audience. The comparison fails closed. Segment equality and
-  variant allocation use the same guard [OPS-2092].
+  flag's audience. Name and group comparisons fail closed. A finite numeric
+  id still gets a variant percentile bucket, hashed as its decimal text.
+  Other non-strings do not [OPS-2092].
 
 ## 2.1.1
 

@@ -127,7 +127,7 @@ describe('allocateVariant (unit edge cases beyond the gold corpus)', () => {
     expect(matched.variantName).toBe('A')
   })
 
-  it('fails closed for ignore-case percentile allocation when the user id is not a string', () => {
+  it('hashes a finite numeric id as decimal text and skips other non-strings', () => {
     const def: FeatureDefinitionModel = {
       featureKey: 'numeric-percentile',
       filters: alwaysOn,
@@ -142,8 +142,8 @@ describe('allocateVariant (unit edge cases beyond the gold corpus)', () => {
       { identity: 42 as unknown as string },
       { ignoreCase: true },
     )
-    expect(numeric.assignmentReason).toBe('DefaultWhenEnabled')
-    expect(numeric.variantName).toBe('B')
+    expect(numeric.assignmentReason).toBe('Percentile')
+    expect(numeric.variantName).toBe('A')
 
     const named = allocateVariant(
       def,
@@ -162,6 +162,22 @@ describe('allocateVariant (unit edge cases beyond the gold corpus)', () => {
     const anonymous = allocateVariant(def, {}, { ignoreCase: true })
     expect(anonymous.assignmentReason).toBe('Percentile')
     expect(anonymous.variantName).toBe('A')
+
+    const objectId = allocateVariant(
+      def,
+      { identity: { id: 42 } as unknown as string },
+      { ignoreCase: true },
+    )
+    expect(objectId.assignmentReason).toBe('DefaultWhenEnabled')
+    expect(objectId.variantName).toBe('B')
+
+    const notFinite = allocateVariant(
+      def,
+      { identity: Number.NaN as unknown as string },
+      { ignoreCase: false },
+    )
+    expect(notFinite.assignmentReason).toBe('DefaultWhenEnabled')
+    expect(notFinite.variantName).toBe('B')
   })
 
   it('treats a missing configurationValue as null', () => {
