@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { computeContextPercentage } from './hash'
 import { allocateVariant } from './variant-allocator'
 import type { FeatureDefinitionModel } from './types'
 
@@ -81,7 +82,7 @@ describe('allocateVariant (unit edge cases beyond the gold corpus)', () => {
     expect(result.variantName).toBe('B')
   })
 
-  it('fails closed when ignore-case user matching sees a non-string identity', () => {
+  it('coerces a numeric identity to match a named user with or without ignoreCase', () => {
     const def: FeatureDefinitionModel = {
       featureKey: 'numeric-user',
       filters: alwaysOn,
@@ -91,13 +92,27 @@ describe('allocateVariant (unit edge cases beyond the gold corpus)', () => {
         user: [{ variant: 'A', users: ['42'] }],
       },
     }
-    const result = allocateVariant(
+    const ignoreCaseOn = allocateVariant(
       def,
       { identity: 42 as unknown as string },
       { ignoreCase: true },
     )
-    expect(result.assignmentReason).toBe('DefaultWhenEnabled')
-    expect(result.variantName).toBe('B')
+    expect(ignoreCaseOn.assignmentReason).toBe('User')
+    expect(ignoreCaseOn.variantName).toBe('A')
+
+    const ignoreCaseOff = allocateVariant(def, {
+      identity: 42 as unknown as string,
+    })
+    expect(ignoreCaseOff.assignmentReason).toBe('User')
+    expect(ignoreCaseOff.variantName).toBe('A')
+
+    const bigintId = allocateVariant(
+      def,
+      { identity: 42n as unknown as string },
+      { ignoreCase: true },
+    )
+    expect(bigintId.assignmentReason).toBe('User')
+    expect(bigintId.variantName).toBe('A')
   })
 
   it('fails closed when a group slot is null and still matches a real group', () => {
@@ -178,6 +193,48 @@ describe('allocateVariant (unit edge cases beyond the gold corpus)', () => {
     )
     expect(notFinite.assignmentReason).toBe('DefaultWhenEnabled')
     expect(notFinite.variantName).toBe('B')
+  })
+
+  it('IgnoreCase on and off hash the same numeric identity into one percentile bucket', () => {
+    const hint = 'allocation\nignore-case-numeric'
+    const bucket = computeContextPercentage(`42\n${hint}`)
+    const def: FeatureDefinitionModel = {
+      featureKey: 'ignore-case-numeric',
+      filters: alwaysOn,
+      variants: [{ name: 'A' }, { name: 'B' }],
+      allocation: {
+        seed: hint,
+        defaultWhenEnabled: 'B',
+        percentile: [
+          { variant: 'A', from: bucket, to: Math.min(100, bucket + 0.0001) },
+        ],
+      },
+    }
+
+    const ignoreCaseOn = allocateVariant(
+      def,
+      { identity: 42 as unknown as string },
+      { ignoreCase: true },
+    )
+    const ignoreCaseOff = allocateVariant(def, {
+      identity: 42 as unknown as string,
+    })
+    expect(ignoreCaseOn.assignmentReason).toBe('Percentile')
+    expect(ignoreCaseOff.assignmentReason).toBe('Percentile')
+    expect(ignoreCaseOn.variantName).toBe(ignoreCaseOff.variantName)
+    expect(ignoreCaseOn.variantName).toBe('A')
+
+    const bigintOn = allocateVariant(
+      def,
+      { identity: 42n as unknown as string },
+      { ignoreCase: true },
+    )
+    const bigintOff = allocateVariant(def, {
+      identity: 42n as unknown as string,
+    })
+    expect(bigintOn.assignmentReason).toBe('Percentile')
+    expect(bigintOff.assignmentReason).toBe('Percentile')
+    expect(bigintOn.variantName).toBe(bigintOff.variantName)
   })
 
   it('treats a missing configurationValue as null', () => {

@@ -1,6 +1,6 @@
 import { evaluateDefinition } from './engine'
 import { computeContextPercentage } from './hash'
-import { stringsEqual } from './params'
+import { coerceAudienceString, stringsEqual } from './params'
 import type {
   EvalContext,
   FeatureDefinitionModel,
@@ -65,19 +65,13 @@ function percentileIdentity(userId: unknown, ignoreCase: boolean): string | unde
   if (userId == null) {
     return ''
   }
-  if (typeof userId === 'number') {
-    if (!Number.isFinite(userId)) {
-      return undefined
-    }
-    // Decimal text, same bucket with or without ignoreCase. Objects are not
-    // stringified: that would hash "[object Object]".
-    const id = String(userId)
-    return ignoreCase ? id.toLowerCase() : id
-  }
-  if (typeof userId !== 'string') {
+  // Number / bigint → decimal text in both IgnoreCase modes, then case-fold.
+  // Objects and other non-strings stay undefined (never hash "[object Object]").
+  const id = coerceAudienceString(userId)
+  if (id === undefined) {
     return undefined
   }
-  return ignoreCase ? userId.toLowerCase() : userId
+  return ignoreCase ? id.toLowerCase() : id
 }
 
 function matchesPercentile(

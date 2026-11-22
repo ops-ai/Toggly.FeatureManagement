@@ -292,6 +292,106 @@ describe('builtin filters', () => {
     expect(evaluateDefinition(named, { identity: 'ALICE' })).toBe(true)
   })
 
+  it('Targeting coerces numeric identity and excludes it against Exclusion.Users', () => {
+    const def: FeatureDefinitionModel = {
+      featureKey: 'f',
+      filters: [
+        {
+          name: 'Targeting',
+          parameters: {
+            'Audience.Exclusion.Users:0': '42',
+            'Audience.DefaultRolloutPercentage': 100,
+          },
+        },
+      ],
+    }
+    expect(
+      evaluateDefinition(def, { identity: 42 as unknown as string }),
+    ).toBe(false)
+    expect(
+      evaluateDefinition(def, { identity: 42n as unknown as string }),
+    ).toBe(false)
+    expect(evaluateDefinition(def, { identity: '42' })).toBe(false)
+    expect(evaluateDefinition(def, { identity: '43' })).toBe(true)
+  })
+
+  it('Targeting coerces numeric groups and excludes them against Exclusion.Groups', () => {
+    const def: FeatureDefinitionModel = {
+      featureKey: 'f',
+      filters: [
+        {
+          name: 'Targeting',
+          parameters: {
+            'Audience.Exclusion.Groups:0': '7',
+            'Audience.DefaultRolloutPercentage': 100,
+          },
+        },
+      ],
+    }
+    expect(
+      evaluateDefinition(def, {
+        identity: 'u',
+        groups: [7 as unknown as string],
+      }),
+    ).toBe(false)
+    expect(
+      evaluateDefinition(def, {
+        identity: 'u',
+        groups: [7n as unknown as string],
+      }),
+    ).toBe(false)
+    expect(
+      evaluateDefinition(def, { identity: 'u', groups: ['7'] }),
+    ).toBe(false)
+    expect(
+      evaluateDefinition(def, { identity: 'u', groups: ['ok'] }),
+    ).toBe(true)
+  })
+
+  it('Targeting excludes an uncoercible identity when Exclusion.Users is set', () => {
+    const def: FeatureDefinitionModel = {
+      featureKey: 'f',
+      filters: [
+        {
+          name: 'Targeting',
+          parameters: {
+            'Audience.Exclusion.Users:0': 'alice',
+            'Audience.DefaultRolloutPercentage': 100,
+          },
+        },
+      ],
+    }
+    expect(
+      evaluateDefinition(def, {
+        identity: { id: 42 } as unknown as string,
+      }),
+    ).toBe(false)
+    expect(
+      evaluateDefinition(def, { identity: true as unknown as string }),
+    ).toBe(false)
+  })
+
+  it('Targeting excludes an uncoercible group when Exclusion.Groups is set', () => {
+    const def: FeatureDefinitionModel = {
+      featureKey: 'f',
+      filters: [
+        {
+          name: 'Targeting',
+          parameters: {
+            'Audience.Exclusion.Groups:0': 'banned',
+            'Audience.DefaultRolloutPercentage': 100,
+          },
+        },
+      ],
+    }
+    expect(
+      evaluateDefinition(def, {
+        identity: 'u',
+        groups: [{ name: 'x' } as unknown as string],
+      }),
+    ).toBe(false)
+  })
+
   it('Targeting fails closed when a group slot is null and the audience names a group', () => {
     const named: FeatureDefinitionModel = {
       featureKey: 'f',

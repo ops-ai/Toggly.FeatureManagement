@@ -7,9 +7,13 @@
 ### Fixed
 - A Targeting check no longer throws when the app passes a non-string user
   id, or a group list with an empty slot, after a name is saved on that
-  flag's audience. Name and group comparisons fail closed. A finite numeric
-  id still gets a variant percentile bucket, hashed as its decimal text.
-  Other non-strings do not [OPS-2092].
+  flag's audience. Finite numbers and bigints coerce to decimal text for
+  audience and exclusion matching (matching .NET string identity), so
+  `identity: 42` is excluded by `Audience.Exclusion.Users: "42"` instead of
+  falling through a 100% default rollout. Objects, booleans, and other
+  uncoercible values still fail closed on exclusion. Variant percentile
+  hashing uses the same decimal-text coercion with or without `IgnoreCase`
+  [OPS-2092].
 
 ## 2.1.1
 
