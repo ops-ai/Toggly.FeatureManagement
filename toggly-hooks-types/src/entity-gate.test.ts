@@ -253,6 +253,29 @@ describe('entity-gate', () => {
     ).toBe(true)
   })
 
+  it('fails closed when a rule operator or operand is not a string', () => {
+    const numericOp = {
+      requirement: 'all' as const,
+      rules: [{ property: 'Color', op: 1 as unknown as string, value: 'red' }],
+    }
+    expect(() => applyEntityGate(numericOp, { Color: 'red' })).not.toThrow()
+    expect(applyEntityGate(numericOp, { Color: 'red' })).toBe(false)
+
+    const numericValue = {
+      requirement: 'all' as const,
+      rules: [{ property: 'Color', op: 'eq', value: 1 as unknown as string }],
+    }
+    expect(() => applyEntityGate(numericValue, { Color: '1' })).not.toThrow()
+    expect(applyEntityGate(numericValue, { Color: '1' })).toBe(false)
+
+    const numericProperty = {
+      requirement: 'all' as const,
+      rules: [{ property: 1 as unknown as string, op: 'eq', value: 'red' }],
+    }
+    expect(() => applyEntityGate(numericProperty, { '1': 'red' })).not.toThrow()
+    expect(applyEntityGate(numericProperty, { '1': 'red' })).toBe(false)
+  })
+
   it('fails closed for an unknown operator', () => {
     expect(
       applyEntityGate(

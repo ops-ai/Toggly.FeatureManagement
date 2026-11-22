@@ -1,3 +1,13 @@
+## 2.0.1
+
+2026-11-22
+
+### Fixed
+
+- A null slot in the targeting groups list no longer throws during `init` or
+  `setContext`. The slot is ignored. A real group beside it is still sent.
+  Identity stays a string, so a numeric user id cannot be passed.
+
 ## 2.0.0
 
 2026-11-04

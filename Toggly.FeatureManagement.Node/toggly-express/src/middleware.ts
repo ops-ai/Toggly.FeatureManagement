@@ -195,6 +195,21 @@ export function featureGate(options: FeatureGateOptions): RequestHandler {
       return next(new Error('Toggly middleware must be applied before featureGate'))
     }
 
+    const deny = () => {
+      if (redirectTo) {
+        return res.redirect(redirectStatus, redirectTo)
+      }
+
+      if (onDisabled) {
+        return onDisabled(req, res, next)
+      }
+
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'The requested resource is not available',
+      })
+    }
+
     try {
       const isEnabled = await togglyReq.toggly.evaluateFeatureGate(
         featureKeys,
@@ -206,22 +221,10 @@ export function featureGate(options: FeatureGateOptions): RequestHandler {
         return next()
       }
 
-      // Feature is disabled
-      if (redirectTo) {
-        return res.redirect(redirectStatus, redirectTo)
-      }
-
-      if (onDisabled) {
-        return onDisabled(req, res, next)
-      }
-
-      // Default: 404
-      return res.status(404).json({
-        error: 'Not Found',
-        message: 'The requested resource is not available',
-      })
-    } catch (error) {
-      return next(error)
+      return deny()
+    } catch {
+      // Evaluator faults must not become a 500. Fail closed like a disabled flag.
+      return deny()
     }
   }
 }

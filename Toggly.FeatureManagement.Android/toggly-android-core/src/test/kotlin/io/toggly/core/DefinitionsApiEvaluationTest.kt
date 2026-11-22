@@ -134,6 +134,56 @@ class DefinitionsApiEvaluationTest {
         }
     }
 
+    @Suppress("UNCHECKED_CAST")
+    private fun groupsWithNull(vararg values: String?): List<String> =
+        values.toMutableList() as List<String>
+
+    @Test
+    fun `null identity does not throw and a numeric id cannot be passed`() = runBlocking {
+        // TogglyConfig.identity is String?. A numeric user id cannot be passed.
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"flag":true}"""))
+            val service = TogglyService(config(server, identity = null, groups = listOf("beta")))
+            try {
+                assertEquals(TogglyLoadStatus.FETCHED, service.init().status)
+                val url = server.takeRequest().requestUrl!!
+                assertFalse(url.queryParameter("u").isNullOrEmpty())
+                assertEquals(listOf("beta"), url.queryParameterValues("g"))
+            } finally {
+                service.dispose()
+            }
+        }
+    }
+
+    @Test
+    fun `null group slot does not throw and a real group is still sent`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"flag":true}"""))
+            server.enqueue(MockResponse().setBody("""{"flag":true}"""))
+            val withRealGroup = TogglyService(
+                config(server, identity = "alice", groups = groupsWithNull(null, "beta"))
+            )
+            try {
+                assertEquals(TogglyLoadStatus.FETCHED, withRealGroup.init().status)
+                val matched = server.takeRequest().requestUrl!!
+                assertEquals("alice", matched.queryParameter("u"))
+                assertEquals(listOf("beta"), matched.queryParameterValues("g"))
+            } finally {
+                withRealGroup.dispose()
+            }
+
+            val nullOnly = TogglyService(
+                config(server, identity = "alice", groups = groupsWithNull(null))
+            )
+            try {
+                assertEquals(TogglyLoadStatus.FETCHED, nullOnly.init().status)
+                assertEquals(null, server.takeRequest().requestUrl!!.queryParameter("g"))
+            } finally {
+                nullOnly.dispose()
+            }
+        }
+    }
+
     @Test
     fun `targeting groups and claims are forwarded on definitions request`() = runBlocking {
         MockWebServer().use { server ->

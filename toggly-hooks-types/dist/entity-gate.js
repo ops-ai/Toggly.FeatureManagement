@@ -80,6 +80,12 @@ function applyEntityGate(gate, attributes) {
     return requirement === 'all' ? results.every(Boolean) : results.some(Boolean);
 }
 function evaluateRule(rule, attributes) {
+    if (rule == null ||
+        typeof rule.op !== 'string' ||
+        typeof rule.property !== 'string' ||
+        typeof rule.value !== 'string') {
+        return false;
+    }
     const actualKey = findAttributeKey(attributes, rule.property);
     if (actualKey === undefined) {
         return false;

@@ -64,7 +64,7 @@ void main() {
   }
 
   Future<void> initClient({
-    String identity = 'user-1',
+    String? identity = 'user-1',
     List<String>? groups,
     Map<String, String>? claims,
   }) {
@@ -128,6 +128,31 @@ void main() {
         ),
         isTrue,
       );
+    });
+
+    test('null identity and a null group slot do not throw', () async {
+      // Identity is String?. A numeric user id cannot be passed.
+      installDefsInterceptor({'feature-on': true});
+      await initClient(identity: null, groups: const ['beta']);
+      final nilIdentity = requests.first.uri.queryParametersAll;
+      expect(nilIdentity['u'], isNotNull);
+      expect(nilIdentity['u']!.single, isNotEmpty);
+      expect(nilIdentity['g'], ['beta']);
+
+      requests.clear();
+      Toggly.dispose();
+      installDefsInterceptor({'feature-on': true});
+      await initClient(
+        identity: 'alice',
+        groups: <Object?>[null, 'beta'].cast<String>(),
+      );
+      expect(requests.first.uri.queryParametersAll['u'], ['alice']);
+      expect(requests.first.uri.queryParametersAll['g'], ['beta']);
+
+      requests.clear();
+      await Toggly.setContext(groups: <Object?>[null].cast<String>());
+      expect(requests.last.uri.queryParametersAll.containsKey('g'), isFalse);
+      expect(requests.last.uri.queryParameters['u'], 'alice');
     });
 
     test('evaluates entity-gate objects inside defs via public API', () async {

@@ -117,7 +117,14 @@ class TogglyService(
         }
     } else null
     // Snapshot caller-owned collections before storage reads or background work.
-    private val groups = config.groups.map { it.trim() }.filter { it.isNotEmpty() }
+    // A Java caller can put null in List<String>. Skip that slot; keep a real group beside it.
+    @Suppress("UNCHECKED_CAST")
+    private val groups = buildList {
+        for (group in config.groups as List<String?>) {
+            val name = group?.trim() ?: continue
+            if (name.isNotEmpty()) add(name)
+        }
+    }
     private val claims = config.claims.toMap().filter { (key, value) ->
         key.isNotEmpty() && value.isNotEmpty()
     }.toSortedMap().entries.take(20).associate { it.key to it.value }

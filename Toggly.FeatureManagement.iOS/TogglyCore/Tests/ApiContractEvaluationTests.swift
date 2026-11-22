@@ -65,7 +65,12 @@ final class ApiContractEvaluationTests: XCTestCase {
         super.tearDown()
     }
 
-    private func makeService(responseBody: String, identity: String = "alice") -> TogglyService {
+    private func makeService(
+        responseBody: String,
+        identity: String? = "alice",
+        groups: [String] = ["beta"],
+        claims: [String: String] = ["plan": "pro"]
+    ) -> TogglyService {
         ApiContractURLProtocol.responseBody = responseBody
         return TogglyService(config: TogglyConfig(
             appKey: "app",
@@ -78,8 +83,8 @@ final class ApiContractEvaluationTests: XCTestCase {
             ],
             refreshInterval: 0,
             enableLiveUpdates: false,
-            groups: ["beta"],
-            claims: ["plan": "pro"],
+            groups: groups,
+            claims: claims,
             enableTelemetry: false
         ))
     }
@@ -177,6 +182,42 @@ final class ApiContractEvaluationTests: XCTestCase {
         XCTAssertFalse(afterRefreshOff)
 
         await service.dispose()
+    }
+
+    /// Identity is `String?` and groups are `[String]`. A numeric user id and a
+    /// nil group slot cannot be passed. Nil identity does not throw; a real
+    /// group is still forwarded. A blank slot is omitted and does not drop
+    /// the group beside it.
+    func testNilIdentityAndBlankGroupSlotDoNotThrow() async throws {
+        let nilIdentity = makeService(
+            responseBody: "{\"flag\":true}",
+            identity: nil,
+            groups: ["beta"],
+            claims: [:]
+        )
+        let nilResponse = await nilIdentity.initialize()
+        XCTAssertEqual(nilResponse.status, .fetched)
+        let nilRequest = try XCTUnwrap(ApiContractURLProtocol.requests.first)
+        let nilItems = try XCTUnwrap(URLComponents(url: nilRequest.url!, resolvingAgainstBaseURL: false)?.queryItems)
+        let user = try XCTUnwrap(nilItems.first(where: { $0.name == "u" })?.value)
+        XCTAssertFalse(user.isEmpty)
+        XCTAssertEqual(nilItems.filter { $0.name == "g" }.compactMap(\.value), ["beta"])
+        await nilIdentity.dispose()
+
+        ApiContractURLProtocol.requests = []
+        let blankSlot = makeService(
+            responseBody: "{\"flag\":true}",
+            identity: "alice",
+            groups: ["", "  ", "beta"],
+            claims: [:]
+        )
+        let blankResponse = await blankSlot.initialize()
+        XCTAssertEqual(blankResponse.status, .fetched)
+        let blankRequest = try XCTUnwrap(ApiContractURLProtocol.requests.first)
+        let blankItems = try XCTUnwrap(URLComponents(url: blankRequest.url!, resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(blankItems.first(where: { $0.name == "u" })?.value, "alice")
+        XCTAssertEqual(blankItems.filter { $0.name == "g" }.compactMap(\.value), ["beta"])
+        await blankSlot.dispose()
     }
 
     func testNetworkFailureFallsBackToDefaultsWithoutChangingPublicAPI() async {

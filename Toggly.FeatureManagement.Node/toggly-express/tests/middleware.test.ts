@@ -513,6 +513,55 @@ describe('featureGate', () => {
     expect(res._status).toBe(404)
   })
 
+  it('fails closed when a null group slot makes evaluation throw', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Map(),
+      json: async () => ([
+        {
+          featureKey: 'gated',
+          filters: [{
+            name: 'Targeting',
+            parameters: {
+              'Audience.Groups:0': 'beta',
+              'Audience.DefaultRolloutPercentage': 0,
+            },
+          }],
+        },
+      ]),
+      text: async () => JSON.stringify([
+        {
+          featureKey: 'gated',
+          filters: [{
+            name: 'Targeting',
+            parameters: {
+              'Audience.Groups:0': 'beta',
+              'Audience.DefaultRolloutPercentage': 0,
+            },
+          }],
+        },
+      ]),
+    })
+
+    const middleware = togglyMiddleware({
+      appKey: 'test-app',
+      getGroups: () => [null] as unknown as string[],
+    })
+    const req = createMockRequest()
+    const res = createMockResponse()
+    const setupNext = vi.fn()
+    await middleware(req, res, setupNext)
+    expect(setupNext).toHaveBeenCalledWith()
+
+    const gate = featureGate({ featureKey: 'gated' })
+    const next = vi.fn()
+    await gate(req, res, next)
+
+    expect(next).not.toHaveBeenCalled()
+    expect(res._status).toBe(404)
+  })
+
   it('should fail if toggly middleware not applied', async () => {
     const req = createMockRequest()
     const res = createMockResponse()

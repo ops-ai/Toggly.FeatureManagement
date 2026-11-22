@@ -275,6 +275,78 @@ public class TogglyTargetingFilterTests
     }
 
     [Fact]
+    public async Task EvaluateAsync_NullUserId_NamedAudience_ReturnsFalse()
+    {
+        // UserId is string. A numeric id cannot be passed.
+        var filter = new TogglyTargetingFilter(BuildProvider(CreateAccessor(null)));
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Audience.Users:0"] = "alice",
+                ["Audience.DefaultRolloutPercentage"] = "0"
+            })
+            .Build();
+
+        (await filter.EvaluateAsync(new FeatureFilterEvaluationContext
+        {
+            FeatureName = "demo-feature",
+            Parameters = config
+        })).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_NullGroupSlot_DoesNotThrow_AndRealGroupStillMatches()
+    {
+        var filter = new TogglyTargetingFilter(BuildProvider(CreateAccessor("alice", new string[] { null!, "beta" })));
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Audience.Groups:0"] = "beta",
+                ["Audience.DefaultRolloutPercentage"] = "0"
+            })
+            .Build();
+
+        (await filter.EvaluateAsync(new FeatureFilterEvaluationContext
+        {
+            FeatureName = "demo-feature",
+            Parameters = config
+        })).Should().BeTrue();
+
+        var nullOnly = new TogglyTargetingFilter(BuildProvider(CreateAccessor("alice", new string[] { null! })));
+        (await nullOnly.EvaluateAsync(new FeatureFilterEvaluationContext
+        {
+            FeatureName = "demo-feature",
+            Parameters = config
+        })).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_NullGroupSlot_DoesNotExcludeRollout()
+    {
+        var filter = new TogglyTargetingFilter(BuildProvider(CreateAccessor("alice", new string[] { null! })));
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Audience.Exclusion.Groups:0"] = "banned",
+                ["Audience.DefaultRolloutPercentage"] = "100"
+            })
+            .Build();
+
+        (await filter.EvaluateAsync(new FeatureFilterEvaluationContext
+        {
+            FeatureName = "demo-feature",
+            Parameters = config
+        })).Should().BeTrue();
+
+        var beside = new TogglyTargetingFilter(BuildProvider(CreateAccessor("alice", new string[] { null!, "banned" })));
+        (await beside.EvaluateAsync(new FeatureFilterEvaluationContext
+        {
+            FeatureName = "demo-feature",
+            Parameters = config
+        })).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task EvaluateAsync_CaseSensitiveExclusion_Misses()
     {
         var filter = new TogglyTargetingFilter(BuildProvider(CreateAccessor("Alice")));
@@ -310,7 +382,7 @@ public class TogglyTargetingFilterTests
         };
     }
 
-    private static ITargetingContextAccessor CreateAccessor(string userId, IEnumerable<string>? groups = null)
+    private static ITargetingContextAccessor CreateAccessor(string? userId, IEnumerable<string>? groups = null)
     {
         var mock = new Mock<ITargetingContextAccessor>();
         mock.Setup(a => a.GetContextAsync())
