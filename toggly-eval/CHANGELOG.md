@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.1.2
+
+2026-11-22
+
+### Fixed
+- A Targeting check no longer throws when the app passes a non-string user
+  id, or a group list with an empty slot, after a name is saved on that
+  flag's audience. The comparison fails closed. Segment equality and
+  variant allocation use the same guard [OPS-2092].
+
 ## 2.1.1
 
 2026-10-18

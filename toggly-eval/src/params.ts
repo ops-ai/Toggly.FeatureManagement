@@ -55,6 +55,22 @@ function asStringValue(v: unknown): string | undefined {
   return typeof v === 'string' ? v : undefined
 }
 
+/**
+ * Equality for audience, segment, and variant operands.
+ * Non-strings do not match. They must not reach toLowerCase, which throws
+ * into the caller's request (a numeric user id, or a null group slot).
+ */
+export function stringsEqual(
+  a: unknown,
+  b: unknown,
+  ignoreCase: boolean,
+): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') {
+    return false
+  }
+  return ignoreCase ? a.toLowerCase() === b.toLowerCase() : a === b
+}
+
 /** Collect indexed RavenDB / legacy colon-prefixed parameter values. */
 export function collectIndexedValues(
   params: Record<string, unknown> | undefined,

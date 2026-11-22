@@ -1,13 +1,16 @@
 import { UAParser } from 'ua-parser-js'
 import type { FilterEvaluator } from './types'
-import { asFloat, asString, collectIndexedValues } from './params'
+import { asFloat, asString, collectIndexedValues, stringsEqual } from './params'
 import { computePercentile } from './hash'
 
-function eq(a: string, b: string, ignoreCase: boolean): boolean {
-  return ignoreCase ? a.toLowerCase() === b.toLowerCase() : a === b
+function eq(a: unknown, b: unknown, ignoreCase: boolean): boolean {
+  return stringsEqual(a, b, ignoreCase)
 }
 
-function containsIgnoreCase(haystack: string, needle: string): boolean {
+function containsIgnoreCase(haystack: unknown, needle: unknown): boolean {
+  if (typeof haystack !== 'string' || typeof needle !== 'string') {
+    return false
+  }
   return haystack.toLowerCase().includes(needle.toLowerCase())
 }
 

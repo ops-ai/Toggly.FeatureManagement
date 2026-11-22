@@ -81,6 +81,89 @@ describe('allocateVariant (unit edge cases beyond the gold corpus)', () => {
     expect(result.variantName).toBe('B')
   })
 
+  it('fails closed when ignore-case user matching sees a non-string identity', () => {
+    const def: FeatureDefinitionModel = {
+      featureKey: 'numeric-user',
+      filters: alwaysOn,
+      variants: [{ name: 'A' }, { name: 'B' }],
+      allocation: {
+        defaultWhenEnabled: 'B',
+        user: [{ variant: 'A', users: ['42'] }],
+      },
+    }
+    const result = allocateVariant(
+      def,
+      { identity: 42 as unknown as string },
+      { ignoreCase: true },
+    )
+    expect(result.assignmentReason).toBe('DefaultWhenEnabled')
+    expect(result.variantName).toBe('B')
+  })
+
+  it('fails closed when a group slot is null and still matches a real group', () => {
+    const def: FeatureDefinitionModel = {
+      featureKey: 'null-group',
+      filters: alwaysOn,
+      variants: [{ name: 'A' }, { name: 'B' }],
+      allocation: {
+        defaultWhenEnabled: 'B',
+        group: [{ variant: 'A', groups: ['beta'] }],
+      },
+    }
+    const missed = allocateVariant(
+      def,
+      { groups: [null] as unknown as string[] },
+      { ignoreCase: true },
+    )
+    expect(missed.assignmentReason).toBe('DefaultWhenEnabled')
+    expect(missed.variantName).toBe('B')
+
+    const matched = allocateVariant(
+      def,
+      { groups: [null, 'Beta'] as unknown as string[] },
+      { ignoreCase: true },
+    )
+    expect(matched.assignmentReason).toBe('Group')
+    expect(matched.variantName).toBe('A')
+  })
+
+  it('fails closed for ignore-case percentile allocation when the user id is not a string', () => {
+    const def: FeatureDefinitionModel = {
+      featureKey: 'numeric-percentile',
+      filters: alwaysOn,
+      variants: [{ name: 'A' }, { name: 'B' }],
+      allocation: {
+        defaultWhenEnabled: 'B',
+        percentile: [{ variant: 'A', from: 0, to: 100 }],
+      },
+    }
+    const numeric = allocateVariant(
+      def,
+      { identity: 42 as unknown as string },
+      { ignoreCase: true },
+    )
+    expect(numeric.assignmentReason).toBe('DefaultWhenEnabled')
+    expect(numeric.variantName).toBe('B')
+
+    const named = allocateVariant(
+      def,
+      { identity: 'alice' },
+      { ignoreCase: true },
+    )
+    expect(named.assignmentReason).toBe('Percentile')
+    expect(named.variantName).toBe('A')
+
+    const caseSensitive = allocateVariant(def, {
+      identity: 42 as unknown as string,
+    })
+    expect(caseSensitive.assignmentReason).toBe('Percentile')
+    expect(caseSensitive.variantName).toBe('A')
+
+    const anonymous = allocateVariant(def, {}, { ignoreCase: true })
+    expect(anonymous.assignmentReason).toBe('Percentile')
+    expect(anonymous.variantName).toBe('A')
+  })
+
   it('treats a missing configurationValue as null', () => {
     const def: FeatureDefinitionModel = {
       featureKey: 'no-config-value',

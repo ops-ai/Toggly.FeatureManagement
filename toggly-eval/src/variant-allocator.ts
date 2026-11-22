@@ -1,5 +1,6 @@
 import { evaluateDefinition } from './engine'
 import { computeContextPercentage } from './hash'
+import { stringsEqual } from './params'
 import type {
   EvalContext,
   FeatureDefinitionModel,
@@ -19,8 +20,8 @@ export interface VariantAllocatorOptions {
   ignoreCase?: boolean
 }
 
-function equalsCase(a: string, b: string, ignoreCase: boolean): boolean {
-  return ignoreCase ? a.toLowerCase() === b.toLowerCase() : a === b
+function equalsCase(a: unknown, b: unknown, ignoreCase: boolean): boolean {
+  return stringsEqual(a, b, ignoreCase)
 }
 
 function findVariant(
@@ -34,8 +35,8 @@ function findVariant(
 }
 
 function matchesUser(
-  userId: string | null | undefined,
-  users: string[],
+  userId: unknown,
+  users: readonly unknown[],
   ignoreCase: boolean,
 ): boolean {
   if (!userId) {
@@ -45,8 +46,8 @@ function matchesUser(
 }
 
 function matchesGroup(
-  groups: string[] | null | undefined,
-  targetedGroups: string[],
+  groups: readonly unknown[] | null | undefined,
+  targetedGroups: readonly unknown[],
   ignoreCase: boolean,
 ): boolean {
   if (!groups || groups.length === 0) {
@@ -60,14 +61,29 @@ function matchesGroup(
  * hash `"{userId}\n{hint}"` (userId lower-cased first when `ignoreCase`), and
  * treat `to === 100` as an inclusive-from, unbounded-above bucket.
  */
+function percentileIdentity(userId: unknown, ignoreCase: boolean): string | undefined {
+  if (userId == null) {
+    return ''
+  }
+  if (typeof userId !== 'string') {
+    // Case-sensitive hashing already coerced via the template string.
+    // Ignore-case must not call toLowerCase on a non-string; fail closed.
+    return ignoreCase ? undefined : String(userId)
+  }
+  return ignoreCase ? userId.toLowerCase() : userId
+}
+
 function matchesPercentile(
-  userId: string | null | undefined,
+  userId: unknown,
   from: number,
   to: number,
   ignoreCase: boolean,
   hint: string,
 ): boolean {
-  const id = ignoreCase ? (userId ?? '').toLowerCase() : userId ?? ''
+  const id = percentileIdentity(userId, ignoreCase)
+  if (id === undefined) {
+    return false
+  }
   const percentage = computeContextPercentage(`${id}\n${hint}`)
   if (to === 100) {
     return percentage >= from

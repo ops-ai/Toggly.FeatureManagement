@@ -1,7 +1,13 @@
 import type { FilterEvaluator } from './types'
 import { computePercentile } from './hash'
 import { registerSegmentFilters } from './segment'
-import { asBool, asFloat, asString, collectIndexedValues } from './params'
+import {
+  asBool,
+  asFloat,
+  asString,
+  collectIndexedValues,
+  stringsEqual,
+} from './params'
 
 export { asBool, asFloat, asString, collectIndexedValues } from './params'
 
@@ -13,13 +19,9 @@ function parseTime(s: string): Date | undefined {
   return new Date(t)
 }
 
-function contains(list: string[], val: string, ignoreCase: boolean): boolean {
+function contains(list: readonly unknown[], val: unknown, ignoreCase: boolean): boolean {
   for (const s of list) {
-    if (ignoreCase) {
-      if (s.toLowerCase() === val.toLowerCase()) {
-        return true
-      }
-    } else if (s === val) {
+    if (stringsEqual(s, val, ignoreCase)) {
       return true
     }
   }

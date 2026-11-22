@@ -168,6 +168,50 @@ describe('segment filters', () => {
     ).toBe(false)
   })
 
+  it('BrowserLanguage fails closed when accept-language is not a string', () => {
+    expect(
+      evaluateDefinition(
+        {
+          featureKey: 'b',
+          filters: [
+            {
+              name: 'BrowserLanguage',
+              parameters: { Percentage: 100, 'BrowserLanguage:0': 'en' },
+            },
+          ],
+        },
+        {
+          identity: 'u',
+          request: { acceptLanguage: 1 as unknown as string },
+        },
+      ),
+    ).toBe(false)
+  })
+
+  it('Country fails closed when the request country is not a string', () => {
+    const def: FeatureDefinitionModel = {
+      featureKey: 'c',
+      filters: [
+        {
+          name: 'Country',
+          parameters: { Percentage: 100, 'Country:0': 'US' },
+        },
+      ],
+    }
+    expect(
+      evaluateDefinition(def, {
+        identity: 'u',
+        request: { country: 1 as unknown as string },
+      }),
+    ).toBe(false)
+    expect(
+      evaluateDefinition(def, {
+        identity: 'u',
+        request: { country: 'us' },
+      }),
+    ).toBe(true)
+  })
+
   it('CountryFamily alias works', () => {
     expect(
       evaluateDefinition(
