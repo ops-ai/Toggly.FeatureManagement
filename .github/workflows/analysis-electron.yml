@@ -332,7 +332,7 @@ jobs:
             echo ""
             echo "### Matrix"
             echo "- Node: 22.x, 24.x, 26.x"
-            echo "- Electron packed hosts: 28.3.3 (floor), 45.2.1 (latest)"
+            echo "- Electron packed hosts: 28.3.3 (floor), 45.4.1 (latest)"
             echo ""
             echo "SonarCloud: https://sonarcloud.io/project/overview?id=toggly-sdks-electron"
           } >> "$GITHUB_STEP_SUMMARY"
