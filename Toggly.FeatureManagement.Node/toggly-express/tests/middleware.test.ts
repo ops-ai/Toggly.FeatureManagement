@@ -601,6 +601,26 @@ describe('featureGate', () => {
     expect(next).toHaveBeenCalledWith(expect.any(Error))
   })
 
+  it('forwards a rejected async onDisabled handler', async () => {
+    const req = createMockRequest()
+    ;(req as { toggly?: unknown }).toggly = {
+      evaluateFeatureGate: async () => false,
+    }
+    const res = createMockResponse()
+    const onDisabled = vi.fn(async () => {
+      throw new Error('async disabled handler blew up')
+    })
+    const gate = featureGate({
+      featureKey: 'disabled-feature',
+      onDisabled,
+    })
+    const next = vi.fn()
+
+    await gate(req, res, next)
+    expect(onDisabled).toHaveBeenCalledTimes(1)
+    expect(next).toHaveBeenCalledWith(expect.any(Error))
+  })
+
   it('should fail if toggly middleware not applied', async () => {
     const req = createMockRequest()
     const res = createMockResponse()

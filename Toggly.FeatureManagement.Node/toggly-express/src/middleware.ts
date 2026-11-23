@@ -213,12 +213,12 @@ export function featureGate(options: FeatureGateOptions): RequestHandler {
     // Express 4 does not catch a rejected promise from async middleware.
     // Forward handler faults with next(error). Do not treat them as a
     // disabled flag, and do not leave them as an unhandled rejection.
-    const call = (fn: () => unknown) => {
+    const call = async (fn: () => unknown) => {
       try {
-        return fn()
+        await fn()
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error))
-        return next(err)
+        next(err)
       }
     }
 
