@@ -85,14 +85,16 @@ test('Java CI re-runs when filter-parity fixtures change', () => {
   assert.match(workflow, /docs\/filter-parity\/\*\*/);
 });
 
-test('Java CI proves Spring Framework 6.2 and 7.0 for MVC/WebFlux', () => {
+test('Java CI proves Spring Framework 6.2, 7.0, and 7.1 for MVC/WebFlux', () => {
   const spring = job('spring-framework');
   assert.match(spring, /6\.2\.19/);
-  assert.match(spring, /7\.0\.10/);
+  assert.match(spring, /7\.0\.11/);
+  assert.match(spring, /7\.1\.0/);
   assert.match(spring, /-pl toggly-spring-mvc,toggly-spring-webflux/);
   assert.match(spring, /-Dspring\.version=/);
   assert.match(spring, /-Dspring-framework\.version=/);
   assert.match(spring, /-Dtoggly\.spring-security\.version=/);
-  assert.match(spring, /7\.1\.2/);
+  assert.match(spring, /7\.1\.3/);
+  assert.match(spring, /7\.2\.0/);
   assert.match(job('build'), /java-version: \[17, 21, 25\]/);
 });
