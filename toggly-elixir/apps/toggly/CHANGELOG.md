@@ -5,7 +5,8 @@
 ### Fixed
 - Variant assignment no longer turns the flag off when the user id is a number
   or a group list contains `nil`. A finite numeric id is hashed as its decimal
-  text. A nil group slot does not match, and a real group beside it still does.
+  text, including `0`. A boolean is anonymous, not `"true"` or `"false"`.
+  A nil group slot does not match, and a real group beside it still does.
 
 ## 0.7.2 — 2026-11-18
 

@@ -158,7 +158,7 @@ defmodule Toggly.Variant do
   defp text_identity(value) when is_binary(value), do: value
   defp text_identity(value) when is_integer(value), do: Integer.to_string(value)
   defp text_identity(value) when is_float(value), do: to_string(value)
-  defp text_identity(value) when is_atom(value), do: to_string(value)
+  # Atoms such as nil, true, and false are not decimal text.
   defp text_identity(_value), do: ""
 
   defp seed_text(seed, _feature_key) when is_binary(seed), do: seed

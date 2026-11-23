@@ -18,6 +18,12 @@ defmodule Toggly.VariantTest do
   defp variant(name, value, status_override \\ "None"),
     do: %{"name" => name, "configurationValue" => value, "statusOverride" => status_override}
 
+  defp bucket(identity) when is_binary(identity) do
+    hint = "allocation\ntest-feature"
+    <<value::little-unsigned-32, _::binary>> = :crypto.hash(:sha256, identity <> "\n" <> hint)
+    value / 0xFFFFFFFF * 100
+  end
+
   test "no variants defined at all: reason is None" do
     definition = def_([], nil)
     assignment = V.assign(definition, %{})
@@ -89,6 +95,39 @@ defmodule Toggly.VariantTest do
     assignment = V.assign(definition, %{"identity" => 42}, ignore_case: true)
     assert assignment.enabled
     assert assignment.assignment_reason == "Percentile"
+  end
+
+  test "integer 0 hashes as decimal text and a boolean stays anonymous" do
+    zero = bucket("0")
+    anonymous = bucket("")
+    refute zero == anonymous
+
+    gap = abs(zero - anonymous) / 4
+    from = max(zero - gap, 0)
+    to = min(zero + gap, 99.999)
+    assert from <= zero and zero < to
+    refute from <= anonymous and anonymous < to
+
+    definition =
+      def_(
+        [variant("A", %{}), variant("B", %{})],
+        %{
+          "defaultWhenEnabled" => "B",
+          "percentile" => [
+            %{"variant" => "A", "from" => from, "to" => to}
+          ]
+        }
+      )
+
+    zero_assignment = V.assign(definition, %{"identity" => 0})
+    assert zero_assignment.variant_name == "A"
+    assert zero_assignment.assignment_reason == "Percentile"
+
+    for identity <- [nil, true, false] do
+      assignment = V.assign(definition, %{"identity" => identity})
+      assert assignment.variant_name == "B"
+      assert assignment.assignment_reason == "DefaultWhenEnabled"
+    end
   end
 
   test "nil group slot does not raise and a real group still matches" do

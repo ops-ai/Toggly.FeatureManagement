@@ -64,11 +64,11 @@ class VariantAssignment:
 def _percentile_identity(user_id: object, ignore_case: bool) -> str:
     """Text hashed for a percentile bucket.
 
-    Falsy ids stay anonymous (``user_id or ""``). A finite number is its
-    decimal text, matching the filter percentile f-string. Other values
-    stay anonymous instead of calling ``str.lower``.
+    Missing ids stay anonymous. A finite number, including ``0``, is its
+    decimal text. Booleans and other non-strings stay anonymous instead of
+    calling ``str``.
     """
-    if not user_id:
+    if user_id is None:
         text = ""
     elif isinstance(user_id, str):
         text = user_id
