@@ -3,7 +3,46 @@ import { afterEach, describe, it, expect } from 'vitest';
 import { Test } from '@nestjs/testing';
 import { ContextIdFactory } from '@nestjs/core';
 import { createServer, type Server } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { TogglyModule, TogglyProvider, TogglyService, decodeVariantValue } from '../src/index.js';
+
+type CorpusCase = {
+  id: string;
+  feature: {
+    name: string;
+    enabledFor: Array<{ name: string; parameters?: Record<string, unknown> }>;
+    variants: Array<{
+      name: string;
+      configurationValue: unknown;
+      statusOverride: 'None' | 'Enabled' | 'Disabled';
+    }>;
+    allocation: {
+      defaultWhenEnabled: string | null;
+      defaultWhenDisabled: string | null;
+      seed: string | null;
+      user: { variant: string; users: string[] }[] | null;
+      group: { variant: string; groups: string[] }[] | null;
+      percentile: { variant: string; from: number; to: number }[] | null;
+    } | null;
+  };
+  targeting: { userId: string | null; groups: string[] };
+  expected: {
+    variantName: string | null;
+    configurationValue: unknown;
+    enabled: boolean;
+    assignmentReason: string;
+  };
+  ignoreCase?: boolean;
+};
+
+const corpusCases = JSON.parse(
+  readFileSync(
+    join(dirname(fileURLToPath(import.meta.url)), '../../variant-allocator-corpus/cases.json'),
+    'utf8',
+  ),
+) as CorpusCase[];
 
 const closers: Array<() => Promise<unknown>> = [];
 afterEach(async () => {
@@ -204,4 +243,58 @@ describe('decodeVariantValue (soft-null typed decode)', () => {
     expect(decodeVariantValue(7, isCheckout)).toBeNull();
     expect(decodeVariantValue(null, isCheckout)).toBeNull();
   });
+});
+
+describe('variant-allocator corpus via Nest public API (MF-parity)', () => {
+  it('loads the shared Microsoft.FeatureManagement gold corpus', () => {
+    expect(corpusCases.length).toBeGreaterThan(0);
+  });
+
+  for (const testCase of corpusCases) {
+    it(`${testCase.id}`, async () => {
+      const transport = await fixture([
+        {
+          featureKey: testCase.feature.name,
+          filters: testCase.feature.enabledFor,
+          variants: testCase.feature.variants,
+          allocation: testCase.feature.allocation,
+        },
+      ]);
+      const mod = await moduleFor({
+        appKey: 'fixture',
+        baseUrl: transport.baseUrl,
+        refreshInterval: 0,
+        enableStreaming: false,
+        enableUsageTracking: false,
+        enableMetrics: false,
+        registerContextsOnStartup: false,
+        variantIgnoreCase: testCase.ignoreCase ?? false,
+        contextFactory: async (req: any) => req.context,
+      });
+
+      const svc = await serviceFor(mod, {
+        context: {
+          identity: testCase.targeting.userId ?? undefined,
+          groups: testCase.targeting.groups,
+        },
+      });
+
+      const variant = await svc.getVariant(testCase.feature.name);
+      const value = await svc.getVariantValue(testCase.feature.name);
+
+      // Public getVariant returns null when the allocator reports disabled or
+      // no assignable variant name (same contract as toggly-node-core).
+      if (!testCase.expected.enabled || !testCase.expected.variantName) {
+        expect(variant).toBeNull();
+        expect(value).toBeNull();
+        return;
+      }
+
+      expect(variant).toEqual({
+        name: testCase.expected.variantName,
+        configurationValue: testCase.expected.configurationValue,
+      });
+      expect(value).toEqual(testCase.expected.configurationValue);
+    });
+  }
 });
