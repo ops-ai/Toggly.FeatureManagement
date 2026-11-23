@@ -17,7 +17,7 @@ module Toggly
         return false if values.empty?
 
         accept = context&.request&.accept_language
-        return false if accept.nil? || accept.empty?
+        return false unless accept.is_a?(String) && !accept.empty?
 
         values.any? { |value| SegmentHelpers.contains_ignore_case?(accept, value) }
       end

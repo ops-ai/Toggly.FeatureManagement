@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.4 - 2026-11-22
+
+### Fixed
+- Country and browser-language checks stay off when the request value is not
+  text, instead of raising. A numeric user id does not match a saved audience
+  name. Variant assignment treats a finite numeric id, including `0`, as its
+  decimal text for percentile hashing and skips a null group slot; a real
+  group beside that slot still matches. Booleans stay anonymous.
+
 ## 1.3.3 - 2026-11-04
 
 ### Fixed

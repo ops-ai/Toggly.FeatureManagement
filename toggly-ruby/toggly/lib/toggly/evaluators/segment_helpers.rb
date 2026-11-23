@@ -72,7 +72,7 @@ module Toggly
       # @param needle [String, nil]
       # @return [Boolean]
       def contains_ignore_case?(haystack, needle)
-        return false if haystack.nil? || needle.nil?
+        return false unless haystack.is_a?(String) && needle.is_a?(String)
 
         haystack.downcase.include?(needle.downcase)
       end
@@ -81,9 +81,9 @@ module Toggly
       # @param right [String, nil]
       # @return [Boolean]
       def equals_ignore_case?(left, right)
-        return false if left.nil? || right.nil?
+        return false unless left.is_a?(String) && right.is_a?(String)
 
-        left.casecmp?(right)
+        left.casecmp?(right) == true
       end
 
       def lookup(params, key)

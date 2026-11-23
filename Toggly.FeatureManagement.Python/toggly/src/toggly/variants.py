@@ -23,6 +23,7 @@ be replayed against ``variant-allocator-corpus/cases.json`` in isolation.
 from __future__ import annotations
 
 import hashlib
+import math
 from dataclasses import dataclass
 from typing import Optional
 
@@ -60,6 +61,28 @@ class VariantAssignment:
     """One of the ``REASON_*`` constants."""
 
 
+def _percentile_identity(user_id: object, ignore_case: bool) -> str:
+    """Text hashed for a percentile bucket.
+
+    Missing ids stay anonymous. A finite number, including ``0``, is its
+    decimal text. Booleans and other non-strings stay anonymous instead of
+    calling ``str``.
+    """
+    if user_id is None:
+        text = ""
+    elif isinstance(user_id, str):
+        text = user_id
+    elif isinstance(user_id, bool):
+        text = ""
+    elif isinstance(user_id, int) or (
+        isinstance(user_id, float) and math.isfinite(user_id)
+    ):
+        text = str(user_id)
+    else:
+        text = ""
+    return text.lower() if ignore_case else text
+
+
 def compute_variant_percentile(user_id: str, hint: str) -> float:
     r"""Compute the MF ``TargetingEvaluator`` percentile bucket in ``[0, 100)``.
 
@@ -89,30 +112,36 @@ def _find_variant(variants: list[Variant], name: str | None) -> Variant | None:
 
 
 def _match_user(allocation: Allocation, user_id: str | None, ignore_case: bool) -> str | None:
-    if not user_id:
+    # A non-string id is not a saved audience name. Do not coerce 42 to "42".
+    if not isinstance(user_id, str) or not user_id:
         return None
     for ua in allocation.user:
         if ignore_case:
-            if user_id.lower() in {u.lower() for u in ua.users}:
+            if user_id.lower() in {u.lower() for u in ua.users if isinstance(u, str)}:
                 return ua.variant
         elif user_id in ua.users:
             return ua.variant
     return None
 
 
+def _string_groups(groups: list[str]) -> list[str]:
+    return [group for group in groups if isinstance(group, str) and group]
+
+
 def _match_group(
     allocation: Allocation, groups: list[str], ignore_case: bool
 ) -> str | None:
-    if not groups:
+    string_groups = _string_groups(groups)
+    if not string_groups:
         return None
     for ga in allocation.group:
         if ignore_case:
-            candidates = {g.lower() for g in ga.groups}
-            if any(g.lower() in candidates for g in groups):
+            candidates = {g.lower() for g in ga.groups if isinstance(g, str)}
+            if any(g.lower() in candidates for g in string_groups):
                 return ga.variant
         else:
-            candidates_cs = set(ga.groups)
-            if any(g in candidates_cs for g in groups):
+            candidates_cs = {g for g in ga.groups if isinstance(g, str)}
+            if any(g in candidates_cs for g in string_groups):
                 return ga.variant
     return None
 
@@ -125,9 +154,7 @@ def _match_percentile(
 ) -> str | None:
     if not allocation.percentile:
         return None
-    resolved_user_id = user_id or ""
-    if ignore_case:
-        resolved_user_id = resolved_user_id.lower()
+    resolved_user_id = _percentile_identity(user_id, ignore_case)
     hint = allocation.seed if allocation.seed else f"allocation\n{feature_key}"
     pct = compute_variant_percentile(resolved_user_id, hint)
     for pa in allocation.percentile:

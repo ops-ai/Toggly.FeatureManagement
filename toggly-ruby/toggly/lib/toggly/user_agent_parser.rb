@@ -20,7 +20,7 @@ module Toggly
     # @param user_agent [String, nil]
     # @return [ParsedUserAgent, nil]
     def parse(user_agent)
-      return nil if user_agent.nil? || user_agent.empty?
+      return nil unless user_agent.is_a?(String) && !user_agent.empty?
 
       ParsedUserAgent.new(
         browser_family: detect_browser(user_agent),

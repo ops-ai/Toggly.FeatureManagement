@@ -12,6 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI host matrix now exercises Ruby 3.3.13, 3.4.12, and 4.0.9 (latest patches;
   declared floor remains Ruby `>= 3.3.0`).
 
+## [2.0.1] - 2026-11-22
+
+### Fixed
+
+- Country, browser-language, and user-agent comparisons stay off when the
+  value is not text, instead of raising. A partial segment rollout with a
+  non-string identity fails closed. Named audiences still match a numeric id
+  only after `Context` converts it to decimal text, and a nil group slot does
+  not hide a real group.
+
 ## [2.0.0] - 2026-10-25
 
 ### Changed

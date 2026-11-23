@@ -81,13 +81,13 @@ def _collect_indexed_values(params: dict[str, Any], *prefixes: str) -> list[str]
 
 
 def _contains_ignore_case(haystack: str | None, needle: str | None) -> bool:
-    if haystack is None or needle is None:
+    if not isinstance(haystack, str) or not isinstance(needle, str):
         return False
     return needle.lower() in haystack.lower()
 
 
 def _equals_ignore_case(a: str | None, b: str | None) -> bool:
-    if a is None or b is None:
+    if not isinstance(a, str) or not isinstance(b, str):
         return False
     return a.lower() == b.lower()
 
@@ -132,7 +132,7 @@ class ParsedUserAgent:
 
 def parse_user_agent(user_agent: str | None) -> ParsedUserAgent | None:
     """Parse a User-Agent string (best-effort parity with toggly-eval / Java)."""
-    if not user_agent:
+    if not isinstance(user_agent, str) or not user_agent:
         return None
     return ParsedUserAgent(
         _detect_browser(user_agent),

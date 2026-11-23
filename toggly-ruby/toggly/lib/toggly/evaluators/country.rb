@@ -21,7 +21,7 @@ module Toggly
         return false if values.empty?
 
         country = context&.request&.country
-        return false if country.nil? || country.empty?
+        return false unless country.is_a?(String) && !country.empty?
 
         values.any? { |value| SegmentHelpers.equals_ignore_case?(value, country) }
       end
