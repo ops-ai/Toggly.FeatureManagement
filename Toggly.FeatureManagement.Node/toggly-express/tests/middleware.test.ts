@@ -513,6 +513,114 @@ describe('featureGate', () => {
     expect(res._status).toBe(404)
   })
 
+  it('fails closed when a null group slot makes evaluation throw', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Map(),
+      json: async () => ([
+        {
+          featureKey: 'gated',
+          filters: [{
+            name: 'Targeting',
+            parameters: {
+              'Audience.Groups:0': 'beta',
+              'Audience.DefaultRolloutPercentage': 0,
+            },
+          }],
+        },
+      ]),
+      text: async () => JSON.stringify([
+        {
+          featureKey: 'gated',
+          filters: [{
+            name: 'Targeting',
+            parameters: {
+              'Audience.Groups:0': 'beta',
+              'Audience.DefaultRolloutPercentage': 0,
+            },
+          }],
+        },
+      ]),
+    })
+
+    const middleware = togglyMiddleware({
+      appKey: 'test-app',
+      getGroups: () => [null] as unknown as string[],
+    })
+    const req = createMockRequest()
+    const res = createMockResponse()
+    const setupNext = vi.fn()
+    await middleware(req, res, setupNext)
+    expect(setupNext).toHaveBeenCalledWith()
+
+    const gate = featureGate({ featureKey: 'gated' })
+    const next = vi.fn()
+    await gate(req, res, next)
+
+    expect(next).not.toHaveBeenCalled()
+    expect(res._status).toBe(404)
+  })
+
+  it('lets a downstream next() error reach Express', async () => {
+    const req = createMockRequest()
+    ;(req as { toggly?: unknown }).toggly = {
+      evaluateFeatureGate: async () => true,
+    }
+    const res = createMockResponse()
+    const gate = featureGate({ featureKey: 'enabled-feature' })
+    const next = vi.fn((err?: unknown) => {
+      if (err) {
+        return
+      }
+      throw new Error('handler blew up')
+    })
+
+    await gate(req, res, next)
+    expect(next).toHaveBeenNthCalledWith(2, expect.any(Error))
+    expect(res._status).not.toBe(404)
+  })
+
+  it('does not call onDisabled again when that handler throws', async () => {
+    const req = createMockRequest()
+    ;(req as { toggly?: unknown }).toggly = {
+      evaluateFeatureGate: async () => false,
+    }
+    const res = createMockResponse()
+    const onDisabled = vi.fn(() => {
+      throw new Error('disabled handler blew up')
+    })
+    const gate = featureGate({
+      featureKey: 'disabled-feature',
+      onDisabled,
+    })
+
+    const next = vi.fn()
+    await gate(req, res, next)
+    expect(onDisabled).toHaveBeenCalledTimes(1)
+    expect(next).toHaveBeenCalledWith(expect.any(Error))
+  })
+
+  it('forwards a rejected async onDisabled handler', async () => {
+    const req = createMockRequest()
+    ;(req as { toggly?: unknown }).toggly = {
+      evaluateFeatureGate: async () => false,
+    }
+    const res = createMockResponse()
+    const onDisabled = vi.fn(async () => {
+      throw new Error('async disabled handler blew up')
+    })
+    const gate = featureGate({
+      featureKey: 'disabled-feature',
+      onDisabled,
+    })
+    const next = vi.fn()
+
+    await gate(req, res, next)
+    expect(onDisabled).toHaveBeenCalledTimes(1)
+    expect(next).toHaveBeenCalledWith(expect.any(Error))
+  })
+
   it('should fail if toggly middleware not applied', async () => {
     const req = createMockRequest()
     const res = createMockResponse()

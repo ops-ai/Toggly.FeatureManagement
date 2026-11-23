@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.11.1
+
+2026-11-22
+
+### Fixed
+
+- A null slot in the targeting groups list no longer crashes initialization.
+  The null slot is ignored. A real group beside it is still sent.
+
 ## 1.11.0
 
 2026-11-04

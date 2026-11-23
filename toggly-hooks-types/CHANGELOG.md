@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.8] - 2026-11-22
+
+### Fixed
+
+- Entity gate comparisons with a non-string operator, property, or value fail
+  closed instead of throwing.
+
 ## [1.4.7] - 2026-11-05
 
 ### Fixed

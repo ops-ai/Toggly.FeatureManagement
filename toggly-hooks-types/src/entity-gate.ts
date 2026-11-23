@@ -112,6 +112,15 @@ export function applyEntityGate(
 }
 
 function evaluateRule(rule: EntityGateRule, attributes: Record<string, unknown>): boolean {
+  if (
+    rule == null ||
+    typeof rule.op !== 'string' ||
+    typeof rule.property !== 'string' ||
+    typeof rule.value !== 'string'
+  ) {
+    return false
+  }
+
   const actualKey = findAttributeKey(attributes, rule.property)
   if (actualKey === undefined) {
     return false

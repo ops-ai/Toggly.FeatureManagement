@@ -337,7 +337,7 @@ class Toggly with WidgetsBindingObserver {
       );
       _startSystemMetrics(config);
     }
-    Toggly._groups = groups != null ? List<String>.from(groups) : [];
+    Toggly._groups = _copyGroups(groups);
     Toggly._claims = claims != null ? Map<String, String>.from(claims) : {};
     await checkAndClearFeatureFlagsCache();
     if (generation != _generation) {
@@ -426,6 +426,28 @@ class Toggly with WidgetsBindingObserver {
   static String? _normalizedToken(String? value) =>
       value == null || value.trim().isEmpty ? null : value.trim();
 
+  /// Copies group names. A cast list can contain a null slot; reading that
+  /// slot as [String] throws, so the slot is skipped and a real name beside
+  /// it is kept. Identity is [String], so a numeric user id cannot be passed.
+  static List<String> _copyGroups(List<String>? groups) {
+    if (groups == null) {
+      return <String>[];
+    }
+    final copy = <String>[];
+    for (var index = 0; index < groups.length; index++) {
+      Object? group;
+      try {
+        group = groups[index];
+      } on TypeError {
+        continue;
+      }
+      if (group is String) {
+        copy.add(group);
+      }
+    }
+    return copy;
+  }
+
   /// Sets an unique identifier to the current session. Useful in case of custom
   /// feature rollouts.
   ///
@@ -476,7 +498,7 @@ class Toggly with WidgetsBindingObserver {
       _instanceId = token;
     }
     if (groups != null) {
-      _groups = List.from(groups);
+      _groups = _copyGroups(groups);
       changed = true;
     }
     if (claims != null) {

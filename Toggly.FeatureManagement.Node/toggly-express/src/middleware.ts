@@ -195,18 +195,7 @@ export function featureGate(options: FeatureGateOptions): RequestHandler {
       return next(new Error('Toggly middleware must be applied before featureGate'))
     }
 
-    try {
-      const isEnabled = await togglyReq.toggly.evaluateFeatureGate(
-        featureKeys,
-        requirement,
-        negate
-      )
-
-      if (isEnabled) {
-        return next()
-      }
-
-      // Feature is disabled
+    const deny = () => {
       if (redirectTo) {
         return res.redirect(redirectStatus, redirectTo)
       }
@@ -215,14 +204,40 @@ export function featureGate(options: FeatureGateOptions): RequestHandler {
         return onDisabled(req, res, next)
       }
 
-      // Default: 404
       return res.status(404).json({
         error: 'Not Found',
         message: 'The requested resource is not available',
       })
-    } catch (error) {
-      return next(error)
     }
+
+    // Express 4 does not catch a rejected promise from async middleware.
+    // Forward handler faults with next(error). Do not treat them as a
+    // disabled flag, and do not leave them as an unhandled rejection.
+    const call = async (fn: () => unknown) => {
+      try {
+        await fn()
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error))
+        next(err)
+      }
+    }
+
+    let isEnabled: boolean
+    try {
+      isEnabled = await togglyReq.toggly.evaluateFeatureGate(
+        featureKeys,
+        requirement,
+        negate
+      )
+    } catch {
+      return call(deny)
+    }
+
+    if (isEnabled) {
+      return call(() => next())
+    }
+
+    return call(deny)
   }
 }
 
