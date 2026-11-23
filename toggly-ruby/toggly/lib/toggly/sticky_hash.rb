@@ -31,10 +31,8 @@ module Toggly
     def segment_percentage_passes?(percentage, feature_key, identity)
       return false if percentage.nil? || percentage <= 0
       return true if percentage >= 100
-      if identity.is_a?(String) && !identity.empty?
-        return compute_percentile(identity, feature_key) < percentage
-      end
       # A numeric id is not sticky text. Partial rollout fails closed.
+      return compute_percentile(identity, feature_key) < percentage if identity.is_a?(String) && !identity.empty?
       return false unless identity.nil? || identity == ""
 
       SecureRandom.random_number * 100 < percentage

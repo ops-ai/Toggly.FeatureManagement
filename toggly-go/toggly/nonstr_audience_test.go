@@ -7,6 +7,11 @@ import (
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/eval"
 )
 
+const (
+	audienceGroups0                  = "Audience.Groups:0"
+	audienceDefaultRolloutPercentage = "Audience.DefaultRolloutPercentage"
+)
+
 func TestContextJSONRejectsNumericIdentity(t *testing.T) {
 	var ctx Context
 	err := json.Unmarshal([]byte(`{"Identity":42}`), &ctx)
@@ -25,8 +30,8 @@ func TestNullGroupSlotDoesNotPanicAndRealGroupStillMatches(t *testing.T) {
 	}
 
 	named := map[string]any{
-		"Audience.Groups:0":                 "beta",
-		"Audience.DefaultRolloutPercentage": float64(0),
+		audienceGroups0:                  "beta",
+		audienceDefaultRolloutPercentage: float64(0),
 	}
 	on, err := eval.TargetingEvaluator{}.Evaluate("flag", named, eval.Context{Groups: ctx.Groups})
 	if err != nil {
@@ -37,8 +42,8 @@ func TestNullGroupSlotDoesNotPanicAndRealGroupStillMatches(t *testing.T) {
 	}
 
 	onlyNull := map[string]any{
-		"Audience.Groups:0":                 "beta",
-		"Audience.DefaultRolloutPercentage": float64(0),
+		audienceGroups0:                  "beta",
+		audienceDefaultRolloutPercentage: float64(0),
 	}
 	on, err = eval.TargetingEvaluator{}.Evaluate("flag", onlyNull, eval.Context{Groups: []string{""}})
 	if err != nil {
@@ -49,8 +54,8 @@ func TestNullGroupSlotDoesNotPanicAndRealGroupStillMatches(t *testing.T) {
 	}
 
 	rollout := map[string]any{
-		"Audience.Groups:0":                 "beta",
-		"Audience.DefaultRolloutPercentage": float64(100),
+		audienceGroups0:                  "beta",
+		audienceDefaultRolloutPercentage: float64(100),
 	}
 	on, err = eval.TargetingEvaluator{}.Evaluate("flag", rollout, eval.Context{Groups: []string{""}})
 	if err != nil {
@@ -63,8 +68,8 @@ func TestNullGroupSlotDoesNotPanicAndRealGroupStillMatches(t *testing.T) {
 
 func TestEmptyIdentityNamedAudienceReturnsFalse(t *testing.T) {
 	named := map[string]any{
-		"Audience.Users:0":                  "alice",
-		"Audience.DefaultRolloutPercentage": float64(0),
+		"Audience.Users:0":               "alice",
+		audienceDefaultRolloutPercentage: float64(0),
 	}
 	on, err := eval.TargetingEvaluator{}.Evaluate("flag", named, eval.Context{})
 	if err != nil {
@@ -74,7 +79,7 @@ func TestEmptyIdentityNamedAudienceReturnsFalse(t *testing.T) {
 		t.Fatal("empty identity must not match a named audience")
 	}
 
-	empty := map[string]any{"Audience.DefaultRolloutPercentage": float64(0)}
+	empty := map[string]any{audienceDefaultRolloutPercentage: float64(0)}
 	on, err = eval.TargetingEvaluator{}.Evaluate("flag", empty, eval.Context{})
 	if err != nil {
 		t.Fatal(err)

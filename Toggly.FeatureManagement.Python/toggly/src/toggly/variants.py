@@ -74,9 +74,9 @@ def _percentile_identity(user_id: object, ignore_case: bool) -> str:
         text = user_id
     elif isinstance(user_id, bool):
         text = ""
-    elif isinstance(user_id, int):
-        text = str(user_id)
-    elif isinstance(user_id, float) and math.isfinite(user_id):
+    elif isinstance(user_id, int) or (
+        isinstance(user_id, float) and math.isfinite(user_id)
+    ):
         text = str(user_id)
     else:
         text = ""
