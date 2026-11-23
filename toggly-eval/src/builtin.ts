@@ -1,9 +1,22 @@
 import type { FilterEvaluator } from './types'
 import { computePercentile } from './hash'
 import { registerSegmentFilters } from './segment'
-import { asBool, asFloat, asString, collectIndexedValues } from './params'
+import {
+  asBool,
+  asFloat,
+  asString,
+  coerceAudienceString,
+  collectIndexedValues,
+  stringsEqual,
+} from './params'
 
-export { asBool, asFloat, asString, collectIndexedValues } from './params'
+export {
+  asBool,
+  asFloat,
+  asString,
+  coerceAudienceString,
+  collectIndexedValues,
+} from './params'
 
 function parseTime(s: string): Date | undefined {
   const t = Date.parse(s)
@@ -13,13 +26,9 @@ function parseTime(s: string): Date | undefined {
   return new Date(t)
 }
 
-function contains(list: string[], val: string, ignoreCase: boolean): boolean {
+function contains(list: readonly unknown[], val: unknown, ignoreCase: boolean): boolean {
   for (const s of list) {
-    if (ignoreCase) {
-      if (s.toLowerCase() === val.toLowerCase()) {
-        return true
-      }
-    } else if (s === val) {
+    if (stringsEqual(s, val, ignoreCase)) {
       return true
     }
   }
@@ -75,9 +84,14 @@ export const timeWindow: FilterEvaluator = (_featureKey, params, _ctx) => {
   return true
 }
 
+/** True when a value is present but cannot be coerced to audience text. */
+function isUncoercibleAudienceValue(v: unknown): boolean {
+  return v != null && coerceAudienceString(v) === undefined
+}
+
 function isTargetingExcluded(
-  identity: string,
-  groups: string[],
+  identity: unknown,
+  groups: readonly unknown[],
   params: Record<string, unknown> | undefined,
   ignoreCase: boolean,
 ): boolean {
@@ -85,14 +99,26 @@ function isTargetingExcluded(
     'Audience.Exclusion.Users',
     'Audience:Exclusion:Users',
   ])
-  if (identity && contains(exclusionUsers, identity, ignoreCase)) {
-    return true
+  if (exclusionUsers.length > 0) {
+    // Object / boolean / NaN identity must not fall through to a 100% rollout.
+    if (isUncoercibleAudienceValue(identity)) {
+      return true
+    }
+    if (contains(exclusionUsers, identity, ignoreCase)) {
+      return true
+    }
   }
 
   const exclusionGroups = collectIndexedValues(params, [
     'Audience.Exclusion.Groups',
     'Audience:Exclusion:Groups',
   ])
+  if (exclusionGroups.length === 0) {
+    return false
+  }
+  if (groups.some(isUncoercibleAudienceValue)) {
+    return true
+  }
   return (
     groups.length > 0 &&
     exclusionGroups.some((g) => contains(groups, g, ignoreCase))
@@ -102,10 +128,11 @@ function isTargetingExcluded(
 export const targeting: FilterEvaluator = (featureKey, params, ctx) => {
   // Match Definitions default: IgnoreCase defaults to true when unset.
   const ignoreCase = asBool(params, 'IgnoreCase') ?? true
-  const identity = ctx.identity ?? ''
+  const identityRaw = ctx.identity
   const groups = ctx.groups ?? []
+  const identity = coerceAudienceString(identityRaw) ?? ''
 
-  if (isTargetingExcluded(identity, groups, params, ignoreCase)) {
+  if (isTargetingExcluded(identityRaw, groups, params, ignoreCase)) {
     return false
   }
 
