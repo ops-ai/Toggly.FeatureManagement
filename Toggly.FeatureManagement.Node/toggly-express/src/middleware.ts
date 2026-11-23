@@ -210,6 +210,18 @@ export function featureGate(options: FeatureGateOptions): RequestHandler {
       })
     }
 
+    // Express 4 does not catch a rejected promise from async middleware.
+    // Forward handler faults with next(error). Do not treat them as a
+    // disabled flag, and do not leave them as an unhandled rejection.
+    const call = (fn: () => unknown) => {
+      try {
+        return fn()
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error))
+        return next(err)
+      }
+    }
+
     let isEnabled: boolean
     try {
       isEnabled = await togglyReq.toggly.evaluateFeatureGate(
@@ -218,16 +230,14 @@ export function featureGate(options: FeatureGateOptions): RequestHandler {
         negate
       )
     } catch {
-      // Only the check fails closed. next() and onDisabled stay outside so
-      // their exceptions reach Express instead of being turned into a 404.
-      return deny()
+      return call(deny)
     }
 
     if (isEnabled) {
-      return next()
+      return call(() => next())
     }
 
-    return deny()
+    return call(deny)
   }
 }
 

@@ -9,7 +9,7 @@
 - `featureGate` no longer forwards an evaluator exception to Express error
   handling. A fault during the check is treated as disabled (404, redirect,
   or `onDisabled`) instead of a 500. Exceptions from `next()` or `onDisabled`
-  are not caught.
+  are forwarded with `next(error)` so Express 4 does not drop them.
 
 ## 0.4.0
 

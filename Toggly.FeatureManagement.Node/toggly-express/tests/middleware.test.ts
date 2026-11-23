@@ -569,12 +569,15 @@ describe('featureGate', () => {
     }
     const res = createMockResponse()
     const gate = featureGate({ featureKey: 'enabled-feature' })
-    const next = vi.fn(() => {
+    const next = vi.fn((err?: unknown) => {
+      if (err) {
+        return
+      }
       throw new Error('handler blew up')
     })
 
-    await expect(gate(req, res, next)).rejects.toThrow('handler blew up')
-    expect(next).toHaveBeenCalledTimes(1)
+    await gate(req, res, next)
+    expect(next).toHaveBeenNthCalledWith(2, expect.any(Error))
     expect(res._status).not.toBe(404)
   })
 
@@ -592,8 +595,10 @@ describe('featureGate', () => {
       onDisabled,
     })
 
-    await expect(gate(req, res, vi.fn())).rejects.toThrow('disabled handler blew up')
+    const next = vi.fn()
+    await gate(req, res, next)
     expect(onDisabled).toHaveBeenCalledTimes(1)
+    expect(next).toHaveBeenCalledWith(expect.any(Error))
   })
 
   it('should fail if toggly middleware not applied', async () => {
