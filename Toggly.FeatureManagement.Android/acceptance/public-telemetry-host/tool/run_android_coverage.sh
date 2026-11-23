@@ -7,11 +7,26 @@ set -u
 
 SETTLE_SECONDS="${TOGGLY_EMULATOR_SETTLE_SECONDS:-15}"
 RETRY_ADB_SLEEP_SECONDS="${TOGGLY_EMULATOR_RETRY_ADB_SLEEP_SECONDS:-5}"
+DEVICE_WAIT_SECONDS="${TOGGLY_EMULATOR_DEVICE_WAIT_SECONDS:-120}"
+
+# Never call unbounded `adb wait-for-device` — if the AVD dies it blocks until
+# the job timeout and prevents Kover artifact upload.
+wait_for_adb_device() {
+  local deadline=$1
+  echo "Waiting for adb device (bounded)..."
+  until adb get-state 2>/dev/null | tr -d '\r' | grep -qx device; do
+    if (( SECONDS >= deadline )); then
+      echo "Timed out waiting for adb device"
+      return 1
+    fi
+    sleep 2
+  done
+}
 
 wait_for_device_ready() {
-  local deadline=$((SECONDS + 300))
+  local deadline=$((SECONDS + DEVICE_WAIT_SECONDS))
   echo "Waiting for emulator to accept a shell user..."
-  adb wait-for-device
+  wait_for_adb_device "${deadline}" || return 1
 
   until [[ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; do
     if (( SECONDS >= deadline )); then
@@ -73,7 +88,8 @@ if [[ "${result}" -ne 0 ]]; then
   adb kill-server >/dev/null 2>&1 || true
   sleep "${RETRY_ADB_SLEEP_SECONDS}"
   adb start-server >/dev/null 2>&1 || true
-  adb wait-for-device || true
+  reconnect_deadline=$((SECONDS + DEVICE_WAIT_SECONDS))
+  wait_for_adb_device "${reconnect_deadline}" || true
   result=0
   run_coverage_once || result=$?
   if [[ "${result}" -ne 0 ]]; then

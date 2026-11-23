@@ -62,10 +62,12 @@ class RunnerScriptTest(unittest.TestCase):
                             "exit \"$GRADLE_EXIT\"\n"
                         )
                         (root / "gradlew").chmod(0o755)
-                        # Satisfy wait_for_device_ready (boot_completed + pm + current user).
+                        # Satisfy wait_for_adb_device + wait_for_device_ready
+                        # (get-state, boot_completed, pm, current user).
                         (root / "adb").write_text(
                             "#!/bin/sh\n"
                             "case \" $* \" in\n"
+                            "  *' get-state '*) printf 'device\\n' ;;\n"
                             "  *' getprop sys.boot_completed '*) printf '1\\n' ;;\n"
                             "  *' pm path android '*) printf 'package:/system/framework/framework-res.apk\\n' ;;\n"
                             "  *' am get-current-user '*) printf '0\\n' ;;\n"
