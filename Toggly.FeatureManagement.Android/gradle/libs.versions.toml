@@ -5,8 +5,11 @@ agp = "9.5.2"
 # KSP 2.3.x is the stable line paired with Kotlin 2.4 (versioning decoupled from Kotlin).
 ksp = "2.3.14"
 
-# Android SDK (API 37 = Android 17; minSdk floor stays 24)
+# Android SDK (API 37 = Android 17; minSdk floor stays 24).
+# Compose BOM 2026.11.01 / Compose 1.13 requires compileSdk 37.1 (not 37.0).
+# targetSdk stays on the major 37 pin — only compileSdk uses the minor.
 compileSdk = "37"
+compileSdkMinor = "1"
 minSdk = "24"
 targetSdk = "37"
 

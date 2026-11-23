@@ -5,7 +5,12 @@ plugins {
 
 android {
     namespace = "io.toggly.acceptance"
-    compileSdk = 37
+    // Compose BOM 2026.11.01 requires compileSdk 37.1; targetSdk stays 37.
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 1
+        }
+    }
 
     defaultConfig {
         applicationId = "io.toggly.acceptance.telemetry"
