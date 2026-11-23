@@ -210,22 +210,24 @@ export function featureGate(options: FeatureGateOptions): RequestHandler {
       })
     }
 
+    let isEnabled: boolean
     try {
-      const isEnabled = await togglyReq.toggly.evaluateFeatureGate(
+      isEnabled = await togglyReq.toggly.evaluateFeatureGate(
         featureKeys,
         requirement,
         negate
       )
-
-      if (isEnabled) {
-        return next()
-      }
-
-      return deny()
     } catch {
-      // Evaluator faults must not become a 500. Fail closed like a disabled flag.
+      // Only the check fails closed. next() and onDisabled stay outside so
+      // their exceptions reach Express instead of being turned into a 404.
       return deny()
     }
+
+    if (isEnabled) {
+      return next()
+    }
+
+    return deny()
   }
 }
 
