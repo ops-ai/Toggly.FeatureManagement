@@ -18,7 +18,7 @@
   </ItemGroup>
   <!-- Azure.Core 1.64 on net10+ needs System.Text.Json >= 10.0.10; keep framework STJ on net8/net9. -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-    <PackageReference Include="System.Text.Json" Version="10.0.14" />
+    <PackageReference Include="System.Text.Json" Version="10.0.15" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net11.0'">
     <PackageReference Include="System.Text.Json" Version="11.0.0" />
