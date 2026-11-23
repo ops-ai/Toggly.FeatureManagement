@@ -52,6 +52,7 @@ public class DefinitionsApiContractTests : IDisposable
     public void Dispose()
     {
         TogglyFeatureProvider.WebSocketClientFactoryOverride = null;
+        GC.SuppressFinalize(this);
     }
 
     public static TheoryData<string, string> FilterParityCases()
@@ -350,7 +351,7 @@ public class DefinitionsApiContractTests : IDisposable
         var metrics = new Mock<IMetricsService>();
         var serviceProvider = new Mock<IServiceProvider>();
         serviceProvider.Setup(x => x.GetService(typeof(IFeatureSnapshotProvider)))
-            .Returns((IFeatureSnapshotProvider?)null);
+            .Returns(null!);
         serviceProvider.Setup(x => x.GetService(typeof(IFeatureStateInternalService)))
             .Returns(featureState.Object);
         serviceProvider.Setup(x => x.GetService(typeof(IMetricsService)))
@@ -597,7 +598,7 @@ public class DefinitionsApiContractTests : IDisposable
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var path = request.RequestUri?.AbsolutePath ?? string.Empty;
-            if (path.IndexOf($"definitions/{AppKey}/{EnvironmentName}", StringComparison.OrdinalIgnoreCase) >= 0)
+            if (path.Contains($"definitions/{AppKey}/{EnvironmentName}", StringComparison.OrdinalIgnoreCase))
             {
                 Interlocked.Increment(ref _definitionsRequests);
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
@@ -643,6 +644,7 @@ public class DefinitionsApiContractTests : IDisposable
             Provider.Dispose();
             Services.Dispose();
             _httpClient.Dispose();
+            GC.SuppressFinalize(this);
         }
     }
 }
