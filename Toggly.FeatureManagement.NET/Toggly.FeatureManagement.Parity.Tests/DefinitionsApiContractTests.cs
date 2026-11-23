@@ -376,6 +376,10 @@ public class DefinitionsApiContractTests : IDisposable
         _ = await provider.GetFeatureDefinitionAsync("__warmup__");
         handler.DefinitionsRequests.Should().BeGreaterThan(0,
             "TogglyFeatureProvider must fetch definitions via mocked HttpMessageHandler");
+        // Request alone is not enough: a failed apply leaves _loaded false and
+        // IsEnabledAsync defaults to false, which would vacuously pass negative fixtures.
+        provider.GetDebugInfo().Loaded.Should().BeTrue(
+            "definitions must load successfully before public-API evaluation");
 
         var httpContext = new DefaultHttpContext();
         var httpAccessor = new HttpContextAccessor();
