@@ -20,4 +20,13 @@ ignore = [
     # Owner: alex@ops.ai. Review by: 2026-12-17 (re-check actix-web/rocket
     # for a release that drops h2 0.3, or re-evaluate reachability).
     "RUSTSEC-2026-0258",
+    # RUSTSEC-2026-0594: cookie PrivateJar nonce reuse after fork. Patched
+    # line is ">=0.18.3" only. actix-web 4.20.0 (latest 4.x as of 2026-11-23)
+    # still depends on cookie ^0.16 and resolves to 0.16.2 with no patched
+    # 0.16.x release. Direct dependents that accept 0.18.x (axum-test,
+    # rocket_http) are refreshed to cookie 0.18.3 in Cargo.lock. Advisory
+    # reachability requires fork + PrivateJar; toggly-actix does not call
+    # PrivateJar. Owner: alex@ops.ai. Review by: 2026-12-23 (re-check
+    # actix-web for a release that moves to cookie >=0.18.3).
+    "RUSTSEC-2026-0594",
 ]
