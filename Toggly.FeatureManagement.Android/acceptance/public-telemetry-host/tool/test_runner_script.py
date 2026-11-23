@@ -62,12 +62,24 @@ class RunnerScriptTest(unittest.TestCase):
                             "exit \"$GRADLE_EXIT\"\n"
                         )
                         (root / "gradlew").chmod(0o755)
+                        # Satisfy wait_for_device_ready (boot_completed + pm + current user).
                         (root / "adb").write_text(
-                            "#!/bin/sh\nprintf 'adb %s\\n' \"$*\"\n"
+                            "#!/bin/sh\n"
+                            "case \" $* \" in\n"
+                            "  *' getprop sys.boot_completed '*) printf '1\\n' ;;\n"
+                            "  *' pm path android '*) printf 'package:/system/framework/framework-res.apk\\n' ;;\n"
+                            "  *' am get-current-user '*) printf '0\\n' ;;\n"
+                            "  *) printf 'adb %s\\n' \"$*\" ;;\n"
+                            "esac\n"
                         )
                         (root / "adb").chmod(0o755)
-                        env = dict(os.environ, GRADLE_EXIT=str(gradle_exit),
-                                   PATH=f"{root}:{os.environ['PATH']}")
+                        env = dict(
+                            os.environ,
+                            GRADLE_EXIT=str(gradle_exit),
+                            PATH=f"{root}:{os.environ['PATH']}",
+                            TOGGLY_EMULATOR_SETTLE_SECONDS="0",
+                            TOGGLY_EMULATOR_RETRY_ADB_SLEEP_SECONDS="0",
+                        )
                         # The action executes each script line in its own sh -c call.
                         result = subprocess.run(["sh", "-c", command], cwd=root,
                                                 env=env, capture_output=True, text=True,

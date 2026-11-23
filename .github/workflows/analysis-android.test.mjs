@@ -262,7 +262,14 @@ test('preserves Android Java matrix, Gradle checks, native telemetry coverage an
   const native = step(coverage, 'Measure public acceptance Activity coverage on Android API 36');
   assert.match(native, /api-level: 36/);
   assert.match(native, /script: bash tool\/run_android_coverage.sh/);
+  assert.match(native, /id: emulator_coverage/);
+  assert.match(native, /continue-on-error: true/);
+  assert.match(native, /emulator-boot-timeout: 900/);
+  assert.match(native, /force-avd-creation: true/);
+  assert.match(native, /emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim/);
+  assert.doesNotMatch(coverage.split('    steps:')[0], /continue-on-error/);
   const artifact = step(coverage, 'Upload coverage artifact');
+  assert.match(artifact, /if: \$\{\{ !cancelled\(\) \}\}/);
   for (const path of [
     'name: android-coverage',
     'build/reports/kover/report.xml',
@@ -273,6 +280,9 @@ test('preserves Android Java matrix, Gradle checks, native telemetry coverage an
     'if-no-files-found: error',
   ]) assert.ok(artifact.includes(path), path);
   assert.doesNotMatch(artifact, /if-no-files-found: ignore/);
+  const failInstrumented = step(coverage, 'Fail if instrumented Android coverage failed');
+  assert.match(failInstrumented, /steps\.emulator_coverage\.outcome == 'failure'/);
+  assert.match(failInstrumented, /exit 1/);
   const sonar = job('sonar');
   assert.match(step(sonar, 'Download coverage report'), /name: android-coverage/);
   assert.doesNotMatch(step(sonar, 'Download coverage report'), /continue-on-error/);
@@ -290,7 +300,8 @@ test('preserves Android Java matrix, Gradle checks, native telemetry coverage an
     ]) assert.ok(scan.includes(arg), `${name}: ${arg}`);
   }
   const cloud = step(sonar, 'SonarCloud Scan');
-  assert.match(cloud, /GITHUB_REF_NAME: \$\{\{ github\.event_name != 'pull_request' && github\.ref == 'refs\/heads\/develop' && 'master' \|\| github\.ref_name \}\}/);
+  assert.match(cloud, /GITHUB_REF_NAME: \$\{\{ github\.event_name != 'pull_request' && \(github\.event_name == 'workflow_call' \|\| github\.ref == 'refs\/heads\/develop'\) && 'master' \|\| github\.ref_name \}\}/);
+  assert.match(cloud, /github\.event_name == 'workflow_call' \|\| github\.ref == 'refs\/heads\/develop'/);
   assert.match(cloud, /-Dsonar\.branch\.name=master/);
   assert.doesNotMatch(step(sonar, 'SonarQube Server Scan'), /sonar\.branch\.name/);
   assert.match(step(sonar, 'SonarQube Server Scan'), /-Dsonar.dependencyCheck.reportPath=dependency-check-reports\/dependency-check-report.xml/);
