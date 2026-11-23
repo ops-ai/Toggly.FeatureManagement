@@ -32,7 +32,7 @@ dependencies:
   flutter:
     sdk: flutter
   
-  elliptic: ^0.3.11
+  elliptic: ^0.4.0
   ecdsa: ^0.2.0
   crypto: ^3.0.8
   feature_flags_toggly:
