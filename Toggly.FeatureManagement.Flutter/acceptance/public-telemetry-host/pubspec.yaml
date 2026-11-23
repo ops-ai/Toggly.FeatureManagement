@@ -9,7 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  feature_flags_toggly: 1.14.2
+  feature_flags_toggly: 2.0.0
 
 dev_dependencies:
   flutter_test:
