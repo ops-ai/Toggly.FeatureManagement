@@ -11,6 +11,7 @@ dependencies:
     sdk: flutter
   feature_flags_toggly_isar:
     path: ../
+    version: 0.6.0
 
 dev_dependencies:
   flutter_lints: '>=3.0.0 <7.0.0'
