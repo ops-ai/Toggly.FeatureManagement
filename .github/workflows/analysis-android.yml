@@ -152,10 +152,10 @@ jobs:
       - name: Measure public acceptance Activity coverage on Android API 36
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          # compileSdk/targetSdk stay at 37. API 37.0 AVDs (default and
-          # aosp_atd) never reach boot_completed on macos-15-intel GHA runners
-          # (device offline for the full 600s window). API 36 is the Play
-          # target floor and boots reliably here.
+          # compileSdk is 37.1 (Compose 1.13 AAR metadata); targetSdk stays 37.
+          # API 37.0 AVDs (default and aosp_atd) never reach boot_completed on
+          # macos-15-intel GHA runners (device offline for the full 600s
+          # window). API 36 is the Play target floor and boots reliably here.
           api-level: 36
           arch: x86_64
           disable-animations: true
