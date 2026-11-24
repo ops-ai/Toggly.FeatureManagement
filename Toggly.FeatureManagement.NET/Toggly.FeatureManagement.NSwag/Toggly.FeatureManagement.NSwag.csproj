@@ -38,7 +38,8 @@
   </ItemGroup>
   
 <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
-    <PackageReference Include="Microsoft.AspNetCore.Mvc.Core" Version="2.3.0" />
+    <!-- NSwag.AspNetCore 14.8+ pulls Mvc.ApiExplorer >= 2.3.13; keep 2.3.x floor. -->
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Core" Version="2.3.14" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' != 'netstandard2.1'">
@@ -47,10 +48,10 @@
 
   <ItemGroup>
 
-    <PackageReference Include="NSwag.Core" Version="14.6.3" />
-    <PackageReference Include="NSwag.Core.Yaml" Version="14.6.3" />
-    <PackageReference Include="NSwag.AspNetCore" Version="14.6.3" />
-    <PackageReference Include="NSwag.Generation.AspNetCore" Version="14.6.3" />
+    <PackageReference Include="NSwag.Core" Version="14.8.0" />
+    <PackageReference Include="NSwag.Core.Yaml" Version="14.8.0" />
+    <PackageReference Include="NSwag.AspNetCore" Version="14.8.0" />
+    <PackageReference Include="NSwag.Generation.AspNetCore" Version="14.8.0" />
   </ItemGroup>
 
   <!-- Microsoft.FeatureManagement.AspNetCore 4.x supports net8.0+ -->
