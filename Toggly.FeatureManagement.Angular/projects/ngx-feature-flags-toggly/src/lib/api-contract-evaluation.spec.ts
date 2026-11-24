@@ -5,7 +5,10 @@
  * This client SDK consumes server-pre-evaluated flag maps; docs/filter-parity
  * fixtures and the variant-allocator corpus apply to local-eval SDKs, not here.
  */
-import { TestBed } from '@angular/core/testing'
+import { Component } from '@angular/core'
+import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing'
+import { FeatureFlagDirective } from './feature.directive'
+import { FeatureVariantDirective } from './feature-variant.directive'
 import { NgxFeatureFlagsTogglyModule } from './ngx-feature-flags-toggly.module'
 import { TogglyService } from './toggly.service'
 
@@ -206,4 +209,116 @@ describe('evaluated-variants-signed API contract evaluation', () => {
     expect(calledUrl).toContain('/evaluated-variants-signed/contract-app/Production')
     expect(calledUrl).not.toContain('/evaluated-signed/contract-app')
   })
+})
+
+@Component({
+  standalone: true,
+  imports: [FeatureFlagDirective],
+  template: `
+    <div *featureFlag="'AlwaysOn'"><span class="on">on</span></div>
+    <div *featureFlag="'AlwaysOff'"><span class="off">off</span></div>
+  `,
+})
+class EvaluatedSignedDirectiveHostComponent {}
+
+@Component({
+  standalone: true,
+  imports: [FeatureVariantDirective],
+  template: `
+    <div *featureVariant="'Sale'; variant: 'Treatment'"><span class="treatment">treatment</span></div>
+    <div *featureVariant="'Sale'; variant: 'Control'"><span class="control">control</span></div>
+  `,
+})
+class EvaluatedVariantsDirectiveHostComponent {}
+
+describe('evaluated-signed API contract directive rendering', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    spyOn(console, 'warn').and.stub()
+    spyOn(console, 'error').and.stub()
+  })
+
+  afterEach(() => {
+    TestBed.resetTestingModule()
+  })
+
+  it('renders *featureFlag from an evaluated-signed defs payload', fakeAsync(() => {
+    mockEvaluatedResponse({
+      defs: {
+        AlwaysOn: true,
+        AlwaysOff: false,
+      },
+    })
+
+    TestBed.configureTestingModule({
+      imports: [
+        EvaluatedSignedDirectiveHostComponent,
+        NgxFeatureFlagsTogglyModule.forRoot({
+          appKey: 'contract-app',
+          environment: 'Production',
+          baseURI: 'https://definitions.example.test',
+          enableTelemetry: false,
+          persistCache: false,
+          verifySignatures: false,
+        }),
+      ],
+    })
+
+    const fixture: ComponentFixture<EvaluatedSignedDirectiveHostComponent> =
+      TestBed.createComponent(EvaluatedSignedDirectiveHostComponent)
+    fixture.detectChanges()
+    tick()
+    fixture.detectChanges()
+
+    expect(fixture.nativeElement.querySelector('.on')).toBeTruthy()
+    expect(fixture.nativeElement.querySelector('.off')).toBeNull()
+  }))
+})
+
+describe('evaluated-variants-signed API contract directive rendering', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    spyOn(console, 'warn').and.stub()
+    spyOn(console, 'error').and.stub()
+  })
+
+  afterEach(() => {
+    TestBed.resetTestingModule()
+  })
+
+  it('renders *featureVariant from an evaluated-variants-signed defs payload', fakeAsync(() => {
+    mockEvaluatedResponse({
+      defs: {
+        Sale: {
+          enabled: true,
+          variant: 'Treatment',
+          configurationValue: { discount: 15 },
+        },
+      },
+    })
+
+    TestBed.configureTestingModule({
+      imports: [
+        EvaluatedVariantsDirectiveHostComponent,
+        NgxFeatureFlagsTogglyModule.forRoot({
+          appKey: 'contract-app',
+          environment: 'Production',
+          baseURI: 'https://definitions.example.test',
+          enableTelemetry: false,
+          persistCache: false,
+          verifySignatures: false,
+          enableVariants: true,
+        }),
+      ],
+    })
+
+    const fixture: ComponentFixture<EvaluatedVariantsDirectiveHostComponent> =
+      TestBed.createComponent(EvaluatedVariantsDirectiveHostComponent)
+    fixture.detectChanges()
+    tick()
+    fixture.detectChanges()
+
+    expect(fixture.nativeElement.querySelector('.treatment')).toBeTruthy()
+    expect(fixture.nativeElement.querySelector('.control')).toBeNull()
+  }))
 })
