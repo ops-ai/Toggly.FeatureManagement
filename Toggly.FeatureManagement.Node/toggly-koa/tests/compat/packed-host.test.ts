@@ -83,5 +83,5 @@ test('packed release installs, typechecks, and handles Koa 2 requests', () => {
 }, 120000)
 
 test('packed release installs, typechecks, and handles Koa 3 requests', () => {
-  installAndVerify('3.2.1')
+  installAndVerify('3.3.0')
 }, 120000)

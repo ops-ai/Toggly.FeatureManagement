@@ -232,7 +232,7 @@ try {
   // Upstream still publishes Fastify 4 (dist-tag "four"); keep proving both majors.
   for (const host of [
     { fastify: '4.29.1', node: nodeFastify4, minimumNode: 22 },
-    { fastify: '5.12.7', node: nodeFastify5, minimumNode: 22 },
+    { fastify: '5.12.8', node: nodeFastify5, minimumNode: 22 },
   ]) {
     assert.ok(
       nodeMajor(host.node) >= host.minimumNode,

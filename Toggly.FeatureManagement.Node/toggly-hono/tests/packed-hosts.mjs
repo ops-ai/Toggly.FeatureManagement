@@ -219,7 +219,7 @@ try {
   // keeps a strict declaration check with current node-server.
   for (const host of [
     { hono: '4.0.0', nodeServer: '1.14.0', skipLibCheck: true },
-    { hono: '4.13.16', nodeServer: '2.1.5', skipLibCheck: false },
+    { hono: '4.13.21', nodeServer: '2.1.11', skipLibCheck: false },
   ]) {
     writeHostFixture(hostDirectory, { skipLibCheck: host.skipLibCheck })
     run('npm', [
