@@ -149,7 +149,12 @@ jobs:
           python -m coverage report --omit='tool/test_*.py' --fail-under=80
           python -m coverage xml --omit='tool/test_*.py' -o coverage.xml
 
+      # Step-level continue-on-error only: unit Kover + Python XML must still
+      # upload when the API 36 instrumented run flakes. The job fails below if
+      # this step fails — do not mark the required job continue-on-error.
       - name: Measure public acceptance Activity coverage on Android API 36
+        id: emulator_coverage
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           # compileSdk/targetSdk stay at 37. API 37.0 AVDs (default and
@@ -159,10 +164,14 @@ jobs:
           api-level: 36
           arch: x86_64
           disable-animations: true
+          force-avd-creation: true
+          emulator-boot-timeout: 900
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
           working-directory: Toggly.FeatureManagement.Android/acceptance/public-telemetry-host
           script: bash tool/run_android_coverage.sh
 
       - name: Upload coverage to Codecov
+        if: ${{ !cancelled() }}
         uses: codecov/codecov-action@v7
         with:
           files: ${{ env.SDK_ROOT }}/build/reports/kover/report.xml
@@ -171,7 +180,10 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+      # Always publish unit Kover (+ Python XML) so Sonar can run even when the
+      # emulator step flakes. Instrumented JaCoCo is optional in this upload.
       - name: Upload coverage artifact
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
           name: android-coverage
@@ -183,6 +195,13 @@ jobs:
             ${{ env.SDK_ROOT }}/acceptance/public-telemetry-host/coverage.xml
           retention-days: 7
           if-no-files-found: error
+
+      - name: Fail if instrumented Android coverage failed
+        if: ${{ steps.emulator_coverage.outcome == 'failure' }}
+        run: |
+          echo "Instrumented API 36 coverage failed after boot wait/retry."
+          echo "Unit Kover XML was still uploaded for Sonar."
+          exit 1
 
   build-samples:
     runs-on: ubuntu-latest
@@ -391,22 +410,24 @@ jobs:
         run: test -n "${SONAR_TOKEN}" || { echo "SonarCloud token is required"; exit 1; }
 
       # toggly-sdks-android's main branch is still named master. A develop
-      # push is a short-lived branch, and the org cannot read quality-gate
-      # status for those. Publish develop pushes as master. Pull requests
-      # keep automatic PR analysis. The self-hosted server scan stays on develop.
+      # push (or release workflow_call from develop) is a short-lived branch,
+      # and the org cannot read quality-gate status for those. Publish those
+      # scans as master (same pattern as Go after OPS-2087/2088). Pull
+      # requests keep automatic PR analysis. The self-hosted server scan stays
+      # on develop.
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v8.3.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
-          GITHUB_REF: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' && 'refs/heads/master' || github.ref }}
-          GITHUB_REF_NAME: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' && 'master' || github.ref_name }}
+          GITHUB_REF: ${{ github.event_name != 'pull_request' && (github.event_name == 'workflow_call' || github.ref == 'refs/heads/develop') && 'refs/heads/master' || github.ref }}
+          GITHUB_REF_NAME: ${{ github.event_name != 'pull_request' && (github.event_name == 'workflow_call' || github.ref == 'refs/heads/develop') && 'master' || github.ref_name }}
         with:
           args: >
             -Dsonar.projectKey=toggly-sdks-android
             -Dsonar.projectVersion=${{ steps.sonar_version.outputs.version }}
-            ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/develop' && format('-Dsonar.branch.name=master -Dsonar.scm.revision={0}', github.sha) || '' }}
+            ${{ github.event_name != 'pull_request' && (github.event_name == 'workflow_call' || github.ref == 'refs/heads/develop') && format('-Dsonar.branch.name=master -Dsonar.scm.revision={0}', github.sha) || '' }}
             -Dsonar.qualitygate.wait=true
             -Dsonar.organization=ops-ai
             -Dsonar.projectName="Toggly SDKs - Android"
