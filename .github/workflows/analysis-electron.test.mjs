@@ -226,7 +226,7 @@ test('Electron workflow runs Node 22/24/26 coverage and packed Electron 28/45 ho
   assert.match(summary, /required-jobs: test,packed-host,sonar,dependency-check/);
   assert.match(step(summary, 'Check test results'), /Packed hosts: \$\{PACKED_HOST_RESULT\}/);
   assert.match(step(summary, 'Check test results'), /Node: 22\.x, 24\.x, 26\.x/);
-  assert.match(step(summary, 'Check test results'), /28\.3\.3 \(floor\), 45\.2\.1 \(latest\)/);
+  assert.match(step(summary, 'Check test results'), /28\.3\.3 \(floor\), 45\.4\.1 \(latest\)/);
 });
 
 // Sonar resolves report paths from projectBaseDir. Electron sits one directory
