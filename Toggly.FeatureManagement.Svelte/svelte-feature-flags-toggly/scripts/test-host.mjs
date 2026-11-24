@@ -19,7 +19,7 @@ const run = (command, args, cwd) =>
 const hosts = [
   { directory: 'svelte-4-minimum', version: '4.0.0' },
   { directory: 'svelte-4', version: '4.2.20' },
-  { directory: 'svelte-5', version: '5.57.0' },
+  { directory: 'svelte-5', version: '5.59.1' },
 ];
 
 try {
