@@ -116,8 +116,10 @@ jobs:
         spring:
           - version: 6.2.19
             security: 6.5.11
-          - version: 7.0.10
-            security: 7.1.2
+          - version: 7.0.11
+            security: 7.1.3
+          - version: 7.1.0
+            security: 7.2.0
 
     steps:
       - name: Checkout code
@@ -434,8 +436,8 @@ jobs:
           echo "- JDK 25 (latest LTS)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Spring / Boot matrix" >> $GITHUB_STEP_SUMMARY
-          echo "- Spring Boot 3.5.x starter + Spring Boot 4.1.x starter" >> $GITHUB_STEP_SUMMARY
-          echo "- Spring Framework 6.2.19 + 7.0.10 (MVC/WebFlux CI + packed hosts)" >> $GITHUB_STEP_SUMMARY
+          echo "- Spring Boot 3.5.x starter + Spring Boot 4.2.x starter" >> $GITHUB_STEP_SUMMARY
+          echo "- Spring Framework 6.2.19 + 7.0.11 + 7.1.0 (MVC/WebFlux CI + packed hosts)" >> $GITHUB_STEP_SUMMARY
           echo "- Filter parity fixtures (docs/filter-parity) included in path triggers" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Analysis Results" >> $GITHUB_STEP_SUMMARY
