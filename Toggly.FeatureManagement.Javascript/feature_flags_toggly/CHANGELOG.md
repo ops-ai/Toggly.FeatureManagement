@@ -19,6 +19,12 @@
 - API-contract evaluation specs exercising public `isFeatureOn` /
   `evaluateFeatureGate` / variant APIs against mocked `evaluated-signed` and
   `evaluated-variants-signed` payloads (wrapped `defs` and flat map shapes).
+- Typed flag value getters `getStringValue`, `getNumberValue`, `getJsonValue`,
+  and `getDateTimeValue`, mirroring `getVariantValue` [OPS-2102][OPS-2105].
+  Each soft-nulls (never throws) when the flag is disabled, unset, or the
+  declared `valueType` mismatches the getter. Source precedence: the
+  evaluated envelope's `value`, else its `configurationValue`, else the
+  assigned variant's `configurationValue`.
 
 ## 1.10.3
 

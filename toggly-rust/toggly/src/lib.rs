@@ -126,6 +126,7 @@ pub mod definition_cache;
 pub mod definitions;
 pub mod entity_context;
 pub mod eval;
+pub mod feature_value;
 pub mod provider;
 mod sdk_identity;
 mod segment_membership;

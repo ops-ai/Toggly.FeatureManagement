@@ -83,6 +83,26 @@ export interface ITogglyService {
   isFeatureOff: (featureKey: string) => Promise<boolean>
   getVariant: (featureKey: string) => Promise<VariantResult | null>
   getVariantValue: <T = unknown>(featureKey: string, isT?: (v: unknown) => v is T) => Promise<T | null>
+  getStringValue: (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => Promise<string | null>
+  getNumberValue: (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => Promise<number | null>
+  getJsonValue: (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => Promise<unknown | null>
+  getDateTimeValue: (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => Promise<Date | null>
   recordUsage: (featureKey: string, variant?: string) => void
   use: <T>(
     featureKey: string,

@@ -3,6 +3,7 @@ package io.toggly.cache.redis;
 import io.toggly.core.model.FeatureDefinition;
 import io.toggly.core.model.FeatureFilter;
 import io.toggly.core.model.FeatureRequirement;
+import io.toggly.core.model.FeatureValueType;
 import io.toggly.core.model.MetricDefinition;
 import io.toggly.core.model.VariantAllocation;
 import io.toggly.core.model.VariantDefinition;
@@ -327,6 +328,13 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
         if (feature.getAllocation() != null) {
             sb.append(",\"allocation\":")
                     .append(SimpleJson.serialize(VariantJson.serializeAllocation(feature.getAllocation())));
+        }
+
+        if (feature.getValueType() != null) {
+            sb.append(",\"valueType\":\"").append(feature.getValueType()).append("\"");
+        }
+        if (feature.getValue() != null) {
+            sb.append(",\"value\":").append(SimpleJson.serialize(feature.getValue()));
         }
 
         sb.append("}");
@@ -698,6 +706,8 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
 
         List<VariantDefinition> variants = VariantJson.parseVariants(json);
         VariantAllocation allocation = VariantJson.parseAllocation(json);
+        FeatureValueType valueType = FeatureValueType.fromString(extractStringValue(json, "valueType"));
+        Object value = SimpleJson.extractValue(json, "value");
 
         return FeatureDefinition.builder()
                 .featureKey(featureKey)
@@ -707,6 +717,8 @@ public class RedisCachingSnapshotProvider implements SnapshotProvider {
                 .filters(filters)
                 .variants(variants)
                 .allocation(allocation)
+                .valueType(valueType)
+                .value(value)
                 .build();
     }
 

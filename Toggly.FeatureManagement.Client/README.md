@@ -67,6 +67,25 @@ bool checkout = client.IsEnabled("ExpressCheckout", order);
 
 An EntityGate without entity context fails closed, even when a default is true. Attributes are resolved with exact then case-insensitive property lookup. Supported operators are `eq`, `neq`, `in`, `contains`, `gt`, `gte`, `lt`, and `lte`; ordered comparisons require number or datetime type. String comparisons ignore case. Empty, malformed and unsupported rules fail closed. Per-read entity context permits different Orders in different views without changing the user session.
 
+## Typed flag values
+
+Requires the next release after 3.11.2 (see `CHANGELOG.md` `Unreleased`). A
+flag's own value can be first-class `boolean`, `string`, `number`, `json`,
+or `datetime`:
+
+```csharp
+double? limit = client.GetNumberValue("upload-limit-mb");
+DateTimeOffset? launchesAt = client.GetDateTimeValue("launch-at", order);
+```
+
+`GetStringValue`, `GetNumberValue`, `GetJsonValue`, and `GetDateTimeValue`
+take the same optional `EntityContext?` as `IsEnabled` and soft-null instead
+of throwing when the flag is disabled (including a failed entity gate),
+missing, or its evaluated `valueType` does not match the getter.
+`GetDateTimeValue` parses an ISO-8601 (or epoch-millisecond) wire value into
+a `DateTimeOffset`; `GetStringValue` never auto-parses a date-looking string,
+so the flag's declared type decides which getter applies.
+
 ## Signatures and persistence
 
 All remote responses require ES256 verification. The exact raw `defs` JSON plus `|` plus Unix timestamp is double SHA-256 hashed, matching the definitions worker. Both P1363 and DER signatures are accepted by the desktop verifier. JWK curve, algorithm, key coordinates and key fingerprint are checked. `AllowedKeyIds` can restrict the accepted keys. `MaximumSignatureAge` defaults to 30 days; timestamps over five minutes in the future and rollback timestamps are rejected.

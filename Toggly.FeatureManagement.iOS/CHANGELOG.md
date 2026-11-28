@@ -4,6 +4,14 @@ All notable changes to the Toggly iOS SDK are documented in this file.
 
 ## Unreleased
 
+### Added
+- Typed flag getters `getStringValue`, `getNumberValue`, `getJsonValue`
+  (untyped and `Decodable`), and `getDateTimeValue` (ISO-8601) on
+  `TogglyService` soft-decode the assigned variant's `configurationValue` by
+  its declared `valueType`, soft-nulling on a disabled feature, missing
+  assignment, or a type mismatch [OPS-2107]. Requires `config.enableVariants`,
+  matching `getVariant`.
+
 ### Changed
 - CI Xcode matrix now keeps the Xcode 16.1 floor on `macos-15` and proves
   current toolchains: Xcode 26.6 on `macos-26` and Xcode 27.1 on `xcode-27`.

@@ -50,6 +50,12 @@ import type {
 } from '../models';
 import { HookExecutor } from './HookExecutor';
 import { decodeVariantValue } from '../decode-variant-value';
+import {
+  decodeDateTimeValue,
+  decodeJsonValue,
+  decodeNumberValue,
+  decodeStringValue,
+} from '../decode-feature-value';
 import { EventEmitter } from './EventEmitter';
 import { MemoryStorage } from './MemoryStorage';
 import {
@@ -1337,7 +1343,9 @@ export class TogglyService {
     const entry = this.variants[featureKey];
     const resolve = this.captureEvaluation([featureKey]);
     const enabled = resolve(featureKey);
-    return enabled && entry?.variant ? { name: entry.variant, configurationValue: entry.configurationValue } : null;
+    return enabled && entry?.variant
+      ? { name: entry.variant, configurationValue: entry.configurationValue, valueType: entry.valueType }
+      : null;
   }
 
   /**
@@ -1349,6 +1357,57 @@ export class TogglyService {
     isT?: (v: unknown) => v is T,
   ): T | null {
     return decodeVariantValue(this.getVariant(featureKey)?.configurationValue, isT);
+  }
+
+  /**
+   * Assigned variant's configuration value decoded as a `string`, soft-nulling
+   * when the feature is disabled/unassigned, the declared `valueType`
+   * disagrees, or the value is not a string. Requires
+   * {@link TogglyConfig.enableVariants}, matching `getVariant`.
+   */
+  getStringValue(featureKey: string): string | null {
+    const variant = this.getVariant(featureKey);
+    if (!variant) return null;
+    return decodeStringValue(variant.configurationValue, variant.valueType);
+  }
+
+  /**
+   * Assigned variant's configuration value decoded as a `number`, soft-nulling
+   * when the feature is disabled/unassigned, the declared `valueType`
+   * disagrees, or the value cannot be parsed as a number. Requires
+   * {@link TogglyConfig.enableVariants}, matching `getVariant`.
+   */
+  getNumberValue(featureKey: string): number | null {
+    const variant = this.getVariant(featureKey);
+    if (!variant) return null;
+    return decodeNumberValue(variant.configurationValue, variant.valueType);
+  }
+
+  /**
+   * Assigned variant's configuration value as JSON, soft-nulling when the
+   * feature is disabled/unassigned, the declared `valueType` disagrees, or
+   * (with `isT`) the guard fails. Requires {@link TogglyConfig.enableVariants},
+   * matching `getVariant`.
+   */
+  getJsonValue<T = unknown>(
+    featureKey: string,
+    isT?: (v: unknown) => v is T,
+  ): T | null {
+    const variant = this.getVariant(featureKey);
+    if (!variant) return null;
+    return decodeJsonValue(variant.configurationValue, variant.valueType, isT);
+  }
+
+  /**
+   * Assigned variant's configuration value decoded as a `Date` (ISO-8601 wire
+   * string), soft-nulling when the feature is disabled/unassigned, the
+   * declared `valueType` disagrees, or the value cannot be parsed. Requires
+   * {@link TogglyConfig.enableVariants}, matching `getVariant`.
+   */
+  getDateTimeValue(featureKey: string): Date | null {
+    const variant = this.getVariant(featureKey);
+    if (!variant) return null;
+    return decodeDateTimeValue(variant.configurationValue, variant.valueType);
   }
 
   /**

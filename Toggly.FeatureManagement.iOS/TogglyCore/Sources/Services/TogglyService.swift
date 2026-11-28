@@ -423,7 +423,7 @@ public actor TogglyService {
             return nil
         }
         await record(variant)
-        return VariantResult(name: variant, configurationValue: entry.configurationValue)
+        return VariantResult(name: variant, configurationValue: entry.configurationValue, valueType: entry.valueType)
     }
 
     /// Returns `VariantResult.configurationValue` for `featureKey`, or `nil` when
@@ -439,6 +439,62 @@ public actor TogglyService {
         as type: T.Type = T.self
     ) async -> T? {
         VariantValueDecoder.decode(await getVariantValue(featureKey), as: type)
+    }
+
+    // MARK: - Typed flag values
+
+    /// Returns the assigned variant's configuration value decoded as a
+    /// `String`, soft-nulling when the feature is disabled/unassigned, the
+    /// declared `valueType` disagrees, or the value is not a string.
+    ///
+    /// Requires `config.enableVariants`, matching `getVariant(_:recordCheck:)`.
+    public func getStringValue(_ featureKey: String) async -> String? {
+        guard let variant = await getVariant(featureKey) else { return nil }
+        return FeatureValueDecoder.decodeStringValue(variant.configurationValue, declaredType: variant.valueType)
+    }
+
+    /// Returns the assigned variant's configuration value decoded as a
+    /// `Double`, soft-nulling when the feature is disabled/unassigned, the
+    /// declared `valueType` disagrees, or the value cannot be parsed as a number.
+    ///
+    /// Requires `config.enableVariants`, matching `getVariant(_:recordCheck:)`.
+    public func getNumberValue(_ featureKey: String) async -> Double? {
+        guard let variant = await getVariant(featureKey) else { return nil }
+        return FeatureValueDecoder.decodeNumberValue(variant.configurationValue, declaredType: variant.valueType)
+    }
+
+    /// Returns the assigned variant's configuration value as untyped JSON
+    /// (dictionary, array, or scalar), soft-nulling when the feature is
+    /// disabled/unassigned or the declared `valueType` disagrees.
+    ///
+    /// Requires `config.enableVariants`, matching `getVariant(_:recordCheck:)`.
+    public func getJsonValue(_ featureKey: String) async -> Any? {
+        guard let variant = await getVariant(featureKey) else { return nil }
+        return FeatureValueDecoder.decodeJsonValue(variant.configurationValue, declaredType: variant.valueType)
+    }
+
+    /// Soft-decodes the assigned variant's configuration value as `T`,
+    /// soft-nulling when the feature is disabled/unassigned, the declared
+    /// `valueType` disagrees, or the value fails to decode as `T`.
+    ///
+    /// Requires `config.enableVariants`, matching `getVariant(_:recordCheck:)`.
+    public func getJsonValue<T: Decodable>(
+        _ featureKey: String,
+        as type: T.Type = T.self
+    ) async -> T? {
+        guard let variant = await getVariant(featureKey) else { return nil }
+        return FeatureValueDecoder.decodeJsonValue(variant.configurationValue, declaredType: variant.valueType, as: type)
+    }
+
+    /// Returns the assigned variant's configuration value decoded as a
+    /// `Date` (ISO-8601 wire string), soft-nulling when the feature is
+    /// disabled/unassigned, the declared `valueType` disagrees, or the value
+    /// cannot be parsed.
+    ///
+    /// Requires `config.enableVariants`, matching `getVariant(_:recordCheck:)`.
+    public func getDateTimeValue(_ featureKey: String) async -> Date? {
+        guard let variant = await getVariant(featureKey) else { return nil }
+        return FeatureValueDecoder.decodeDateTimeValue(variant.configurationValue, declaredType: variant.valueType)
     }
 
     // MARK: - Identity

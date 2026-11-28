@@ -178,4 +178,67 @@ describe('enableVariants', () => {
     await service.setIdentity('someone-else');
     expect(service.getVariant('onFeature')).toEqual({ name: 'other-user-variant', configurationValue: undefined });
   });
+
+  describe('typed flag value getters', () => {
+    async function initTyped(storage = new MemoryStorage()) {
+      (fetch as jest.Mock).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Map(),
+        json: async () => ({
+          stringFlag: { enabled: true, variant: 'default', valueType: 'string', configurationValue: 'hello' },
+          numberFlag: { enabled: true, variant: 'default', valueType: 'number', configurationValue: 42 },
+          jsonFlag: { enabled: true, variant: 'default', valueType: 'json', configurationValue: { color: 'blue' } },
+          dateFlag: { enabled: true, variant: 'default', valueType: 'datetime', configurationValue: '2026-01-15T10:00:00Z' },
+          mismatch: { enabled: true, variant: 'default', valueType: 'number', configurationValue: 'not-a-number-type' },
+          disabledFlag: { enabled: false, variant: 'default', valueType: 'string', configurationValue: 'hidden' },
+          legacyFlag: { enabled: true, variant: 'default', configurationValue: 'no-declared-type' },
+        }),
+      });
+      const service = create(storage);
+      await service.init();
+      return service;
+    }
+
+    it('getStringValue returns the typed string and soft-nulls a mismatched type', async () => {
+      const service = await initTyped();
+      expect(service.getStringValue('stringFlag')).toBe('hello');
+      expect(service.getStringValue('numberFlag')).toBeNull();
+    });
+
+    it('getNumberValue returns the typed number and soft-nulls when the declared type disagrees', async () => {
+      const service = await initTyped();
+      expect(service.getNumberValue('numberFlag')).toBe(42);
+      expect(service.getNumberValue('mismatch')).toBeNull();
+    });
+
+    it('getJsonValue returns the raw payload and honors an isT guard', async () => {
+      const service = await initTyped();
+      expect(service.getJsonValue('jsonFlag')).toEqual({ color: 'blue' });
+      const isColor = (v: unknown): v is { color: string } =>
+        typeof v === 'object' && v !== null && typeof (v as { color?: unknown }).color === 'string';
+      expect(service.getJsonValue('jsonFlag', isColor)).toEqual({ color: 'blue' });
+      expect(service.getJsonValue('jsonFlag', (v): v is number => typeof v === 'number')).toBeNull();
+    });
+
+    it('getDateTimeValue parses an ISO-8601 wire string and soft-nulls a mismatched type', async () => {
+      const service = await initTyped();
+      expect(service.getDateTimeValue('dateFlag')).toEqual(new Date('2026-01-15T10:00:00Z'));
+      expect(service.getDateTimeValue('stringFlag')).toBeNull();
+    });
+
+    it('typed getters soft-null when disabled or unknown', async () => {
+      const service = await initTyped();
+      expect(service.getStringValue('disabledFlag')).toBeNull();
+      expect(service.getStringValue('missing')).toBeNull();
+      expect(service.getNumberValue('missing')).toBeNull();
+      expect(service.getJsonValue('missing')).toBeNull();
+      expect(service.getDateTimeValue('missing')).toBeNull();
+    });
+
+    it('typed getters attempt a decode when no valueType is declared', async () => {
+      const service = await initTyped();
+      expect(service.getStringValue('legacyFlag')).toBe('no-declared-type');
+    });
+  });
 });

@@ -5,3 +5,4 @@ export * from './storage-keys';
 export * from './variant-result';
 export * from './local-gate';
 export { decodeVariantValue } from '../decode-variant-value';
+export type { FeatureValueType } from '../feature-value-codec';

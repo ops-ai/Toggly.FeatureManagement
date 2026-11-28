@@ -148,6 +148,63 @@ public sealed partial class TogglyClient : IAsyncDisposable, IFrontendTelemetry,
         return enabled;
     }
 
+    /// <summary>Typed string flag value from an evaluated envelope; soft-nulls to <paramref name="defaultValue"/> when disabled, missing, or mistyped.</summary>
+    public string? GetStringValue(string featureKey, EntityContext? entity = null, string? defaultValue = null)
+    {
+        if (!TryResolveTypedEnvelope(featureKey, entity, out var raw, out var valueType))
+            return defaultValue;
+        return FeatureValueCodec.DecodeStringValue(raw, valueType) ?? defaultValue;
+    }
+
+    /// <summary>Typed number flag value from an evaluated envelope; soft-nulls to <paramref name="defaultValue"/> when disabled, missing, or mistyped.</summary>
+    public double? GetNumberValue(string featureKey, EntityContext? entity = null, double? defaultValue = null)
+    {
+        if (!TryResolveTypedEnvelope(featureKey, entity, out var raw, out var valueType))
+            return defaultValue;
+        return FeatureValueCodec.DecodeNumberValue(raw, valueType) ?? defaultValue;
+    }
+
+    /// <summary>Typed JSON object/array flag value; soft-nulls to <paramref name="defaultValue"/> when disabled, missing, or mistyped.</summary>
+    public JsonElement? GetJsonValue(string featureKey, EntityContext? entity = null, JsonElement? defaultValue = null)
+    {
+        if (!TryResolveTypedEnvelope(featureKey, entity, out var raw, out var valueType))
+            return defaultValue;
+        return FeatureValueCodec.DecodeJsonValue(raw, valueType) ?? defaultValue;
+    }
+
+    /// <summary>Typed DateTime flag value (ISO-8601 wire); soft-nulls to <paramref name="defaultValue"/> when disabled, missing, or mistyped.</summary>
+    public DateTimeOffset? GetDateTimeValue(string featureKey, EntityContext? entity = null, DateTimeOffset? defaultValue = null)
+    {
+        if (!TryResolveTypedEnvelope(featureKey, entity, out var raw, out var valueType))
+            return defaultValue;
+        return FeatureValueCodec.DecodeDateTimeValue(raw, valueType) ?? defaultValue;
+    }
+
+    private bool TryResolveTypedEnvelope(
+        string featureKey,
+        EntityContext? entity,
+        out JsonElement raw,
+        out string? valueType)
+    {
+        raw = default;
+        valueType = null;
+        if (!IsEnabled(featureKey, entity))
+            return false;
+        JsonElement definition;
+        lock (stateLock)
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            if (!definitions.TryGetValue(featureKey, out definition))
+                return false;
+        }
+        var resolved = FeatureValueCodec.ResolveEnvelope(definition);
+        if (resolved is null)
+            return false;
+        raw = resolved.Value.Raw;
+        valueType = resolved.Value.ValueType;
+        return true;
+    }
+
     private TelemetryIdentity? CaptureIdentity()
     {
         lock (stateLock)

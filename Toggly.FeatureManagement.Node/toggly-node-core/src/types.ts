@@ -307,6 +307,39 @@ export interface TogglyClient {
     kind?: string,
     isT?: (v: unknown) => v is T,
   ): Promise<T | null>
+  /**
+   * Typed getter for the flag's own catalog `string` value (OPS-2102) —
+   * distinct from any assigned variant's `configurationValue`. Soft-nulls
+   * (`null`) when the feature is unknown, disabled, unset, or the declared
+   * `valueType` mismatches.
+   */
+  getStringValue(
+    featureKey: string,
+    context?: EvaluationContext,
+    entity?: EvaluationEntityContext,
+    kind?: string,
+  ): Promise<string | null>
+  /** Typed getter for the flag's own catalog `number` value (OPS-2102). See {@link getStringValue}. */
+  getNumberValue(
+    featureKey: string,
+    context?: EvaluationContext,
+    entity?: EvaluationEntityContext,
+    kind?: string,
+  ): Promise<number | null>
+  /** Typed getter for the flag's own catalog `json` value (object/array, OPS-2102). See {@link getStringValue}. */
+  getJsonValue(
+    featureKey: string,
+    context?: EvaluationContext,
+    entity?: EvaluationEntityContext,
+    kind?: string,
+  ): Promise<unknown | null>
+  /** Typed getter for the flag's own catalog `datetime` value, decoded to a `Date` (OPS-2102). See {@link getStringValue}. */
+  getDateTimeValue(
+    featureKey: string,
+    context?: EvaluationContext,
+    entity?: EvaluationEntityContext,
+    kind?: string,
+  ): Promise<Date | null>
   registerContext<T>(
     kind: string,
     mapper: (entity: T) => TogglyEntityContext,

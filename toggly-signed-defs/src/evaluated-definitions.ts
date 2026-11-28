@@ -10,7 +10,19 @@ export interface EntityGate {
   rules: EntityGateRule[]
 }
 
-export type EvaluatedDefinitionValue = boolean | EntityGate
+/** First-class flag value type (OPS-2099 / OPS-2102). */
+export type FeatureValueType = 'boolean' | 'string' | 'number' | 'json' | 'datetime'
+
+/** Evaluated-signed value envelope (non-boolean flags). */
+export interface EvaluatedValueEnvelope {
+  enabled: boolean
+  valueType?: FeatureValueType
+  value?: unknown
+  variant?: string
+  configurationValue?: unknown
+}
+
+export type EvaluatedDefinitionValue = boolean | EntityGate | EvaluatedValueEnvelope
 
 export type EvaluatedDefinitions = Record<string, EvaluatedDefinitionValue>
 

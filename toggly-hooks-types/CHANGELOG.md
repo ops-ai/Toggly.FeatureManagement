@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0] - 2026-11-28
+
+### Added
+
+- Optional `valueType`, `value`, `variant`, and `configurationValue` on
+  evaluated-signed envelopes for first-class typed flag getters [OPS-2102].
+
 ## [1.4.7] - 2026-11-05
 
 ### Fixed

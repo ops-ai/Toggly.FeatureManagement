@@ -9,6 +9,9 @@ export interface FeatureFilter {
   parameters?: Record<string, unknown>
 }
 
+/** First-class flag value type (OPS-2099 / OPS-2102). */
+export type FeatureValueType = 'boolean' | 'string' | 'number' | 'json' | 'datetime'
+
 export interface FeatureDefinitionModel {
   featureKey: string
   filters?: FeatureFilter[]
@@ -18,6 +21,8 @@ export interface FeatureDefinitionModel {
   requirementType?: RequirementType
   contextKind?: string
   contextRequirementType?: RequirementType
+  /** Declared value type; optional for unmigrated catalogs. */
+  valueType?: FeatureValueType
   /** Catalog-local variant definitions (Microsoft.FeatureManagement parity). */
   variants?: VariantDefinition[]
   /** Variant allocation rules; absent/null means no allocation is configured. */

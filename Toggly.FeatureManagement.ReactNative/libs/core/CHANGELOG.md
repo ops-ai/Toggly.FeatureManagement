@@ -1,5 +1,14 @@
 ## Unreleased
 
+### Added
+- Typed flag getters `getStringValue`, `getNumberValue`, `getJsonValue<T>(…, isT?)`,
+  and `getDateTimeValue` on `TogglyService` soft-decode the assigned variant's
+  `configurationValue` by its declared `valueType`, soft-nulling on a disabled
+  feature, missing assignment, or a type mismatch [OPS-2107]. Requires
+  `enableVariants: true`, matching `getVariant`.
+- Re-exported `decodeStringValue`, `decodeNumberValue`, `decodeJsonValue`,
+  `decodeDateTimeValue`, and `valueTypeMatches`.
+
 ### Changed
 - `engines.node` floor raised from `>=18` to `>=22` (Node 18 and 20 are EOL).
 - CI unit matrix exercises Node 22, 24, and 26.

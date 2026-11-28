@@ -9,7 +9,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.12.0"
+version = "0.13.0"
 authors = ["Toggly <support@toggly.io>"]
 edition = "2021"
 rust-version = "1.89"
@@ -79,5 +79,5 @@ futures-util = "0.3"
 # workflow actually publishes the bump. A bare `^X.Y.Z` caret pin breaks
 # that resolution as soon as X.Y changes here (see OPS-1247), so widen
 # the range across every published version between them instead.
-toggly = { version = ">=0.6.3, <0.13.0", path = "toggly" }
+toggly = { version = ">=0.6.3, <0.14.0", path = "toggly" }
 toggly-macros = { version = ">=0.6.3, <0.13.0", path = "toggly-macros" }

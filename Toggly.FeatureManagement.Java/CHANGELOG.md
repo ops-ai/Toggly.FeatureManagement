@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.5.0
+
+2026-11-28
+
+### Added
+- Catalog `valueType` field on `FeatureDefinition` (`FeatureValueType`:
+  `BOOLEAN | STRING | NUMBER | JSON | DATETIME`), plus a flag-level `value`
+  (wire `value`, falling back to `configurationValue` for catalogs that
+  reuse the variant key). Parsed by `HttpSnapshotProvider` and round-tripped
+  by `toggly-cache-redis`. Legacy catalogs without `valueType` still attempt
+  the typed decode [OPS-2106].
+- Typed flag getters `getStringValue`, `getNumberValue`, `getJsonValue`, and
+  `getDateTimeValue` on `TogglyClient` and the `Toggly` static facade.
+  Soft-null (`null`) on a missing feature, a disabled flag, a declared
+  `valueType` mismatch, or a decode failure — never throw solely for shape
+  mismatch and never return a wrong-typed value. `getDateTimeValue` parses
+  ISO-8601 into `OffsetDateTime`. New `io.toggly.core.util.FeatureValueCodec`
+  reuses the same soft-null shape as `VariantValueCodec` (OPS-1365)
+  [OPS-2106].
+
 ## 2.4.0
 
 2026-11-04

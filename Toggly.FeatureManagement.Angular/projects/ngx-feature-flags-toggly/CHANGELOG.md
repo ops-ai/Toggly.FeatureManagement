@@ -10,6 +10,12 @@
 ### Added
 - Mocked HTTP API-contract evaluation specs for public entry points against
   realistic `/evaluated-signed` and `/evaluated-variants-signed` `{ defs }` payloads.
+- Typed flag value getters `getStringValue`, `getNumberValue`, `getJsonValue`,
+  and `getDateTimeValue` on `TogglyService`, mirroring `getVariantValue`
+  [OPS-2102][OPS-2105]. Each soft-nulls (never throws) when the flag is
+  disabled, unset, or the declared `valueType` mismatches the getter. Source
+  precedence: the evaluated envelope's `value`, else its `configurationValue`,
+  else the assigned variant's `configurationValue`.
 
 ## 2.11.1
 

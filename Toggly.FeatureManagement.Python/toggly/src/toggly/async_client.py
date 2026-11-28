@@ -24,6 +24,12 @@ from toggly.entity_context import register_entity_contexts_at_startup
 from toggly.enums import FeatureRequirement, LoadStatus
 from toggly.evaluator import EvaluationEngine, EvaluatorRegistry
 from toggly.exceptions import TogglyConfigError, TogglyNetworkError, TogglySignatureError
+from toggly.feature_value_codec import (
+    decode_datetime_value,
+    decode_json_value,
+    decode_number_value,
+    decode_string_value,
+)
 from toggly.http import (
     HttpClient,
     build_definitions_url,
@@ -419,6 +425,86 @@ class AsyncTogglyClient(TelemetryClientMixin, DefinitionRefreshMixin):
         if variant is None:
             return None
         return decode_variant_value(variant.configuration_value, type)
+
+    async def _resolved_value_source(
+        self,
+        feature_key: str,
+        context: EvaluationContext | None,
+    ) -> tuple[Any, str | None] | None:
+        """Return ``(raw_value, declared_value_type)`` for a flag, or ``None``.
+
+        ``None`` on an unknown feature or a disabled flag (soft-null source
+        for every typed getter — OPS-2102).
+        """
+        if context is None:
+            context = EvaluationContext(identity=self._identity)
+        async with self._lock:
+            definition = self._definitions.get(feature_key)
+            if definition is None:
+                return None
+            enabled = self._engine.evaluate(definition, context)
+            if not enabled:
+                return None
+            return definition.value, definition.value_type
+
+    async def get_string_value(
+        self,
+        feature_key: str,
+        context: EvaluationContext | None = None,
+        default: str | None = None,
+    ) -> str | None:
+        """Return the flag's value as ``str``. Soft-nulls to ``default``."""
+        source = await self._resolved_value_source(feature_key, context)
+        if source is None:
+            return default
+        raw, declared = source
+        decoded = decode_string_value(raw, declared)
+        return default if decoded is None else decoded
+
+    async def get_number_value(
+        self,
+        feature_key: str,
+        context: EvaluationContext | None = None,
+        default: float | None = None,
+    ) -> float | None:
+        """Return the flag's value as a finite ``float``. Soft-nulls to ``default``."""
+        source = await self._resolved_value_source(feature_key, context)
+        if source is None:
+            return default
+        raw, declared = source
+        decoded = decode_number_value(raw, declared)
+        return default if decoded is None else decoded
+
+    async def get_json_value(
+        self,
+        feature_key: str,
+        context: EvaluationContext | None = None,
+        default: Any | None = None,
+    ) -> Any | None:
+        """Return the flag's value as parsed JSON. Soft-nulls to ``default``."""
+        source = await self._resolved_value_source(feature_key, context)
+        if source is None:
+            return default
+        raw, declared = source
+        decoded = decode_json_value(raw, declared)
+        return default if decoded is None else decoded
+
+    async def get_datetime_value(
+        self,
+        feature_key: str,
+        context: EvaluationContext | None = None,
+        default: datetime | None = None,
+    ) -> datetime | None:
+        """Return the flag's value as a ``datetime`` parsed from ISO-8601.
+
+        Soft-nulls to ``default``.
+        """
+        source = await self._resolved_value_source(feature_key, context)
+        if source is None:
+            return default
+        raw, declared = source
+        decoded = decode_datetime_value(raw, declared)
+        return default if decoded is None else decoded
 
     async def get_feature_state(
         self,

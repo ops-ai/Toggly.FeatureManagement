@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.0
+
+2026-11-28
+
+### Added
+- Optional catalog `valueType` on `FeatureDefinitionModel` and soft-decode
+  helpers (`decodeStringValue`, `decodeNumberValue`, `decodeJsonValue`,
+  `decodeDateTimeValue`) for first-class typed flag getters [OPS-2102].
+
 ## 2.1.2
 
 2026-11-22

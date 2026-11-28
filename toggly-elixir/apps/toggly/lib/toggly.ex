@@ -181,6 +181,88 @@ defmodule Toggly do
 
   defp decode_variant_value(_value, _as), do: nil
 
+  # ========== Typed Flag Value Getters (OPS-2102) ==========
+  #
+  # Soft-decode a flag's own catalog `"value"` by its declared `"valueType"`,
+  # distinct from the variant configuration getters above (`get_variant/4` /
+  # `get_variant_value/4`). Soft-null (`nil`) on an unknown feature, a
+  # disabled flag, a declared-type mismatch, or a decode failure — never
+  # raise solely for shape mismatch and never return a wrong-typed value.
+
+  @doc """
+  Returns the flag's value as a string.
+
+  Soft-nulls (`nil`) on a missing feature, a disabled flag, a declared
+  `"valueType"` mismatch, or a non-string value.
+  """
+  @spec get_string_value(client(), String.t(), Toggly.Context.t()) :: String.t() | nil
+  def get_string_value(client, key, context \\ %{}) do
+    case resolved_value_source(client, key, context) do
+      {raw, declared} -> Toggly.FeatureValueCodec.decode_string_value(raw, declared)
+      nil -> nil
+    end
+  end
+
+  @doc """
+  Returns the flag's value as a finite number.
+
+  Soft-nulls (`nil`) on a missing feature, a disabled flag, a declared
+  `"valueType"` mismatch, or a non-numeric value.
+  """
+  @spec get_number_value(client(), String.t(), Toggly.Context.t()) :: number() | nil
+  def get_number_value(client, key, context \\ %{}) do
+    case resolved_value_source(client, key, context) do
+      {raw, declared} -> Toggly.FeatureValueCodec.decode_number_value(raw, declared)
+      nil -> nil
+    end
+  end
+
+  @doc """
+  Returns the flag's value as a parsed JSON object/array.
+
+  Soft-nulls (`nil`) on a missing feature, a disabled flag, a declared
+  `"valueType"` mismatch, or an undecodable value.
+  """
+  @spec get_json_value(client(), String.t(), Toggly.Context.t()) :: map() | list() | nil
+  def get_json_value(client, key, context \\ %{}) do
+    case resolved_value_source(client, key, context) do
+      {raw, declared} -> Toggly.FeatureValueCodec.decode_json_value(raw, declared)
+      nil -> nil
+    end
+  end
+
+  @doc """
+  Returns the flag's value as a `DateTime` parsed from an ISO-8601 string.
+
+  Soft-nulls (`nil`) on a missing feature, a disabled flag, a declared
+  `"valueType"` mismatch, or an unparsable value.
+  """
+  @spec get_datetime_value(client(), String.t(), Toggly.Context.t()) :: DateTime.t() | nil
+  def get_datetime_value(client, key, context \\ %{}) do
+    case resolved_value_source(client, key, context) do
+      {raw, declared} -> Toggly.FeatureValueCodec.decode_datetime_value(raw, declared)
+      nil -> nil
+    end
+  end
+
+  # Returns `{raw_value, declared_value_type}` for a flag, or `nil` on an
+  # unknown feature or a disabled flag (soft-null source for every typed
+  # getter — OPS-2102).
+  defp resolved_value_source(client, key, context) do
+    data = data(client)
+    context = context || %{}
+
+    case Map.fetch(data.definitions, key) do
+      {:ok, definition} ->
+        if Toggly.Evaluator.evaluate(definition, context) do
+          {Map.get(definition, "value"), Map.get(definition, "valueType")}
+        end
+
+      :error ->
+        nil
+    end
+  end
+
   @doc "Fetches and verifies definitions; a failure preserves the active snapshot."
   def refresh(client), do: GenServer.call(client, :refresh, 30_000)
 

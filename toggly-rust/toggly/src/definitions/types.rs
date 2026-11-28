@@ -22,6 +22,38 @@ pub enum RequirementType {
     All,
 }
 
+/// Declared catalog value type for a feature flag (OPS-2102).
+///
+/// `None` on a `FeatureDefinition` means the catalog predates this field;
+/// typed flag getters still attempt a decode in that case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FeatureValueType {
+    /// A boolean flag value (handled via `is_enabled`, not a typed getter).
+    Boolean,
+    /// A string flag value.
+    String,
+    /// A numeric flag value.
+    Number,
+    /// A JSON object/array flag value.
+    Json,
+    /// An ISO-8601 datetime flag value.
+    Datetime,
+}
+
+impl FeatureValueType {
+    /// Returns whether a typed getter for `requested` may attempt a decode.
+    ///
+    /// `declared == None` (legacy catalogs predating this field) always
+    /// allows the attempt; the decode itself still soft-nulls on failure.
+    pub fn matches(declared: Option<FeatureValueType>, requested: FeatureValueType) -> bool {
+        match declared {
+            None => true,
+            Some(declared) => declared == requested,
+        }
+    }
+}
+
 /// A feature filter configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeatureFilter {
@@ -75,6 +107,23 @@ pub struct FeatureDefinition {
     /// Allocation rules (user/group/percentile + defaults) for variant assignment.
     #[serde(default)]
     pub allocation: Option<Allocation>,
+
+    /// Declared catalog value type (OPS-2102). `None` on catalogs predating
+    /// this field.
+    #[serde(default)]
+    pub value_type: Option<FeatureValueType>,
+
+    /// Resolved flag-level value for non-boolean flags. Prefer `value`;
+    /// `configuration_value` is a fallback for catalogs that reuse the
+    /// variant key at the flag level. Use [`FeatureDefinition::resolved_value`]
+    /// to read either.
+    #[serde(default)]
+    pub value: Option<serde_json::Value>,
+
+    /// Flag-level fallback for `value` (OPS-2102), distinct from each
+    /// variant's own `configuration_value`.
+    #[serde(default)]
+    pub configuration_value: Option<serde_json::Value>,
 }
 
 /// A variant's effective status override on the feature's enabled state.
@@ -181,6 +230,11 @@ impl FeatureDefinition {
     /// Get a filter by name.
     pub fn get_filter(&self, name: &str) -> Option<&FeatureFilter> {
         self.filters.iter().find(|f| f.name == name)
+    }
+
+    /// Returns `value`, falling back to `configuration_value` (OPS-2102).
+    pub fn resolved_value(&self) -> Option<&serde_json::Value> {
+        self.value.as_ref().or(self.configuration_value.as_ref())
     }
 }
 
@@ -342,6 +396,9 @@ mod tests {
             context_requirement_type: None,
             variants: vec![],
             allocation: None,
+            value_type: None,
+            value: None,
+            configuration_value: None,
         };
 
         assert!(def.has_filters());

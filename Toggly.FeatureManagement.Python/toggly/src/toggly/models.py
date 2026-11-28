@@ -259,6 +259,14 @@ class FeatureDefinition:
     allocation: Allocation | None = None
     """Allocation rules for variant assignment (user, group, percentile targeting)."""
 
+    value_type: str | None = None
+    """Declared catalog value type (OPS-2102): ``"boolean" | "string" | "number" |
+    "json" | "datetime"``, or ``None`` on catalogs predating this field."""
+
+    value: Any = None
+    """Resolved flag-level value for non-boolean flags. Prefers wire ``value``,
+    falls back to ``configurationValue`` for catalogs that reuse the variant key."""
+
     def __post_init__(self) -> None:
         """Validate feature definition after initialization."""
         if not self.feature_key:
@@ -285,6 +293,8 @@ class FeatureDefinition:
             "metrics": self.metrics,
             "variants": [v.to_dict() for v in self.variants],
             "allocation": self.allocation.to_dict() if self.allocation else None,
+            "value_type": self.value_type,
+            "value": self.value,
         }
 
     @classmethod
@@ -311,6 +321,12 @@ class FeatureDefinition:
             metrics=data.get("metrics"),
             variants=variants,
             allocation=allocation,
+            value_type=data.get("value_type") or data.get("valueType"),
+            value=(
+                data.get("value")
+                if data.get("value") is not None
+                else data.get("configurationValue", data.get("configuration_value"))
+            ),
         )
 
 

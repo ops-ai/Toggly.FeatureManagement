@@ -134,4 +134,83 @@ public class FlagEvaluationContractTests
         Assert.False(client.IsEnabled("remote_off"));
         Assert.False(client.IsEnabled("remote_on"));
     }
+
+    [Fact]
+    public async Task TypedValueEnvelopesEvaluateThroughIsEnabledAndTypedGetters()
+    {
+        using var fixture = new SignedFixture();
+        var defs = JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            // valueType + value: direct typed value, no configurationValue.
+            ["banner_text"] = new { enabled = true, valueType = "string", value = "Welcome back" },
+            // Falls back to configurationValue when "value" is absent.
+            ["theme"] = new { enabled = true, valueType = "json", configurationValue = new { mode = "dark", fontSize = 14 } },
+            ["retry_budget"] = new { enabled = true, valueType = "number", value = 3.5 },
+            ["launch_at"] = new { enabled = true, valueType = "datetime", value = "2026-02-03T04:05:06Z" },
+            // Disabled value envelope: IsEnabled false, typed getters soft-null.
+            ["disabled_value"] = new { enabled = false, valueType = "string", value = "unused" },
+            // Declared type mismatch: typed getter soft-nulls even though enabled.
+            ["mismatched_type"] = new { enabled = true, valueType = "number", value = "not-a-number" },
+            // Legacy boolean flag untouched by the envelope shape.
+            ["legacy_flag"] = true,
+            // Existing EntityGate object must still evaluate via rules, not the envelope path.
+            ["gated_flag"] = new
+            {
+                requirement = "all",
+                rules = new[] { new { property = "plan", op = "eq", type = "string", value = "pro" } }
+            }
+        });
+
+        using var http = new HttpClient(new Handler((_, _) =>
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(fixture.Envelope(defs)) };
+            response.Headers.TryAddWithoutValidation("X-Definitions-Revision", "typed-rev-1");
+            return Task.FromResult(response);
+        }));
+
+        await using var client = new TogglyClient(new()
+        {
+            EnableTelemetry = false,
+            AppKey = "public-app",
+            Environment = "Production",
+            TrustedJwks = fixture.Jwks,
+            EnableLiveUpdates = false
+        }, http, new Es256SignatureVerifier());
+
+        await client.InitializeAsync();
+
+        Assert.True(client.IsEnabled("banner_text"));
+        Assert.Equal("Welcome back", client.GetStringValue("banner_text"));
+
+        Assert.True(client.IsEnabled("theme"));
+        var theme = client.GetJsonValue("theme");
+        Assert.NotNull(theme);
+        Assert.Equal(JsonValueKind.Object, theme!.Value.ValueKind);
+        Assert.Equal("dark", theme.Value.GetProperty("mode").GetString());
+        Assert.Equal(14, theme.Value.GetProperty("fontSize").GetInt32());
+
+        Assert.Equal(3.5, client.GetNumberValue("retry_budget"));
+        Assert.Equal(DateTimeOffset.Parse("2026-02-03T04:05:06Z"), client.GetDateTimeValue("launch_at"));
+
+        Assert.False(client.IsEnabled("disabled_value"));
+        Assert.Null(client.GetStringValue("disabled_value"));
+        Assert.Equal("fallback", client.GetStringValue("disabled_value", defaultValue: "fallback"));
+
+        Assert.True(client.IsEnabled("mismatched_type"));
+        Assert.Null(client.GetNumberValue("mismatched_type"));
+
+        Assert.True(client.IsEnabled("legacy_flag"));
+        Assert.Null(client.GetStringValue("legacy_flag"));
+
+        var pro = new EntityContext("Account", "acct-1", new Dictionary<string, object?> { ["plan"] = "pro" });
+        Assert.True(client.IsEnabled("gated_flag", pro));
+        Assert.False(client.IsEnabled("gated_flag"));
+        Assert.Null(client.GetStringValue("gated_flag"));
+        Assert.Null(client.GetStringValue("gated_flag", pro));
+
+        // Typed getters accept the same optional entity as IsEnabled.
+        Assert.Equal("Welcome back", client.GetStringValue("banner_text", pro));
+
+        Assert.Null(client.GetStringValue("missing_flag"));
+    }
 }

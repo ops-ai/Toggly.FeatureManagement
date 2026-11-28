@@ -178,6 +178,105 @@ public final class Toggly {
         return client().getVariantValue(type, featureKey, context);
     }
 
+    // ========== Typed Flag Value Getters (OPS-2102) ==========
+    //
+    // See TogglyClient#getStringValue/getNumberValue/getJsonValue/
+    // getDateTimeValue — soft-decode the flag's own catalog value, distinct
+    // from the variant configuration getters above.
+
+    /**
+     * Returns the flag's value as a {@link String}. Soft-nulls on a missing
+     * feature, a disabled flag, a declared {@code valueType} mismatch, or a
+     * non-string value.
+     *
+     * @param featureKey the feature key
+     * @return the string value, or null
+     */
+    public static String getStringValue(String featureKey) {
+        return client().getStringValue(featureKey);
+    }
+
+    /**
+     * Returns the flag's value as a {@link String} for the given context.
+     *
+     * @param featureKey the feature key
+     * @param context the evaluation context
+     * @return the string value, or null
+     */
+    public static String getStringValue(String featureKey, EvaluationContext context) {
+        return client().getStringValue(featureKey, context);
+    }
+
+    /**
+     * Returns the flag's value as a finite {@link Double}. Soft-nulls on a
+     * missing feature, a disabled flag, a declared {@code valueType}
+     * mismatch, or a non-numeric value.
+     *
+     * @param featureKey the feature key
+     * @return the numeric value, or null
+     */
+    public static Double getNumberValue(String featureKey) {
+        return client().getNumberValue(featureKey);
+    }
+
+    /**
+     * Returns the flag's value as a finite {@link Double} for the given context.
+     *
+     * @param featureKey the feature key
+     * @param context the evaluation context
+     * @return the numeric value, or null
+     */
+    public static Double getNumberValue(String featureKey, EvaluationContext context) {
+        return client().getNumberValue(featureKey, context);
+    }
+
+    /**
+     * Returns the flag's value as a parsed JSON object/array. Soft-nulls on
+     * a missing feature, a disabled flag, a declared {@code valueType}
+     * mismatch, or an undecodable value.
+     *
+     * @param featureKey the feature key
+     * @return the parsed JSON value, or null
+     */
+    public static Object getJsonValue(String featureKey) {
+        return client().getJsonValue(featureKey);
+    }
+
+    /**
+     * Returns the flag's value as a parsed JSON object/array for the given context.
+     *
+     * @param featureKey the feature key
+     * @param context the evaluation context
+     * @return the parsed JSON value, or null
+     */
+    public static Object getJsonValue(String featureKey, EvaluationContext context) {
+        return client().getJsonValue(featureKey, context);
+    }
+
+    /**
+     * Returns the flag's value as an {@link java.time.OffsetDateTime} parsed
+     * from an ISO-8601 string. Soft-nulls on a missing feature, a disabled
+     * flag, a declared {@code valueType} mismatch, or an unparsable value.
+     *
+     * @param featureKey the feature key
+     * @return the parsed datetime, or null
+     */
+    public static java.time.OffsetDateTime getDateTimeValue(String featureKey) {
+        return client().getDateTimeValue(featureKey);
+    }
+
+    /**
+     * Returns the flag's value as an {@link java.time.OffsetDateTime} for the
+     * given context.
+     *
+     * @param featureKey the feature key
+     * @param context the evaluation context
+     * @return the parsed datetime, or null
+     */
+    public static java.time.OffsetDateTime getDateTimeValue(String featureKey, EvaluationContext context) {
+        return client().getDateTimeValue(featureKey, context);
+    }
+
     /**
      * Registers a mapper from a domain object to {@link TogglyEntityContext}.
      */

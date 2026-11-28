@@ -11,6 +11,7 @@ import io.toggly.core.eval.VariantAllocator;
 import io.toggly.core.eval.VariantAssignment;
 import io.toggly.core.model.FeatureDefinition;
 import io.toggly.core.model.FeatureRequirement;
+import io.toggly.core.model.FeatureValueType;
 import io.toggly.core.model.MetricDefinition;
 import io.toggly.core.model.VariantDefinition;
 import io.toggly.core.model.VariantResult;
@@ -20,6 +21,7 @@ import io.toggly.core.snapshot.SnapshotProvider;
 import io.toggly.core.telemetry.FeatureUsageScope;
 import io.toggly.core.telemetry.MetricsFeatureOptions;
 import io.toggly.core.telemetry.TelemetryRuntime;
+import io.toggly.core.util.FeatureValueCodec;
 import io.toggly.core.util.VariantValueCodec;
 
 import java.util.List;
@@ -433,6 +435,159 @@ public final class TogglyClient implements AutoCloseable {
     public <T> Optional<T> getVariantValueOptional(
             Class<T> type, String featureKey, EvaluationContext context) {
         return VariantValueCodec.decodeOptional(getVariantValue(featureKey, context), type);
+    }
+
+    // ========== Typed Flag Value Getters (OPS-2102) ==========
+    //
+    // Soft-decode a flag's own catalog value (FeatureDefinition#getValue) by
+    // its declared FeatureDefinition#getValueType, distinct from the variant
+    // configuration getters above. Soft-null (return null) on a missing
+    // feature, a disabled flag, a declared-type mismatch, or a decode
+    // failure — never throw solely for shape mismatch.
+
+    /**
+     * Returns {@code (raw value, declared type)} for a flag using the current
+     * thread context, or {@code null} on an unknown feature or a disabled flag.
+     */
+    private Object[] resolvedValueSource(String featureKey, EvaluationContext context) {
+        if (featureKey == null || featureKey.isEmpty()) {
+            return null;
+        }
+        try {
+            FeatureSnapshot snapshot = snapshotProvider.getSnapshot();
+            FeatureDefinition definition = snapshot.getFeature(featureKey);
+            if (definition == null) {
+                return null;
+            }
+            EvaluationContext effectiveContext = resolveContext(context);
+            boolean enabled = evaluationEngine.evaluateWithDefaults(
+                    definition,
+                    effectiveContext,
+                    featureKey,
+                    config.getFeatureDefaults(),
+                    config.getDefaultFeatureState());
+            if (!enabled) {
+                return null;
+            }
+            return new Object[]{definition.getValue(), definition.getValueType()};
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, e, () -> "Error resolving flag value for feature: " + featureKey);
+            return null;
+        }
+    }
+
+    /**
+     * Returns the flag's value as a {@link String}, using the current thread
+     * context. Soft-nulls on a missing feature, a disabled flag, a declared
+     * {@code valueType} mismatch, or a non-string value.
+     *
+     * @param featureKey the feature key
+     * @return the string value, or null
+     */
+    public String getStringValue(String featureKey) {
+        return getStringValue(featureKey, ContextHolder.getContext());
+    }
+
+    /**
+     * Returns the flag's value as a {@link String} for the given context.
+     * See {@link #getStringValue(String)}.
+     *
+     * @param featureKey the feature key
+     * @param context the evaluation context
+     * @return the string value, or null
+     */
+    public String getStringValue(String featureKey, EvaluationContext context) {
+        Object[] source = resolvedValueSource(featureKey, context);
+        if (source == null) {
+            return null;
+        }
+        return FeatureValueCodec.decodeString(source[0], (FeatureValueType) source[1]);
+    }
+
+    /**
+     * Returns the flag's value as a finite {@link Double}, using the current
+     * thread context. Soft-nulls on a missing feature, a disabled flag, a
+     * declared {@code valueType} mismatch, or a non-numeric value.
+     *
+     * @param featureKey the feature key
+     * @return the numeric value, or null
+     */
+    public Double getNumberValue(String featureKey) {
+        return getNumberValue(featureKey, ContextHolder.getContext());
+    }
+
+    /**
+     * Returns the flag's value as a finite {@link Double} for the given
+     * context. See {@link #getNumberValue(String)}.
+     *
+     * @param featureKey the feature key
+     * @param context the evaluation context
+     * @return the numeric value, or null
+     */
+    public Double getNumberValue(String featureKey, EvaluationContext context) {
+        Object[] source = resolvedValueSource(featureKey, context);
+        if (source == null) {
+            return null;
+        }
+        return FeatureValueCodec.decodeNumber(source[0], (FeatureValueType) source[1]);
+    }
+
+    /**
+     * Returns the flag's value as a parsed JSON object/array ({@code Map}/
+     * {@code List}), using the current thread context. Soft-nulls on a
+     * missing feature, a disabled flag, a declared {@code valueType}
+     * mismatch, or an undecodable value.
+     *
+     * @param featureKey the feature key
+     * @return the parsed JSON value, or null
+     */
+    public Object getJsonValue(String featureKey) {
+        return getJsonValue(featureKey, ContextHolder.getContext());
+    }
+
+    /**
+     * Returns the flag's value as a parsed JSON object/array for the given
+     * context. See {@link #getJsonValue(String)}.
+     *
+     * @param featureKey the feature key
+     * @param context the evaluation context
+     * @return the parsed JSON value, or null
+     */
+    public Object getJsonValue(String featureKey, EvaluationContext context) {
+        Object[] source = resolvedValueSource(featureKey, context);
+        if (source == null) {
+            return null;
+        }
+        return FeatureValueCodec.decodeJson(source[0], (FeatureValueType) source[1]);
+    }
+
+    /**
+     * Returns the flag's value as an {@link java.time.OffsetDateTime} parsed
+     * from an ISO-8601 string, using the current thread context. Soft-nulls
+     * on a missing feature, a disabled flag, a declared {@code valueType}
+     * mismatch, or an unparsable value.
+     *
+     * @param featureKey the feature key
+     * @return the parsed datetime, or null
+     */
+    public java.time.OffsetDateTime getDateTimeValue(String featureKey) {
+        return getDateTimeValue(featureKey, ContextHolder.getContext());
+    }
+
+    /**
+     * Returns the flag's value as an {@link java.time.OffsetDateTime} for the
+     * given context. See {@link #getDateTimeValue(String)}.
+     *
+     * @param featureKey the feature key
+     * @param context the evaluation context
+     * @return the parsed datetime, or null
+     */
+    public java.time.OffsetDateTime getDateTimeValue(String featureKey, EvaluationContext context) {
+        Object[] source = resolvedValueSource(featureKey, context);
+        if (source == null) {
+            return null;
+        }
+        return FeatureValueCodec.decodeDateTime(source[0], (FeatureValueType) source[1]);
     }
 
     private VariantResult toVariantResult(VariantAssignment assignment) {

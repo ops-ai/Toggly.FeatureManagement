@@ -40,6 +40,25 @@ const cfg = Toggly.getVariantValue<Checkout>('checkout-flow', isCheckout)
 // Checkout | null — soft-null when missing or guard fails
 ```
 
+## Typed flag values
+
+Requires the next release after 1.10.3 (see `CHANGELOG.md` `Unreleased`). A
+flag's own value can be first-class `boolean`, `string`, `number`, `json`,
+or `datetime`, so non-boolean flags no longer need a variant just to carry a
+single structured value.
+
+```typescript
+const limit = Toggly.getNumberValue('upload-limit-mb') // number | null
+const launchesAt = Toggly.getDateTimeValue('launch-at') // Date | null
+```
+
+`getStringValue`, `getNumberValue`, `getJsonValue`, and `getDateTimeValue`
+soft-null (never throw) when the flag is disabled, unset, or its declared
+`valueType` does not match the getter. `getDateTimeValue` parses an
+ISO-8601 wire value into a `Date`; `getStringValue` never auto-parses a
+date-looking string, so the flag's declared type — not the shape of the
+value — decides which getter applies.
+
 Passing context during initialization avoids an intermediate request followed
 by a refreshing `setContext` call. Omitted fields reuse persisted context;
 omitting identity also generates an identifier when none exists. Explicit

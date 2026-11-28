@@ -8,6 +8,30 @@ using System.Text.Json.Serialization;
 namespace Toggly.FeatureManagement.Data
 {
     /// <summary>
+    /// Declares the typed shape of a feature's variant configuration value (OPS-2104).
+    /// Used by the typed getters in <see cref="FeatureValueManagerExtensions"/> to validate
+    /// catalog intent before decoding a value. Mirrors the wire <c>FeatureValueType</c> used by
+    /// the evaluated-signed envelope and other Toggly SDKs.
+    /// </summary>
+    public enum FeatureValueType
+    {
+        /// <summary>Plain boolean enabled/disabled flag; no typed variant value.</summary>
+        Boolean,
+
+        /// <summary>Scalar string value.</summary>
+        String,
+
+        /// <summary>Numeric value (bound as <see cref="double"/>).</summary>
+        Number,
+
+        /// <summary>Arbitrary JSON document/value (object or array).</summary>
+        Json,
+
+        /// <summary>Date/time value (bound as <see cref="DateTimeOffset"/>).</summary>
+        DateTime
+    }
+
+    /// <summary>
     /// Feature definition model
     /// </summary>
     public class FeatureDefinitionModel : IEquatable<FeatureDefinitionModel>, IEqualityComparer<FeatureDefinitionModel>
@@ -16,6 +40,14 @@ namespace Toggly.FeatureManagement.Data
         /// Unique key of feature
         /// </summary>
         public string FeatureKey { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Declared type of this feature's variant configuration value (OPS-2104). <c>null</c>
+        /// means the catalog has not declared a type; typed getters soft-decode without
+        /// validating against this field.
+        /// </summary>
+        [JsonConverter(typeof(JsonStringEnumConverter))]
+        public FeatureValueType? ValueType { get; set; }
 
         /// <summary>
         /// List of filters to checked to determine if feature is enabled

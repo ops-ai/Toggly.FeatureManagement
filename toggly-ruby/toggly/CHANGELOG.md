@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-28
+
+### Added
+
+- Catalog `value_type` attribute on `FeatureDefinition` (wire `valueType`:
+  `"boolean" | "string" | "number" | "json" | "datetime"`) plus a flag-level
+  `value` (wire `value`, falling back to `configurationValue` for catalogs
+  that reuse the variant key). Legacy catalogs without `valueType` still
+  attempt the decode [OPS-2106].
+- Typed flag getters `get_string_value`, `get_number_value`,
+  `get_json_value`, and `get_datetime_value` on `Client` and the `Toggly`
+  global module. Soft-null (`nil`) on a missing feature, a disabled flag, a
+  declared `value_type` mismatch, or a decode failure — never raise solely
+  for shape mismatch and never return a wrong-typed value.
+  `get_datetime_value` parses ISO-8601 strings into `Time`. New
+  `Toggly::FeatureValueCodec` module reuses the same soft-null shape as the
+  variant value decoding in `Client#get_variant_value` [OPS-2106].
+
 ### Changed
 
 - CI host matrix now exercises Ruby 3.3.13, 3.4.12, and 4.0.9 (latest patches;

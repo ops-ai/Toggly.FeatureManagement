@@ -241,7 +241,7 @@ class TogglyService(
             for ((key, entry) in defs) {
                 val name = entry.variant
                 if (name != null && entry.enabled) {
-                    result[key] = VariantResult(name, entry.configurationValue)
+                    result[key] = VariantResult(name, entry.configurationValue, entry.valueType)
                 }
             }
             result
@@ -416,7 +416,7 @@ class TogglyService(
             )
         }
         val result = if (entry != null && entry.variant != null && entry.enabled && enabled) {
-            VariantResult(name = entry.variant, configurationValue = entry.configurationValue)
+            VariantResult(name = entry.variant, configurationValue = entry.configurationValue, valueType = entry.valueType)
         } else {
             null
         }
@@ -437,6 +437,61 @@ class TogglyService(
      */
     suspend fun <T : Any> getVariantValue(featureKey: String, clazz: Class<T>): T? =
         decodeVariantValue(getVariant(featureKey)?.configurationValue, clazz)
+
+    /**
+     * Returns the assigned variant's configuration value decoded as a [String],
+     * soft-nulling when the feature is disabled/unassigned, the declared
+     * `valueType` disagrees, or the value is not a string. Requires
+     * [TogglyConfig.enableVariants], matching [getVariant].
+     */
+    suspend fun getStringValue(featureKey: String): String? {
+        val variant = getVariant(featureKey) ?: return null
+        return decodeStringValue(variant.configurationValue, variant.valueType)
+    }
+
+    /**
+     * Returns the assigned variant's configuration value decoded as a [Double],
+     * soft-nulling when the feature is disabled/unassigned, the declared
+     * `valueType` disagrees, or the value cannot be parsed as a number. Requires
+     * [TogglyConfig.enableVariants], matching [getVariant].
+     */
+    suspend fun getNumberValue(featureKey: String): Double? {
+        val variant = getVariant(featureKey) ?: return null
+        return decodeNumberValue(variant.configurationValue, variant.valueType)
+    }
+
+    /**
+     * Returns the assigned variant's configuration value as untyped JSON
+     * (Map/List/scalar), soft-nulling when the feature is disabled/unassigned
+     * or the declared `valueType` disagrees. Requires [TogglyConfig.enableVariants],
+     * matching [getVariant].
+     */
+    suspend fun getJsonValue(featureKey: String): Any? {
+        val variant = getVariant(featureKey) ?: return null
+        return decodeJsonValue(variant.configurationValue, variant.valueType)
+    }
+
+    /**
+     * Soft-decodes the assigned variant's configuration value as [clazz] when
+     * the declared `valueType` is `"json"`. Prefer the reified [getJsonValue]
+     * extension from Kotlin. Requires [TogglyConfig.enableVariants].
+     */
+    suspend fun <T : Any> getJsonValue(featureKey: String, clazz: Class<T>): T? {
+        val variant = getVariant(featureKey) ?: return null
+        if (!valueTypeMatches(variant.valueType, "json")) return null
+        return decodeVariantValue(variant.configurationValue, clazz)
+    }
+
+    /**
+     * Returns the assigned variant's configuration value decoded as a [Date]
+     * (ISO-8601 wire string), soft-nulling when the feature is
+     * disabled/unassigned, the declared `valueType` disagrees, or the value
+     * cannot be parsed. Requires [TogglyConfig.enableVariants], matching [getVariant].
+     */
+    suspend fun getDateTimeValue(featureKey: String): java.util.Date? {
+        val variant = getVariant(featureKey) ?: return null
+        return decodeDateTimeValue(variant.configurationValue, variant.valueType)
+    }
 
     private data class VariantSnapshot(
         val entry: EvaluatedVariantDef?,

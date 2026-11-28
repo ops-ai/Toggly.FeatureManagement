@@ -45,6 +45,13 @@ const attachClientSystemMetrics: AttachClientSystemMetrics =
 
 import { FeatureRequirement, StorageKeys, TogglyConfig, VariantResult, EvaluatedVariantDef } from './models';
 import { decodeVariantValue } from './decode-variant-value';
+import {
+  decodeDateTimeValue,
+  decodeJsonValue,
+  decodeNumberValue,
+  decodeStringValue,
+  type FeatureValueType,
+} from './feature-value-codec';
 import { HookExecutor } from './hooks';
 import {
   appendEvaluationContext,
@@ -57,6 +64,7 @@ import {
   serializeCacheLruIndex,
   touchCacheLruKey,
   type CacheLruIndex,
+  isEntityGate,
   normalizeEntityContext,
   registerContext as registerEntityContext,
   resolveEvaluatedDefinition,
@@ -919,6 +927,73 @@ export class Toggly {
   ): T | null {
     const variant = Toggly.getVariant(featureKey);
     return decodeVariantValue(variant?.configurationValue, isT);
+  }
+
+  /**
+   * Resolve one typed flag value (OPS-2102).
+   *
+   * - Not enabled → `null`.
+   * - Declared `valueType` (from the evaluated envelope; legacy catalogs omit
+   *   it) mismatching `decode`'s own type soft-nulls instead of throwing.
+   * - Source value: the evaluated envelope's `value`, else its
+   *   `configurationValue`, else the assigned variant's `configurationValue`.
+   */
+  private static _resolveTypedValue<T>(
+    featureKey: string,
+    decode: (raw: unknown, declared?: FeatureValueType | null) => T | null,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): T | null {
+    if (!Toggly.isFeatureOn(featureKey, context, kind)) {
+      return null;
+    }
+    const evaluation = Toggly.captureEvaluation();
+    const raw = evaluation.flags[featureKey];
+    const envelope =
+      raw !== null && typeof raw === 'object' && !isEntityGate(raw)
+        ? (raw as unknown as Record<string, unknown>)
+        : undefined;
+    const declaredValueType = (envelope?.valueType as FeatureValueType | undefined) ?? null;
+    const sourceValue = envelope
+      ? envelope.value !== undefined ? envelope.value : envelope.configurationValue
+      : Toggly.getVariant(featureKey)?.configurationValue;
+    return decode(sourceValue, declaredValueType);
+  }
+
+  /** Typed getter for `string` flag values. Returns `null` when disabled, unset, or mistyped. */
+  static getStringValue(
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): string | null {
+    return Toggly._resolveTypedValue(featureKey, decodeStringValue, context, kind);
+  }
+
+  /** Typed getter for `number` flag values. Returns `null` when disabled, unset, or mistyped. */
+  static getNumberValue(
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): number | null {
+    return Toggly._resolveTypedValue(featureKey, decodeNumberValue, context, kind);
+  }
+
+  /** Typed getter for `json` flag values (object/array). Returns `null` when disabled, unset, or mistyped. */
+  static getJsonValue(
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): unknown | null {
+    return Toggly._resolveTypedValue(featureKey, decodeJsonValue, context, kind);
+  }
+
+  /** Typed getter for `datetime` flag values, decoded to a `Date`. Returns `null` when disabled, unset, or mistyped. */
+  static getDateTimeValue(
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Date | null {
+    return Toggly._resolveTypedValue(featureKey, decodeDateTimeValue, context, kind);
   }
 
   static fetchFeatureFlags(): Promise<{ [key: string]: boolean }> {

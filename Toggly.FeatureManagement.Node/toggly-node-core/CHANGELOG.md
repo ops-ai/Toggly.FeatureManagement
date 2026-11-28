@@ -1,3 +1,25 @@
+## Unreleased
+
+### Added
+- Typed flag value getters `getStringValue`, `getNumberValue`, `getJsonValue`,
+  and `getDateTimeValue` on the client, mirroring `getVariantValue`
+  [OPS-2102][OPS-2105]. Each soft-nulls (never throws) when the feature is
+  unknown, disabled, unset, or the declared catalog `valueType` mismatches
+  the getter. Source: the flag's own catalog `value`, else `configurationValue`.
+
+## 0.15.0
+
+2026-11-28
+
+### Added
+- Typed flag value getters `getStringValue`, `getNumberValue`, `getJsonValue`,
+  and `getDateTimeValue` on `TogglyClient`, mirroring `getVariantValue`
+  [OPS-2102]. Each soft-nulls (never throws) when the feature is unknown,
+  disabled for the evaluation context, unset, or the declared catalog
+  `valueType` mismatches the getter. Resolves the flag's own catalog `value`
+  (falling back to `configurationValue`) — distinct from any assigned
+  variant's `configurationValue`.
+
 ## 0.14.0
 
 2026-11-04

@@ -105,6 +105,7 @@ export type {
   EvaluatedDefinitionValue,
   EvaluatedEnabledEnvelope,
   EvaluatedDefinitions,
+  FeatureValueType,
   TogglyEntityContext,
   EntityContextMapper,
 } from './entity-gate';

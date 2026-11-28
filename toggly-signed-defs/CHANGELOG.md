@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0
+
+2026-11-28
+
+### Added
+- `EvaluatedValueEnvelope` and `FeatureValueType` on evaluated-signed
+  definition values so clients can parse typed flag payloads [OPS-2102].
+
 ## 1.2.10
 
 ### Fixed

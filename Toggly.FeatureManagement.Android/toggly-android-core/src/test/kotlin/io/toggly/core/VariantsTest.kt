@@ -420,6 +420,180 @@ class VariantsTest {
     @kotlinx.serialization.Serializable
     private data class PricingConfig(val color: String)
 
+    // ---- Typed flag value getters (OPS-2102 / OPS-2107) ----
+
+    @Test
+    fun `getStringValue returns the typed string`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"stringFlag":{"enabled":true,"variant":"default","valueType":"string","configurationValue":"hello"}}"""
+                )
+            )
+            val service = TogglyService(config(server))
+            try {
+                service.init()
+                assertEquals("hello", service.getStringValue("stringFlag"))
+            } finally {
+                service.dispose()
+            }
+        }
+    }
+
+    @Test
+    fun `getStringValue soft-nulls a number-typed flag`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"numberFlag":{"enabled":true,"variant":"default","valueType":"number","configurationValue":42}}"""
+                )
+            )
+            val service = TogglyService(config(server))
+            try {
+                service.init()
+                assertNull(service.getStringValue("numberFlag"))
+            } finally {
+                service.dispose()
+            }
+        }
+    }
+
+    @Test
+    fun `getNumberValue returns the typed number`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"numberFlag":{"enabled":true,"variant":"default","valueType":"number","configurationValue":42}}"""
+                )
+            )
+            val service = TogglyService(config(server))
+            try {
+                service.init()
+                assertEquals(42.0, service.getNumberValue("numberFlag"))
+            } finally {
+                service.dispose()
+            }
+        }
+    }
+
+    @Test
+    fun `getNumberValue soft-nulls when the declared type disagrees`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"mismatch":{"enabled":true,"variant":"default","valueType":"number","configurationValue":"not-a-number-type"}}"""
+                )
+            )
+            val service = TogglyService(config(server))
+            try {
+                service.init()
+                assertNull(service.getNumberValue("mismatch"))
+            } finally {
+                service.dispose()
+            }
+        }
+    }
+
+    @Test
+    fun `getJsonValue returns the untyped payload and decodes typed`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"jsonFlag":{"enabled":true,"variant":"default","valueType":"json","configurationValue":{"color":"blue"}}}"""
+                )
+            )
+            val service = TogglyService(config(server))
+            try {
+                service.init()
+                @Suppress("UNCHECKED_CAST")
+                val raw = service.getJsonValue("jsonFlag") as Map<String, Any?>
+                assertEquals("blue", raw["color"])
+                assertEquals(PricingConfig(color = "blue"), service.getJsonValue<PricingConfig>("jsonFlag"))
+                assertEquals(PricingConfig(color = "blue"), service.getJsonValue("jsonFlag", PricingConfig::class.java))
+            } finally {
+                service.dispose()
+            }
+        }
+    }
+
+    @Test
+    fun `getDateTimeValue parses an ISO-8601 wire string`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"dateFlag":{"enabled":true,"variant":"default","valueType":"datetime","configurationValue":"2026-01-15T10:00:00Z"}}"""
+                )
+            )
+            val service = TogglyService(config(server))
+            try {
+                service.init()
+                val value = service.getDateTimeValue("dateFlag")
+                assertNotNull(value)
+                assertEquals(1_768_471_200_000L, value!!.time)
+            } finally {
+                service.dispose()
+            }
+        }
+    }
+
+    @Test
+    fun `getDateTimeValue soft-nulls a string-typed flag`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"stringFlag":{"enabled":true,"variant":"default","valueType":"string","configurationValue":"hello"}}"""
+                )
+            )
+            val service = TogglyService(config(server))
+            try {
+                service.init()
+                assertNull(service.getDateTimeValue("stringFlag"))
+            } finally {
+                service.dispose()
+            }
+        }
+    }
+
+    @Test
+    fun `typed getters soft-null when disabled or unknown`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"disabled":{"enabled":false,"variant":"default","valueType":"string","configurationValue":"hidden"}}"""
+                )
+            )
+            val service = TogglyService(config(server))
+            try {
+                service.init()
+                assertNull(service.getStringValue("disabled"))
+                assertNull(service.getStringValue("missing"))
+                assertNull(service.getNumberValue("missing"))
+                assertNull(service.getJsonValue("missing"))
+                assertNull(service.getDateTimeValue("missing"))
+            } finally {
+                service.dispose()
+            }
+        }
+    }
+
+    @Test
+    fun `typed getters attempt a decode when no valueType is declared`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"legacyFlag":{"enabled":true,"variant":"default","configurationValue":"no-declared-type"}}"""
+                )
+            )
+            val service = TogglyService(config(server))
+            try {
+                service.init()
+                assertEquals("no-declared-type", service.getStringValue("legacyFlag"))
+            } finally {
+                service.dispose()
+            }
+        }
+    }
+
     private fun createKey(): TestKey {
         val generator = KeyPairGenerator.getInstance("EC")
         generator.initialize(ECGenParameterSpec("secp256r1"))

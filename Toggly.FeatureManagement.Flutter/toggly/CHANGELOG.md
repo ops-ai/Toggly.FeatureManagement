@@ -1,3 +1,14 @@
+## 2.1.0
+
+2026-11-28
+
+### Added
+- Typed flag getters `Toggly.getStringValue`, `getNumberValue`, `getJsonValue<T>`
+  (optional `fromJson`), and `getDateTimeValue` (ISO-8601) soft-decode the
+  assigned variant's `configurationValue` by its declared `valueType`,
+  soft-nulling on a disabled feature, missing assignment, or a type mismatch
+  [OPS-2107]. Requires `enableVariants: true`, matching `getVariant`.
+
 ## 2.0.0
 
 2026-11-04

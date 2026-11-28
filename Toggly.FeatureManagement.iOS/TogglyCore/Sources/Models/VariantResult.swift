@@ -12,9 +12,15 @@ public struct VariantResult: @unchecked Sendable, CustomStringConvertible, Custo
     /// (JSON primitive, dictionary, or array), or `nil`.
     public let configurationValue: Any?
 
-    public init(name: String, configurationValue: Any? = nil) {
+    /// Declared value type (`"boolean" | "string" | "number" | "json" | "datetime"`)
+    /// for `configurationValue`, when the catalog or evaluated envelope provided
+    /// one (OPS-2099 / OPS-2102). `nil` for legacy/untyped catalogs.
+    public let valueType: String?
+
+    public init(name: String, configurationValue: Any? = nil, valueType: String? = nil) {
         self.name = name
         self.configurationValue = configurationValue
+        self.valueType = valueType
     }
 
     public var description: String { "VariantResult(name: \(name))" }
@@ -22,12 +28,13 @@ public struct VariantResult: @unchecked Sendable, CustomStringConvertible, Custo
 }
 
 /// Wire entry for a single feature key from `evaluated-variants-signed`:
-/// `{ enabled, variant?, configurationValue? }`. Already fully evaluated
-/// server-side; no client-side entity-gate evaluation is required.
+/// `{ enabled, variant?, configurationValue?, valueType? }`. Already fully
+/// evaluated server-side; no client-side entity-gate evaluation is required.
 struct EvaluatedVariantDef: @unchecked Sendable {
     let enabled: Bool
     let variant: String?
     let configurationValue: Any?
+    let valueType: String?
 }
 
 typealias EvaluatedVariantDefs = [String: EvaluatedVariantDef]
@@ -43,15 +50,17 @@ func parseEvaluatedVariantDefs(from data: Data) throws -> EvaluatedVariantDefs {
     var result: EvaluatedVariantDefs = [:]
     for (key, value) in object {
         guard let entry = value as? [String: Any] else {
-            result[key] = EvaluatedVariantDef(enabled: false, variant: nil, configurationValue: nil)
+            result[key] = EvaluatedVariantDef(enabled: false, variant: nil, configurationValue: nil, valueType: nil)
             continue
         }
         let enabled = (entry["enabled"] as? Bool) ?? false
         let variant = (entry["variant"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        let valueType = (entry["valueType"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         result[key] = EvaluatedVariantDef(
             enabled: enabled,
             variant: variant,
-            configurationValue: entry["configurationValue"]
+            configurationValue: entry["configurationValue"],
+            valueType: valueType
         )
     }
     return result

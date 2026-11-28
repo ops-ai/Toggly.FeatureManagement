@@ -100,6 +100,9 @@ fn to_definition(case: &Case) -> FeatureDefinition {
         context_requirement_type: None,
         variants: case.feature.variants.clone(),
         allocation: case.feature.allocation.clone(),
+        value_type: None,
+        value: None,
+        configuration_value: None,
     }
 }
 
