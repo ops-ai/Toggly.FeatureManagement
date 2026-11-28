@@ -151,6 +151,9 @@ public class FlagEvaluationContractTests
             ["disabled_value"] = new { enabled = false, valueType = "string", value = "unused" },
             // Declared type mismatch: typed getter soft-nulls even though enabled.
             ["mismatched_type"] = new { enabled = true, valueType = "number", value = "not-a-number" },
+            // Same envelope but requested through every other typed getter: each must take
+            // its own "resolved enabled, decode soft-nulls" branch, not just GetNumberValue's.
+            ["mismatched_for_other_getters"] = new { enabled = true, valueType = "number", value = 7 },
             // Legacy boolean flag untouched by the envelope shape.
             ["legacy_flag"] = true,
             // Existing EntityGate object must still evaluate via rules, not the envelope path.
@@ -211,6 +214,17 @@ public class FlagEvaluationContractTests
         // Typed getters accept the same optional entity as IsEnabled.
         Assert.Equal("Welcome back", client.GetStringValue("banner_text", pro));
 
+        // Each typed getter's own "resolved but decode soft-nulled" branch, not just
+        // GetNumberValue's: a number-declared envelope requested through every other getter.
+        Assert.Equal(7, client.GetNumberValue("mismatched_for_other_getters"));
+        Assert.Null(client.GetStringValue("mismatched_for_other_getters"));
+        Assert.Null(client.GetJsonValue("mismatched_for_other_getters"));
+        Assert.Null(client.GetDateTimeValue("mismatched_for_other_getters"));
+
+        // Each typed getter's own "not enabled / no definition" early-return branch.
         Assert.Null(client.GetStringValue("missing_flag"));
+        Assert.Null(client.GetNumberValue("missing_flag"));
+        Assert.Null(client.GetJsonValue("missing_flag"));
+        Assert.Null(client.GetDateTimeValue("missing_flag"));
     }
 }
