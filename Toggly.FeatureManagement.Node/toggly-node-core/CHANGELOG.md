@@ -1,12 +1,3 @@
-## Unreleased
-
-### Added
-- Typed flag value getters `getStringValue`, `getNumberValue`, `getJsonValue`,
-  and `getDateTimeValue` on the client, mirroring `getVariantValue`
-  [OPS-2102][OPS-2105]. Each soft-nulls (never throws) when the feature is
-  unknown, disabled, unset, or the declared catalog `valueType` mismatches
-  the getter. Source: the flag's own catalog `value`, else `configurationValue`.
-
 ## 0.15.0
 
 2026-11-28
