@@ -13,6 +13,10 @@ const createMockService = (overrides = {}) => ({
   evaluateFeatureGate: jest.fn().mockResolvedValue(true),
   getVariant: jest.fn().mockReturnValue(null),
   getVariantValue: jest.fn().mockReturnValue(null),
+  getStringValue: jest.fn().mockReturnValue(null),
+  getNumberValue: jest.fn().mockReturnValue(null),
+  getJsonValue: jest.fn().mockReturnValue(null),
+  getDateTimeValue: jest.fn().mockReturnValue(null),
   on: jest.fn().mockReturnValue(() => {}),
   addStateChangeHandler: jest.fn().mockReturnValue(() => {}),
   setIdentity: jest.fn().mockResolvedValue(undefined),
@@ -262,6 +266,80 @@ describe('useToggly', () => {
 
     expect(result.getVariantValue('feature1')).toEqual({ color: 'blue' });
     expect(mockService.getVariantValue).toHaveBeenCalledWith('feature1');
+  });
+
+  it('provides getStringValue function that delegates to the service', () => {
+    mockService.getStringValue.mockReturnValue('hello');
+
+    let result: any;
+    const TestComponent = () => {
+      result = useToggly();
+      return null;
+    };
+
+    render(<TestComponent />, {
+      wrapper: createWrapper(contextValue),
+    });
+
+    expect(result.getStringValue('feature1')).toBe('hello');
+    expect(mockService.getStringValue).toHaveBeenCalledWith('feature1');
+  });
+
+  it('provides getNumberValue function that delegates to the service', () => {
+    mockService.getNumberValue.mockReturnValue(42);
+
+    let result: any;
+    const TestComponent = () => {
+      result = useToggly();
+      return null;
+    };
+
+    render(<TestComponent />, {
+      wrapper: createWrapper(contextValue),
+    });
+
+    expect(result.getNumberValue('feature1')).toBe(42);
+    expect(mockService.getNumberValue).toHaveBeenCalledWith('feature1');
+  });
+
+  it('provides getJsonValue function that delegates to the service', () => {
+    mockService.getJsonValue.mockReturnValue({ color: 'blue' });
+
+    let result: any;
+    const TestComponent = () => {
+      result = useToggly();
+      return null;
+    };
+
+    render(<TestComponent />, {
+      wrapper: createWrapper(contextValue),
+    });
+
+    expect(result.getJsonValue('feature1')).toEqual({ color: 'blue' });
+    expect(mockService.getJsonValue).toHaveBeenCalledWith('feature1');
+
+    const isColor = (v: unknown): v is { color: string } =>
+      typeof v === 'object' && v !== null && typeof (v as { color?: unknown }).color === 'string';
+    result.getJsonValue('feature1', isColor);
+    expect(mockService.getJsonValue).toHaveBeenCalledWith('feature1', isColor);
+  });
+
+  it('provides getDateTimeValue function that delegates to the service', () => {
+    const date = new Date('2026-01-15T10:00:00Z');
+    mockService.getDateTimeValue.mockReturnValue(date);
+
+    let result: any;
+    const TestComponent = () => {
+      result = useToggly();
+      return null;
+    };
+
+    render(<TestComponent />, {
+      wrapper: createWrapper(contextValue),
+    });
+
+    expect(result.getDateTimeValue('feature1')).toEqual(date);
+    expect(mockService.getDateTimeValue).toHaveBeenCalledWith('feature1');
   });
 
   it('provides getDebugInfo function', () => {

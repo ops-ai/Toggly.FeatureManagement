@@ -67,7 +67,8 @@ class HttpSnapshotProviderParsingTest {
                 {"feature_flags":[{"feature_key":"checkout","requirement_type":"All",
                    "filters":[{"name":"Percentage","parameters":{"Value":25.5,"Enabled":true,"Missing":null}}],
                    "variants":[{"name":"A","configurationValue":{"color":"blue"}}],
-                   "allocation":{"defaultWhenEnabled":"A"}},
+                   "allocation":{"defaultWhenEnabled":"A"},
+                   "valueType":"string","value":"blue theme"},
                    {"filters":[]}, {"featureKey":"new-key","requirementType":"Any","contextKind":"Account",
                     "contextRequirementType":"All","filters":[{"name":"AlwaysOn"}]}],
                  "metrics":[{"metric_key":"orders","name":"Purchases","unit":"count"}]}
@@ -84,6 +85,9 @@ class HttpSnapshotProviderParsingTest {
                 .containsKey("Missing");
         assertThat(checkout.getVariants()).hasSize(1);
         assertThat(checkout.getAllocation().getDefaultWhenEnabled()).isEqualTo("A");
+        assertThat(checkout.getValueType()).isEqualTo(io.toggly.core.model.FeatureValueType.STRING);
+        assertThat(checkout.getValue()).isEqualTo("blue theme");
+        assertThat(snapshot.getFeature("new-key").getValueType()).isNull();
         assertThat(snapshot.getFeature("new-key").getContextKind()).isEqualTo("Account");
         assertThat(snapshot.getMetrics()).containsKey("orders");
         assertThat(snapshot.getMetrics().get("orders").getName()).isEqualTo("Purchases");

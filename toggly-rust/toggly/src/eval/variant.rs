@@ -288,6 +288,9 @@ mod tests {
             context_requirement_type: None,
             variants,
             allocation,
+            value_type: None,
+            value: None,
+            configuration_value: None,
         }
     }
 

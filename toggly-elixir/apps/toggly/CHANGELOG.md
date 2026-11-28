@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.0 — 2026-11-28
+
+### Added
+- Catalog `"valueType"` field on feature definition maps (`"boolean" |
+  "string" | "number" | "json" | "datetime"`), plus a flag-level `"value"`.
+  Legacy catalogs without `"valueType"` still attempt the decode [OPS-2106].
+- Typed flag getters `Toggly.get_string_value/3`, `get_number_value/3`,
+  `get_json_value/3`, and `get_datetime_value/3`. Soft-null (`nil`) on a
+  missing feature, a disabled flag, a declared `"valueType"` mismatch, or a
+  decode failure — never raise solely for shape mismatch and never return a
+  wrong-typed value. `get_datetime_value/3` parses ISO-8601 into `DateTime`.
+  New `Toggly.FeatureValueCodec` module reuses the same soft-null shape as
+  the OPS-1365-era variant value decoding in `get_variant_value/4`
+  [OPS-2106].
+
 ## 0.7.2 — 2026-11-18
 
 ### Changed

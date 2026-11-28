@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.14.0
+
+2026-11-28
+
+### Added
+- Catalog `valueType` field on `FeatureDefinitionModel` (new
+  `definitions.ValueType`: `boolean | string | number | json | datetime`),
+  plus a flag-level `Value` (JSON `value`, falling back to
+  `ConfigurationValue`/`configurationValue` for catalogs that reuse the
+  variant key). Legacy catalogs without `valueType` still attempt the typed
+  decode [OPS-2106].
+- Typed flag getters `GetStringValue`, `GetNumberValue`, `GetJSONValue`, and
+  `GetDateTimeValue` on `*Client`. Soft-null (`(zero, false)`) on a missing
+  feature, a disabled flag, a declared `valueType` mismatch, or a decode
+  failure — never panic solely for shape mismatch and never return a
+  wrong-typed value. `GetDateTimeValue` parses RFC 3339 (ISO-8601). New
+  `toggly/featurevalue` package reuses the same soft-null shape as
+  `GetVariantValueAs` (OPS-1365) [OPS-2106].
+
 ## 0.13.3
 
 2026-11-04

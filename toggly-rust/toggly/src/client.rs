@@ -282,6 +282,78 @@ impl TogglyClient {
         }
     }
 
+    /// Returns `(raw value, declared value type)` for `feature_key`, or
+    /// `None` on an unknown feature or a disabled flag (OPS-2102). Soft-null
+    /// source for every typed getter below — never errors.
+    async fn resolved_value_source(
+        &self,
+        feature_key: &str,
+        context: EvalContext,
+    ) -> Option<(
+        serde_json::Value,
+        Option<crate::definitions::FeatureValueType>,
+    )> {
+        if feature_key.is_empty() {
+            return None;
+        }
+        let context = self.resolve_targeting_context(context);
+        let provider = self.provider.read().await;
+        let definition = provider.get(feature_key)?;
+        drop(provider);
+
+        let enabled = self.engine.evaluate(&definition, &context).ok()?;
+        if !enabled {
+            return None;
+        }
+        let value = definition.resolved_value()?.clone();
+        Some((value, definition.value_type))
+    }
+
+    /// Returns the flag's value as a `String`. Soft-nulls (`None`) on a
+    /// missing feature, a disabled flag, a declared `valueType` mismatch, or
+    /// a non-string value (OPS-2102).
+    pub async fn get_string_value(
+        &self,
+        feature_key: &str,
+        context: EvalContext,
+    ) -> Option<String> {
+        let (raw, declared) = self.resolved_value_source(feature_key, context).await?;
+        crate::feature_value::decode_string(Some(&raw), declared)
+    }
+
+    /// Returns the flag's value as a finite `f64`. Soft-nulls (`None`) on a
+    /// missing feature, a disabled flag, a declared `valueType` mismatch, or
+    /// a non-numeric value (OPS-2102).
+    pub async fn get_number_value(&self, feature_key: &str, context: EvalContext) -> Option<f64> {
+        let (raw, declared) = self.resolved_value_source(feature_key, context).await?;
+        crate::feature_value::decode_number(Some(&raw), declared)
+    }
+
+    /// Returns the flag's value as a parsed JSON object/array. Soft-nulls
+    /// (`None`) on a missing feature, a disabled flag, a declared
+    /// `valueType` mismatch, or an undecodable value (OPS-2102).
+    pub async fn get_json_value(
+        &self,
+        feature_key: &str,
+        context: EvalContext,
+    ) -> Option<serde_json::Value> {
+        let (raw, declared) = self.resolved_value_source(feature_key, context).await?;
+        crate::feature_value::decode_json(Some(&raw), declared)
+    }
+
+    /// Returns the flag's value as a [`chrono::DateTime<chrono::FixedOffset>`]
+    /// parsed from an ISO-8601 string. Soft-nulls (`None`) on a missing
+    /// feature, a disabled flag, a declared `valueType` mismatch, or an
+    /// unparsable value (OPS-2102).
+    pub async fn get_datetime_value(
+        &self,
+        feature_key: &str,
+        context: EvalContext,
+    ) -> Option<chrono::DateTime<chrono::FixedOffset>> {
+        let (raw, declared) = self.resolved_value_source(feature_key, context).await?;
+        crate::feature_value::decode_datetime(Some(&raw), declared)
+    }
+
     /// Evaluate a feature gate (multiple features with AND/OR logic).
     #[instrument(skip(self, context), fields(features = ?feature_keys))]
     pub async fn evaluate_gate(

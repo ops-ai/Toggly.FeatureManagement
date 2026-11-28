@@ -1,3 +1,18 @@
+## Unreleased
+
+### Fixed
+- Typed getters honor `valueType` from the variant envelope when
+  `enableVariants` projects flags to booleans, so a typed mismatch soft-nulls
+  instead of returning the wrong-typed `configurationValue`.
+
+### Added
+- Typed flag value getters `getStringValue`, `getNumberValue`, `getJsonValue`,
+  and `getDateTimeValue` on `Toggly`, mirroring `getVariantValue`
+  [OPS-2102][OPS-2105]. Each soft-nulls (never throws) when the flag is
+  disabled, unset, or the declared `valueType` mismatches the getter. Source
+  precedence: the evaluated envelope's `value`, else its `configurationValue`,
+  else the assigned variant's `configurationValue`.
+
 ## 1.13.0
 
 2026-10-11

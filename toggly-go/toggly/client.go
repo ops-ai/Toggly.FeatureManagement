@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/eval"
+	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/featurevalue"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/metrics"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/metrics/systemmetrics"
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/usage"
@@ -230,6 +232,78 @@ func GetVariantValueAs[T any](c *Client, ctx context.Context, featureKey string,
 		return zero, false
 	}
 	return out, true
+}
+
+// resolvedValueSource returns the flag's (raw value, declared ValueType) for
+// the typed getters below, or (nil, "", false) on an unknown feature or a
+// disabled flag (OPS-2102). Soft-null source — never errors.
+func (c *Client) resolvedValueSource(ctx context.Context, featureKey string, evalCtx Context) (interface{}, definitions.ValueType, bool) {
+	if c == nil || c.provider == nil || featureKey == "" {
+		return nil, "", false
+	}
+	def, ok := c.provider.get(featureKey)
+	if !ok {
+		return nil, "", false
+	}
+	evalCtx = c.resolveTargetingContext(ctx, evalCtx)
+	enabled, err := c.engine.Evaluate(def, toEvalContext(evalCtx))
+	if err != nil || !enabled {
+		return nil, "", false
+	}
+
+	// Match IsEnabled: secure features require authorization before a typed
+	// value is returned for an enabled flag (OPS-2102 review finding).
+	allowed, err := c.authorizeFeature(ctx, featureKey, evalCtx)
+	if err != nil || !allowed {
+		return nil, "", false
+	}
+
+	return def.ResolvedValue(), def.ValueType, true
+}
+
+// GetStringValue returns the flag's value as a string. Soft-nulls ("", false)
+// on a missing feature, a disabled flag, a declared valueType mismatch, or a
+// non-string value (OPS-2102).
+func (c *Client) GetStringValue(ctx context.Context, featureKey string, evalCtx Context) (string, bool) {
+	raw, declared, ok := c.resolvedValueSource(ctx, featureKey, evalCtx)
+	if !ok {
+		return "", false
+	}
+	return featurevalue.DecodeString(raw, declared)
+}
+
+// GetNumberValue returns the flag's value as a finite float64. Soft-nulls
+// (0, false) on a missing feature, a disabled flag, a declared valueType
+// mismatch, or a non-numeric value (OPS-2102).
+func (c *Client) GetNumberValue(ctx context.Context, featureKey string, evalCtx Context) (float64, bool) {
+	raw, declared, ok := c.resolvedValueSource(ctx, featureKey, evalCtx)
+	if !ok {
+		return 0, false
+	}
+	return featurevalue.DecodeNumber(raw, declared)
+}
+
+// GetJSONValue returns the flag's value as a parsed JSON object/array.
+// Soft-nulls (nil, false) on a missing feature, a disabled flag, a declared
+// valueType mismatch, or an undecodable value (OPS-2102).
+func (c *Client) GetJSONValue(ctx context.Context, featureKey string, evalCtx Context) (interface{}, bool) {
+	raw, declared, ok := c.resolvedValueSource(ctx, featureKey, evalCtx)
+	if !ok {
+		return nil, false
+	}
+	return featurevalue.DecodeJSON(raw, declared)
+}
+
+// GetDateTimeValue returns the flag's value as a time.Time parsed from an
+// ISO-8601 string. Soft-nulls (zero time, false) on a missing feature, a
+// disabled flag, a declared valueType mismatch, or an unparsable value
+// (OPS-2102).
+func (c *Client) GetDateTimeValue(ctx context.Context, featureKey string, evalCtx Context) (time.Time, bool) {
+	raw, declared, ok := c.resolvedValueSource(ctx, featureKey, evalCtx)
+	if !ok {
+		return time.Time{}, false
+	}
+	return featurevalue.DecodeDateTime(raw, declared)
 }
 
 // SetIdentity updates the client's default targeting userId used when neither

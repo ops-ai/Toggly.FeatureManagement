@@ -167,6 +167,22 @@ object Toggly {
     suspend fun <T : Any> getVariantValue(featureKey: String, clazz: Class<T>): T? =
         shared.getVariantValue(featureKey, clazz)
 
+    /** Returns the assigned variant's configuration value decoded as a [String]. See [TogglyService.getStringValue]. */
+    suspend fun getStringValue(featureKey: String): String? = shared.getStringValue(featureKey)
+
+    /** Returns the assigned variant's configuration value decoded as a [Double]. See [TogglyService.getNumberValue]. */
+    suspend fun getNumberValue(featureKey: String): Double? = shared.getNumberValue(featureKey)
+
+    /** Returns the assigned variant's configuration value as untyped JSON. See [TogglyService.getJsonValue]. */
+    suspend fun getJsonValue(featureKey: String): Any? = shared.getJsonValue(featureKey)
+
+    /** Soft-decodes the assigned variant's configuration value as [clazz] (Java-friendly). */
+    suspend fun <T : Any> getJsonValue(featureKey: String, clazz: Class<T>): T? =
+        shared.getJsonValue(featureKey, clazz)
+
+    /** Returns the assigned variant's configuration value decoded as a [java.util.Date]. See [TogglyService.getDateTimeValue]. */
+    suspend fun getDateTimeValue(featureKey: String): java.util.Date? = shared.getDateTimeValue(featureKey)
+
     fun registerContext(kind: String, mapper: EntityContextMapper) {
         shared.registerContext(kind, mapper)
     }

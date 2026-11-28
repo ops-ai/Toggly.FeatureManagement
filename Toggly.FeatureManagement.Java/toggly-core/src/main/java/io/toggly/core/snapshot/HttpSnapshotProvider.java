@@ -10,6 +10,7 @@ import io.toggly.core.exception.TogglySignatureException;
 import io.toggly.core.model.FeatureDefinition;
 import io.toggly.core.model.FeatureFilter;
 import io.toggly.core.model.FeatureRequirement;
+import io.toggly.core.model.FeatureValueType;
 import io.toggly.core.model.MetricDefinition;
 import io.toggly.core.model.VariantAllocation;
 import io.toggly.core.model.VariantDefinition;
@@ -779,6 +780,11 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
         List<FeatureFilter> filters = parseFilters(json);
         List<VariantDefinition> variants = VariantJson.parseVariants(json);
         VariantAllocation allocation = VariantJson.parseAllocation(json);
+        FeatureValueType valueType = FeatureValueType.fromString(extractStringValue(json, "valueType"));
+        Object value = SimpleJson.extractValue(json, "value");
+        if (value == null) {
+            value = SimpleJson.extractValue(json, "configurationValue");
+        }
 
         return FeatureDefinition.builder()
                 .featureKey(featureKey)
@@ -788,6 +794,8 @@ public final class HttpSnapshotProvider implements SnapshotProvider {
                 .filters(filters)
                 .variants(variants)
                 .allocation(allocation)
+                .valueType(valueType)
+                .value(value)
                 .build();
     }
 

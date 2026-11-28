@@ -12,6 +12,7 @@ import 'package:uuid/uuid.dart';
 import 'package:rxdart/rxdart.dart';
 
 import 'entity_gate.dart' as entity_gate;
+import 'feature_value_decode.dart';
 import 'services/system_metrics_collector.dart';
 import 'services/telemetry_reporter.dart';
 
@@ -1270,10 +1271,12 @@ class Toggly with WidgetsBindingObserver {
       );
     }
     final variant = raw['variant'];
+    final valueType = raw['valueType'];
     return VariantResult(
       enabled: raw['enabled'] == true,
       name: variant is String ? variant : null,
       configurationValue: raw['configurationValue'],
+      valueType: valueType is String ? valueType : null,
     );
   }
 
@@ -1365,6 +1368,55 @@ class Toggly with WidgetsBindingObserver {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Returns the assigned variant's configuration value decoded as a
+  /// [String], soft-nulling when the feature is disabled/unassigned, the
+  /// declared `valueType` disagrees, or the value is not a string.
+  ///
+  /// Requires `enableVariants: true` in [TogglyConfig], matching [getVariant].
+  static Future<String?> getStringValue(String featureKey) async {
+    final r = await getVariant(featureKey);
+    if (!r.enabled) return null;
+    return decodeStringValue(r.configurationValue, r.valueType);
+  }
+
+  /// Returns the assigned variant's configuration value decoded as a [num],
+  /// soft-nulling when the feature is disabled/unassigned, the declared
+  /// `valueType` disagrees, or the value cannot be parsed as a number.
+  ///
+  /// Requires `enableVariants: true` in [TogglyConfig], matching [getVariant].
+  static Future<num?> getNumberValue(String featureKey) async {
+    final r = await getVariant(featureKey);
+    if (!r.enabled) return null;
+    return decodeNumberValue(r.configurationValue, r.valueType);
+  }
+
+  /// Returns the assigned variant's configuration value as JSON, soft-nulling
+  /// when the feature is disabled/unassigned or the declared `valueType`
+  /// disagrees. When [fromJson] is provided, soft-decodes a map payload
+  /// through it; returns null when the payload is not a map or [fromJson] throws.
+  ///
+  /// Requires `enableVariants: true` in [TogglyConfig], matching [getVariant].
+  static Future<T?> getJsonValue<T>(
+    String featureKey, [
+    T Function(Map<String, dynamic>)? fromJson,
+  ]) async {
+    final r = await getVariant(featureKey);
+    if (!r.enabled) return null;
+    return decodeJsonValue<T>(r.configurationValue, r.valueType, fromJson);
+  }
+
+  /// Returns the assigned variant's configuration value decoded as a
+  /// [DateTime] (ISO-8601 wire string), soft-nulling when the feature is
+  /// disabled/unassigned, the declared `valueType` disagrees, or the value
+  /// cannot be parsed.
+  ///
+  /// Requires `enableVariants: true` in [TogglyConfig], matching [getVariant].
+  static Future<DateTime?> getDateTimeValue(String featureKey) async {
+    final r = await getVariant(featureKey);
+    if (!r.enabled) return null;
+    return decodeDateTimeValue(r.configurationValue, r.valueType);
   }
 
   /// Records explicit use of a feature without evaluating it.

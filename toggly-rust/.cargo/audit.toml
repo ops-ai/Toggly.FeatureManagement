@@ -20,4 +20,13 @@ ignore = [
     # Owner: alex@ops.ai. Review by: 2026-12-17 (re-check actix-web/rocket
     # for a release that drops h2 0.3, or re-evaluate reachability).
     "RUSTSEC-2026-0258",
+
+    # RUSTSEC-2026-0594: cookie private nonces can repeat after fork.
+    # cookie 0.18.x is patched (>=0.18.3) via rocket/axum-test; the remaining
+    # hit is cookie 0.16.2 pulled by actix-web 4.19 (toggly-actix). No patched
+    # 0.16.x line exists — actix-web still pins cookie ~0.16. Host apps that
+    # fork after setting private cookies are out of scope for the SDK itself.
+    # Owner: alex@ops.ai. Review by: 2027-02-28 (re-check actix-web for a
+    # cookie 0.18+ bump).
+    "RUSTSEC-2026-0594",
 ]

@@ -1,5 +1,10 @@
 ## Unreleased
 
+### Added
+- Typed flag getters `getStringValue`, `getNumberValue`, `getJsonValue(…, isT?)`,
+  and `getDateTimeValue` on `useToggly()`, delegating to Core's soft-null
+  decode by the assigned variant's declared `valueType` [OPS-2107].
+
 ### Changed
 - `engines.node` floor raised from `>=18` to `>=22` (Node 18 and 20 are EOL).
 - CI unit matrix exercises Node 22, 24, and 26; packed native hosts prove React Native 0.70.15 (peer floor) and 0.88.1 (latest).

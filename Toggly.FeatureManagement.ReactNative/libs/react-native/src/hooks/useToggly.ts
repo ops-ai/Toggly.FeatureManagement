@@ -72,6 +72,38 @@ export interface UseTogglyResult extends Pick<TogglyService, 'recordUsage' | 're
   ) => T | null;
 
   /**
+   * Assigned variant's configuration value decoded as a `string`, soft-nulling
+   * when the feature is disabled/unassigned or the declared `valueType`
+   * disagrees. Requires `enableVariants: true` on the owning `TogglyService`.
+   */
+  getStringValue: (featureKey: string) => string | null;
+
+  /**
+   * Assigned variant's configuration value decoded as a `number`, soft-nulling
+   * when the feature is disabled/unassigned or the declared `valueType`
+   * disagrees. Requires `enableVariants: true` on the owning `TogglyService`.
+   */
+  getNumberValue: (featureKey: string) => number | null;
+
+  /**
+   * Assigned variant's configuration value as JSON. Optional `isT` type guard
+   * soft-fails to null on mismatch. Requires `enableVariants: true` on the
+   * owning `TogglyService`.
+   */
+  getJsonValue: <T = unknown>(
+    featureKey: string,
+    isT?: (v: unknown) => v is T,
+  ) => T | null;
+
+  /**
+   * Assigned variant's configuration value decoded as a `Date` (ISO-8601 wire
+   * string), soft-nulling when the feature is disabled/unassigned or the
+   * declared `valueType` disagrees. Requires `enableVariants: true` on the
+   * owning `TogglyService`.
+   */
+  getDateTimeValue: (featureKey: string) => Date | null;
+
+  /**
    * Refresh feature flags from the server
    */
   refresh: () => Promise<void>;
@@ -204,6 +236,32 @@ export function useToggly(): UseTogglyResult {
     [toggly]
   );
 
+  const getStringValue = useCallback(
+    (featureKey: string): string | null => toggly.getStringValue(featureKey),
+    [toggly]
+  );
+
+  const getNumberValue = useCallback(
+    (featureKey: string): number | null => toggly.getNumberValue(featureKey),
+    [toggly]
+  );
+
+  const getJsonValue = useCallback(
+    <T = unknown>(
+      featureKey: string,
+      isT?: (v: unknown) => v is T,
+    ): T | null =>
+      isT === undefined
+        ? toggly.getJsonValue(featureKey)
+        : toggly.getJsonValue(featureKey, isT),
+    [toggly]
+  );
+
+  const getDateTimeValue = useCallback(
+    (featureKey: string): Date | null => toggly.getDateTimeValue(featureKey),
+    [toggly]
+  );
+
   const refresh = useCallback(async (): Promise<void> => {
     const intent = ++refreshIntent.current;
     update({ isRefreshing: true });
@@ -265,6 +323,10 @@ export function useToggly(): UseTogglyResult {
     isFeatureOff,
     getVariant,
     getVariantValue,
+    getStringValue,
+    getNumberValue,
+    getJsonValue,
+    getDateTimeValue,
     refresh,
     setIdentity,
     setContext,

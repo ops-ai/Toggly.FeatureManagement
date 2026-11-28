@@ -19,6 +19,8 @@ public final class FeatureDefinition {
     private final List<MetricDefinition> metrics;
     private final List<VariantDefinition> variants;
     private final VariantAllocation allocation;
+    private final FeatureValueType valueType;
+    private final Object value;
 
     private FeatureDefinition(Builder builder) {
         this.featureKey = builder.featureKey;
@@ -34,6 +36,8 @@ public final class FeatureDefinition {
                 ? Collections.unmodifiableList(new ArrayList<>(builder.variants))
                 : Collections.emptyList();
         this.allocation = builder.allocation;
+        this.valueType = builder.valueType;
+        this.value = builder.value;
     }
 
     public static Builder builder() {
@@ -88,6 +92,23 @@ public final class FeatureDefinition {
         return allocation;
     }
 
+    /**
+     * Declared catalog value type (OPS-2102), or {@code null} on catalogs
+     * predating this field.
+     */
+    public FeatureValueType getValueType() {
+        return valueType;
+    }
+
+    /**
+     * Resolved flag-level value for non-boolean flags. Wire {@code value},
+     * falling back to {@code configurationValue} for catalogs that reuse the
+     * variant key. Null when the flag carries no value.
+     */
+    public Object getValue() {
+        return value;
+    }
+
     public static final class Builder {
         private String featureKey;
         private List<FeatureFilter> filters = new ArrayList<>();
@@ -98,6 +119,8 @@ public final class FeatureDefinition {
         private List<MetricDefinition> metrics;
         private List<VariantDefinition> variants;
         private VariantAllocation allocation;
+        private FeatureValueType valueType;
+        private Object value;
 
         private Builder() {}
 
@@ -163,6 +186,28 @@ public final class FeatureDefinition {
             return this;
         }
 
+        /**
+         * Sets the declared catalog value type (OPS-2102).
+         *
+         * @param valueType the declared type, or null for catalogs predating this field
+         * @return this builder
+         */
+        public Builder valueType(FeatureValueType valueType) {
+            this.valueType = valueType;
+            return this;
+        }
+
+        /**
+         * Sets the resolved flag-level value (OPS-2102).
+         *
+         * @param value the flag's value, or null when absent
+         * @return this builder
+         */
+        public Builder value(Object value) {
+            this.value = value;
+            return this;
+        }
+
         public FeatureDefinition build() {
             Objects.requireNonNull(featureKey, "featureKey is required");
             return new FeatureDefinition(this);
@@ -182,7 +227,9 @@ public final class FeatureDefinition {
                 contextRequirementType == that.contextRequirementType &&
                 Objects.equals(metrics, that.metrics) &&
                 Objects.equals(variants, that.variants) &&
-                Objects.equals(allocation, that.allocation);
+                Objects.equals(allocation, that.allocation) &&
+                valueType == that.valueType &&
+                Objects.equals(value, that.value);
     }
 
     @Override
@@ -196,7 +243,9 @@ public final class FeatureDefinition {
                 contextRequirementType,
                 metrics,
                 variants,
-                allocation);
+                allocation,
+                valueType,
+                value);
     }
 
     @Override

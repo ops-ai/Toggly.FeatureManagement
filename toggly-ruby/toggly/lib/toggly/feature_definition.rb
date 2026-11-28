@@ -41,6 +41,16 @@ module Toggly
     # @return [FeatureVariantAllocation, nil] Allocation rules for variant assignment
     attr_reader :allocation
 
+    # @return [String, nil] Declared catalog value type (OPS-2102):
+    #   "boolean" | "string" | "number" | "json" | "datetime". +nil+ on
+    #   catalogs predating this field.
+    attr_reader :value_type
+
+    # @return [Object] Resolved flag-level value for non-boolean flags.
+    #   Prefers the wire +value+, falling back to +configurationValue+ for
+    #   catalogs that reuse the variant key.
+    attr_reader :value
+
     # Feature types
     TYPES = %w[Release Experiment Ops Permission].freeze
 
@@ -58,7 +68,9 @@ module Toggly
       context_kind: nil,
       context_requirement_type: nil,
       variants: [],
-      allocation: nil
+      allocation: nil,
+      value_type: nil,
+      value: nil
     )
       @feature_key = feature_key.to_s
       @feature_type = validate_type(feature_type)
@@ -73,6 +85,8 @@ module Toggly
       @context_requirement_type = context_requirement_type
       @variants = Array(variants)
       @allocation = allocation
+      @value_type = value_type
+      @value = value
     end
 
     # Create from a hash (e.g., from JSON)
@@ -109,7 +123,9 @@ module Toggly
         context_kind: hash[:contextKind] || hash[:context_kind],
         context_requirement_type: hash[:contextRequirementType] || hash[:context_requirement_type],
         variants: variants,
-        allocation: allocation
+        allocation: allocation,
+        value_type: hash[:valueType] || hash[:value_type],
+        value: hash.key?(:value) && !hash[:value].nil? ? hash[:value] : (hash[:configurationValue] || hash[:configuration_value])
       )
     end
 
@@ -127,7 +143,9 @@ module Toggly
         created_at: @created_at&.iso8601,
         updated_at: @updated_at&.iso8601,
         variants: @variants.map(&:to_h),
-        allocation: @allocation&.to_h
+        allocation: @allocation&.to_h,
+        value_type: @value_type,
+        value: @value
       }
     end
 

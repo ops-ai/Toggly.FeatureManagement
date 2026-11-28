@@ -23,7 +23,9 @@ import kotlinx.serialization.json.longOrNull
 internal data class EvaluatedVariantDef(
     val enabled: Boolean,
     val variant: String? = null,
-    val configurationValue: Any? = null
+    val configurationValue: Any? = null,
+    /** Declared value type (`"boolean"|"string"|"number"|"json"|"datetime"`); null for untyped catalogs. */
+    val valueType: String? = null
 )
 
 internal fun parseVariantDefinitionValue(value: JsonElement): EvaluatedVariantDef {
@@ -31,7 +33,8 @@ internal fun parseVariantDefinitionValue(value: JsonElement): EvaluatedVariantDe
     val enabled = (obj["enabled"] as? JsonPrimitive)?.booleanOrNull ?: false
     val variant = (obj["variant"] as? JsonPrimitive)?.contentOrNull
     val configurationValue = obj["configurationValue"]?.let(::jsonElementToKotlinValue)
-    return EvaluatedVariantDef(enabled = enabled, variant = variant, configurationValue = configurationValue)
+    val valueType = (obj["valueType"] as? JsonPrimitive)?.contentOrNull
+    return EvaluatedVariantDef(enabled = enabled, variant = variant, configurationValue = configurationValue, valueType = valueType)
 }
 
 internal fun parseVariantDefinitions(element: JsonElement): Map<String, EvaluatedVariantDef> {

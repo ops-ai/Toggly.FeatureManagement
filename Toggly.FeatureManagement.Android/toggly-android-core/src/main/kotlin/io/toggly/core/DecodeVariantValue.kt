@@ -86,3 +86,19 @@ suspend inline fun <reified T> TogglyService.getVariantValue(featureKey: String)
 /** See [TogglyService.getVariantValue]. */
 suspend inline fun <reified T> Toggly.getVariantValue(featureKey: String): T? =
     decodeVariantValue(getVariant(featureKey)?.configurationValue)
+
+/**
+ * Soft-decodes the assigned variant's configuration value as [T] when the
+ * declared `valueType` is `"json"`. JVM-safe reified companion to
+ * [TogglyService.getJsonValue] (the `Class<T>` overload stays a member).
+ */
+suspend inline fun <reified T> TogglyService.getJsonValue(featureKey: String): T? {
+    val variant = getVariant(featureKey) ?: return null
+    return decodeTypedJsonValue(variant.configurationValue, variant.valueType)
+}
+
+/** See [TogglyService.getJsonValue]. */
+suspend inline fun <reified T> Toggly.getJsonValue(featureKey: String): T? {
+    val variant = getVariant(featureKey) ?: return null
+    return decodeTypedJsonValue(variant.configurationValue, variant.valueType)
+}

@@ -132,6 +132,15 @@ export type { FeatureStatPayload } from './telemetry/usage-batcher.js'
 export type { MetricStatPayload } from './telemetry/metrics-batcher.js'
 export { decodeVariantValue } from './decode-variant-value.js'
 export {
+  decodeDateTimeValue,
+  decodeJsonValue,
+  decodeNumberValue,
+  decodeStringValue,
+  isFeatureValueType,
+  valueTypeMatches,
+} from './feature-value-codec.js'
+export type { FeatureValueType } from './feature-value-codec.js'
+export {
   createSegmentMembershipClient,
   SegmentMembershipError,
 } from '@ops-ai/toggly-segments'

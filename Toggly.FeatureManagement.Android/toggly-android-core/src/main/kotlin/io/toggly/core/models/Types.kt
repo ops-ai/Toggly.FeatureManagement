@@ -122,7 +122,13 @@ data class TogglyInitResponse(
  */
 data class VariantResult(
     val name: String,
-    val configurationValue: Any? = null
+    val configurationValue: Any? = null,
+    /**
+     * Declared value type (`"boolean"|"string"|"number"|"json"|"datetime"`) for
+     * [configurationValue], when the catalog or evaluated envelope provided one
+     * (OPS-2099 / OPS-2102). Null for legacy/untyped catalogs.
+     */
+    val valueType: String? = null
 )
 
 /**

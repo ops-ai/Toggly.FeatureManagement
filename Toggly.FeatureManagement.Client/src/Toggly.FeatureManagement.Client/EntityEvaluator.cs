@@ -6,12 +6,23 @@ namespace Toggly.FeatureManagement.Client;
 /// <summary>Evaluates signed entity gates against per-read local attributes.</summary>
 public static class EntityEvaluator
 {
-    /// <summary>Resolves a boolean or entity rule without changing cached definitions.</summary>
+    /// <summary>Resolves a boolean, entity rule, or typed-value envelope without changing cached definitions.</summary>
     public static bool Resolve(JsonElement definition, EntityContext? entity = null)
     {
         if (definition.ValueKind == JsonValueKind.True)
             return true;
-        if (definition.ValueKind != JsonValueKind.Object || entity is null)
+        if (definition.ValueKind != JsonValueKind.Object)
+            return false;
+        // Evaluated-signed value envelope (OPS-2102): { enabled, valueType?, value?, variant?, configurationValue? }.
+        // Distinguished from an EntityGate object by the absence of "rules"; "enabled" alone decides,
+        // independent of any entity, so FeatureValueCodec getters and bare IsEnabled checks agree.
+        if (!definition.TryGetProperty("rules", out _)
+            && definition.TryGetProperty("enabled", out var enabledProp)
+            && (enabledProp.ValueKind == JsonValueKind.True || enabledProp.ValueKind == JsonValueKind.False))
+        {
+            return enabledProp.ValueKind == JsonValueKind.True;
+        }
+        if (entity is null)
             return false;
         if (!definition.TryGetProperty("rules", out var rules) || rules.ValueKind != JsonValueKind.Array || rules.GetArrayLength() == 0)
             return false;

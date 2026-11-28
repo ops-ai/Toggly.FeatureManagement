@@ -280,6 +280,9 @@ mod tests {
             context_requirement_type: None,
             variants: vec![],
             allocation: None,
+            value_type: None,
+            value: None,
+            configuration_value: None,
         }
     }
 

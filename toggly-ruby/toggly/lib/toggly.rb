@@ -11,6 +11,7 @@ require_relative "toggly/context"
 require_relative "toggly/errors"
 require_relative "toggly/feature_variant"
 require_relative "toggly/feature_definition"
+require_relative "toggly/feature_value_codec"
 require_relative "toggly/variant_allocator"
 require_relative "toggly/variant_result"
 require_relative "toggly/evaluators/base"
@@ -130,6 +131,54 @@ module Toggly
       raise Error, NOT_CONFIGURED_ERROR unless @client
 
       @client.get_variant_value(feature_key, context: context, as: as, &)
+    end
+
+    # Flag's own catalog value as a +String+ using the global client. See
+    # {Client#get_string_value}.
+    #
+    # @param feature_key [String, Symbol]
+    # @param context [Context, nil]
+    # @return [String, nil]
+    def get_string_value(feature_key, context: nil)
+      raise Error, NOT_CONFIGURED_ERROR unless @client
+
+      @client.get_string_value(feature_key, context: context)
+    end
+
+    # Flag's own catalog value as a +Float+ using the global client. See
+    # {Client#get_number_value}.
+    #
+    # @param feature_key [String, Symbol]
+    # @param context [Context, nil]
+    # @return [Float, nil]
+    def get_number_value(feature_key, context: nil)
+      raise Error, NOT_CONFIGURED_ERROR unless @client
+
+      @client.get_number_value(feature_key, context: context)
+    end
+
+    # Flag's own catalog value as a parsed JSON object/array using the global
+    # client. See {Client#get_json_value}.
+    #
+    # @param feature_key [String, Symbol]
+    # @param context [Context, nil]
+    # @return [Hash, Array, nil]
+    def get_json_value(feature_key, context: nil)
+      raise Error, NOT_CONFIGURED_ERROR unless @client
+
+      @client.get_json_value(feature_key, context: context)
+    end
+
+    # Flag's own catalog value as a +Time+ parsed from ISO-8601 using the
+    # global client. See {Client#get_datetime_value}.
+    #
+    # @param feature_key [String, Symbol]
+    # @param context [Context, nil]
+    # @return [Time, nil]
+    def get_datetime_value(feature_key, context: nil)
+      raise Error, NOT_CONFIGURED_ERROR unless @client
+
+      @client.get_datetime_value(feature_key, context: context)
     end
 
     # Reset the global client (mainly for testing)

@@ -9,9 +9,15 @@ class VariantResult {
   /// Server-provided configuration payload for the variant (JSON primitive, map, or list).
   final dynamic configurationValue;
 
+  /// Declared value type (`'boolean' | 'string' | 'number' | 'json' | 'datetime'`)
+  /// for [configurationValue], when the catalog or evaluated envelope
+  /// provided one (OPS-2099 / OPS-2102). Absent for legacy/untyped catalogs.
+  final String? valueType;
+
   const VariantResult({
     required this.enabled,
     this.name,
     this.configurationValue,
+    this.valueType,
   });
 }

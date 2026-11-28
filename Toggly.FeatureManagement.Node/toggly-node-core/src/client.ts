@@ -60,6 +60,25 @@ import {
 } from './entity-context-registration.js'
 import { TelemetryRuntime } from './telemetry/index.js'
 import { decodeVariantValue } from './decode-variant-value.js'
+import {
+  decodeDateTimeValue,
+  decodeJsonValue,
+  decodeNumberValue,
+  decodeStringValue,
+  type FeatureValueType,
+} from './feature-value-codec.js'
+
+/**
+ * Catalog fields for OPS-2102 typed flag values, not yet declared on the
+ * published `@ops-ai/toggly-eval` `FeatureDefinitionModel`. Read via this
+ * local extension so typed getters work against whatever the definitions
+ * API actually returns, independent of that package's release cadence.
+ */
+type ValueTypedDefinition = FeatureDefinitionModel & {
+  valueType?: FeatureValueType
+  value?: unknown
+  configurationValue?: unknown
+}
 
 function normalizeRevision(revision: string | null | undefined): string | null {
   if (!revision) {
@@ -976,6 +995,79 @@ export function createTogglyClient(
   }
 
   /**
+   * Resolves `(raw value, declared valueType)` for the flag's own catalog
+   * value (OPS-2102) — distinct from any assigned variant's
+   * `configurationValue`. Soft-null source (`null`) for every typed getter
+   * below: unknown feature, or disabled for this context. Evaluates through
+   * `isFeatureOn` so hooks and usage recording match the boolean getters.
+   */
+  async function resolvedValueSource(
+    featureKey: string,
+    context?: EvaluationContext,
+    entity?: EvaluationEntityContext,
+    kind?: string,
+  ): Promise<{ raw: unknown; declared: FeatureValueType | null } | null> {
+    const definition = state.definitions.get(featureKey) as ValueTypedDefinition | undefined
+    if (!definition) {
+      return null
+    }
+    const enabled = await isFeatureOn(featureKey, context, entity, kind)
+    if (!enabled) {
+      return null
+    }
+    const raw = definition.value === undefined ? definition.configurationValue : definition.value
+    return { raw, declared: definition.valueType ?? null }
+  }
+
+  /** Typed getter for `string` flag values. `null` when unknown, disabled, unset, or mistyped. */
+  async function getStringValue(
+    featureKey: string,
+    context?: EvaluationContext,
+    entity?: EvaluationEntityContext,
+    kind?: string,
+  ): Promise<string | null> {
+    const source = await resolvedValueSource(featureKey, context, entity, kind)
+    if (!source) return null
+    return decodeStringValue(source.raw, source.declared)
+  }
+
+  /** Typed getter for `number` flag values. `null` when unknown, disabled, unset, or mistyped. */
+  async function getNumberValue(
+    featureKey: string,
+    context?: EvaluationContext,
+    entity?: EvaluationEntityContext,
+    kind?: string,
+  ): Promise<number | null> {
+    const source = await resolvedValueSource(featureKey, context, entity, kind)
+    if (!source) return null
+    return decodeNumberValue(source.raw, source.declared)
+  }
+
+  /** Typed getter for `json` flag values (object/array). `null` when unknown, disabled, unset, or mistyped. */
+  async function getJsonValue(
+    featureKey: string,
+    context?: EvaluationContext,
+    entity?: EvaluationEntityContext,
+    kind?: string,
+  ): Promise<unknown> {
+    const source = await resolvedValueSource(featureKey, context, entity, kind)
+    if (!source) return null
+    return decodeJsonValue(source.raw, source.declared)
+  }
+
+  /** Typed getter for `datetime` flag values, decoded to a `Date`. `null` when unknown, disabled, unset, or mistyped. */
+  async function getDateTimeValue(
+    featureKey: string,
+    context?: EvaluationContext,
+    entity?: EvaluationEntityContext,
+    kind?: string,
+  ): Promise<Date | null> {
+    const source = await resolvedValueSource(featureKey, context, entity, kind)
+    if (!source) return null
+    return decodeDateTimeValue(source.raw, source.declared)
+  }
+
+  /**
    * Set user identity (eval-time only — does not re-fetch definitions)
    */
   async function setIdentity(identity: string): Promise<void> {
@@ -1158,6 +1250,10 @@ export function createTogglyClient(
     evaluateFeatureGate,
     getVariant,
     getVariantValue,
+    getStringValue,
+    getNumberValue,
+    getJsonValue,
+    getDateTimeValue,
     registerContext,
     setIdentity,
     addHook,

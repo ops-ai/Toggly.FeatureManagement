@@ -8,6 +8,8 @@
 - Bump Client test packages to current stable (`Microsoft.NET.Test.Sdk` 17.12.0, `xunit` 2.9.3, `coverlet.collector` 6.0.4); stay away from FluentAssertions 7+/8+.
 
 ### Added
+- Typed flag getters (`GetStringValue`, `GetNumberValue`, `GetJsonValue`, `GetDateTimeValue`) that soft-decode evaluated-signed value envelopes [OPS-2102] / [OPS-2104].
+- `EntityEvaluator` treats `{ enabled, valueType?, value? }` envelopes as booleans for `IsEnabled` without requiring entity context.
 - Mocked HTTP flag-evaluation contract tests for signed boolean and entity defs through `IsEnabled` / `Evaluate`.
 
 ## 3.11.2 — 2026-09-28

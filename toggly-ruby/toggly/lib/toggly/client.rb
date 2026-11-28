@@ -177,6 +177,75 @@ module Toggly
       decode_variant_configuration(value, as, &block)
     end
 
+    # ========== Typed Flag Value Getters (OPS-2102) ==========
+    #
+    # Soft-decode a flag's own catalog value (FeatureDefinition#value) by its
+    # declared FeatureDefinition#value_type, distinct from the variant
+    # configuration getters above (#get_variant / #get_variant_value).
+    # Soft-null (+nil+) on an unknown feature, a disabled flag, a
+    # declared-type mismatch, or a decode failure — never raise solely for
+    # shape mismatch and never return a wrong-typed value.
+
+    # Returns the flag's value as a +String+.
+    #
+    # Soft-nulls (+nil+) on a missing feature, a disabled flag, a declared
+    # +value_type+ mismatch, or a non-string value.
+    #
+    # @param feature_key [String, Symbol] The feature key
+    # @param context [Context, nil] Optional evaluation context
+    # @return [String, nil]
+    def get_string_value(feature_key, context: nil)
+      raw, declared = resolved_value_source(feature_key, context)
+      return nil if declared.equal?(UNHANDLED_VARIANT_VALUE)
+
+      FeatureValueCodec.decode_string_value(raw, declared)
+    end
+
+    # Returns the flag's value as a finite +Float+.
+    #
+    # Soft-nulls (+nil+) on a missing feature, a disabled flag, a declared
+    # +value_type+ mismatch, or a non-numeric value.
+    #
+    # @param feature_key [String, Symbol] The feature key
+    # @param context [Context, nil] Optional evaluation context
+    # @return [Float, nil]
+    def get_number_value(feature_key, context: nil)
+      raw, declared = resolved_value_source(feature_key, context)
+      return nil if declared.equal?(UNHANDLED_VARIANT_VALUE)
+
+      FeatureValueCodec.decode_number_value(raw, declared)
+    end
+
+    # Returns the flag's value as a parsed JSON object/array.
+    #
+    # Soft-nulls (+nil+) on a missing feature, a disabled flag, a declared
+    # +value_type+ mismatch, or an undecodable value.
+    #
+    # @param feature_key [String, Symbol] The feature key
+    # @param context [Context, nil] Optional evaluation context
+    # @return [Hash, Array, nil]
+    def get_json_value(feature_key, context: nil)
+      raw, declared = resolved_value_source(feature_key, context)
+      return nil if declared.equal?(UNHANDLED_VARIANT_VALUE)
+
+      FeatureValueCodec.decode_json_value(raw, declared)
+    end
+
+    # Returns the flag's value as a +Time+ parsed from an ISO-8601 string.
+    #
+    # Soft-nulls (+nil+) on a missing feature, a disabled flag, a declared
+    # +value_type+ mismatch, or an unparsable value.
+    #
+    # @param feature_key [String, Symbol] The feature key
+    # @param context [Context, nil] Optional evaluation context
+    # @return [Time, nil]
+    def get_datetime_value(feature_key, context: nil)
+      raw, declared = resolved_value_source(feature_key, context)
+      return nil if declared.equal?(UNHANDLED_VARIANT_VALUE)
+
+      FeatureValueCodec.decode_datetime_value(raw, declared)
+    end
+
     # Default targeting userId used by {#get_variant} / {#get_variant_value}
     # when the per-call context has no identity.
     #
@@ -547,6 +616,20 @@ module Toggly
 
       identity = context&.identity
       @telemetry.record_check(feature_key, enabled, identity)
+    end
+
+    # Returns [raw_value, declared_value_type] for a flag, or
+    # [nil, UNHANDLED_VARIANT_VALUE] on an unknown feature or a disabled flag
+    # (soft-null source for every typed getter — OPS-2102).
+    def resolved_value_source(feature_key, context)
+      key = feature_key.to_s
+      definition = @mutex.synchronize { @definitions[key] }
+      return [nil, UNHANDLED_VARIANT_VALUE] if definition.nil?
+
+      enabled = @engine.evaluate(definition, context)
+      return [nil, UNHANDLED_VARIANT_VALUE] unless enabled
+
+      [definition.value, definition.value_type]
     end
 
     # Allocator userId: per-call context identity when present, else client identity.

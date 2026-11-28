@@ -10,6 +10,28 @@ const (
 	RequirementAll RequirementType = "All"
 )
 
+// ValueType is the declared catalog value type for a feature flag
+// (OPS-2102): "boolean" | "string" | "number" | "json" | "datetime".
+// The zero value (empty string) means the catalog predates this field;
+// typed flag getters still attempt a decode in that case.
+type ValueType string
+
+const (
+	ValueTypeBoolean  ValueType = "boolean"
+	ValueTypeString   ValueType = "string"
+	ValueTypeNumber   ValueType = "number"
+	ValueTypeJSON     ValueType = "json"
+	ValueTypeDateTime ValueType = "datetime"
+)
+
+// Matches reports whether a typed getter for requested may attempt a decode.
+// An empty (undeclared) ValueType always allows the attempt — legacy
+// catalogs predating this field still decode; the decode itself still
+// soft-nulls on failure.
+func (vt ValueType) Matches(requested ValueType) bool {
+	return vt == "" || vt == requested
+}
+
 // FeatureFilter mirrors the server-side filter object.
 //
 // NOTE: The server may emit scalar values (string/number/bool) in Parameters,
@@ -43,6 +65,28 @@ type FeatureDefinitionModel struct {
 	// then always unassigned, though the assignment reason still reports
 	// DefaultWhenEnabled/DefaultWhenDisabled (matching Microsoft.FeatureManagement).
 	Allocation *AllocationDefinition `json:"allocation,omitempty"`
+
+	// ValueType is the declared catalog value type for this flag (OPS-2102).
+	// Empty on catalogs predating this field.
+	ValueType ValueType `json:"valueType,omitempty"`
+
+	// Value is the resolved flag-level value for non-boolean flags. Prefer
+	// Value; ConfigurationValue is a fallback for catalogs that reuse the
+	// variant key at the flag level. Use ResolvedValue to read either.
+	Value interface{} `json:"value,omitempty"`
+
+	// ConfigurationValue is the flag-level fallback for Value (OPS-2102),
+	// distinct from VariantDefinition.ConfigurationValue on each variant.
+	ConfigurationValue interface{} `json:"configurationValue,omitempty"`
+}
+
+// ResolvedValue returns Value, falling back to ConfigurationValue when Value
+// is nil (OPS-2102).
+func (d FeatureDefinitionModel) ResolvedValue() interface{} {
+	if d.Value != nil {
+		return d.Value
+	}
+	return d.ConfigurationValue
 }
 
 // SignedDefinitionsResponse is the envelope returned by /definitions-signed/{appKey}/{env}.

@@ -4,6 +4,19 @@
 - CI unit and packed-consumer matrix expanded from Node **24 (lts/\*)** to **22 / 24 / 26**.
 - Packed React 19 consumer fixture bumped from React / React DOM **19.3.0** → **19.3.1** (latest stable; `@types/react` / `@types/react-dom` remain **19.3.0**, newest published types line).
 
+### Fixed
+- Typed getters honor `valueType` from the variant envelope when
+  `enableVariants` projects flags to booleans, so a typed mismatch soft-nulls
+  instead of returning the wrong-typed `configurationValue`.
+
+### Added
+- Typed flag value getters `getStringValue`, `getNumberValue`, `getJsonValue`,
+  and `getDateTimeValue` on `Toggly`, mirroring `getVariantValue`
+  [OPS-2102][OPS-2105]. Each soft-nulls (never throws) when the flag is
+  disabled, unset, or the declared `valueType` mismatches the getter. Source
+  precedence: the evaluated envelope's `value`, else its `configurationValue`,
+  else the assigned variant's `configurationValue`.
+
 ## 1.14.1
 
 2026-10-23

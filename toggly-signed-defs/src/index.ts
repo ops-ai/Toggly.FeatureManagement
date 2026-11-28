@@ -29,5 +29,7 @@ export type {
   EntityGateRule,
   EvaluatedDefinitionValue,
   EvaluatedDefinitions,
+  EvaluatedValueEnvelope,
+  FeatureValueType,
 } from './evaluated-definitions'
 export { isEntityGate, isEvaluatedDefinitions } from './evaluated-definitions'

@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- `FeatureDefinitionModel.ValueType` (wire `valueType`): declares a feature's
+  variant configuration value type (`Boolean`/`String`/`Number`/`Json`/`DateTime`).
+  `null` means the catalog has not declared a type [OPS-2104].
+- `FeatureValueManagerExtensions` typed getters on `IVariantFeatureManager` —
+  `GetStringValueAsync`, `GetNumberValueAsync`, `GetJsonValueAsync`,
+  `GetDateTimeValueAsync` (plus `ITargetingContext` overloads). Each assigns
+  via `GetVariantAsync`, then soft-decodes the configuration value: an
+  optional `IFeatureDefinitionModelProvider` validates the declared
+  `ValueType` and resolves the exact catalog value when supplied; otherwise
+  the value is reconstructed from the variant's bound configuration on a
+  best-effort basis. Soft-nulls (never throws) when disabled, no variant is
+  assigned, or the value does not match the requested type [OPS-2104].
+
 ## All .NET SDK packages 3.15.0 - 2026-11-16
 
 ### Added

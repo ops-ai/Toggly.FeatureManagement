@@ -40,6 +40,7 @@ from toggly.exceptions import (
     TogglySignatureError,
     TogglyTimeoutError,
 )
+from toggly.feature_value_codec import FeatureValueType, is_feature_value_type
 from toggly.models import (
     Allocation,
     DebugInfo,
@@ -104,6 +105,9 @@ __all__ = [
     "TogglyNetworkError",
     "TogglySignatureError",
     "TogglyTimeoutError",
+    # Feature value typing (OPS-2102)
+    "FeatureValueType",
+    "is_feature_value_type",
     # Models
     "FeatureDefinition",
     "FeatureFilter",

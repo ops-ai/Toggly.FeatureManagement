@@ -71,3 +71,44 @@ func TestIsEnabledAuthorizesOnlyEnabledSecureFeatures(t *testing.T) {
 		t.Fatalf("disabled secure feature = %t, %v, calls = %d", on, err, authorizer.calls)
 	}
 }
+
+// TestTypedGetters_AuthorizeSecureFeatures guards OPS-2102 review finding:
+// GetStringValue/GetNumberValue/GetJSONValue/GetDateTimeValue must run the
+// same authorization check as IsEnabled before returning a typed value for a
+// secured, enabled feature — never bypass it via resolvedValueSource.
+func TestTypedGetters_AuthorizeSecureFeatures(t *testing.T) {
+	authorizer := &recordingAuthorization{allowed: true}
+	client, err := NewClient(Config{
+		AppKey: "app", AuthorizationService: authorizer,
+		DisableBackgroundRefresh: true, DisableEntityContextRegistration: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = client.Close() }()
+	const secureValueFeature = "secure-value"
+	client.provider.applyDefinitions([]definitions.FeatureDefinitionModel{
+		{
+			FeatureKey:     secureValueFeature,
+			SecuredFeature: true,
+			Filters:        []definitions.FeatureFilter{{Name: "AlwaysOn"}},
+			ValueType:      definitions.ValueTypeString,
+			Value:          "secret-value",
+		},
+	})
+	ctx := context.Background()
+
+	if got, ok := client.GetStringValue(ctx, secureValueFeature, Context{}); !ok || got != "secret-value" || authorizer.calls != 1 {
+		t.Fatalf("authorized GetStringValue = %q, %v, calls = %d", got, ok, authorizer.calls)
+	}
+
+	authorizer.allowed = false
+	if got, ok := client.GetStringValue(ctx, secureValueFeature, Context{}); ok || got != "" || authorizer.calls != 2 {
+		t.Fatalf("denied GetStringValue = %q, %v, calls = %d; want soft-null", got, ok, authorizer.calls)
+	}
+
+	authorizer.err = errors.New("authorization unavailable")
+	if got, ok := client.GetStringValue(ctx, secureValueFeature, Context{}); ok || got != "" || authorizer.calls != 3 {
+		t.Fatalf("authorization-error GetStringValue = %q, %v, calls = %d; want soft-null", got, ok, authorizer.calls)
+	}
+}

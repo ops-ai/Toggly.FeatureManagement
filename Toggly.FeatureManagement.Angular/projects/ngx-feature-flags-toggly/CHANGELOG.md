@@ -7,9 +7,20 @@
   (CLI/build aligned to latest matching patches). Peer floor remains Angular `>=15`;
   Angular 15 floor fixtures unchanged.
 
+### Fixed
+- Typed getters honor `valueType` from the variant envelope when
+  `enableVariants` projects flags to booleans, so a typed mismatch soft-nulls
+  instead of returning the wrong-typed `configurationValue`.
+
 ### Added
 - Mocked HTTP API-contract evaluation specs for public entry points against
   realistic `/evaluated-signed` and `/evaluated-variants-signed` `{ defs }` payloads.
+- Typed flag value getters `getStringValue`, `getNumberValue`, `getJsonValue`,
+  and `getDateTimeValue` on `TogglyService`, mirroring `getVariantValue`
+  [OPS-2102][OPS-2105]. Each soft-nulls (never throws) when the flag is
+  disabled, unset, or the declared `valueType` mismatches the getter. Source
+  precedence: the evaluated envelope's `value`, else its `configurationValue`,
+  else the assigned variant's `configurationValue`.
 
 ## 2.11.1
 

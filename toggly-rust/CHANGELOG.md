@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.13.0
+
+2026-11-28
+
+### Added
+- Catalog `valueType` field on `FeatureDefinition` (new
+  `definitions::FeatureValueType`: `Boolean | String | Number | Json |
+  Datetime`), plus a flag-level `value` (wire `value`, falling back to
+  `configuration_value`/`configurationValue` for catalogs that reuse the
+  variant key); `FeatureDefinition::resolved_value()` reads either. Legacy
+  catalogs without `valueType` still attempt the typed decode [OPS-2106].
+- Typed flag getters `get_string_value`, `get_number_value`,
+  `get_json_value`, and `get_datetime_value` on `TogglyClient`. Soft-null
+  (`None`) on a missing feature, a disabled flag, a declared `valueType`
+  mismatch, or a decode failure — never panic solely for shape mismatch and
+  never return a wrong-typed value. `get_datetime_value` parses ISO-8601
+  into `chrono::DateTime<FixedOffset>`. New `toggly::feature_value` module
+  reuses the same soft-null shape as `get_variant_value_as` (OPS-1365)
+  [OPS-2106].
+
 ## 0.11.1
 
 2026-10-23

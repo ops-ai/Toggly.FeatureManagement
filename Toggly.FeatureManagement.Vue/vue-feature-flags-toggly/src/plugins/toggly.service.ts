@@ -18,6 +18,7 @@ import {
   normalizeEvaluationClaims,
   isCacheLruEnabled,
   evaluateStoredFeatureKeys,
+  isEntityGate,
   normalizeEntityContext,
   toBooleanDefinitions,
   parseCacheLruIndex,
@@ -37,6 +38,13 @@ import {
 import { HookExecutor } from './hooks';
 import type { EvaluatedVariantDef, VariantResult } from '../variant.types';
 import { decodeVariantValue } from '../utils/decode-variant-value';
+import {
+  decodeDateTimeValue,
+  decodeJsonValue,
+  decodeNumberValue,
+  decodeStringValue,
+  type FeatureValueType,
+} from '../utils/feature-value-codec';
 import {
   buildWebSocketUrl,
   getNextReconnectDelayMs,
@@ -415,6 +423,26 @@ export interface TogglyService {
   ) => Promise<boolean>
   getVariant: (featureKey: string) => VariantResult | null
   getVariantValue: <T = unknown>(featureKey: string, isT?: (v: unknown) => v is T) => T | null
+  getStringValue: (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => Promise<string | null>
+  getNumberValue: (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => Promise<number | null>
+  getJsonValue: (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => Promise<unknown>
+  getDateTimeValue: (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ) => Promise<Date | null>
   subscribeFeaturesRefresh: (listener: () => void) => () => void
   setLocalGates: (gates: LocalGate[]) => void
   notifyLocalGatesChanged: () => void
@@ -1050,6 +1078,79 @@ export class Toggly implements TogglyService {
   ): T | null {
     return decodeVariantValue(this.getVariant(featureKey)?.configurationValue, isT)
   }
+
+  /**
+   * Resolve one typed flag value (OPS-2102).
+   *
+   * - Not enabled → `null`.
+   * - Declared `valueType` (from the evaluated envelope; legacy catalogs omit
+   *   it) mismatching `decode`'s own type soft-nulls instead of throwing.
+   * - Source value: the evaluated envelope's `value`, else its
+   *   `configurationValue`, else the assigned variant's `configurationValue`.
+   */
+  private readonly _resolveTypedValue = async <T>(
+    featureKey: string,
+    decode: (raw: unknown, declared?: FeatureValueType | null) => T | null,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<T | null> => {
+    const enabled = await this.isFeatureOn(featureKey, context, kind)
+    if (!enabled) {
+      return null
+    }
+    const snapshot = this._captureEvaluation()
+    const definition = snapshot.features?.[featureKey]
+    const envelope =
+      definition !== null && typeof definition === 'object' && !isEntityGate(definition)
+        ? (definition as unknown as Record<string, unknown>)
+        : undefined
+    // enableVariants reduces snapshot.features to plain booleans
+    // (see variantDefsToFlags), which drops the catalog's declared
+    // valueType. Fall back to the variant envelope's own valueType so
+    // typed getters still see it (OPS-2102 review finding).
+    const declaredValueType =
+      (envelope?.['valueType'] as FeatureValueType | undefined) ??
+      (snapshot.variants?.[featureKey]?.valueType as FeatureValueType | undefined) ??
+      null
+    let sourceValue: unknown
+    if (envelope) {
+      sourceValue =
+        envelope['value'] === undefined
+          ? envelope['configurationValue']
+          : envelope['value']
+    } else {
+      sourceValue = this.getVariant(featureKey)?.configurationValue
+    }
+    return decode(sourceValue, declaredValueType)
+  }
+
+  /** Typed getter for `string` flag values. Returns `null` when disabled, unset, or mistyped. */
+  getStringValue = (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<string | null> => this._resolveTypedValue(featureKey, decodeStringValue, context, kind)
+
+  /** Typed getter for `number` flag values. Returns `null` when disabled, unset, or mistyped. */
+  getNumberValue = (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<number | null> => this._resolveTypedValue(featureKey, decodeNumberValue, context, kind)
+
+  /** Typed getter for `json` flag values (object/array). Returns `null` when disabled, unset, or mistyped. */
+  getJsonValue = (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<unknown> => this._resolveTypedValue(featureKey, decodeJsonValue, context, kind)
+
+  /** Typed getter for `datetime` flag values, decoded to a `Date`. Returns `null` when disabled, unset, or mistyped. */
+  getDateTimeValue = (
+    featureKey: string,
+    context?: TogglyEntityContext | Record<string, unknown> | null,
+    kind?: string,
+  ): Promise<Date | null> => this._resolveTypedValue(featureKey, decodeDateTimeValue, context, kind)
 
   /**
    * Subscribe to feature (and variant) data updates after HTTP refresh or WebSocket-driven reload.
