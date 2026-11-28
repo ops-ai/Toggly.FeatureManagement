@@ -156,4 +156,53 @@ class TypedFlagValueTest {
 
         client.close();
     }
+
+    @Test
+    void staticFacadeDelegatesTypedGettersToGlobalClient() {
+        FeatureDefinition definition = FeatureDefinition.builder()
+                .featureKey("greeting")
+                .filters(List.of(FeatureFilter.alwaysOn()))
+                .valueType(FeatureValueType.STRING)
+                .value("hello")
+                .build();
+        FeatureDefinition numberDefinition = FeatureDefinition.builder()
+                .featureKey("limit")
+                .filters(List.of(FeatureFilter.alwaysOn()))
+                .valueType(FeatureValueType.NUMBER)
+                .value(7)
+                .build();
+        FeatureDefinition jsonDefinition = FeatureDefinition.builder()
+                .featureKey("config")
+                .filters(List.of(FeatureFilter.alwaysOn()))
+                .valueType(FeatureValueType.JSON)
+                .value(Map.of("ok", true))
+                .build();
+        FeatureDefinition datetimeDefinition = FeatureDefinition.builder()
+                .featureKey("launch-at")
+                .filters(List.of(FeatureFilter.alwaysOn()))
+                .valueType(FeatureValueType.DATETIME)
+                .value("2026-06-01T00:00:00Z")
+                .build();
+
+        InMemorySnapshotProvider provider = new InMemorySnapshotProvider();
+        provider.setFeatures(Map.of(
+                definition.getFeatureKey(), definition,
+                numberDefinition.getFeatureKey(), numberDefinition,
+                jsonDefinition.getFeatureKey(), jsonDefinition,
+                datetimeDefinition.getFeatureKey(), datetimeDefinition
+        ));
+        Toggly.initialize(new TogglyClient(defaultConfig(), provider));
+        try {
+            assertEquals("hello", Toggly.getStringValue("greeting"));
+            assertEquals("hello", Toggly.getStringValue("greeting", null));
+            assertEquals(7.0, Toggly.getNumberValue("limit"));
+            assertEquals(7.0, Toggly.getNumberValue("limit", null));
+            assertEquals(Map.of("ok", true), Toggly.getJsonValue("config"));
+            assertEquals(Map.of("ok", true), Toggly.getJsonValue("config", null));
+            assertEquals(2026, Toggly.getDateTimeValue("launch-at").getYear());
+            assertEquals(2026, Toggly.getDateTimeValue("launch-at", null).getYear());
+        } finally {
+            Toggly.shutdown();
+        }
+    }
 }

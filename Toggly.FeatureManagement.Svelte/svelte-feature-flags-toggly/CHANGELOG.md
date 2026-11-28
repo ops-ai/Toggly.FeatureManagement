@@ -1,5 +1,10 @@
 ## Unreleased
 
+### Fixed
+- Typed getters honor `valueType` from the variant envelope when
+  `enableVariants` projects flags to booleans, so a typed mismatch soft-nulls
+  instead of returning the wrong-typed `configurationValue`.
+
 ### Added
 - Typed flag value getters `getStringValue`, `getNumberValue`, `getJsonValue`,
   and `getDateTimeValue` on `Toggly`, mirroring `getVariantValue`

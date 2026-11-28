@@ -27,6 +27,10 @@ class FeatureValueCodecTest {
         assertThat(FeatureValueCodec.decodeNumber("3.14", null)).isEqualTo(3.14);
         assertThat(FeatureValueCodec.decodeNumber(true, null)).isNull();
         assertThat(FeatureValueCodec.decodeNumber("not-a-number", null)).isNull();
+        assertThat(FeatureValueCodec.decodeNumber("   ", null)).isNull();
+        assertThat(FeatureValueCodec.decodeNumber(Double.NaN, null)).isNull();
+        assertThat(FeatureValueCodec.decodeNumber(Double.POSITIVE_INFINITY, null)).isNull();
+        assertThat(FeatureValueCodec.decodeNumber(new Object(), null)).isNull();
         assertThat(FeatureValueCodec.decodeNumber(42, FeatureValueType.STRING)).isNull();
     }
 
@@ -34,8 +38,10 @@ class FeatureValueCodecTest {
     void decodeJsonAcceptsMapsListsAndJsonStringsOnly() {
         assertThat(FeatureValueCodec.decodeJson(Map.of("a", 1), null)).isEqualTo(Map.of("a", 1));
         assertThat(FeatureValueCodec.decodeJson("{\"a\": 1}", null)).isEqualTo(Map.of("a", 1L));
+        assertThat(FeatureValueCodec.decodeJson(null, null)).isNull();
         assertThat(FeatureValueCodec.decodeJson("not json", null)).isNull();
         assertThat(FeatureValueCodec.decodeJson("\"a plain string\"", null)).isNull();
+        assertThat(FeatureValueCodec.decodeJson(42, null)).isNull();
         assertThat(FeatureValueCodec.decodeJson(Map.of("a", 1), FeatureValueType.STRING)).isNull();
     }
 
@@ -47,9 +53,27 @@ class FeatureValueCodecTest {
         assertThat(decoded.getMonthValue()).isEqualTo(1);
         assertThat(decoded.getDayOfMonth()).isEqualTo(15);
 
+        OffsetDateTime existing = OffsetDateTime.parse("2025-03-01T00:00:00Z");
+        assertThat(FeatureValueCodec.decodeDateTime(existing, null)).isEqualTo(existing);
+        assertThat(FeatureValueCodec.decodeDateTime(existing.toInstant(), null)).isEqualTo(existing);
+
         assertThat(FeatureValueCodec.decodeDateTime("not-a-date", null)).isNull();
+        assertThat(FeatureValueCodec.decodeDateTime("   ", null)).isNull();
         assertThat(FeatureValueCodec.decodeDateTime(12345, null)).isNull();
         assertThat(FeatureValueCodec.decodeDateTime("2026-01-15T10:30:00Z", FeatureValueType.STRING)).isNull();
+    }
+
+    @Test
+    void fromStringParsesRecognizedWireLiterals() {
+        assertThat(FeatureValueType.fromString(null)).isNull();
+        assertThat(FeatureValueType.fromString("")).isNull();
+        assertThat(FeatureValueType.fromString("   ")).isNull();
+        assertThat(FeatureValueType.fromString("boolean")).isEqualTo(FeatureValueType.BOOLEAN);
+        assertThat(FeatureValueType.fromString("STRING")).isEqualTo(FeatureValueType.STRING);
+        assertThat(FeatureValueType.fromString("number")).isEqualTo(FeatureValueType.NUMBER);
+        assertThat(FeatureValueType.fromString("json")).isEqualTo(FeatureValueType.JSON);
+        assertThat(FeatureValueType.fromString("datetime")).isEqualTo(FeatureValueType.DATETIME);
+        assertThat(FeatureValueType.fromString("mystery")).isEqualTo(FeatureValueType.UNKNOWN);
     }
 
     @Test

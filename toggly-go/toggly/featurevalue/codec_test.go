@@ -1,6 +1,7 @@
 package featurevalue
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -23,14 +24,35 @@ func TestDecodeNumber(t *testing.T) {
 	if n, ok := DecodeNumber(float64(42), ""); !ok || n != 42 {
 		t.Fatalf("DecodeNumber = %v, %v; want 42, true", n, ok)
 	}
+	if n, ok := DecodeNumber(float32(2), ""); !ok || n != 2 {
+		t.Fatalf("DecodeNumber float32 = %v, %v; want 2, true", n, ok)
+	}
+	if n, ok := DecodeNumber(int(7), ""); !ok || n != 7 {
+		t.Fatalf("DecodeNumber int = %v, %v; want 7, true", n, ok)
+	}
+	if n, ok := DecodeNumber(int64(9), ""); !ok || n != 9 {
+		t.Fatalf("DecodeNumber int64 = %v, %v; want 9, true", n, ok)
+	}
+	if n, ok := DecodeNumber(json.Number("2.5"), ""); !ok || n != 2.5 {
+		t.Fatalf("DecodeNumber json.Number = %v, %v; want 2.5, true", n, ok)
+	}
+	if _, ok := DecodeNumber(json.Number("not-a-number"), ""); ok {
+		t.Fatal("expected invalid json.Number to soft-null")
+	}
 	if n, ok := DecodeNumber("3.14", ""); !ok || n != 3.14 {
 		t.Fatalf("DecodeNumber = %v, %v; want 3.14, true", n, ok)
+	}
+	if _, ok := DecodeNumber("   ", ""); ok {
+		t.Fatal("expected blank numeric string to soft-null")
 	}
 	if _, ok := DecodeNumber(true, ""); ok {
 		t.Fatal("expected bool to never decode as a number")
 	}
 	if _, ok := DecodeNumber("not-a-number", ""); ok {
 		t.Fatal("expected unparsable string to soft-null")
+	}
+	if _, ok := DecodeNumber([]byte("1"), ""); ok {
+		t.Fatal("expected unsupported type to soft-null")
 	}
 	if _, ok := DecodeNumber(float64(42), definitions.ValueTypeString); ok {
 		t.Fatal("expected declared-type mismatch to soft-null")
@@ -48,6 +70,12 @@ func TestDecodeJSON(t *testing.T) {
 		t.Fatalf("expected JSON string to decode, got ok=%v", ok)
 	} else if got, ok := v.(map[string]interface{}); !ok || got["a"] != float64(1) {
 		t.Fatalf("unexpected decoded value: %#v", v)
+	}
+	if _, ok := DecodeJSON(nil, ""); ok {
+		t.Fatal("expected nil JSON input to soft-null")
+	}
+	if _, ok := DecodeJSON(42, ""); ok {
+		t.Fatal("expected unsupported JSON type to soft-null")
 	}
 	if _, ok := DecodeJSON("not json", ""); ok {
 		t.Fatal("expected malformed JSON string to soft-null")
@@ -67,6 +95,13 @@ func TestDecodeDateTime(t *testing.T) {
 	}
 	if got.Year() != 2026 || got.Month() != time.January || got.Day() != 15 {
 		t.Fatalf("unexpected parsed time: %v", got)
+	}
+	existing := time.Date(2025, 3, 1, 0, 0, 0, 0, time.UTC)
+	if passed, ok := DecodeDateTime(existing, ""); !ok || !passed.Equal(existing) {
+		t.Fatalf("expected existing time.Time to pass through, got %v %v", passed, ok)
+	}
+	if _, ok := DecodeDateTime("   ", ""); ok {
+		t.Fatal("expected blank datetime string to soft-null")
 	}
 	if _, ok := DecodeDateTime("not-a-date", ""); ok {
 		t.Fatal("expected unparsable string to soft-null")

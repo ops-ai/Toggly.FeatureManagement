@@ -594,6 +594,35 @@ class VariantsTest {
         }
     }
 
+    @Test
+    fun `Toggly facade delegates typed getters to the shared service`() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """{
+                      "stringFlag":{"enabled":true,"variant":"default","valueType":"string","configurationValue":"hello"},
+                      "numberFlag":{"enabled":true,"variant":"default","valueType":"number","configurationValue":42},
+                      "jsonFlag":{"enabled":true,"variant":"default","valueType":"json","configurationValue":{"a":1}},
+                      "dateFlag":{"enabled":true,"variant":"default","valueType":"datetime","configurationValue":"2026-01-15T10:30:00Z"}
+                    }""".trimIndent()
+                )
+            )
+            Toggly.reset()
+            try {
+                Toggly.configure(config(server).copy(storage = MemoryStorage()))
+                Toggly.init()
+                assertEquals("hello", Toggly.getStringValue("stringFlag"))
+                assertEquals(42.0, Toggly.getNumberValue("numberFlag"))
+                assertEquals(mapOf("a" to 1L), Toggly.getJsonValue("jsonFlag"))
+                assertNotNull(Toggly.getDateTimeValue("dateFlag"))
+                assertEquals(mapOf("a" to 1L), Toggly.getJsonValue<Map<String, Long>>("jsonFlag"))
+                assertNull(Toggly.getJsonValue("stringFlag", Map::class.java))
+            } finally {
+                Toggly.reset()
+            }
+        }
+    }
+
     private fun createKey(): TestKey {
         val generator = KeyPairGenerator.getInstance("EC")
         generator.initialize(ECGenParameterSpec("secp256r1"))

@@ -12,6 +12,8 @@ export interface EvaluatedVariantDef {
   enabled: boolean
   variant?: string
   configurationValue?: unknown
+  /** Declared catalog value type (OPS-2102); legacy catalogs omit it. */
+  valueType?: import('./feature-value-codec').FeatureValueType
 }
 
 /** Partial targeting update. Blank instanceId clears a token; changing identity clears an omitted token. */

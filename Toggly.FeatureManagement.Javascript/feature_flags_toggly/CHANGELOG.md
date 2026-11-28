@@ -15,6 +15,11 @@
 - WebSocket smoke suite runs under Jest `node` environment so `ws` resolves to
   the Node client after the Jest 30 bump (jsdom was selecting `ws/browser.js`).
 
+### Fixed
+- Typed getters honor `valueType` from the variant envelope when
+  `enableVariants` projects flags to booleans, so a `number`-typed variant
+  no longer returns its stringified `configurationValue` from `getStringValue`.
+
 ### Added
 - API-contract evaluation specs exercising public `isFeatureOn` /
   `evaluateFeatureGate` / variant APIs against mocked `evaluated-signed` and

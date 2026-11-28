@@ -237,6 +237,20 @@ describe('typed flag value getters (OPS-2102 / OPS-2105)', () => {
       expect(Toggly.getNumberValue('Promo')).toBeNull();
     });
 
+    it('honors valueType from the variant envelope when flags are boolean-projected', async () => {
+      await initWithVariantDefs({
+        Promo: {
+          enabled: true,
+          variant: 'A',
+          valueType: 'number',
+          configurationValue: '42',
+        },
+      });
+
+      expect(Toggly.getNumberValue('Promo')).toBe(42);
+      expect(Toggly.getStringValue('Promo')).toBeNull();
+    });
+
     it('returns null when no variant configurationValue is set', async () => {
       await initWithVariantDefs({
         Promo: { enabled: true, variant: 'A' },
