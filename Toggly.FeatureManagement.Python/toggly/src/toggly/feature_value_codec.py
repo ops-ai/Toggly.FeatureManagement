@@ -14,6 +14,7 @@ flags keep working; the decode itself is still soft-null on failure.
 from __future__ import annotations
 
 import json
+import math
 from datetime import datetime
 from typing import Any, Literal
 
@@ -55,12 +56,17 @@ def decode_number_value(raw: Any, declared: str | None = None) -> float | None:
     if isinstance(raw, bool):
         return None
     if isinstance(raw, (int, float)):
-        return float(raw)
+        value = float(raw)
+        return value if math.isfinite(value) else None
     if isinstance(raw, str) and raw.strip() != "":
         try:
-            return float(raw)
+            # float() accepts "nan"/"inf"/"infinity" and silently overflows
+            # (e.g. "1e400" -> inf) without raising — reject non-finite
+            # results so NaN/Infinity/overflow numeric strings soft-null.
+            value = float(raw)
         except ValueError:
             return None
+        return value if math.isfinite(value) else None
     return None
 
 

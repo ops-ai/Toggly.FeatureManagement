@@ -1104,7 +1104,14 @@ export class Toggly implements TogglyService {
       definition !== null && typeof definition === 'object' && !isEntityGate(definition)
         ? (definition as unknown as Record<string, unknown>)
         : undefined
-    const declaredValueType = (envelope?.['valueType'] as FeatureValueType | undefined) ?? null
+    // enableVariants reduces snapshot.features to plain booleans
+    // (see variantDefsToFlags), which drops the catalog's declared
+    // valueType. Fall back to the variant envelope's own valueType so
+    // typed getters still see it (OPS-2102 review finding).
+    const declaredValueType =
+      (envelope?.['valueType'] as FeatureValueType | undefined) ??
+      (snapshot.variants?.[featureKey]?.valueType as FeatureValueType | undefined) ??
+      null
     const sourceValue = envelope
       ? envelope['value'] !== undefined ? envelope['value'] : envelope['configurationValue']
       : this.getVariant(featureKey)?.configurationValue

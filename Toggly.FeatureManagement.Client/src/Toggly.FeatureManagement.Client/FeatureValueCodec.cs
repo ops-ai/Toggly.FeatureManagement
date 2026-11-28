@@ -83,7 +83,18 @@ internal static class FeatureValueCodec
             return null;
         }
         if (element.ValueKind == JsonValueKind.Number && element.TryGetDouble(out var epochMilliseconds) && double.IsFinite(epochMilliseconds))
-            return DateTimeOffset.FromUnixTimeMilliseconds((long)epochMilliseconds);
+        {
+            try
+            {
+                return DateTimeOffset.FromUnixTimeMilliseconds((long)epochMilliseconds);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                // Out-of-range numeric timestamp (outside DateTimeOffset's representable
+                // range) — soft-null instead of throwing (OPS-2102 review finding).
+                return null;
+            }
+        }
         return null;
     }
 

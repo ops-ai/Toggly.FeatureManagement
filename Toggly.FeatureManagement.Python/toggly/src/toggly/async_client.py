@@ -443,9 +443,11 @@ class AsyncTogglyClient(TelemetryClientMixin, DefinitionRefreshMixin):
             if definition is None:
                 return None
             enabled = self._engine.evaluate(definition, context)
-            if not enabled:
-                return None
-            return definition.value, definition.value_type
+
+        self._record_check(feature_key, enabled, context.identity)
+        if not enabled:
+            return None
+        return definition.value, definition.value_type
 
     async def get_string_value(
         self,

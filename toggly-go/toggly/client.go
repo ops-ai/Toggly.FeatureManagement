@@ -250,6 +250,14 @@ func (c *Client) resolvedValueSource(ctx context.Context, featureKey string, eva
 	if err != nil || !enabled {
 		return nil, "", false
 	}
+
+	// Match IsEnabled: secure features require authorization before a typed
+	// value is returned for an enabled flag (OPS-2102 review finding).
+	allowed, err := c.authorizeFeature(ctx, featureKey, evalCtx)
+	if err != nil || !allowed {
+		return nil, "", false
+	}
+
 	return def.ResolvedValue(), def.ValueType, true
 }
 

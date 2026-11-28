@@ -1,5 +1,6 @@
 package io.toggly.core
 
+import java.text.ParsePosition
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -53,11 +54,16 @@ inline fun <reified T> decodeTypedJsonValue(value: Any?, declaredType: String?):
     return decodeVariantValue(value)
 }
 
+// "XXX" preserves colon-separated timezone minute offsets (e.g. "+05:30");
+// a bare "X" collapses to hour-only precision and silently drops minutes.
+// "XX" additionally covers non-colon offsets (e.g. "+0530").
 private val isoDateTimePatterns = arrayOf(
     "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
     "yyyy-MM-dd'T'HH:mm:ss'Z'",
-    "yyyy-MM-dd'T'HH:mm:ss.SSSX",
-    "yyyy-MM-dd'T'HH:mm:ssX",
+    "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+    "yyyy-MM-dd'T'HH:mm:ssXXX",
+    "yyyy-MM-dd'T'HH:mm:ss.SSSXX",
+    "yyyy-MM-dd'T'HH:mm:ssXX",
     "yyyy-MM-dd"
 )
 
@@ -79,7 +85,12 @@ fun decodeDateTimeValue(value: Any?, declaredType: String?): Date? {
             val format = SimpleDateFormat(pattern, Locale.US)
             format.timeZone = TimeZone.getTimeZone("UTC")
             format.isLenient = false
-            return format.parse(text)
+            val position = ParsePosition(0)
+            val parsed = format.parse(text, position) ?: continue
+            // Reject partial matches (e.g. trailing garbage SimpleDateFormat
+            // would otherwise silently ignore) — require full consumption.
+            if (position.index != text.length || position.errorIndex != -1) continue
+            return parsed
         } catch (_: Exception) {
             // try next pattern
         }

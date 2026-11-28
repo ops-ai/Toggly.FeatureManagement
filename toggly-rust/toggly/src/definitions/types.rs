@@ -52,6 +52,31 @@ impl FeatureValueType {
             Some(declared) => declared == requested,
         }
     }
+
+    fn from_wire_str(raw: &str) -> Option<FeatureValueType> {
+        match raw.to_ascii_lowercase().as_str() {
+            "boolean" => Some(FeatureValueType::Boolean),
+            "string" => Some(FeatureValueType::String),
+            "number" => Some(FeatureValueType::Number),
+            "json" => Some(FeatureValueType::Json),
+            "datetime" => Some(FeatureValueType::Datetime),
+            _ => None,
+        }
+    }
+}
+
+/// Soft-deserialize `value_type`: an empty or unrecognized string (future
+/// value types, or a catalog quirk) becomes `None` instead of failing the
+/// whole definitions payload (OPS-2102) — mirrors `deserialize_null_as_default`
+/// above for other optional fields in this module.
+fn deserialize_value_type_soft<'de, D>(
+    deserializer: D,
+) -> Result<Option<FeatureValueType>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw = Option::<String>::deserialize(deserializer)?;
+    Ok(raw.and_then(|s| FeatureValueType::from_wire_str(&s)))
 }
 
 /// A feature filter configuration.
@@ -109,8 +134,9 @@ pub struct FeatureDefinition {
     pub allocation: Option<Allocation>,
 
     /// Declared catalog value type (OPS-2102). `None` on catalogs predating
-    /// this field.
-    #[serde(default)]
+    /// this field, or on an empty/unrecognized wire value (soft-ignored
+    /// rather than failing the whole definitions payload).
+    #[serde(default, deserialize_with = "deserialize_value_type_soft")]
     pub value_type: Option<FeatureValueType>,
 
     /// Resolved flag-level value for non-boolean flags. Prefer `value`;
@@ -350,6 +376,45 @@ mod tests {
         let def: FeatureDefinition = serde_json::from_str(json).unwrap();
         assert!(def.variants.is_empty());
         assert!(def.allocation.is_none());
+    }
+
+    #[test]
+    fn test_deserialize_feature_definition_soft_ignores_bad_value_type() {
+        // Empty string and an unrecognized future value type must soft-null
+        // to `None` rather than failing the whole definitions payload
+        // (OPS-2102 review finding).
+        for value_type_json in ["\"\"", "\"enum\"", "\"ValueType\""] {
+            let json = format!(
+                r#"{{
+                "featureKey": "bad-value-type",
+                "filters": [],
+                "metrics": [],
+                "securedFeature": false,
+                "clientSdkEnabled": true,
+                "requirementType": "Any",
+                "valueType": {value_type_json}
+            }}"#
+            );
+
+            let def: FeatureDefinition = serde_json::from_str(&json).unwrap();
+            assert_eq!(def.value_type, None, "input was {value_type_json}");
+        }
+    }
+
+    #[test]
+    fn test_deserialize_feature_definition_accepts_valid_value_type() {
+        let json = r#"{
+            "featureKey": "typed-feature",
+            "filters": [],
+            "metrics": [],
+            "securedFeature": false,
+            "clientSdkEnabled": true,
+            "requirementType": "Any",
+            "valueType": "string"
+        }"#;
+
+        let def: FeatureDefinition = serde_json::from_str(json).unwrap();
+        assert_eq!(def.value_type, Some(FeatureValueType::String));
     }
 
     #[test]
