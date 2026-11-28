@@ -150,7 +150,8 @@ void main() {
     expect(await Toggly.getDateTimeValue('Missing'), isNull);
   });
 
-  test('typed getters attempt a decode when no valueType is declared', () async {
+  test('typed getters attempt a decode when no valueType is declared',
+      () async {
     await initVariants();
     expect(await Toggly.getStringValue('Legacy'), 'no-declared-type');
   });

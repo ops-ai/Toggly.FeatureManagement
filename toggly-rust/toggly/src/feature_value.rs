@@ -1,5 +1,5 @@
 //! Soft-decode a resolved feature's value by its declared catalog
-//! [`FeatureValueType`](crate::definitions::FeatureValueType) (OPS-2102).
+//! [`FeatureValueType`] (OPS-2102).
 //!
 //! Mirrors the wire contract used across Toggly SDKs: a feature definition
 //! may carry a `valueType` of `boolean | string | number | json | datetime`.

@@ -20,7 +20,7 @@ export function valueTypeMatches(
   declared: FeatureValueType | undefined | null,
   requested: FeatureValueType,
 ): boolean {
-  if (declared == null || declared === '') {
+  if (declared == null) {
     // Legacy catalogs without valueType: allow decode attempt (soft-null on failure).
     return true
   }
