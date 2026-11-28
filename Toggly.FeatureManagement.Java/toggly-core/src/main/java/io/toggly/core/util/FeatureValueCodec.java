@@ -2,6 +2,7 @@ package io.toggly.core.util;
 
 import io.toggly.core.model.FeatureValueType;
 
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -50,7 +51,7 @@ public final class FeatureValueCodec {
         if (!valueTypeMatches(declared, FeatureValueType.STRING)) {
             return null;
         }
-        return raw instanceof String ? (String) raw : null;
+        return raw instanceof String string ? string : null;
     }
 
     /**
@@ -68,13 +69,13 @@ public final class FeatureValueCodec {
             // Never treat true/false as 1/0.
             return null;
         }
-        if (raw instanceof Number) {
-            double d = ((Number) raw).doubleValue();
+        if (raw instanceof Number number) {
+            double d = number.doubleValue();
             return Double.isFinite(d) ? d : null;
         }
-        if (raw instanceof String && !((String) raw).isBlank()) {
+        if (raw instanceof String string && !string.isBlank()) {
             try {
-                double d = Double.parseDouble(((String) raw).trim());
+                double d = Double.parseDouble(string.trim());
                 return Double.isFinite(d) ? d : null;
             } catch (NumberFormatException ignored) {
                 return null;
@@ -101,10 +102,10 @@ public final class FeatureValueCodec {
         if (raw instanceof java.util.Map || raw instanceof java.util.List) {
             return raw;
         }
-        if (raw instanceof String) {
+        if (raw instanceof String string) {
             Object parsed;
             try {
-                parsed = SimpleJson.parseValue((String) raw, new int[]{0});
+                parsed = SimpleJson.parseValue(string, new int[]{0});
             } catch (RuntimeException ignored) {
                 return null;
             }
@@ -125,17 +126,17 @@ public final class FeatureValueCodec {
         if (!valueTypeMatches(declared, FeatureValueType.DATETIME)) {
             return null;
         }
-        if (raw instanceof OffsetDateTime) {
-            return (OffsetDateTime) raw;
+        if (raw instanceof OffsetDateTime offsetDateTime) {
+            return offsetDateTime;
         }
-        if (raw instanceof java.time.Instant) {
-            return OffsetDateTime.ofInstant((java.time.Instant) raw, ZoneOffset.UTC);
+        if (raw instanceof Instant instant) {
+            return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
         }
-        if (!(raw instanceof String) || ((String) raw).isBlank()) {
+        if (!(raw instanceof String string) || string.isBlank()) {
             return null;
         }
         try {
-            return OffsetDateTime.parse(((String) raw).trim(), DateTimeFormatter.ISO_DATE_TIME);
+            return OffsetDateTime.parse(string.trim(), DateTimeFormatter.ISO_DATE_TIME);
         } catch (DateTimeParseException ignored) {
             return null;
         }

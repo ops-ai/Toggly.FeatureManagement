@@ -483,7 +483,11 @@ public actor TogglyService {
         as type: T.Type = T.self
     ) async -> T? {
         guard let variant = await getVariant(featureKey) else { return nil }
-        return FeatureValueDecoder.decodeJsonValue(variant.configurationValue, declaredType: variant.valueType, as: type)
+        return FeatureValueDecoder.decodeJsonValue(
+            variant.configurationValue,
+            declaredType: variant.valueType,
+            as: type
+        )
     }
 
     /// Returns the assigned variant's configuration value decoded as a

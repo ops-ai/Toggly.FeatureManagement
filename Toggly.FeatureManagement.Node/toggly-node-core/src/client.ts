@@ -1015,7 +1015,7 @@ export function createTogglyClient(
     if (!enabled) {
       return null
     }
-    const raw = definition.value !== undefined ? definition.value : definition.configurationValue
+    const raw = definition.value === undefined ? definition.configurationValue : definition.value
     return { raw, declared: definition.valueType ?? null }
   }
 
@@ -1049,7 +1049,7 @@ export function createTogglyClient(
     context?: EvaluationContext,
     entity?: EvaluationEntityContext,
     kind?: string,
-  ): Promise<unknown | null> {
+  ): Promise<unknown> {
     const source = await resolvedValueSource(featureKey, context, entity, kind)
     if (!source) return null
     return decodeJsonValue(source.raw, source.declared)

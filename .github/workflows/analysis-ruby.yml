@@ -394,7 +394,7 @@ jobs:
             -Dsonar.exclusions=**/vendor/**,**/spec/**,**/test/**,**/coverage/**,**/*.gemspec
             -Dsonar.tests=${{ env.SDK_ROOT }}
             -Dsonar.test.inclusions=**/spec/**,**/test/**,**/host-fixtures/**
-            -Dsonar.ruby.coverage.reportPaths=coverage/core-resultset.json,coverage/rails-resultset.json,coverage/cache-resultset.json
+            -Dsonar.ruby.coverage.reportPaths=coverage/core-coverage.json,coverage/rails-coverage.json,coverage/cache-coverage.json
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
             -Dsonar.qualitygate.wait=true
 

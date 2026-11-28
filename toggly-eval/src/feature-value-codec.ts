@@ -52,7 +52,7 @@ export function decodeNumberValue(
 export function decodeJsonValue(
   raw: unknown,
   declared?: FeatureValueType | null,
-): unknown | null {
+): unknown {
   if (!valueTypeMatches(declared, 'json')) return null
   if (raw === null || raw === undefined) return null
   if (typeof raw === 'object') return raw

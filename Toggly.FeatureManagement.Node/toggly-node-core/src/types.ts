@@ -332,7 +332,7 @@ export interface TogglyClient {
     context?: EvaluationContext,
     entity?: EvaluationEntityContext,
     kind?: string,
-  ): Promise<unknown | null>
+  ): Promise<unknown>
   /** Typed getter for the flag's own catalog `datetime` value, decoded to a `Date` (OPS-2102). See {@link getStringValue}. */
   getDateTimeValue(
     featureKey: string,

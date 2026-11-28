@@ -155,16 +155,17 @@ func TestClient_GetStringValue_SoftNullsOnDisabledFlag(t *testing.T) {
 func TestClient_GetStringValue_SoftNullsOnMissingFeature(t *testing.T) {
 	c := newCatalogFeatureValueClient(t)
 
-	if _, ok := c.GetStringValue(context.Background(), "does-not-exist", Context{}); ok {
+	const missingFeature = "does-not-exist"
+	if _, ok := c.GetStringValue(context.Background(), missingFeature, Context{}); ok {
 		t.Fatal("expected GetStringValue to soft-null for an unknown feature")
 	}
-	if _, ok := c.GetNumberValue(context.Background(), "does-not-exist", Context{}); ok {
+	if _, ok := c.GetNumberValue(context.Background(), missingFeature, Context{}); ok {
 		t.Fatal("expected GetNumberValue to soft-null for an unknown feature")
 	}
-	if _, ok := c.GetJSONValue(context.Background(), "does-not-exist", Context{}); ok {
+	if _, ok := c.GetJSONValue(context.Background(), missingFeature, Context{}); ok {
 		t.Fatal("expected GetJSONValue to soft-null for an unknown feature")
 	}
-	if _, ok := c.GetDateTimeValue(context.Background(), "does-not-exist", Context{}); ok {
+	if _, ok := c.GetDateTimeValue(context.Background(), missingFeature, Context{}); ok {
 		t.Fatal("expected GetDateTimeValue to soft-null for an unknown feature")
 	}
 }

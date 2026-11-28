@@ -74,6 +74,9 @@ import {
   type EvaluatedDefinitions,
   type TogglyEntityContext,
 } from '@ops-ai/toggly-hooks-types';
+
+type FeatureContextInput = TogglyEntityContext | Record<string, unknown> | null;
+
 import {
   applyLocalGate,
   buildFlagGateIndex,
@@ -941,7 +944,7 @@ export class Toggly {
   private static _resolveTypedValue<T>(
     featureKey: string,
     decode: (raw: unknown, declared?: FeatureValueType | null) => T | null,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: FeatureContextInput,
     kind?: string,
   ): T | null {
     if (!Toggly.isFeatureOn(featureKey, context, kind)) {
@@ -960,16 +963,22 @@ export class Toggly {
       (envelope?.valueType as FeatureValueType | undefined) ??
       (Toggly.variantsValue?.[featureKey]?.valueType as FeatureValueType | undefined) ??
       null;
-    const sourceValue = envelope
-      ? envelope.value !== undefined ? envelope.value : envelope.configurationValue
-      : Toggly.getVariant(featureKey)?.configurationValue;
+    let sourceValue: unknown;
+    if (envelope) {
+      sourceValue =
+        envelope.value === undefined
+          ? envelope.configurationValue
+          : envelope.value;
+    } else {
+      sourceValue = Toggly.getVariant(featureKey)?.configurationValue;
+    }
     return decode(sourceValue, declaredValueType);
   }
 
   /** Typed getter for `string` flag values. Returns `null` when disabled, unset, or mistyped. */
   static getStringValue(
     featureKey: string,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: FeatureContextInput,
     kind?: string,
   ): string | null {
     return Toggly._resolveTypedValue(featureKey, decodeStringValue, context, kind);
@@ -978,7 +987,7 @@ export class Toggly {
   /** Typed getter for `number` flag values. Returns `null` when disabled, unset, or mistyped. */
   static getNumberValue(
     featureKey: string,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: FeatureContextInput,
     kind?: string,
   ): number | null {
     return Toggly._resolveTypedValue(featureKey, decodeNumberValue, context, kind);
@@ -987,16 +996,16 @@ export class Toggly {
   /** Typed getter for `json` flag values (object/array). Returns `null` when disabled, unset, or mistyped. */
   static getJsonValue(
     featureKey: string,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: FeatureContextInput,
     kind?: string,
-  ): unknown | null {
+  ): unknown {
     return Toggly._resolveTypedValue(featureKey, decodeJsonValue, context, kind);
   }
 
   /** Typed getter for `datetime` flag values, decoded to a `Date`. Returns `null` when disabled, unset, or mistyped. */
   static getDateTimeValue(
     featureKey: string,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: FeatureContextInput,
     kind?: string,
   ): Date | null {
     return Toggly._resolveTypedValue(featureKey, decodeDateTimeValue, context, kind);

@@ -382,7 +382,7 @@ export interface TogglyService {
     featureKey: string,
     context?: TogglyEntityContextInput,
     kind?: string,
-  ) => Promise<unknown | null>
+  ) => Promise<unknown>
   getDateTimeValue: (
     featureKey: string,
     context?: TogglyEntityContextInput,
@@ -1086,7 +1086,7 @@ export class Toggly implements TogglyService {
    * - Source value: the evaluated envelope's `value`, else its
    *   `configurationValue`, else the assigned variant's `configurationValue`.
    */
-  private _resolveTypedValue = async <T>(
+  private readonly _resolveTypedValue = async <T>(
     featureKey: string,
     decode: (raw: unknown, declared?: FeatureValueType | null) => T | null,
     context?: TogglyEntityContextInput,
@@ -1111,11 +1111,17 @@ export class Toggly implements TogglyService {
     // typed getters still see it (OPS-2102 review finding).
     const declaredValueType =
       (envelope?.['valueType'] as FeatureValueType | undefined) ??
-      (snapshot.variants?.[featureKey]?.valueType as FeatureValueType | undefined) ??
+      snapshot.variants?.[featureKey]?.valueType ??
       null
-    const sourceValue = envelope
-      ? envelope['value'] !== undefined ? envelope['value'] : envelope['configurationValue']
-      : this.getVariant(featureKey)?.configurationValue
+    let sourceValue: unknown
+    if (envelope) {
+      sourceValue =
+        envelope['value'] === undefined
+          ? envelope['configurationValue']
+          : envelope['value']
+    } else {
+      sourceValue = this.getVariant(featureKey)?.configurationValue
+    }
     return decode(sourceValue, declaredValueType)
   }
 
@@ -1138,7 +1144,7 @@ export class Toggly implements TogglyService {
     featureKey: string,
     context?: TogglyEntityContextInput,
     kind?: string,
-  ): Promise<unknown | null> => this._resolveTypedValue(featureKey, decodeJsonValue, context, kind)
+  ): Promise<unknown> => this._resolveTypedValue(featureKey, decodeJsonValue, context, kind)
 
   /** Typed getter for `datetime` flag values, decoded to a `Date`. Returns `null` when disabled, unset, or mistyped. */
   getDateTimeValue = (

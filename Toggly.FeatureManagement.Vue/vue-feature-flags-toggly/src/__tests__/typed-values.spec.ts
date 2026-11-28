@@ -47,19 +47,27 @@ describe('typed flag value getters (OPS-2102 / OPS-2105)', () => {
       service.dispose()
     })
 
-    it('returns null when the feature is disabled', async () => {
-      mockDefsResponse({ Theme: { enabled: false, valueType: 'string', value: 'dark' } })
+    it.each([
+      {
+        name: 'disabled feature',
+        defs: { Theme: { enabled: false, valueType: 'string', value: 'dark' } },
+        key: 'Theme',
+      },
+      {
+        name: 'declared valueType mismatch',
+        defs: { Theme: { enabled: true, valueType: 'number', value: 'dark' } },
+        key: 'Theme',
+      },
+      {
+        name: 'unknown feature key',
+        defs: { Theme: { enabled: true, valueType: 'string', value: 'dark' } },
+        key: 'Unknown',
+      },
+    ])('returns null for $name', async ({ defs, key }) => {
+      mockDefsResponse(defs)
       const service = newService()
 
-      expect(await service.getStringValue('Theme')).toBeNull()
-      service.dispose()
-    })
-
-    it('soft-nulls when the declared valueType mismatches the getter', async () => {
-      mockDefsResponse({ Theme: { enabled: true, valueType: 'number', value: 'dark' } })
-      const service = newService()
-
-      expect(await service.getStringValue('Theme')).toBeNull()
+      expect(await service.getStringValue(key)).toBeNull()
       service.dispose()
     })
 
@@ -76,14 +84,6 @@ describe('typed flag value getters (OPS-2102 / OPS-2105)', () => {
       const service = newService()
 
       expect(await service.getStringValue('Theme')).toBe('light')
-      service.dispose()
-    })
-
-    it('returns null for an unknown feature key', async () => {
-      mockDefsResponse({ Theme: { enabled: true, valueType: 'string', value: 'dark' } })
-      const service = newService()
-
-      expect(await service.getStringValue('Unknown')).toBeNull()
       service.dispose()
     })
   })

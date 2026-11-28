@@ -446,10 +446,25 @@ public final class TogglyClient implements AutoCloseable {
     // failure — never throw solely for shape mismatch.
 
     /**
-     * Returns {@code (raw value, declared type)} for a flag using the current
-     * thread context, or {@code null} on an unknown feature or a disabled flag.
+     * Soft-null carrier for a flag's resolved catalog value + declared type.
+     * Prefer a typed holder over {@code Object[]} so callers never deal with
+     * a null-array sentinel (java:S1168).
      */
-    private Object[] resolvedValueSource(String featureKey, EvaluationContext context) {
+    private static final class ResolvedValue {
+        private final Object raw;
+        private final FeatureValueType valueType;
+
+        private ResolvedValue(Object raw, FeatureValueType valueType) {
+            this.raw = raw;
+            this.valueType = valueType;
+        }
+    }
+
+    /**
+     * Returns the resolved catalog value for a flag using the current thread
+     * context, or {@code null} on an unknown feature or a disabled flag.
+     */
+    private ResolvedValue resolvedValueSource(String featureKey, EvaluationContext context) {
         if (featureKey == null || featureKey.isEmpty()) {
             return null;
         }
@@ -469,7 +484,7 @@ public final class TogglyClient implements AutoCloseable {
             if (!enabled) {
                 return null;
             }
-            return new Object[]{definition.getValue(), definition.getValueType()};
+            return new ResolvedValue(definition.getValue(), definition.getValueType());
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, e, () -> "Error resolving flag value for feature: " + featureKey);
             return null;
@@ -497,11 +512,11 @@ public final class TogglyClient implements AutoCloseable {
      * @return the string value, or null
      */
     public String getStringValue(String featureKey, EvaluationContext context) {
-        Object[] source = resolvedValueSource(featureKey, context);
+        ResolvedValue source = resolvedValueSource(featureKey, context);
         if (source == null) {
             return null;
         }
-        return FeatureValueCodec.decodeString(source[0], (FeatureValueType) source[1]);
+        return FeatureValueCodec.decodeString(source.raw, source.valueType);
     }
 
     /**
@@ -525,11 +540,11 @@ public final class TogglyClient implements AutoCloseable {
      * @return the numeric value, or null
      */
     public Double getNumberValue(String featureKey, EvaluationContext context) {
-        Object[] source = resolvedValueSource(featureKey, context);
+        ResolvedValue source = resolvedValueSource(featureKey, context);
         if (source == null) {
             return null;
         }
-        return FeatureValueCodec.decodeNumber(source[0], (FeatureValueType) source[1]);
+        return FeatureValueCodec.decodeNumber(source.raw, source.valueType);
     }
 
     /**
@@ -554,11 +569,11 @@ public final class TogglyClient implements AutoCloseable {
      * @return the parsed JSON value, or null
      */
     public Object getJsonValue(String featureKey, EvaluationContext context) {
-        Object[] source = resolvedValueSource(featureKey, context);
+        ResolvedValue source = resolvedValueSource(featureKey, context);
         if (source == null) {
             return null;
         }
-        return FeatureValueCodec.decodeJson(source[0], (FeatureValueType) source[1]);
+        return FeatureValueCodec.decodeJson(source.raw, source.valueType);
     }
 
     /**
@@ -583,11 +598,11 @@ public final class TogglyClient implements AutoCloseable {
      * @return the parsed datetime, or null
      */
     public java.time.OffsetDateTime getDateTimeValue(String featureKey, EvaluationContext context) {
-        Object[] source = resolvedValueSource(featureKey, context);
+        ResolvedValue source = resolvedValueSource(featureKey, context);
         if (source == null) {
             return null;
         }
-        return FeatureValueCodec.decodeDateTime(source[0], (FeatureValueType) source[1]);
+        return FeatureValueCodec.decodeDateTime(source.raw, source.valueType);
     }
 
     private VariantResult toVariantResult(VariantAssignment assignment) {

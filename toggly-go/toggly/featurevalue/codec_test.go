@@ -16,13 +16,15 @@ func TestDecodeString(t *testing.T) {
 		t.Fatal("expected non-string input to soft-null")
 	}
 	if _, ok := DecodeString("hello", definitions.ValueTypeNumber); ok {
-		t.Fatal("expected declared-type mismatch to soft-null")
+		t.Fatal(mismatchSoftNull)
 	}
 }
 
-func TestDecodeNumber(t *testing.T) {
+const mismatchSoftNull = "expected declared-type mismatch to soft-null"
+
+func TestDecodeNumberFloatKinds(t *testing.T) {
 	if n, ok := DecodeNumber(float64(42), ""); !ok || n != 42 {
-		t.Fatalf("DecodeNumber = %v, %v; want 42, true", n, ok)
+		t.Fatalf("DecodeNumber float64 = %v, %v; want 42, true", n, ok)
 	}
 	if n, ok := DecodeNumber(float32(2), ""); !ok || n != 2 {
 		t.Fatalf("DecodeNumber float32 = %v, %v; want 2, true", n, ok)
@@ -33,6 +35,9 @@ func TestDecodeNumber(t *testing.T) {
 	if n, ok := DecodeNumber(int64(9), ""); !ok || n != 9 {
 		t.Fatalf("DecodeNumber int64 = %v, %v; want 9, true", n, ok)
 	}
+}
+
+func TestDecodeNumberJSONAndStrings(t *testing.T) {
 	if n, ok := DecodeNumber(json.Number("2.5"), ""); !ok || n != 2.5 {
 		t.Fatalf("DecodeNumber json.Number = %v, %v; want 2.5, true", n, ok)
 	}
@@ -40,11 +45,14 @@ func TestDecodeNumber(t *testing.T) {
 		t.Fatal("expected invalid json.Number to soft-null")
 	}
 	if n, ok := DecodeNumber("3.14", ""); !ok || n != 3.14 {
-		t.Fatalf("DecodeNumber = %v, %v; want 3.14, true", n, ok)
+		t.Fatalf("DecodeNumber string = %v, %v; want 3.14, true", n, ok)
 	}
 	if _, ok := DecodeNumber("   ", ""); ok {
 		t.Fatal("expected blank numeric string to soft-null")
 	}
+}
+
+func TestDecodeNumberRejects(t *testing.T) {
 	if _, ok := DecodeNumber(true, ""); ok {
 		t.Fatal("expected bool to never decode as a number")
 	}
@@ -55,7 +63,7 @@ func TestDecodeNumber(t *testing.T) {
 		t.Fatal("expected unsupported type to soft-null")
 	}
 	if _, ok := DecodeNumber(float64(42), definitions.ValueTypeString); ok {
-		t.Fatal("expected declared-type mismatch to soft-null")
+		t.Fatal(mismatchSoftNull)
 	}
 }
 
@@ -84,7 +92,7 @@ func TestDecodeJSON(t *testing.T) {
 		t.Fatal("expected a bare JSON string literal to soft-null (not object/array)")
 	}
 	if _, ok := DecodeJSON(m, definitions.ValueTypeString); ok {
-		t.Fatal("expected declared-type mismatch to soft-null")
+		t.Fatal(mismatchSoftNull)
 	}
 }
 
@@ -110,7 +118,7 @@ func TestDecodeDateTime(t *testing.T) {
 		t.Fatal("expected non-string/time input to soft-null")
 	}
 	if _, ok := DecodeDateTime("2026-01-15T10:30:00Z", definitions.ValueTypeString); ok {
-		t.Fatal("expected declared-type mismatch to soft-null")
+		t.Fatal(mismatchSoftNull)
 	}
 }
 

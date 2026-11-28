@@ -1,6 +1,9 @@
 import type { Hook, TogglyEntityContext, TogglyEvaluationContext } from '@ops-ai/toggly-hooks-types';
 import type { LocalGate } from '@ops-ai/toggly-local-gates';
 
+/** Shared optional context for gate / typed-value APIs (typescript:S4323). */
+export type TogglyFeatureContextInput = TogglyEntityContext | Record<string, unknown> | null;
+
 /** Assigned variant for a feature (from evaluated-variants-signed). */
 export interface VariantResult {
   name: string
@@ -74,12 +77,12 @@ export interface ITogglyService {
     featureKeys: string[],
     requirement?: string,
     negate?: boolean,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: TogglyFeatureContextInput,
     kind?: string,
   ) => Promise<boolean>
   isFeatureOn: (
     featureKey: string,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: TogglyFeatureContextInput,
     kind?: string,
   ) => Promise<boolean>
   isFeatureOff: (featureKey: string) => Promise<boolean>
@@ -87,22 +90,22 @@ export interface ITogglyService {
   getVariantValue: <T = unknown>(featureKey: string, isT?: (v: unknown) => v is T) => Promise<T | null>
   getStringValue: (
     featureKey: string,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: TogglyFeatureContextInput,
     kind?: string,
   ) => Promise<string | null>
   getNumberValue: (
     featureKey: string,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: TogglyFeatureContextInput,
     kind?: string,
   ) => Promise<number | null>
   getJsonValue: (
     featureKey: string,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: TogglyFeatureContextInput,
     kind?: string,
-  ) => Promise<unknown | null>
+  ) => Promise<unknown>
   getDateTimeValue: (
     featureKey: string,
-    context?: TogglyEntityContext | Record<string, unknown> | null,
+    context?: TogglyFeatureContextInput,
     kind?: string,
   ) => Promise<Date | null>
   recordUsage: (featureKey: string, variant?: string) => void
