@@ -8,7 +8,9 @@ import (
 	"github.com/ops-ai/Toggly.FeatureManagement/toggly-go/toggly/definitions"
 )
 
-func TestDecodeString(t *testing.T) {
+const mismatchSoftNull = "expected declared-type mismatch to soft-null"
+
+func TestFeatureValueDecodeString(t *testing.T) {
 	if s, ok := DecodeString("hello", ""); !ok || s != "hello" {
 		t.Fatalf("DecodeString = %q, %v; want hello, true", s, ok)
 	}
@@ -20,9 +22,7 @@ func TestDecodeString(t *testing.T) {
 	}
 }
 
-const mismatchSoftNull = "expected declared-type mismatch to soft-null"
-
-func TestDecodeNumberFloatKinds(t *testing.T) {
+func TestFeatureValueDecodeNumberFloatKinds(t *testing.T) {
 	if n, ok := DecodeNumber(float64(42), ""); !ok || n != 42 {
 		t.Fatalf("DecodeNumber float64 = %v, %v; want 42, true", n, ok)
 	}
@@ -37,7 +37,7 @@ func TestDecodeNumberFloatKinds(t *testing.T) {
 	}
 }
 
-func TestDecodeNumberJSONAndStrings(t *testing.T) {
+func TestFeatureValueDecodeNumberJSONAndStrings(t *testing.T) {
 	if n, ok := DecodeNumber(json.Number("2.5"), ""); !ok || n != 2.5 {
 		t.Fatalf("DecodeNumber json.Number = %v, %v; want 2.5, true", n, ok)
 	}
@@ -52,7 +52,7 @@ func TestDecodeNumberJSONAndStrings(t *testing.T) {
 	}
 }
 
-func TestDecodeNumberRejects(t *testing.T) {
+func TestFeatureValueDecodeNumberRejects(t *testing.T) {
 	if _, ok := DecodeNumber(true, ""); ok {
 		t.Fatal("expected bool to never decode as a number")
 	}
@@ -67,7 +67,7 @@ func TestDecodeNumberRejects(t *testing.T) {
 	}
 }
 
-func TestDecodeJSON(t *testing.T) {
+func TestFeatureValueDecodeJSON(t *testing.T) {
 	m := map[string]interface{}{"a": float64(1)}
 	if v, ok := DecodeJSON(m, ""); !ok {
 		t.Fatalf("expected map to decode, got ok=%v", ok)
@@ -96,7 +96,7 @@ func TestDecodeJSON(t *testing.T) {
 	}
 }
 
-func TestDecodeDateTime(t *testing.T) {
+func TestFeatureValueDecodeDateTime(t *testing.T) {
 	got, ok := DecodeDateTime("2026-01-15T10:30:00Z", "")
 	if !ok {
 		t.Fatal("expected ISO-8601 string to decode")
@@ -122,7 +122,7 @@ func TestDecodeDateTime(t *testing.T) {
 	}
 }
 
-func TestValueTypeMatches(t *testing.T) {
+func TestFeatureValueTypeMatches(t *testing.T) {
 	if !definitions.ValueType("").Matches(definitions.ValueTypeString) {
 		t.Fatal("expected empty (legacy) declared type to allow any decode attempt")
 	}

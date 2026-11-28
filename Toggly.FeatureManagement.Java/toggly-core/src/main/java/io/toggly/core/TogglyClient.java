@@ -464,7 +464,7 @@ public final class TogglyClient implements AutoCloseable {
      * Returns the resolved catalog value for a flag using the current thread
      * context, or {@code null} on an unknown feature or a disabled flag.
      */
-    private ResolvedValue resolvedValueSource(String featureKey, EvaluationContext context) {
+    private ResolvedValue resolveEnabledFlagValue(String featureKey, EvaluationContext context) {
         if (featureKey == null || featureKey.isEmpty()) {
             return null;
         }
@@ -512,7 +512,7 @@ public final class TogglyClient implements AutoCloseable {
      * @return the string value, or null
      */
     public String getStringValue(String featureKey, EvaluationContext context) {
-        ResolvedValue source = resolvedValueSource(featureKey, context);
+        ResolvedValue source = resolveEnabledFlagValue(featureKey, context);
         if (source == null) {
             return null;
         }
@@ -540,7 +540,7 @@ public final class TogglyClient implements AutoCloseable {
      * @return the numeric value, or null
      */
     public Double getNumberValue(String featureKey, EvaluationContext context) {
-        ResolvedValue source = resolvedValueSource(featureKey, context);
+        ResolvedValue source = resolveEnabledFlagValue(featureKey, context);
         if (source == null) {
             return null;
         }
@@ -569,7 +569,7 @@ public final class TogglyClient implements AutoCloseable {
      * @return the parsed JSON value, or null
      */
     public Object getJsonValue(String featureKey, EvaluationContext context) {
-        ResolvedValue source = resolvedValueSource(featureKey, context);
+        ResolvedValue source = resolveEnabledFlagValue(featureKey, context);
         if (source == null) {
             return null;
         }
@@ -598,7 +598,7 @@ public final class TogglyClient implements AutoCloseable {
      * @return the parsed datetime, or null
      */
     public java.time.OffsetDateTime getDateTimeValue(String featureKey, EvaluationContext context) {
-        ResolvedValue source = resolvedValueSource(featureKey, context);
+        ResolvedValue source = resolveEnabledFlagValue(featureKey, context);
         if (source == null) {
             return null;
         }

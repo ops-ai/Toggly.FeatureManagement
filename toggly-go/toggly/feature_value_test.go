@@ -152,7 +152,7 @@ func TestClient_GetStringValue_SoftNullsOnDisabledFlag(t *testing.T) {
 	}
 }
 
-func TestClient_GetStringValue_SoftNullsOnMissingFeature(t *testing.T) {
+func TestClient_TypedGetters_SoftNullsOnMissingFeature(t *testing.T) {
 	c := newCatalogFeatureValueClient(t)
 
 	const missingFeature = "does-not-exist"

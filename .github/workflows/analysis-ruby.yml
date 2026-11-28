@@ -310,23 +310,29 @@ jobs:
             resultset=$(find coverage-artifacts/$pkg -name ".resultset.json" 2>/dev/null | head -1)
             test -n "$json"
             test -n "$resultset"
-            python3 - "$json" "$resultset" "$pkg" "coverage/$pkg-coverage.json" "coverage/$pkg-resultset.json" <<'PY'
+            python3 - "$json" "$resultset" "$pkg" "coverage/$pkg-coverage.json" "coverage/$pkg-resultset.json" "coverage/$pkg-server-coverage.json" <<'PY'
           import json
           import sys
 
-          source, resultset_source, package, output, resultset_output = sys.argv[1:]
+          source, resultset_source, package, output, resultset_output, server_output = sys.argv[1:]
           directory = {"core": "toggly", "rails": "toggly-rails", "cache": "toggly-cache"}[package]
           with open(source, encoding="utf-8") as handle:
               report = json.load(handle)
+
+          def repo_path(path: str) -> str:
+              return f"toggly-ruby/{directory}/{path}"
+
+          # SonarCloud (dreruby) accepts the remapped JSON-formatter payload.
           report["coverage"] = {
-              f"toggly-ruby/{directory}/{path}": result
+              repo_path(path): result
               for path, result in report["coverage"].items()
           }
           with open(output, "w", encoding="utf-8") as handle:
               json.dump(report, handle)
+
           with open(resultset_source, encoding="utf-8") as handle:
               resultset = json.load(handle)
-          # The Server analyzer expects the older SimpleCov path-to-lines format.
+          # Legacy resultset (path → lines) kept for debugging / older scanners.
           for framework in resultset.values():
               framework["coverage"] = {
                   path: file_coverage["lines"]
@@ -334,6 +340,17 @@ jobs:
               }
           with open(resultset_output, "w", encoding="utf-8") as handle:
               json.dump(resultset, handle)
+
+          # SonarQube Server's ruby SimpleCov sensor expects the standard
+          # JSON-formatter shape with repo-relative paths matching sonar.sources.
+          server_coverage = {}
+          for path, result in report["coverage"].items():
+              if isinstance(result, dict) and "lines" in result:
+                  server_coverage[path] = result["lines"]
+              else:
+                  server_coverage[path] = result
+          with open(server_output, "w", encoding="utf-8") as handle:
+              json.dump({"meta": {"simplecov_version": "0.22.0"}, "coverage": server_coverage}, handle)
           PY
             echo "Mapped coverage for $pkg: $json"
           done
@@ -394,7 +411,7 @@ jobs:
             -Dsonar.exclusions=**/vendor/**,**/spec/**,**/test/**,**/coverage/**,**/*.gemspec
             -Dsonar.tests=${{ env.SDK_ROOT }}
             -Dsonar.test.inclusions=**/spec/**,**/test/**,**/host-fixtures/**
-            -Dsonar.ruby.coverage.reportPaths=coverage/core-coverage.json,coverage/rails-coverage.json,coverage/cache-coverage.json
+            -Dsonar.ruby.coverage.reportPaths=coverage/core-server-coverage.json,coverage/rails-server-coverage.json,coverage/cache-server-coverage.json
             -Dsonar.dependencyCheck.reportPath=dependency-check-reports/dependency-check-report.xml
             -Dsonar.qualitygate.wait=true
 
